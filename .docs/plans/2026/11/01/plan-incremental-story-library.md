@@ -352,7 +352,7 @@ TT最终：`pnpm test`883/883通过，约53.8秒（/tmp/shiqu-continuation-all-t
 - [x] 本地复现第三回独立完整事件共享背景、以及viewer只显示1导致重复提取1的回归；只用公开定位与本地替身，不追加真实调用。
 - [x] 实施展示/提取解耦、动态catalog输出上限和一致token估算，保留第一篇冷启动与批量缓存/取消。
 - [x] 修正接纳/显示/排除的完整事件重叠规则及内部拒绝诊断，保留重复、非法范围、未知pending等安全防线；不改namespace/模型路由/摘要职责。
-- [ ] 更新相应回归和当前文档；跑typecheck/lint、完整TT、服务E2E并记录证据。真实任务的再次模型调用须另遵用户授权范围，不自动追加。
+- [x] 更新相应回归和当前文档；跑typecheck/lint、完整TT、服务E2E并记录证据。真实任务的再次模型调用须另遵用户授权范围，不自动追加。
 
 non-low：缓存/接受契约与批量性能行为协同改变，AR11重新审查；无SQL迁移、无清缓存、无自动改历史分镜。展示层一篇不再限制后端每次只产出一篇。新候选可能在被选中后进一步核对完整性，禁止为结构去重任意扩张或截断原文。
 
@@ -364,3 +364,34 @@ AR risk: non-low — coordinated acceptance and display filtering, persistent re
 AR review round: 11; reviewer: reused
 
 SS：第二轮新增回归在旧代码复现viewer只提取1及第三回独立事件共享背景被拒绝（/tmp/shiqu-discovery-speed-before.log）。已实现首冷1/续批4/显示1、三provider动态schema与token预算一致；结构增量按全库和本批覆盖并集，已接受事件仅按重复过滤；受限拒绝诊断与成功清除、失败时不部分提交pending均落实。96/96定向通过（/tmp/shiqu-discovery-speed-focused.log），含20服务E2E及动态schema、批量缓存、第三回共享背景/诊断回归。旧5篇批量和全交叉拒绝预期已按新规则调整，保留拒绝无增量拼接、重复/未知事件/非法范围及并发缓存断言；typecheck/lint通过。未追加真实调用，真实任务仍保留失败状态。
+
+SS milestone: `b9f5108` (`fix: batch extraction independently and accept complete shared-context stories`)。96项定向及typecheck/lint通过；实际红楼namespace已只读核对不变。
+
+CR passed: no major findings
+
+独立CR8完整审查至b9f5108，复核冷1续4/展示1解耦、三provider动态schema及token一致、覆盖并集增量/包含/续完接纳、显示与排除去重、受限诊断及pending失败原子性。静态指纹/提示词/缓存保持，没有新增模型阶段。96项定向含20服务E2E和typecheck/lint已核对；结构增量不等于语义证明，未捕获末次真实回执不可认定为黛玉进府。
+
+CR risk: non-low — coordinated acceptance and display filtering, persistent rejection diagnostics, extraction batching and provider output-contract enforcement.
+CR review round: 8; reviewer: reused
+
+TT首次890/891通过，唯一失败为旧异常原文测试仍匹配“未能完整核对”，实际已按新要求返回具体“原文范围无法核对”。已仅更新该文案预期，仍断言502、异常原文拒绝/零持久化和直接准备/回填400，未放宽原文保护；定向6/6通过（/tmp/shiqu-discovery-speed-source-guard.log），待CR复核及完整TT重跑。ET20/20通过（/tmp/shiqu-discovery-speed-e2e.log）。
+
+SS milestone: `2c1ceb6` (`test: assert specific source rejection diagnostics`)。仅将原文保护测试的泛化错误匹配改为具体诊断，502、准备/回填400及零持久化断言保留。独立CR9确认该差异与AR11一致，复用CR8完整结论，无重大问题。
+
+CR passed: no major findings
+
+CR risk: non-low — the story retains acceptance, cache and batching boundaries; this follow-up changes only the expected diagnostic text in an existing guard test.
+CR review round: 9; reviewer: reused
+
+TT最终：`pnpm test`891/891通过，约42.8秒（`/tmp/shiqu-discovery-speed-all-tests-final.log`）；ET20/20通过，约8.5秒（`/tmp/shiqu-discovery-speed-e2e.log`）；96项定向、原文保护6/6、typecheck/lint通过。CR9后无源码改动。真实任务的前次授权重试以第三回失败结束，新版尚未实际重试，不将受控验证宣称为真实恢复或稳定提速。最终VR待审；再次实际重试已单独询问，未获答复前不派发外部模型调用。
+
+运行状态更新：用户答复“允许新版实际重试”后，尚未点击重试即从同一内置浏览器读到书架已有《林黛玉初进贾府》。本地GET任务确认phase=confirming、selected={batch:0,index:0}、search={state:idle,error:null}，保存3篇候选（林黛玉初进贾府、宝黛初会与宝玉摔玉、贾雨村判断葫芦案），productionState=paused，stage=请确认制作内容。只读元数据证据`/tmp/shiqu-discovery-live-current-proof.json`。当前查找已成功，替代上文“真实任务仍失败”的历史状态；无法据此归因是谁/哪次重试产生，不能声称有新版实测延迟对比。agent没有消耗这次新重试授权或追加模型调用。
+
+打开书架“确认制作”卡片的点击被自动审批拦截，理由是按钮可能推进制作，而授权限定查找。未执行、未绕过；不影响上述GET/AX状态证明查找与选中已成功。没有确认制作、没有由agent触发摘要/分镜/图像。
+
+VR passed: all acceptance criteria complete
+
+独立VR8复用VR7代码/测试结论并复核最新只读运行证据，20项标准全部complete；REQ已勾选。当前真实任务已有3候选、选中黛玉初进贾府，停在制作确认；不再沿用0候选失败的旧状态，也不据此推断谁触发或实测耗时。完整最终VR8逐字写入DD。完成至DD，保留9d37585、b9f5108、2c1ceb6本地里程碑，不自动GC/push或打包。
+
+VR risk: non-low — coordinated acceptance and display filtering, persistent rejection diagnostics, extraction batching, provider output-contract enforcement, and preservation of cache and paid-generation boundaries.
+VR review round: 8; reviewer: reused
