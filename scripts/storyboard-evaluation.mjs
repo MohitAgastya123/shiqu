@@ -44,16 +44,24 @@ export async function collectEvaluationReplays(directory,model,excluded=[]){
    const receipt=JSON.parse(receiptRaw);
    if(!request.job||request.job.model!==model||!matchesEvaluationModel(receipt,model)||!receipt.requestId||typeof receipt.text!=='string')throw Error('EVALUATION_REPLAY_MODEL');
    if(receipt.image)throw Error('EVALUATION_NO_MEDIA');
-   const key=evaluationReplayKey(request.job,model),entry={request:location,receipt:receiptFile,key,requestHash:createHash('sha256').update(requestRaw).digest('hex'),receiptHash:createHash('sha256').update(receiptRaw).digest('hex'),requestId:receipt.requestId,...(rejected.has(receipt.requestId)?{excluded:rejected.get(receipt.requestId).reason}:{})};
+   const unpinned={...request.job};delete unpinned.model;
+   const jobHashes=[hash(request.job),hash(unpinned)],key=evaluationReplayKey(request.job,model),entry={request:location,receipt:receiptFile,key,requestHash:createHash('sha256').update(requestRaw).digest('hex'),receiptHash:createHash('sha256').update(receiptRaw).digest('hex'),requestId:receipt.requestId,...(rejected.has(receipt.requestId)?{excluded:rejected.get(receipt.requestId).reason}:{})};
    entries.push(entry);
    if(entry.excluded)continue;
    const previous=receipts.get(key);
    if(previous&&previous.entry.receiptHash!==entry.receiptHash)throw Error('EVALUATION_REPLAY_AMBIGUOUS');
-   receipts.set(key,{entry,receipt});
+   receipts.set(key,{entry,receipt,jobHashes});
   }
  }
  await collect(directory);
- return {manifest:{directory,model,entries},get(job){const value=receipts.get(evaluationReplayKey(job,model));return value?structuredClone(value):undefined;}};
+ return {manifest:{directory,model,entries},get(job){const value=receipts.get(evaluationReplayKey(job,model));return value?structuredClone(value):undefined;},hasRecordedEntry(calls){return [...receipts.values()].some(value=>calls.some(call=>call.cached&&call.model===model&&call.requestId===value.receipt.requestId&&value.jobHashes.includes(call.hash)&&call.cachedFrom?.includes(value.entry.receipt)));}};
+}
+// Entry proof belongs to the persisted branch, not to each new runner process.
+export function evaluationReplayForJob(replay,calls,job){
+ if(!replay)return undefined;
+ const paid=replay.get(job);
+ if(!replay.hasRecordedEntry(calls)&&!paid)throw Error('EVALUATION_REPLAY_FIRST_MISS');
+ return paid;
 }
 
 // Write receipt history before returning a model result, including count-keep calls absent from engine usage.

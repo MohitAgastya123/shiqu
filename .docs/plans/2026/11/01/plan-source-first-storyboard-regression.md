@@ -19,8 +19,8 @@ Git base: `117b3289f444f30e9c05dae0c2b70265aa7c01e3`。原有三按钮排版两�
 - [x] 首次SS有界探针：使用同原文/适中/原40稿真实独立数量审核，须合法返回有据调整和具体结构问题。失败不算通过，不喂人工清单/目标数救场；保留回执并修通用规则。
 - [x] 完成共用数量审核schema、四步提示、方向与结构问题耦合校验、本地原文绑定和数量建议传给结构修订。原全面审核提示/输出路径不变，不接正式engine/queue新阶段。
 - [x] 完成离线两阶段测试器的检查点/哈希缓存及有意义受控测试：阶段顺序、结构回退、局部修订、失效/无变化/上限、重启不重复调用、0媒体调用；原有相关流程保持。
-- [ ] 真实隔离重放九篇，保留每轮稿、回执、实际数量和失败证据；人工参考仅在事后验收侧读取。九篇全部有逐项证据才能称复现。
-- [ ] 独立核对九篇关键戏，修通用缺陷后重跑受影响样本；完成typecheck/lint、适当完整TT与本故事受控ET，更新方法文档及离线报告。未通过项不得勾选。
+- [x] 已完成九篇一轮隔离调用及证据保存；未全部语义通过，按最新用户收口不再扩跑，不称九篇均复现。
+- [x] 提示更新、已完成样本的独立核对、方法记录及本地检查完成；全部九篇最终独立通过已由用户撤去交付门槛，未完项保留pending。
 
 ## 已有证据
 
@@ -236,3 +236,13 @@ v4第一篇55在两门复核后再次passed但仍漏宁府辨认，判为语义�
 AR18 passed: no blocking architecture flaws；non-low，reviewer reused。采用tracked离线helper承接精确键、整目录冻结、歧义拒绝与具体失败回执识别，文件fixture验证；runner仅组织case/replay参数及绑定。必须首次精确命中，不能改种稿迁就命中；所选已知发现分支有选择偏差，只证明该机审接续闭环，不证明v4成功或稳定独立发现。SOURCE_QUOTE只排除对应receipt，不能封禁job或TIMEOUT前有效count；所有原失败保存。
 
 SS18：tracked helper与5个文件fixture完成，13定向通过；完整TT966/966、ET20/20/typecheck/lint通过，日志/tmp/frame-count-replay-*.log。真实整目录冻结2对原生回执；识别第三篇唯一SOURCE_QUOTE对应ID/文件哈希；入府接续首请求于08:03:53Z精确cached命中原发现，未新抽样或改种稿，随后原engine结构修订开始。v4此刻只余两篇，新增单篇后合计3并发。根清单绑定replay/排除文件哈希，回执来源写历史；分支选择偏差保留为结论限制。
+
+CR10 blocked: 初版replay runner进程首请求误当分支首次入口，重启struct/full会被FIRST_MISS挡住。已修正为tracked helper核对持久history中的cachedFrom/requestId/model/完整job hash证明；入口已保存后允许后续不同job继续。新增真实文件history保存→重开→struct/full继续与五种伪证明拒绝用例，6/6 helper检查通过。原在途replay-run.mjs冻结不改，新replay-run-v2.mjs使用统一guard；不倒称旧版具备恢复能力。待CR11。
+
+v4话香23、诉肺腑26、药方30均两门passed，独立语义核对新增有据且旧关键组保持，详证见各assessment。其余语义未通过/流程未完项仍不计整体通过。
+
+## 按用户收口：提示更新完成，不再扩跑
+
+用户明确“不一定全跑完”，本轮验收已在REQ改为提示/必要修订通路/方法记录/验证完成，不再要求九篇全部跑毕通过。于2026-11-02停止entry与scope两个隔离测试及专属子进程；未影响用户应用/其他任务。已恢复隔离数据库idle并保存result/summary/stop，第一篇59、第三篇52均pending，未改passed。停止中的原生调用用量可能不完整，单独注明。v4原完整批次及漏检/引文失败均保留。
+
+CR11 fixed: 入口重放要求改为核验分支持久证明，重启后的struct/full不再被当成新入口；复审通过，未发现新增主要问题。风险non-low，reviewer reused。最终本地TT967/967、重放文件fixture6/6、已有受控ET20/20、typecheck/lint通过。日志/tmp/frame-count-replay-resume-{full,typecheck,lint}.log及/tmp/frame-count-replay-e2e.log；旧冻结runner的恢复限制不倒称已修，新runner使用修正helper。只作代码/文档收尾，不再调用生成模型。

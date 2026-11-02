@@ -4,7 +4,8 @@ import assert from 'node:assert/strict';
 import {mkdtemp,mkdir,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {collectEvaluationReplays,evaluationReplayKey,failedEvaluationReceipts} from '../scripts/storyboard-evaluation.mjs';
+import {createHash} from 'node:crypto';
+import {collectEvaluationReplays,evaluationReplayKey,failedEvaluationReceipts,evaluationReplayForJob,openEvaluationHistory} from '../scripts/storyboard-evaluation.mjs';
 const model='controlled',job={instructions:'Read the supplied source.',prompt:'{"plan":"original"}',schema:{type:'object',properties:{answer:{type:'string'}},required:['answer'],additionalProperties:false},timeoutMs:1000,reasoningEffort:'high'};
 async function fixture(t){const directory=await mkdtemp(join(tmpdir(),'frame-replays-'));t.after(()=>rm(directory,{recursive:true,force:true}));return directory;}
 async function pair(directory,name,request=job,receipt={text:'{"answer":"checked"}',model,requestId:name,image:null}){
@@ -39,4 +40,14 @@ test('explicit failure identity stays tied to its recorded call even after later
  const bad={step:'review:1',hash:'bad-job',requestId:'bad'},later={step:'review:2',hash:'good-job',requestId:'good'};
  assert.equal(failedEvaluationReceipts({calls:[bad,later],failures:[{...bad,error:'EDITORIAL_SOURCE_QUOTE'}]})[0].requestId,'bad');
  assert.throws(()=>failedEvaluationReceipts({calls:[bad],failures:[{...bad,requestId:'invented',error:'EDITORIAL_SOURCE_QUOTE'}]}),/AMBIGUOUS/);
+});
+test('persisted exact entry proof permits restart into structure and full jobs, while forged proof does not',async t=>{
+ const directory=await fixture(t);await pair(directory,'entry');let replay=await collectEvaluationReplays(directory,model);
+ const historyDirectory=join(directory,'history');await mkdir(historyDirectory);let history=openEvaluationHistory(historyDirectory);
+ const structure={...job,instructions:'Repair the audited structure.'},full={...job,instructions:'Review all facts and continuity.'};
+ assert.throws(()=>evaluationReplayForJob(replay,history.calls,structure),/FIRST_MISS/);
+ const entry=evaluationReplayForJob(replay,history.calls,job);history.receipt({hash:createHash('sha256').update(JSON.stringify(job)).digest('hex'),cached:true,cachedFrom:[entry.entry.receipt],model,requestId:entry.receipt.requestId});
+ replay=await collectEvaluationReplays(directory,model);history=openEvaluationHistory(historyDirectory);
+ assert.equal(evaluationReplayForJob(replay,history.calls,structure),undefined);assert.equal(evaluationReplayForJob(replay,history.calls,full),undefined);
+ for(const change of [{hash:'different'},{model:'other'},{requestId:'other'},{cached:false},{cachedFrom:['elsewhere']}])assert.throws(()=>evaluationReplayForJob(replay,[{...history.calls[0],...change}],structure),/FIRST_MISS/);
 });
