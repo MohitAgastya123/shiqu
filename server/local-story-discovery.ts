@@ -26,6 +26,7 @@ type Story=z.infer<typeof storySchema>;
 const pendingSchema=z.object({id:z.string().min(1).max(64),title:z.string().min(1).max(100),source:localSourceSchema});
 const rejectionSchema=z.object({code:z.enum(['duplicate','no-new-evidence','invalid-source','no-progress','pending-resolution']),title:z.string().max(100).optional(),source:localSourceSchema.optional()});
 const stateSchema=z.object({stories:z.array(storySchema).max(50000),cursor:z.number().int().min(0),readThrough:z.number().int().min(0),pendingEvents:z.array(pendingSchema).max(16),exhausted:z.boolean(),rejected:z.boolean(),lastRejection:rejectionSchema.optional()});
+const stateEnvelope=stateSchema.extend({stories:z.array(z.unknown()).max(50000),pendingEvents:z.array(z.unknown()).max(16)});
 type State=z.infer<typeof stateSchema>;
 type Rejection=z.infer<typeof rejectionSchema>;
 const failed=()=>new ReaderError(502,'本段选题未能完整核对，已保留进度，请重试或换个主题。');
@@ -97,14 +98,19 @@ export async function discoverLocalStories(provider:ReaderProvider,books:LocalBo
   }
   return shown;
  };
- const validate=(state:State)=>{
+ const validate=(state:Pick<State,'cursor'|'readThrough'|'exhausted'>)=>{
   if(state.cursor>plan.blocks.length||state.readThrough>plan.blocks.length||state.readThrough<state.cursor||state.readThrough>state.cursor+1||state.exhausted!==(state.cursor===plan.blocks.length))return false;
-  for(const story of state.stories){
-   qualified(books,book,story.source);
-   for(const source of story.continuedFrom||[]){qualified(books,book,source);if(!sourceCovers(book,story.source,source))return false;}
-  }
-  const ids=new Set<string>();for(const event of state.pendingEvents){qualified(books,book,event.source);if(ids.has(event.id))return false;ids.add(event.id);}
   return true;
+ };
+ const restore=(raw:z.infer<typeof stateEnvelope>):State=>{
+  const stories:Story[]=[],pendingEvents:PendingEvent[]=[],ids=new Set<string>();
+  for(const item of raw.stories)try{
+   const story=storySchema.parse(item);qualified(books,book,story.source);
+   for(const source of story.continuedFrom||[]){qualified(books,book,source);if(!sourceCovers(book,story.source,source))throw failed();}
+   stories.push(story);
+  }catch{/* Remove only the invalid record, retaining the proven reading frontier. */}
+  for(const item of raw.pendingEvents)try{const event=pendingSchema.parse(item);qualified(books,book,event.source);if(!ids.has(event.id)){pendingEvents.push(event);ids.add(event.id);}}catch{/* Other unfinished events remain valid. */}
+  return {...raw,stories,pendingEvents};
  };
  const unitText=new Map(book.sections.flatMap(section=>section.units.map(unit=>[unit.id,unit.text] as const)));
  const scanRequest=(current:State,cursor:number,maxStories=5)=>{
@@ -120,18 +126,28 @@ export async function discoverLocalStories(provider:ReaderProvider,books:LocalBo
    if(ids.length){for(const id of ids)visible.add(id);context.push('已选故事 '+story.title+'\n'+books.resolve(book,story.source).title+'\n'+ids.map(id=>'['+id+']\n'+unitText.get(id)).join('\n\n'));}
   }
   if(chapterStories)relevant=current.stories.filter(story=>sourceUnitIds(book,story.source).some(id=>visible.has(id)));
+  const completed=current.stories.filter(story=>current.pendingEvents.some(event=>sourceCovers(book,story.source,event.source)));
+  if(completed.length)context.push('已保存完整故事，可在重新确认对应旧事件及全部证据后通过resolvedEventIds收束，不重复输出故事：'+JSON.stringify(completed.map(story=>({title:story.title,source:story.source}))));
   const chapterStoryLevel=chapterStories?(relevant.length?'episodes':'main'):undefined;
   const input:WholeBookInput={title:book.title,edition:book.edition,text:block.text,purpose:'catalog',scan:{maxStories:chapterStoryLevel==='main'?1:maxStories,excludedSources:relevant.map(story=>story.source),pendingEvents:current.pendingEvents,contextText:context.join('\n\n'),...(chapterStoryLevel?{chapterStoryLevel}:{})}};
   return {input,titles:relevant.map(story=>story.title),visible};
  };
  const progress=(current:State,stage:'reading'|'checking'|'selecting'='reading',reading:ReadingObserver|undefined=observer,block:ReadingBlock|undefined=plan.blocks[current.cursor])=>reading?.onProgress({completed:current.cursor,total:plan.blocks.length,completedChars:plan.blocks.slice(0,current.cursor).reduce((n,block)=>n+block.chars,0),totalChars,stage,mode:plan.manifest.mode,currentChapters:block?.chapters||[]});
  const empty=():State=>({stories:[],cursor:0,readThrough:0,pendingEvents:[],exhausted:false,rejected:false});
- const read=async()=>await cache.read(key,stateSchema,validate)||empty();
+ const read=async()=>{
+  const raw=await cache.read(key,stateEnvelope,validate);if(!raw)return empty();
+  const restored=restore(raw);
+  if(JSON.stringify(raw)!==JSON.stringify(restored)){
+   const repaired=await cache.update(key,stateEnvelope,()=>raw,value=>restore(value));
+   return restore(repaired);
+  }
+  return restored;
+ };
  // Migrate under the extraction lock; never let a late legacy read overwrite new progress.
- if(!await cache.read(key,stateSchema,validate))await cache.shared(key,observer,async()=>{
-  if(await cache.read(key,stateSchema,validate))return;
-  const previous=await cache.read(legacyNamespace+'/library',stateSchema,validate);
-  if(previous)await cache.write(key,previous);
+ if(!await cache.read(key,stateEnvelope,validate))await cache.shared(key,observer,async()=>{
+  if(await cache.read(key,stateEnvelope,validate))return;
+  const previous=await cache.read(legacyNamespace+'/library',stateEnvelope,validate);
+  if(previous)await cache.write(key,restore(previous));
  });
  const response=(state:State,stories:Story[],hit:boolean):SuggestionBatch=>{
   const note=(hit?'已复用本地故事库及主题判断缓存。':chapterStories?'已按先总故事、后小故事的顺序收录，再匹配主题。':'已逐篇收录原文故事并匹配主题。')+(state.rejected?'部分返回出处未能完整核对，已保留当前进度，可继续重试。':'')+(!stories.length&&state.exhausted?'已检查完所给原文，暂时没有更多符合主题的故事。':'')+(state.exhausted&&state.pendingEvents.length?'部分跨章线索尚未确认完整，未作为故事推荐。':'');
@@ -158,7 +174,7 @@ export async function discoverLocalStories(provider:ReaderProvider,books:LocalBo
     progress(current,'checking',reading);
     if(result.stories.length>input.scan!.maxStories)throw failed();
     if(!result.scan||!Array.isArray(result.scan.pendingEvents)||!Array.isArray(result.scan.resolvedEventIds))throw failed();
-    const accepted:Story[]=[],rejections:Rejection[]=[],covered=new Set(current.stories.flatMap(story=>sourceUnitIds(book,story.source)));
+    const accepted:Story[]=[],rejections:Rejection[]=[],initialCovered=new Set(current.stories.flatMap(story=>sourceUnitIds(book,story.source))),covered=new Set(initialCovered);
     for(const raw of result.stories){
      try{
       const parsed=storySchema.omit({continuedFrom:true}).parse(raw);qualified(books,book,parsed.source,visible);
@@ -171,23 +187,27 @@ export async function discoverLocalStories(provider:ReaderProvider,books:LocalBo
      }catch{rejections.push(rejectedStory('invalid-source',raw));}
     }
     let pending:PendingEvent[];
-    try{pending=mergePending(books,book,current.pendingEvents,result.scan.pendingEvents,result.scan.resolvedEventIds,accepted,visible);}
+    try{pending=mergePending(books,book,current.pendingEvents,result.scan.pendingEvents,result.scan.resolvedEventIds,[...current.stories,...accepted],visible);}
     catch{
-     const lastRejection=rejections[0]||{code:'pending-resolution' as const};
-     await cache.write(key,{...current,lastRejection});throw new ReaderError(502,rejectionMessage(lastRejection));
+     const independent=accepted.filter(story=>!story.continuedFrom?.length||sourceUnitIds(book,story.source).some(id=>!initialCovered.has(id)));
+     const lastRejection={code:'pending-resolution' as const};
+     await cache.write(key,{...current,stories:[...current.stories,...independent],lastRejection});
+     if(independent.length)break;
+     throw new ReaderError(502,rejectionMessage(lastRejection));
     }
     const rejected=!!rejections.length,lastRejection=rejections[0]||(!accepted.length&&!result.scan.blockComplete?{code:'no-progress' as const}:undefined);
     const next:State={...current,stories:[...current.stories,...accepted],pendingEvents:pending,rejected,lastRejection};
     // A full response is not proof that all stories in this block have been catalogued.
-    if(!rejected&&result.stories.length<input.scan!.maxStories&&result.scan.blockComplete)next.cursor++;
+    if(rejections.every(reason=>reason.code==='duplicate')&&result.stories.length<input.scan!.maxStories&&result.scan.blockComplete)next.cursor++;
     next.readThrough=next.cursor;next.exhausted=next.cursor===plan.blocks.length;
     if(!next.exhausted&&next.pendingEvents.length){
      const upcoming=scanRequest(next,next.cursor);
      if(requestTokens(upcoming.input,'',upcoming.titles,status.provider)>limits.whole)throw new ReaderError(502,'跨章上下文超过输入预算，旧故事库和进度已保留，请缩小章节范围。');
     }
+    const advanced=next.cursor>current.cursor||pending.length<current.pendingEvents.length;
     await cache.write(key,next);current=next;progress(current,'reading',reading);
     if(reading.signal.aborted)break;
-    if(!accepted.length&&lastRejection)throw new ReaderError(502,rejectionMessage(lastRejection));
+    if(!accepted.length&&lastRejection&&!advanced)throw new ReaderError(502,rejectionMessage(lastRejection));
    }
   });
   hit=false;

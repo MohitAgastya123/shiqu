@@ -7,7 +7,7 @@ import type {MediaStore} from '../lib/services.ts';
 import type {SuggestionProgress} from '../lib/reader-suggestions.ts';
 import {ReaderError} from '../lib/reader-model.ts';
 
-export type ReadingObserver={signal:AbortSignal;onProgress:(progress:SuggestionProgress)=>void;drain?:boolean;maxStories?:1};
+export type ReadingObserver={signal:AbortSignal;onProgress:(progress:SuggestionProgress)=>void;drain?:boolean;maxStories?:1;cycleId?:string};
 type Flight={controller:AbortController;promise:Promise<unknown>;listeners:Set<ReadingObserver|undefined>;progress?:SuggestionProgress;settled:boolean};
 const envelope=z.object({version:z.literal(1),key:z.string(),value:z.unknown()});
 export function discoveryHash(value:unknown){return createHash('sha256').update(JSON.stringify(value)).digest('hex');}
@@ -24,6 +24,7 @@ function wait<T>(promise:Promise<T>,signal?:AbortSignal):Promise<T>{
 
 export class StoryDiscoveryCache{
  private flights=new Map<string,Flight>();
+ private updates=new Map<string,Promise<unknown>>();
  private store:MediaStore;
  constructor(store:MediaStore){this.store=store;}
  async read<T>(key:string,schema:z.ZodType<T>,valid:(value:T)=>boolean=()=>true):Promise<T|null>{
@@ -41,6 +42,16 @@ export class StoryDiscoveryCache{
  async write(key:string,value:unknown){
   try{await this.store.put(`reader-cache/${discoveryHash(key)}.json`,new TextEncoder().encode(JSON.stringify({version:1,key,value})),{contentType:'application/json'});}
   catch{throw new ReaderError(503,'故事缓存暂时无法保存，请检查数据目录权限后重试。');}
+ }
+ // Every queued mutation executes against the latest file; a shared flight would discard joiners' work.
+ async update<T>(key:string,schema:z.ZodType<T>,initial:()=>T,change:(value:T)=>T|Promise<T>):Promise<T>{
+  const previous=this.updates.get(key)||Promise.resolve();
+  const pending=previous.catch(()=>{}).then(async()=>{
+   const value=await change(await this.read(key,schema)||initial());
+   await this.write(key,value);return value;
+  });
+  this.updates.set(key,pending);
+  try{return await pending;}finally{if(this.updates.get(key)===pending)this.updates.delete(key);}
  }
  async shared<T>(key:string,observer:ReadingObserver|undefined,work:(reading:ReadingObserver)=>Promise<T>):Promise<T>{
   observer?.signal.throwIfAborted();
