@@ -42,3 +42,5 @@
 本轮服务E2E仍为tests/incremental-story-library.e2e.mjs，扩充并调整受控适配器；全文书籍、缓存/并发、runner路由及预算故障由单元/集成补足。实际Luna可用性仅由单次有界探测证明，不视为准确率基准。
 
 21. 三provider的选中后摘要准备指令及归档摘要指令均要求2–3句、尽量80–150字、起因/关键行动/实际结果齐全；摘要仅准备/审核使用，旧1200字符范围记录继续读取，不按新建议长度截断或付费重写历史文本。语义与字数质量不由受控回归冒充实测。
+
+无摘要提取/原文二元批量匹配本轮最终执行：TT877/877（/tmp/shiqu-deferred-all-tests.log），ET17/17（/tmp/shiqu-deferred-e2e.log），主定向78/78（/tmp/shiqu-deferred-focused.log）及书库定向78/78（/tmp/shiqu-deferred-library-tests.log）。场景15—21由真实REST/SQLite/媒体/队列与受控provider及相应单元测试覆盖；Luna可用性探测/tmp/shiqu-luna-match-probe.json记录实际gpt-6-luna/low，约3166ms、无摘要。非稳定提速或准确率基准，未做浏览器/打包/历史成品改写。

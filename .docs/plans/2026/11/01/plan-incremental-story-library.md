@@ -250,7 +250,7 @@ VR review round: 4; reviewer: reused
 - [x] 实施原文批量二元匹配、预算自适应分批、严格ID回执和取消/并发持久化；拆分Luna路由及匹配缓存模型身份，其他阶段沿用原模型。
 - [x] 更新fixture、三provider/runner/缓存/批量/跨章/候选/重选/准备回归；补实际REST/SQLite/队列服务E2E，验证候选无摘要、选中后首次编排前保存摘要，audit保留而plan/outline/batch/reflection/repair无摘要。
 - [x] 同步README、开发/使用指南及流程文档，移除现行需核对/摘要匹配说明，保留历史里程碑证据。
-- [ ] 运行pnpm typecheck、pnpm lint、完整pnpm test及增量故事库服务E2E，记录实证；无桌面/Docker打包。SS里程碑只提交本故事文件，最终到DD，无GC/push。
+- [x] 运行pnpm typecheck、pnpm lint、完整pnpm test及增量故事库服务E2E，记录实证；无桌面/Docker打包。SS里程碑只提交本故事文件，最终到DD，无GC/push。
 
 主要风险：省去输出不省去读原文/划边界，换主题可能增加输入；缓存兼容锁不能覆盖新进度，单篇超预算必须清楚失败；Luna古文主题质量未由受控用例证明。无UI变化，浏览器禁用不是本轮交付依赖。原书架故事及三份黛玉对照不修改。
 
@@ -277,3 +277,23 @@ AR review round: 9; reviewer: reused
 SS实现：catalog及pending不再输出摘要，新候选只带matchReason；选择后的准备复用原文生成简短完整摘要。冻结旧catalog指纹已与修改前捕获逐项一致校验，旧范围/游标在共享锁内迁移且旧文件不删；现有库命中绕过迁移锁，避免被正在扩展的读者阻塞。匹配直接批量读原文、二元严格ID核验、按完整输入预算缩批，Luna/low独立路由及实际模型拒绝防线已实现。
 
 定向78/78通过（/tmp/shiqu-deferred-focused.log，含17服务E2E、模型路由/runner、摘要隔离/简写及缓存接续）；原文/章节/缓存/取消等另一组78/78通过（/tmp/shiqu-deferred-library-tests.log）。typecheck/lint通过，diff检查通过。首轮受限环境EPERM已通过同组获准监听本地端口解决；未关闭/弱化断言。完整TT/最终ET及独立CR/VR待完成。
+
+SS milestone: `5b03678` (`feat: defer summaries and batch original-based theme matching with Luna`)。无摘要提取、原文二元批量匹配、旧库接续、Luna独立路由与简短摘要指令已实现；78项主定向及78项书库定向通过，待完整TT/最终ET。用户澄清的awesome-shiqu只读核对发现其ZIP解析、公开清单和阅读器仍使用hook，需独立同步；本轮没有修改该仓库。
+
+CR passed: no major findings
+
+独立CR6完整审查e51429b..5b03678，排除独立书籍星标和未修改awesome-shiqu。确认无摘要catalog/pending、原文二元批量预算/严格ID、旧库锁内接续与即时缓存/取消、Luna独立及实际模型身份、选中后短摘要准备、旧1200兼容和编排隔离/审核保留。既有SQL/媒体迁移及付费回执边界未改。已核对两组78/78和typecheck/lint及单次可用性探测，完整TT/最终ET待执行，不宣称稳定提速或准确率。
+
+CR risk: non-low — discovery and candidate contracts, persistent cache compatibility and concurrency, per-task model routing, and source-bound paid-generation prerequisites.
+CR review round: 6; reviewer: reused
+
+TT最终：`pnpm test`877/877通过，约43.5秒（/tmp/shiqu-deferred-all-tests.log）；ET最终：`pnpm exec node --experimental-strip-types --test tests/incremental-story-library.e2e.mjs`17/17通过（/tmp/shiqu-deferred-e2e.log），约6.8秒。typecheck/lint与diff检查通过；两组定向均78/78。全部测试使用隔离库/受控模型，真实模型证据仅Luna两短原文的有界可用性探测。未改真实书库或awesome-shiqu，未打包或push。
+
+VR passed: all acceptance criteria complete
+
+独立VR5逐项确认现行16项标准全部complete，REQ本轮标准已勾选，完整VR原文写入DD。CR6后无源码改动；TT877/877、ET17/17和两组78/78、typecheck/lint及单次Luna可用性探测有效。完成到DD，保留SS里程碑5b03678与本故事收尾文档待提交，无最终GC/push。awesome-shiqu仅只读确认仍用hook，未同步，不能把拾趣内置阅读器兼容结论套用到它。
+
+VR risk: non-low — discovery and candidate contracts, persistent cache compatibility and concurrency, per-task model routing, and source-bound paid-generation prerequisites.
+VR review round: 5; reviewer: reused
+
+用户“DD GC”收尾：确认HEAD仍为已验证实现5b03678，工作区仅本故事DD/AP/REQ/E2E执行记录四文档。DD保留完整VR5原文，复用CR6、TT877/877、ET17/17及typecheck/lint证据；本次GC提交四份收尾文档，保留里程碑，不重跑无变更的测试，不打包或push。awesome-shiqu未改。
