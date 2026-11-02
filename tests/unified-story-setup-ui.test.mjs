@@ -13,9 +13,9 @@ test('discovery stays in the picker and selection opens one continuous story flo
  const selection={bookId:'zhuangzi',storyTitle:'庄周梦蝶',theme:'选择',artStyle:'paper-cut',productionPrompt:'清楚的旁白。',narrativeDetail:'brief',length:'auto',voice:false};
  const session={id:'creating',selection,state:'idle',ready:0,story:null,error:null,awaitingFrameCount:false,retryAllowed:false,generationMode:'background',generationControl:'active',frameRecommendation:{count:7,reason:'保留因果。'},intake:{phase:'confirming',generation:1,search:{state:'idle'},selected:{batch:0,index:0},batches:[{stories:[{title:'庄周梦蝶',description:'不应铺开的候选介绍。'}],note:''}]},generationProgress:{sourceReady:true,frameCountConfirmed:false,phase:'production-confirmation'}};
  const html=renderToStaticMarkup(createElement(Setup,{session,book:'庄子',busy:false,onAction:async()=>{},progress:{busy:false,controlBusy:false,error:'',onControl:async()=>{},onRetry:noop,onBack:noop}}));
- assert.equal((html.match(/<ol /g)||[]).length,1);assert.match(html,/重新选择/);assert.match(html,/>开始制作<\/button>/);assert.match(html,/画风：剪纸艺术/);assert.match(html,/建议 7 幅/);assert.match(html,/制作要求（可选）/);
- for(const label of ['原文','制作要求','修改画风','修改幅数'])assert.ok(html.includes(label),label);
- assert.doesNotMatch(html,/叙事详略|<textarea|type="radio"|不应铺开的候选介绍|修改分镜|制作内容可从流程步骤修改|确认前不会/);
+ assert.equal((html.match(/<ol /g)||[]).length,1);assert.match(html,/重新选择/);assert.match(html,/>开始制作<\/button>/);assert.match(html,/画风：剪纸艺术/);assert.match(html,/简短 · 画幅数由编排与审核确定/);assert.match(html,/制作要求（可选）/);
+ for(const label of ['原文','制作要求','修改画风','修改叙事详略'])assert.ok(html.includes(label),label);
+ assert.doesNotMatch(html,/<textarea|type="radio"|不应铺开的候选介绍|修改分镜|制作内容可从流程步骤修改|确认前不会/);
  assert.match(html,/data-stage="plan" data-state="pending"/);assert.match(html,/data-stage="image" data-state="pending"/);assert.doesNotMatch(html,/制作故事|yu-creation-confirmation|yu-creation-summary/);
  const props={session,book:'庄子',busy:false,onAction:async()=>{},progress:{busy:false,controlBusy:false,error:'',onControl:async()=>{},onRetry:noop,onBack:noop}};
  const choosing={...session,intake:{...session.intake,phase:'choosing',selected:undefined}};
@@ -67,16 +67,16 @@ test('discovery stays in the picker and selection opens one continuous story flo
  assert.match(renderToStaticMarkup(createElement(Setup,{...props,session:unprepared})),/准备这篇/);
  const failedPreparation=renderToStaticMarkup(createElement(Setup,{...props,session:{...unprepared,state:'failed',error:'准备失败。',retryAllowed:true,intake:{...session.intake,phase:'preparing'}}}));
  assert.doesNotMatch(failedPreparation,/准备这篇/);assert.match(failedPreparation,/yu-retry-control/);
- assert.match(renderToStaticMarkup(createElement(Setup,{...props,session:{...session,intake:{...session.intake,draft:{artStyle:'paper-cut',productionPrompt:'手改',narrativeDetail:'brief',length:5}}}})),/5 幅 · 待确认/);
+ assert.match(renderToStaticMarkup(createElement(Setup,{...props,session:{...session,intake:{...session.intake,draft:{artStyle:'paper-cut',productionPrompt:'手改',narrativeDetail:'brief',length:5}}}})),/简短 · 画幅数由编排与审核确定/);
  const preparing=renderToStaticMarkup(createElement(Setup,{...props,session:{...session,state:'running',frameRecommendation:null,intake:{...session.intake,phase:'preparing'}}}));
  assert.match(preparing,/生成进展/);assert.match(preparing,/data-stage="count"/);assert.doesNotMatch(preparing,/>开始制作<\/button>/);
  const pausedPreparation=renderToStaticMarkup(createElement(Setup,{...props,session:{...session,state:'idle',generationControl:'paused',frameRecommendation:null,intake:{...session.intake,phase:'preparing'}}}));
  assert.match(pausedPreparation,/恢复生成/);assert.match(pausedPreparation,/生成进展/);
- for(const label of ['制作要求（可选）','修改画风','修改幅数','重新选择故事'])assert.ok(pausedPreparation.includes(label),label);
+ for(const label of ['制作要求（可选）','修改画风','修改叙事详略','重新选择故事'])assert.ok(pausedPreparation.includes(label),label);
  const pausedProps={session:{...session,intake:undefined,generationControl:'paused'},...props.progress,editor:{base:null,changes:{},impact:null,busy:false,open:noop},onReselect:noop};
  const pausedWithoutPlan=renderToStaticMarkup(createElement(Paused,pausedProps));
  const pausedTimeline=pausedWithoutPlan.match(/<ol .*?<\/ol>/s)[0];
- for(const label of ['制作要求','修改画风','修改画幅数','重新选择故事'])assert.ok(pausedTimeline.includes(label),label);
+ for(const label of ['制作要求','修改画风','修改叙事详略','重新选择故事'])assert.ok(pausedTimeline.includes(label),label);
  assert.equal((pausedWithoutPlan.match(/>恢复生成<\/button>/g)||[]).length,1);
  assert.match(pausedWithoutPlan,/<button type="button" class="yu-primary"[^>]*>恢复生成<\/button>/);
  assert.doesNotMatch(pausedWithoutPlan,/暂停后修改|开始制作新版|yu-review-tools/);
@@ -91,7 +91,7 @@ test('discovery stays in the picker and selection opens one continuous story flo
  const shelfControl=renderToStaticMarkup(createElement(Control,{session:pausedProps.session,busy:false,onControl:noop}));
  assert.match(shelfControl,/class="yu-generation-control"/);assert.doesNotMatch(shelfControl,/class="yu-primary"/);
  const emptyPlanEditor=renderToStaticMarkup(createElement(Editor,{editor:{base:{selection:{...selection,length:5},plan:null,images:[]},changes:{},tab:'count',busy:false,loading:false,setTab:noop,setChanges:noop,impact:{changed:true,replan:true,total:5},submit:noop,discard:noop}}));
- assert.match(emptyPlanEditor,/value="5"/);assert.match(emptyPlanEditor,/开始制作新版/);assert.doesNotMatch(emptyPlanEditor,/保持暂停|恢复生成/);assert.doesNotMatch(emptyPlanEditor,/>分镜<|保存修改并加入队列/);
+ assert.match(emptyPlanEditor,/叙事详略/);assert.doesNotMatch(emptyPlanEditor,/type="number"|type="range"/);assert.match(emptyPlanEditor,/开始制作新版/);assert.doesNotMatch(emptyPlanEditor,/保持暂停|恢复生成/);assert.doesNotMatch(emptyPlanEditor,/>分镜<|保存修改并加入队列/);
  const targetedPlan={pages:Array.from({length:20},(_,i)=>({caption:`第 ${i+1} 幅已保存的旁白。`,prompt:`Saved scene ${i+1}.`})),characters:'已保存的人物设定。',reflection:'已保存的余味。'};
  const targetEditor={base:{selection,plan:targetedPlan,images:[]},changes:{},tab:'script',scriptPage:18,busy:false,loading:false,setTab:noop,setScriptPage:noop,setChanges:noop,impact:{changed:false,replan:false,total:20},submit:noop,discard:noop};
  const targetMarkup=renderToStaticMarkup(createElement(Editor,{editor:targetEditor}));
@@ -130,20 +130,20 @@ test('discovery stays in the picker and selection opens one continuous story flo
  assert.match(shorterMarkup,/aria-label="修改第 3 幅"/);
 
  // Settings edits return to a draft preview; only the explicit production action submits.
- const draftEditor={base:{selection:{...selection,length:5},plan:null,images:[]},changes:{length:30,artStyle:'ink-pencil'},tab:'count',busy:false,loading:false,setTab:noop,setChanges:noop,impact:{changed:true,replan:true,total:30},submit:noop,discard:noop};
+ const draftEditor={base:{selection:{...selection,length:5},plan:null,images:[]},changes:{length:'auto',narrativeDetail:'detailed',artStyle:'ink-pencil'},tab:'count',busy:false,loading:false,setTab:noop,setChanges:noop,impact:{changed:true,replan:true,total:30},submit:noop,discard:noop};
  const editing=renderToStaticMarkup(createElement(Editor,{editor:draftEditor,onDone:noop}));
  assert.match(editing,/>完成编辑<\/button>/);assert.doesNotMatch(editing,/>开始制作新版<\/button>|保持暂停|恢复生成/);
  const confirmation=renderToStaticMarkup(createElement(Actions,{editor:draftEditor}));
  assert.match(confirmation,/>开始制作新版<\/button>/);assert.doesNotMatch(confirmation,/>完成编辑<\/button>|保持暂停|恢复生成/);
  const pausedDraft=renderToStaticMarkup(createElement(Paused,{...pausedProps,editor:draftEditor}));
- assert.match(pausedDraft,/30 幅 · 待确认/);assert.doesNotMatch(pausedDraft,/开始制作新版|暂停后修改/);
+ assert.match(pausedDraft,/按叙事详略编排 · 审核后确定数量/);assert.doesNotMatch(pausedDraft,/开始制作新版|暂停后修改/);
  assert.equal((pausedDraft.match(/>恢复生成<\/button>/g)||[]).length,1);
  const pausedEditor=renderToStaticMarkup(createElement(Editor,{editor:draftEditor,onDone:noop,resuming:true}));
  assert.match(pausedEditor,/>完成编辑<\/button>/);assert.doesNotMatch(pausedEditor,/>恢复生成<\/button>|开始制作新版/);
  const pausedConflict=renderToStaticMarkup(createElement(Paused,{...pausedProps,editor:{...draftEditor,conflict:true}}));
  assert.match(pausedConflict,/<button type="button" class="yu-primary" disabled="">恢复生成<\/button>/);
  const draftSteps=revisionDraftSteps(draftEditor.base,draftEditor.changes);
- assert.equal(draftSteps.find(s=>s.id==='count').detail,'30 幅 · 待确认');
+ assert.equal(draftSteps.find(s=>s.id==='count').detail,'按叙事详略编排 · 审核后确定数量');
  assert.equal(draftSteps.find(s=>s.id==='count').state,'current');
  assert.equal(draftSteps.find(s=>s.id==='source').detail,'画风：彩铅国漫');
  for(const id of ['plan','review','repair','recheck','image'])assert.equal(draftSteps.find(s=>s.id===id).state,'pending',id);
@@ -168,8 +168,11 @@ test('discovery stays in the picker and selection opens one continuous story flo
 
  const createTabs=renderToStaticMarkup(createElement(Tabs,{tab:'style',onChange:noop})),revisionTabs=renderToStaticMarkup(createElement(Tabs,{tab:'script',onChange:noop,script:true}));
  assert.doesNotMatch(createTabs,/分镜/);assert.match(revisionTabs,/分镜/);
- const count=renderToStaticMarkup(createElement(Fields,{tab:'count',settings:{artStyle:'paper-cut',productionPrompt:'',length:80},disabled:true,creation:true,onChange:noop}));
- assert.match(count,/disabled/);assert.equal((count.match(/max="80"/g)||[]).length,2);assert.doesNotMatch(count,/保存修改并加入队列|叙事详略/);
+ const count=renderToStaticMarkup(createElement(Fields,{tab:'count',settings:{artStyle:'paper-cut',productionPrompt:'',length:'auto',narrativeDetail:'balanced'},disabled:true,creation:true,onChange:noop}));
+ assert.match(count,/disabled/);assert.match(count,/叙事详略/);assert.doesNotMatch(count,/type="number"|type="range"|保存修改并加入队列/);
+ const patches=[];const detailTree=Fields({tab:'count',settings:{artStyle:'paper-cut',productionPrompt:'',length:7,narrativeDetail:'balanced'},disabled:false,onChange:p=>patches.push(p)});
+ const choose=node=>{if(Array.isArray(node)){node.forEach(choose);return;}if(!node?.props)return;if(node.type==='button'&&node.props.children?.[0]?.props?.children==='详细')node.props.onClick();choose(node.props.children);};
+ choose(detailTree);assert.deepEqual(patches,[{narrativeDetail:'detailed',length:'auto'}]);
  const style=renderToStaticMarkup(createElement(Fields,{tab:'style',settings:{artStyle:'paper-cut',productionPrompt:'',length:7},artRecommendation:{artStyle:'woodblock',reason:'鲜明轮廓适合人物动作。'},disabled:false,creation:true,onChange:noop}));
  assert.match(style,/推荐：木版年画/);assert.match(style,/鲜明轮廓适合人物动作。/);assert.match(style,/当前选择：剪纸艺术/);assert.match(style,/采用推荐/);
 });

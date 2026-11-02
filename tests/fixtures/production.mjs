@@ -18,7 +18,7 @@ function deferred(){let resolve,reject;const promise=new Promise((yes,no)=>{reso
 export async function productionFixture(t,provider='codex',variables={}){
  const root=await mkdtemp(path.join(os.tmpdir(),'shiqu production ')),dataDirectory=path.join(root,'data');
  await cp('drizzle',path.join(root,'drizzle'),{recursive:true});await mkdir(path.join(root,'docker'));await cp('docker/seed.sql',path.join(root,'docker/seed.sql'));
- const control={calls:[],plans:[],outlines:[],batches:[],reflections:[],reflectionRepairs:[],reviews:[],repairs:[],recommendations:[],hold:true,autoLength:8,active:0,maxActive:0,beforeText:null};
+ const control={calls:[],plans:[],outlines:[],batches:[],reflections:[],reflectionRepairs:[],reviews:[],structures:[],repairs:[],recommendations:[],hold:true,autoLength:8,active:0,maxActive:0,beforeText:null};
  async function image(prompt,reference){
   const page=Number(prompt.match(/Scene (\d+):/)[1])-1,gate=deferred(),call={page,reference,prompt,...gate,done:false,bytes:encoded};
   control.calls.push(call);control.active++;control.maxActive=Math.max(control.maxActive,control.active);
@@ -27,12 +27,13 @@ export async function productionFixture(t,provider='codex',variables={}){
  async function planned(prompt,schema){
   const payload=JSON.parse(prompt);if(schema.properties.artStyle)return {artStyle:'ink-pencil',reason:'与本篇人物动作及叙事相符。'};
   if(schema.properties.count){control.recommendations.push(payload);return {count:7,reason:'保留完整因果和关键转折。',...(schema.properties.storySummary?{storySummary:payload.storyBrief.summary==='尚未准备完整摘要，请依据已核原文生成。'?makePlan(1).summary:payload.storyBrief.summary,storyMatchReason:payload.storyBrief.matchReason,...await control.beforeText?.('recommend',payload,schema)}:{})};}
-  if(schema.properties.issues){control.reviews.push(payload);return {titleReview:{title:payload.plan.title,reason:'标题准确对应当前故事。'},...(payload.reflectionCandidates?{reflectionChoice:{index:1,reason:'保留原文支持的认识，表达简洁。'}}:{}),...await control.beforeText?.('review',payload,schema)??{issues:[]}};}
+  if(schema.properties.issues){control.reviews.push(payload);return {coverage:[{quote:payload.verifiedOriginal.text.slice(0,30),task:'受控原文与分镜核对',pages:[1],assessment:'adequate',reason:'受控回执，不代表真实语义审核。',issuePage:0}],titleReview:{title:payload.plan.title,reason:'标题准确对应当前故事。'},...(payload.reflectionCandidates?{reflectionChoice:{index:1,reason:'保留原文支持的认识，表达简洁。'}}:{}),...await control.beforeText?.('review',payload,schema)??{issues:[]}};}
   if(payload.draft){
    (payload.revision?control.reflectionRepairs:control.reflections).push(payload);
    const override=await control.beforeText?.(payload.revision?'reflection-repair':'reflection',payload,schema);
    return schema.properties.candidates?{title:payload.draft.title,...override??{candidates:makeReflectionCandidates(makePlan(1).reflection)}}:override??{reflection:'梦醒之后，仍可以记住梦中的自在。'};
   }
+  if(schema.properties.edits){control.structures.push(payload);return await control.beforeText?.('structure',payload,schema)??{edits:[{from:2,to:1,pages:[makePlan(1).pages[0]]}]};}
   if(payload.requestedPages){control.repairs.push(payload);return await control.beforeText?.('repair',payload,schema)??{pages:payload.requestedPages.map(page=>({page,...payload.plan.pages[page-1],prompt:payload.plan.pages[page-1].prompt+' Revised staging with one clear visible action.'}))};}
   const length=payload.exactPageCount==='auto'?control.autoLength:payload.exactPageCount,plan=makePlan(length);
   if(schema.properties.beats){control.outlines.push(payload);const override=await control.beforeText?.('outline',payload,schema);const {pages,...metadata}=plan;return override??{...metadata,beats:pages.map((_,i)=>`第 ${i+1} 幅的关键事件与动作。`)};}

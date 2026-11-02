@@ -1,14 +1,15 @@
 // Share production fields across creation drafts and immutable story revisions.
 // Callbacks only update their owner's local draft; recommending and submitting stay explicit.
 import StoryArtStylePicker from './StoryArtStylePicker';
-import {StoryFrameCountInput} from './StoryFrameCount';
+import {narrativeDetails} from '@/lib/reader-frame-recommendation';
+import type {NarrativeDetail} from '@/lib/reader-frame-recommendation';
 import {StoryArtRecommendation} from './StoryArtRecommendation';
 import type {ArtStyleId} from '@/lib/reader-styles';
 import type {FrameRecommendation} from '@/lib/reader-frame-recommendation';
 import type {ArtRecommendation} from '@/lib/reader-art-recommendation';
 export type StoryEditorTab='requirements'|'style'|'count'|'script';
-export type ProductionSettings={artStyle:ArtStyleId;productionPrompt:string;length:number};
-const tabs:{id:StoryEditorTab;label:string}[]=[{id:'requirements',label:'制作要求'},{id:'style',label:'画风'},{id:'count',label:'画幅数'},{id:'script',label:'分镜'}];
+export type ProductionSettings={artStyle:ArtStyleId;productionPrompt:string;length:number|'auto';narrativeDetail:NarrativeDetail};
+const tabs:{id:StoryEditorTab;label:string}[]=[{id:'requirements',label:'制作要求'},{id:'style',label:'画风'},{id:'count',label:'叙事详略'},{id:'script',label:'分镜'}];
 export function StoryEditorTabs({tab,onChange,script=false,disabled=false}:{tab:StoryEditorTab;onChange:(tab:StoryEditorTab)=>void;script?:boolean;disabled?:boolean}){
  return <nav className="yu-revision-tabs" aria-label="修改内容">{tabs.filter(t=>script||t.id!=='script').map(t=><button type="button" key={t.id} disabled={disabled} aria-pressed={tab===t.id} onClick={()=>onChange(t.id)}>{t.label}</button>)}</nav>;
 }
@@ -19,7 +20,7 @@ export default function StoryProductionEditor({tab,settings,disabled,onChange,cr
    {artRecommendation&&<StoryArtRecommendation recommendation={artRecommendation} selected={settings.artStyle} disabled={disabled} onApply={()=>onChange({artStyle:artRecommendation.artStyle})}/>}
    <StoryArtStylePicker value={settings.artStyle} disabled={disabled} onChange={artStyle=>onChange({artStyle})}/>
   </>}
-  {tab==='count'&&<section><h3>画幅数</h3>{recommendation&&<p className="yu-count-help">建议 {recommendation.count} 幅 · {recommendation.reason}</p>}<StoryFrameCountInput count={settings.length} disabled={disabled} onChange={length=>onChange({length})}/><p className="yu-count-help">{creation?'确认制作后按所选幅数编排完整故事。':'修改幅数后重新编排完整故事，原图按新分镜的实际输入判断是否复用。'}</p></section>}
-  {onRecommend&&(tab==='count'||tab==='requirements')&&<><button type="button" className="yu-revision-open" onClick={onRecommend}>按当前要求重新推荐幅数</button><p className="yu-count-help">会保存当前设置并进入推荐队列；也可直接确认自行选择的幅数。</p></>}
+  {tab==='count'&&<section><h3>叙事详略</h3><div className="yu-options" role="group" aria-label="叙事详略">{narrativeDetails.map(detail=><button type="button" key={detail.id} aria-pressed={settings.narrativeDetail===detail.id} className={settings.narrativeDetail===detail.id?'selected':''} disabled={disabled} onClick={()=>onChange({narrativeDetail:detail.id,length:'auto'})}><strong>{detail.label}</strong><span>{detail.description}</span></button>)}</div><p className="yu-count-help">画幅数由模型按原文和详略编排，审核时可增减；文字稿稳定后再生成图片。</p>{recommendation&&<p className="yu-count-help">初步估计 {recommendation.count} 幅，最终数量以编排和审核结果为准。</p>}</section>}
+  {onRecommend&&(tab==='count'||tab==='requirements')&&<><button type="button" className="yu-revision-open" onClick={onRecommend}>按当前要求重新准备</button><p className="yu-count-help">保存设置并核对原文；审核通过前不会绘图。</p></>}
  </fieldset>;
 }

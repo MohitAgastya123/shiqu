@@ -73,7 +73,7 @@ for(const action of ['pause','stop'])test(`quitting after ${action} keeps the co
 test('quitting during frame-count preparation resumes it without a retry',async t=>{
  const f=await productionFixture(t);f.control.hold=false;
  const {kill,started}=gateGenerator(f,'recommend');
- const id=await f.create('auto',{narrativeDetail:'balanced'});await until(()=>started()===1);
+ const id=await f.create(8,{narrativeDetail:'balanced'});await until(()=>started()===1);
  f.app.stopGeneration();kill(Error('killed'));
  await until(async()=>(await jobs(f,id)).some(job=>job.kind==='prepare'&&job.interrupted===1));
  assert.equal((await row(f,id)).state,'idle');
@@ -245,7 +245,7 @@ test('a failed failure write does not stop the queue or report a provider failur
 test('a failed checkpoint save during script work is not a provider failure and recovers',async t=>{
  const logs=t.mock.method(console,'error',()=>{});
  const f=await productionFixture(t),p=production(f);f.control.hold=false;
- failWrites(p.repository,'state=?,error=?,lock_token=NULL',1,'db');
+ failWrites(p.repository,'state=?,error=?,page=CASE',1,'db');
  const id=await f.create(3);await until(()=>logs.mock.calls.some(call=>call.arguments[0]==='production_job_unsaved'));
  const job=(await jobs(f,id)).find(job=>job.pool==='text');
  assert.equal(job.state,'running');assert.equal(job.error,null);

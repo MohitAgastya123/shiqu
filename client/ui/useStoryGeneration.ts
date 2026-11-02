@@ -63,7 +63,7 @@ export function useStoryGeneration(page:number,callbacks:Callbacks,watchShelf=fa
   collect(s);
   if(id.current===sessionId){setActive(s);if(s.story)cb.current.onStory(s.story);}
  }
- async function confirmFrameCount(count:number){
+ async function confirmFrameCount(count:number|'auto'){
   if(busy||pending.current||!active?.awaitingFrameCount)return;
   const sessionId=active.id;setBusy(true);setError('');
   try{

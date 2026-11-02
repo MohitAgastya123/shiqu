@@ -119,8 +119,8 @@ for(const desktop of [false,true])test(`${desktop?'desktop':'reader'} deletion d
  assert.equal((await f.read(id)).generationControl,'stopped');assert.equal(f.control.calls.length,1);
 });
 
-test('background preparation retains count confirmation and does not plan or draw early',async t=>{
- const f=await productionFixture(t),id=await f.create('auto',{narrativeDetail:'balanced'});f.control.hold=false;await control(f,id,'background');
+test('legacy numeric background preparation retains count confirmation and does not plan or draw early',async t=>{
+ const f=await productionFixture(t),id=await f.create(8,{narrativeDetail:'balanced'});f.control.hold=false;await control(f,id,'background');
  await until(async()=>(await f.read(id)).awaitingFrameCount);await f.restart();await f.app.services.production.tick();
  assert.equal(f.control.plans.length,0);assert.equal(f.control.calls.length,0);assert.equal(f.control.recommendations.length,1);
  await f.json(`sessions/${id}/frame-count`,'POST',{count:9});await until(async()=>(await f.read(id)).state==='completed');assert.equal(f.control.calls.length,9);

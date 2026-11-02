@@ -243,7 +243,7 @@ export class ReaderProductionCoordinator implements ReaderProduction{
    if(searching)await this.queue.enqueue(this.spec(row,'discover','search',String(search.round),'',[],{searchRound:search.round},-10));
    if(['discovering','choosing','confirming'].includes(doc.intake.phase))return;
   }
-  const preparing=selection.narrativeDetail&&!doc.frameCountConfirmed&&!doc.plan;
+  const preparing=selection.narrativeDetail&&!doc.frameCountConfirmed&&!doc.plan&&(selection.length!=='auto'||!doc.frameRecommendation);
   // A distinct job owns each saved planning checkpoint; the empty key is the complete-script barrier.
   const scriptKey=!preparing&&(!doc.plan||!reviewPassed(doc))&&(doc.visualReview||doc.draft||doc.storyboard||selection.length==='auto'||selection.length>readerStoryboardBatchSize)?nextStep(doc,selection,0)?.key||'':doc.visualReview?'approved':'';
   const setup=doc.intake?{setupGeneration:doc.intake.generation}:{};
@@ -481,6 +481,7 @@ export class ReaderProductionCoordinator implements ReaderProduction{
   if(doc.visualReview&&!reviewPassed(doc))return {review:doc.visualReview.status};
   if(doc.draft)return {storyboardFrames:doc.draft.pages.length,reflectionPending:true};
   if(doc.storyboard&&!doc.plan)return {storyboardFrames:doc.storyboard.pages.length};
+  if(job.kind==='prepare'&&doc.frameRecommendation&&!doc.plan)return {prepared:true};
   if(!doc.plan||!doc.original)throw new ReaderError(503,'故事仍在更新，请重试继续。');
   return {pages:doc.plan.pages.length};
  }

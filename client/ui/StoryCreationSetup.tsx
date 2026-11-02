@@ -21,19 +21,19 @@ type SetupTab=Exclude<StoryEditorTab,'script'>;
 type Props={session:SessionView;book:string;busy:boolean;onAction:(command:IntakeCommand)=>Promise<void>;progress:Omit<ComponentProps<typeof StoryGenerationStatus>,'session'|'timeline'|'stages'|'children'|'compact'>};
 // Stable titles prevent the initial discovery snapshot from flashing a production screen.
 export function storyCreationTitle(session:SessionView){return session.intake?(session.intake.selected?'故事流程':'选择故事'):session.story?.title||session.selection.storyTitle||'你的故事，正在展开';}
-const savedSettings=(session:SessionView)=>session.intake!.draft||{artStyle:session.selection.artStyle,productionPrompt:session.selection.productionPrompt,narrativeDetail:session.selection.narrativeDetail||'balanced' as const,length:session.frameRecommendation?.count||8};
+const savedSettings=(session:SessionView)=>session.intake!.draft||{artStyle:session.selection.artStyle,productionPrompt:session.selection.productionPrompt,narrativeDetail:session.selection.narrativeDetail||'balanced' as const,length:'auto' as const};
 export default function StoryCreationSetup({session,book,busy,onAction,progress}:Props){
- const intake=session.intake!,saved=savedSettings(session),savedKey=JSON.stringify(saved);
+ const intake=session.intake!,saved={...savedSettings(session),length:'auto' as const},savedKey=JSON.stringify(saved);
  const [error,setError]=useState('');
  const [finding,setFinding]=useState(false);
  const [editing,setEditing]=useState<SetupTab|null>(null),[choosing,setChoosing]=useState(false),[sourceOpen,setSourceOpen]=useState(false);
- const [settings,setSettings]=useState(saved),[remote,setRemote]=useState(false);
+ const [settings,setSettings]=useState({...saved,length:'auto' as const}),[remote,setRemote]=useState(false);
  const baseline=useRef(savedKey),own=useRef(false),shown=useRef(session.id);
  useEffect(()=>{
   const mine=own.current,same=shown.current===session.id;own.current=false;shown.current=session.id;
   // Another device changed what is saved. Unsaved edits stay until the reader decides between them.
   if(same&&!mine&&JSON.stringify(settings)!==baseline.current){setRemote(true);return;}
-  baseline.current=savedKey;setSettings(saved);setRemote(false);
+  baseline.current=savedKey;setSettings({...saved,length:'auto'});setRemote(false);
   if(!same||mine){setSourceOpen(false);setEditing(null);setError('');}
  },[session.id,intake.generation,savedKey]);
  const search=intake.search,paused=!!session.generationControl&&session.generationControl!=='active';
@@ -58,7 +58,7 @@ export default function StoryCreationSetup({session,book,busy,onAction,progress}
   if(await act({action:'choose',batch:batchIndex,index,...(selected?{settings:preferences}:{})}))setChoosing(false);
  }
  function closeEditor(){setEditing(null);if(JSON.stringify(settings)!==baseline.current&&!busy&&!remote)void act({action:'draft',settings});}
- function adoptRemote(){baseline.current=savedKey;setSettings(saved);setRemote(false);}
+ function adoptRemote(){baseline.current=savedKey;setSettings({...saved,length:'auto'});setRemote(false);}
  function keepEdits(){baseline.current=savedKey;setRemote(false);void act({action:'draft',settings});}
  const remoteChoice=remote&&<div className="yu-revision-conflict-note" role="status"><p>另一台设备更新了制作内容。你的修改还没有保存。</p><div className="yu-revision-buttons"><button type="button" disabled={busy} onClick={adoptRemote}>采用最新内容</button><button type="button" disabled={busy} onClick={keepEdits}>保留我的修改</button></div></div>;
  const findMore=<button type="button" className="yu-refresh-batch" aria-busy={searching&&!paused} disabled={busy||searching||intake.batches.length>=40} onClick={()=>void act({action:'more'})}>{searching&&!paused&&<Loader2 size={14} className="spin" aria-hidden="true"/>}{searching?(paused?'恢复后继续查找':'正在查找…'):search.state==='failed'?'重试查找':'继续找故事'}</button>;
@@ -71,7 +71,7 @@ export default function StoryCreationSetup({session,book,busy,onAction,progress}
  </>;
  const stages=generationProgress(session,Date.now()).steps.map(step=>{
   if(ready&&step.id==='source')return {...step,label:'原文',detail:`画风：${getArtStyle(settings.artStyle).label}`};
-  if(ready&&step.id==='count')return {...step,detail:`${settings.length===session.frameRecommendation?.count?'建议 ':''}${settings.length} 幅 · 待确认`};
+  if(ready&&step.id==='count')return {...step,detail:`${settings.narrativeDetail==='brief'?'简短':settings.narrativeDetail==='detailed'?'详细':'适中'} · 画幅数由编排与审核确定`};
   return step;
  });
  return <section className="yu-creation-setup" aria-label={selected?'故事流程':'选择故事'}>
@@ -84,7 +84,7 @@ export default function StoryCreationSetup({session,book,busy,onAction,progress}
   {selected?<StoryGenerationStatus session={session} {...progress} compact={ready} control={ready?null:undefined} stages={stages} timeline={{
    links:{source:[{label:'重新选择故事',onClick:()=>{if(!busy)setChoosing(true);}},...(editable?[{label:'制作要求（可选）',onClick:()=>setEditing('requirements')}]:[])]},
    detailActions:editable?{source:{label:'修改画风',onClick:()=>setEditing('style')}}:undefined,
-   actions:editable?{count:{label:'修改幅数',onClick:()=>setEditing('count')}}:undefined
+   actions:editable?{count:{label:'修改叙事详略',onClick:()=>setEditing('count')}}:undefined
   }}>
    {ready&&<><button type="button" className="yu-primary" disabled={busy||session.state==='running'} onClick={()=>void act({action:'confirm',settings})}>{busy?'正在保存…':paused?'恢复生成':'开始制作'}</button></>}
    {preparable&&<button type="button" className="yu-primary" disabled={busy||session.state==='running'} onClick={()=>void act({action:'choose',batch:intake.selected!.batch,index:intake.selected!.index,settings:preferences})}>准备这篇</button>}
@@ -100,7 +100,7 @@ export default function StoryCreationSetup({session,book,busy,onAction,progress}
   {editing&&<Sheet title="修改故事" busy={busy} onClose={closeEditor}>
    {remoteChoice}
    <StoryEditorTabs tab={editing} disabled={locked} onChange={tab=>{if(tab!=='script')setEditing(tab);}}/>
-   <StoryProductionEditor tab={editing} settings={settings} creation disabled={locked} recommendation={session.frameRecommendation} artRecommendation={selected?.artRecommendation} onChange={patch=>setSettings(s=>({...s,...patch}))} onRecommend={ready&&session.state!=='running'?()=>void act({action:'recommend',settings:preferences}):undefined}/>
+   <StoryProductionEditor tab={editing} settings={settings} creation disabled={locked} recommendation={session.frameRecommendation} artRecommendation={selected?.artRecommendation} onChange={patch=>setSettings(s=>({...s,...patch,length:'auto'}))} onRecommend={ready&&session.state!=='running'?()=>void act({action:'recommend',settings:preferences}):undefined}/>
    {error&&<p className="yu-batch-error" role="alert">{error}</p>}
    <button type="button" className="yu-primary" disabled={busy} onClick={closeEditor}>完成编辑</button><p className="yu-revision-note">设置会保存在这里，离开后也保留；确认制作后才开始生成。</p>
   </Sheet>}

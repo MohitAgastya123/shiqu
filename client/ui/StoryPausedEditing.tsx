@@ -16,6 +16,6 @@ export default function StoryPausedEditing({editor,onReselect,...props}:Props){
  return <StoryGenerationStatus {...props} controlBusy={locked} stages={stages} timeline={{
   links:{source:[{label:'重新选择故事',onClick:()=>{if(!locked)onReselect();}},{label:'制作要求',onClick:()=>edit('requirements')}]},
   detailActions:{source:{label:'修改画风',onClick:()=>edit('style')}},
-  actions:{count:{label:'修改画幅数',onClick:()=>edit('count')},...(session.story?{plan:{label:'修改分镜',onClick:()=>edit('script')}}:{})}
+  actions:{count:{label:'修改叙事详略',onClick:()=>edit('count')},...(session.story?{plan:{label:'修改分镜',onClick:()=>edit('script')}}:{})}
  }} control={changed?<StoryRevisionActions editor={{...editor,busy:locked}} resuming/>:undefined}/>;
 }

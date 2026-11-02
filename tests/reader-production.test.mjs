@@ -188,9 +188,9 @@ test('publication must own its job token as well as the session token',async t=>
  await f.app.services.database.prepare('UPDATE production_jobs SET lease_until=1 WHERE id=?').bind(job.id).run();
 });
 
-for(const provider of ['codex','gemini'])test(`${provider}: confirmation gates paid script/images for auto and identical numeric selections`,async t=>{
+for(const provider of ['codex','gemini'])test(`${provider}: legacy numeric confirmation gates paid script/images before planning`,async t=>{
  const f=await productionFixture(t,provider);f.control.hold=false;
- for(const initial of ['auto',7]){
+ for(const initial of [7,9]){
   const id=await f.createLegacyReader(initial,{narrativeDetail:'balanced'}),viewer=crypto.randomUUID(),plans=f.control.plans.length,images=f.control.calls.length,recommendations=f.control.recommendations.length;
   await f.demand(id,viewer);await until(async()=>(await f.read(id)).awaitingFrameCount);
   assert.equal(f.control.plans.length,plans);assert.equal(f.control.calls.length,images);assert.equal(f.control.recommendations.length,recommendations+1);

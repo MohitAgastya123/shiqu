@@ -72,6 +72,10 @@ export function withLocalBooks(provider:ReaderProvider,books:LocalBooks,media:Me
      if(localBookId(selection))verifyOriginal(selection,original);
      return generator.review!(selection,plan,original,outline,candidates);
     }} satisfies Pick<typeof generator,'review'>:{}),
+    ...(generator.restructure?{async restructure(selection,plan,original,issues,coverage){
+     if(localBookId(selection))verifyOriginal(selection,original);
+     return generator.restructure!(selection,plan,original,issues,coverage);
+    }} satisfies Pick<typeof generator,'restructure'>:{}),
     ...(generator.repair?{async repair(selection,plan,original,issues,outline){
      if(localBookId(selection))verifyOriginal(selection,original);
      return generator.repair!(selection,plan,original,issues,outline);

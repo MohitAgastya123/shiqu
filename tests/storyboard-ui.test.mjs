@@ -1,4 +1,4 @@
-// Render actual reader controls to verify batch progress and the 80-frame input limit without a browser.
+// Render actual reader controls to verify batch progress and automatic frame arrangement without a browser.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
@@ -7,17 +7,17 @@ import {createElement} from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {defaultProductionPrompt} from '../lib/reader-prompts.ts';
 
-test('reader renders saved directory, batch range, honest progress and 80-frame controls',async()=>{
+test('reader renders saved directory, batch range, honest progress and automatic frame controls',async()=>{
  const bundle=await build({stdin:{contents:"export {default as Status} from './client/ui/StoryGenerationStatus.tsx';export {default as Count} from './client/ui/StoryFrameCount.tsx';export {default as Retry} from './client/ui/StoryRetry.tsx';export {default as Review} from './client/ui/StoryReviewTools.tsx';export {default as Editor} from './client/ui/StoryRevisionEditor.tsx';",resolveDir:process.cwd(),loader:'tsx'},bundle:true,write:false,platform:'node',format:'cjs',packages:'external',loader:{'.css':'empty'}});
  const compiled={exports:{}};new Function('require','module','exports',bundle.outputFiles[0].text)(createRequire(import.meta.url),compiled,compiled.exports);
  const {Status,Count,Retry,Review}=compiled.exports,session={id:'render',selection:{length:45},state:'running',productionState:'running',ready:0,story:null,error:null,stage:'正在编排第 21–40 幅分镜',awaitingFrameCount:false,frameRecommendation:null,generationProgress:{sourceReady:true,frameCountConfirmed:true,frameCount:45,phase:'plan',startedAt:Date.now(),attempt:1,storyboardFrames:20,storyboardBatch:{first:21,last:40}}};
  const status=renderToStaticMarkup(createElement(Status,{session,busy:false,error:'',onRetry(){},onBack(){}}));
  assert.match(status,/已保存 20 \/ 45 幅分镜/);assert.match(status,/分镜目录已保存/);assert.match(status,/当前编排第 21–40 幅/);
  assert.doesNotMatch(status,/<progress/);assert.match(status,/进行中/);
- for(const label of ['确认原文','确定画幅数','分批分镜','全篇审片','定向修订','复核','绘图'])assert.ok(status.includes(label),label);
+ for(const label of ['确认原文','叙事详略与篇幅','分批分镜','全篇审片','定向修订','复核','绘图'])assert.ok(status.includes(label),label);
  assert.match(status,/data-stage="review" data-state="pending"/);
  const count=renderToStaticMarkup(createElement(Count,{recommendation:{count:80,reason:'展开关键动作与转折。'},disabled:false,onConfirm(){}}));
- assert.equal((count.match(/max="80"/g)||[]).length,2);assert.match(count,/生成 80 幅/);
+ assert.doesNotMatch(count,/type="range"|type="number"/);assert.match(count,/80 幅/);assert.match(count,/由编排和审核确定/);
  const reviewing={...session,story:{pages:Array(45).fill({})},stage:'正在审核全篇分镜',generationProgress:{...session.generationProgress,phase:'review',reviewStatus:'pending',reviewRound:0}};
  const review=renderToStaticMarkup(createElement(Status,{session:reviewing,busy:false,error:'',onRetry(){},onBack(){}}));
  assert.match(review,/全篇审片/);assert.match(review,/审片通过后才开始绘图/);assert.doesNotMatch(review,/<progress/);

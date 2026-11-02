@@ -27,7 +27,7 @@ async function fixture(t,provider='codex'){
  await cp('drizzle',path.join(root,'drizzle'),{recursive:true});await mkdir(path.join(root,'docker'));await cp('docker/seed.sql',path.join(root,'docker/seed.sql'));
  const control={calls:[],plans:[],outlines:[],pending:new Map(),hold:false,autoLength:30,overridePlanLength:null,recommendations:[],recommendation:{count:7,reason:'保留完整因果与关键转折，节奏适合这篇短寓言。'}};
  function planned(payload,schema,instructions,budget){
-  if(schema.properties.issues)return {issues:[],titleReview:{title:payload.plan.title,reason:'标题准确对应当前故事。'},...(payload.reflectionCandidates?{reflectionChoice:{index:1,reason:'保留原文支持的认识。'}}:{})};
+  if(schema.properties.issues)return {coverage:[{quote:payload.verifiedOriginal.text.slice(0,30),task:'受控原文核对',pages:[1],assessment:'adequate',reason:'受控记录，不代表语义质量。',issuePage:0}],issues:[],titleReview:{title:payload.plan.title,reason:'标题准确对应当前故事。'},...(payload.reflectionCandidates?{reflectionChoice:{index:1,reason:'保留原文支持的认识。'}}:{})};
   if(schema.properties.candidates)return {title:payload.draft.title,candidates:[makePlan(1).reflection,'醒来之后，梦中的自在仍值得回味。','梦与醒的分界，也未必是心境的分界。']};
   if(payload.draft)return {reflection:makePlan(1).reflection};
   if(schema.properties.count){control.recommendations.push({payload,schema,instructions,budget});return {...control.recommendation,...(schema.properties.storySummary?{storySummary:makePlan(1).summary,storyMatchReason:'原文支持梦与醒的经历。'}:{})};}
@@ -222,17 +222,17 @@ test('out-of-order progress renews inactivity while an unchanged stage still tim
 
 
 for(const provider of ['gemini','codex']){
- test(`${provider}: detail recommends from a saved original and waits for durable exact-count confirmation`,async t=>{
+ test(`${provider}: legacy numeric detail recommends from a saved original and waits for durable exact-count confirmation`,async t=>{
   const f=await fixture(t,provider);
   for(const [index,narrativeDetail] of ['brief','balanced','detailed'].entries()){
    const id=crypto.randomUUID(),recs=f.control.recommendations.length,plans=f.control.plans.length,images=f.control.calls.length;
-   await f.json('sessions','POST',{requestId:id,selection:{...selection,length:'auto',narrativeDetail}});
+   await f.json('sessions','POST',{requestId:id,selection:{...selection,length:8,narrativeDetail}});
    assert.equal((await f.request(`sessions/${id}/frame-count`,'POST',{count:1})).status,409);
-   await f.generate(id,0,'auto');
+   await f.generate(id,0,8);
    let current=await f.read(id);assert.equal(current.state,'idle');assert.equal(current.awaitingFrameCount,true);assert.equal(current.retryAllowed,false);assert.equal(current.story,null);assert.equal(current.ready,0);
    assert.deepEqual({count:current.frameRecommendation.count,reason:current.frameRecommendation.reason},f.control.recommendation);assert.ok(current.frameRecommendation.storySummary);assert.equal(f.control.plans.length,plans);assert.equal(f.control.calls.length,images);
    const rec=f.control.recommendations.at(-1);assert.equal(rec.payload.narrativeDetail,narrativeDetail);assert.match(rec.payload.verifiedOriginal.text,/昔者庄周/);assert.equal(rec.schema.properties.count.minimum,1);assert.equal(rec.schema.properties.count.maximum,80);assert.doesNotMatch(rec.instructions,/30至60|30–60/);
-   await f.advance(id,59);f.restart();await f.generate(id,0,'auto');assert.equal(f.control.recommendations.length,recs+1);
+   await f.advance(id,59);f.restart();await f.generate(id,0,8);assert.equal(f.control.recommendations.length,recs+1);
    const count=index===1?60:1;
    const confirmations=await Promise.all([f.request(`sessions/${id}/frame-count`,'POST',{count}),f.request(`sessions/${id}/frame-count`,'POST',{count})]);assert.ok(confirmations.every(r=>r.status===200));
    assert.equal((await f.request(`sessions/${id}/frame-count`,'POST',{count:count===1?60:1})).status,409);
@@ -273,9 +273,9 @@ test('unverifiable URL originals fail before any recommendation or plan request'
  const failed=await f.advance(id,0);assert.equal(failed.state,'failed');assert.match(failed.error,/原文未能核对/);assert.equal(f.control.recommendations.length,0);assert.equal(f.control.plans.length,0);assert.equal(f.control.calls.length,0);
 });
 
-test('lost recommendation responses and concurrent advances reuse the saved suggestion without planning',async t=>{
- const f=await fixture(t),id=crypto.randomUUID();await f.json('sessions','POST',{requestId:id,selection:{...selection,length:'auto',narrativeDetail:'balanced'}});
- let lost=false;assert.equal(await f.generate(id,0,'auto',{request:async(pathname,method,body)=>{
+test('legacy lost recommendation responses and concurrent advances reuse the saved suggestion without planning',async t=>{
+ const f=await fixture(t),id=crypto.randomUUID();await f.json('sessions','POST',{requestId:id,selection:{...selection,length:8,narrativeDetail:'balanced'}});
+ let lost=false;assert.equal(await f.generate(id,0,8,{request:async(pathname,method,body)=>{
   const result=await f.json(pathname.replace(/^reader\//,''),method,body);
   if(!lost&&method==='POST'&&result.awaitingFrameCount){lost=true;throw Error('lost recommendation response');}return result;
  }}),'');assert.equal(lost,true);assert.equal(f.control.recommendations.length,1);

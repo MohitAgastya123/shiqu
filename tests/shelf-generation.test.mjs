@@ -60,7 +60,7 @@ test('shelf refresh reports running and queued work without dispatch or viewer r
 });
 
 test('shelf refresh exposes choice and failure states without retrying',async t=>{
- const f=await productionFixture(t),choice=await f.createLegacyReader('auto',{narrativeDetail:'balanced'});
+ const f=await productionFixture(t),choice=await f.createLegacyReader(8,{narrativeDetail:'balanced'});
  await f.demand(choice);await until(async()=>(await f.read(choice)).awaitingFrameCount);
  const failed=await f.createLegacyReader(),generator=f.generation.generator.bind(f.generation);
  f.generation.generator=()=>({...generator(),async plan(){throw Error('controlled plan failure');}});

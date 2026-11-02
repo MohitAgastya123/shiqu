@@ -12,7 +12,7 @@ import {generationProgress} from '../lib/generation-progress.ts';
 const base={sourceReady:true,frameCountConfirmed:true,planReady:true,total:45,ready:0,reviewStatus:'pending',reviewRound:0};
 const states=input=>productionSteps({...base,...input}).map(s=>s.state);
 test('seven steps distinguish initial review, targeted repair, recheck, skipped work and legacy stories',()=>{
- assert.deepEqual(productionSteps(base).map(s=>s.label),['确认原文','确定画幅数','分批分镜','全篇审片','定向修订','复核','绘图']);
+ assert.deepEqual(productionSteps(base).map(s=>s.label),['确认原文','叙事详略与篇幅','分批分镜','全篇审片','定向修订','复核','绘图']);
  assert.deepEqual(states({phase:'source',planReady:false,sourceReady:false,frameCountConfirmed:false,reviewStatus:null}),['current','pending','pending','pending','pending','pending','pending']);
  assert.deepEqual(states({phase:'frame-count',planReady:false,frameCountConfirmed:false,reviewStatus:null}),['done','current','pending','pending','pending','pending','pending']);
  assert.deepEqual(states({phase:'plan',planReady:false,reviewStatus:null}),['done','done','current','pending','pending','pending','pending']);

@@ -54,7 +54,7 @@ export function nextStep(doc:Document,selection:Selection,through:number):Step|n
   if((doc.original?.storyBrief||doc.intake?.briefRequired&&doc.intake.selected)&&!storyBriefVerified(doc.original))return {kind:'recommend',page:0,key:'recommend'};
   if(selection.narrativeDetail){
    if(!doc.frameRecommendation)return {kind:'recommend',page:0,key:'recommend'};
-   if(!doc.frameCountConfirmed)return null;
+   if(!doc.frameCountConfirmed&&selection.length!=='auto')return null;
   }
   return {kind:'plan',page:doc.storyboard?.pages.length||0,key:doc.storyboard?'plan:'+doc.storyboard.pages.length:'plan'};
  }
@@ -64,7 +64,7 @@ export function nextStep(doc:Document,selection:Selection,through:number):Step|n
   if(review.status==='repair'){
    const pages=review.issues.map(issue=>issue.page).filter(page=>!review.repaired.includes(page));
    const page=pages.filter(page=>page>0).sort((a,b)=>a-b)[0]??0;
-   return {kind:'repair',page:Math.max(0,page-1),key:`repair:${review.round}:${page}`};
+   return {kind:'repair',page:Math.max(0,page-1),key:review.issues.some(issue=>issue.requiresReplan)?`repair:${review.round}:structure`:`repair:${review.round}:${page}`};
   }
   return {kind:'review',page:0,key:'review:'+review.round};
  }
@@ -73,7 +73,7 @@ export function nextStep(doc:Document,selection:Selection,through:number):Step|n
  return null;
 }
 export function productionComplete(doc:Document,selection:Selection){return (!doc.intake||doc.intake.phase==='confirmed')&&!awaitingFrameCount(doc,selection)&&!nextStep(doc,selection,readerMaxFrames-1);}
-export function awaitingFrameCount(doc:Document,selection:Selection){return !doc.intake&&!!selection.narrativeDetail&&!doc.plan&&!!doc.frameRecommendation&&!doc.frameCountConfirmed;}
+export function awaitingFrameCount(doc:Document,selection:Selection){return !doc.intake&&selection.length!=='auto'&&!!selection.narrativeDetail&&!doc.plan&&!!doc.frameRecommendation&&!doc.frameCountConfirmed;}
 export function view(row:SessionRow):SessionView{
  const selection=selectionSchema.parse(JSON.parse(row.selection)),doc=JSON.parse(row.document) as Document,p=doc.plan;
  const step=nextStep(doc,selection,readerMaxFrames-1),intakePhase=effectiveIntakePhase(doc,selection);
@@ -88,7 +88,7 @@ export function view(row:SessionRow):SessionView{
  const generationProgress:GenerationProgress={sourceReady:!!doc.original,frameCountConfirmed,frameCount:p?.pages.length??doc.draft?.pages.length??doc.storyboard?.outline.beats.length??(frameCountConfirmed&&typeof selection.length==='number'?selection.length:null),...(doc.storyboard||doc.draft?{storyboardFrames:doc.draft?.pages.length??doc.storyboard!.pages.length,storyboardBatch}:{}),...(doc.visualReview?{reviewStatus:doc.visualReview.status,reviewRound:doc.visualReview.round,repairCompleted:doc.visualReview.repaired.length,repairTotal:doc.visualReview.issues.length,reviewAudits:doc.visualReview.reports.length,repairBatches:doc.visualReview.history?.length,repairPasses:doc.visualReview.repairs,reviewStopReason:doc.visualReview.stopReason,reviewOverridden:!!doc.visualReview.overridden}:{}),phase:intakePhase==='choosing'?'story-choice':intakePhase==='confirming'?'production-confirmation':waiting?'frame-count':step?.kind||'completed',startedAt:null,attempt:row.step_attempts||0};
  const search=doc.intake?intakeSearch(doc.intake):undefined;
  const intake=doc.intake?{phase:intakePhase!,generation:doc.intake.generation,batches:doc.intake.batches,selected:doc.intake.selected,manualArt:doc.intake.manualArt,draft:doc.intake.draft,search:{state:search!.state,error:search!.error}}:undefined;
- const redraw=doc.revision&&p&&reviewPassed(doc)?revisionRedraw(doc.revision,selection,p):undefined;
+ const redraw=doc.revision&&p&&reviewPassed(doc)?revisionRedraw(doc.revision,selection,p,doc.images):undefined;
  return {...(doc.intake?{intake:intake as IntakeView}:{}),...(doc.revision?{revision:{parentId:doc.revision.parentId,rootId:doc.revision.rootId,number:doc.revision.number,...(redraw?{redraw}:{})}}:{}),...(doc.visualReview?.status==='blocked'?{reviewIssues:blockedIssues(doc.visualReview)}:{}),id:row.id,selection,generationMode:row.generation_mode||'reader',generationControl:row.generation_control||'active',state:row.state,generationProgress,error:row.error,retryAllowed:!!step&&doc.visualReview?.stopReason!=='replan',retryAt,...(doc.visualReview?.status==='blocked'?{retryStage:'review' as const}:step?.kind==='source'||row.state==='failed'&&!doc.original&&row.error?.startsWith('原文未能核对')?{retryStage:'source' as const}:{}),stage,frameRecommendation:doc.frameRecommendation||null,awaitingFrameCount:waiting,ready:doc.images.filter(Boolean).length,story,page:row.page,saved:!!row.saved,lastReadAt:row.last_read_at||null,createdAt:row.created_at};
 }
 // Saved documents are not schema-checked, so rendering is the proof that a row can be used at all.
