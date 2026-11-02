@@ -4,6 +4,8 @@
 
 日常创作步骤见[使用指南](../.docs/user-guide.md#制作与阅读故事)：浏览器中选择故事、画风与叙事详略，设置制作和验收要求；文字审片通过后绘图。提示词查看、故事改名、每书星标参考图及 PDF / PNG / ZIP 导出也在同一浏览器界面完成，与 CLI 启动的界面一致。
 
+0.6.5 的[署名与转载设置](../.docs/user-guide.md#署名与转载)、12–48 px WebP 签名字号及[带提示词的 ZIP 分享](../.docs/user-guide.md#zip-内容与提示词分享)同样在浏览器中完成。升级前停服备份，CLI 与桌面版保持同版；分享前检查 ZIP 内原文与自定义要求。
+
 ## 用户运行要求
 
 桌面版不要求电脑安装 Node。应用在执行内置运行时前校验 SHA-256，再检查实际版本、平台/架构和 SQLite 功能；资源缺失或损坏时要求重新安装，不会偷偷改用系统 Node。设置页只显示内置运行时状态。
@@ -115,8 +117,8 @@ CLI 复用共享数据库中的书库目录，没有时可导入原 `cli-library
 发布前将 `package.json`、`src-tauri/tauri.conf.json` 和 `src-tauri/Cargo.toml` 的版本更新为同一个 `X.Y.Z`，同步 `src-tauri/Cargo.lock` 中的本应用版本，并提交源码。然后推送对应标签，例如当前版本：
 
 ```bash
-git tag v0.6.0
-git push origin v0.6.0
+git tag v0.6.5
+git push origin v0.6.5
 ```
 
 标签所在提交必须包含该工作流及要发布的源码；GitHub 不会打包未提交的本地修改。每个版本使用新的标签。README 的 `/releases/latest/download/` 链接依赖以下固定文件名：
