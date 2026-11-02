@@ -4,7 +4,7 @@ import {readerBooks,ReaderError} from './reader-model.ts';
 import type {Plan,Selection} from './reader-model.ts';
 import {getArtStyle} from './reader-styles.ts';
 import type {ArtStyleId} from './reader-styles.ts';
-import {promptSections,inputBoundaryDirection,sourceFidelityDirection,narrativeMeaningDirection,storyboardDirection,imageCompositionDirection,storyScopeDirection,storyOpeningDirection,storySourceDirection} from './reader-prompts.ts';
+import {promptSections,inputBoundaryDirection,sourceFidelityDirection,narrativeMeaningDirection,storyboardDirection,imageCompositionDirection,storyScopeDirection,storyOpeningDirection,storySourceDirection,storyKnowledgeDirection} from './reader-prompts.ts';
 import {artRecommendationJson,artRecommendationInstructions} from './reader-art-recommendation.ts';
 import {storySummaryDirection} from './reader-story-brief.ts';
 import {narrativeDetailInstructions} from './reader-frame-recommendation.ts';
@@ -27,6 +27,7 @@ export const suggestionSystemPrompt=promptSections(
 export const storyPlanningDirection=promptSections(
  ['故事与事实','面向成年读者，用简体中文改编指定经典中的 chosenStory，保持核心人物、事件与因果；没有选定故事时才按 theme 选题。选定后依据已核原文编排。只改编确知属于该书的故事；存在 verifiedOriginal 时，仅以 text 和存在时的 chapterContext.text 为事实依据，不用记忆补充情节。未提供已核原文的 URL 来源须经 URL context 读取，不能确认时拒绝编造。'],
  ['原文编排',storySourceDirection],
+ ['作品知识与补文',storyKnowledgeDirection],
  ['范围与开场',storyScopeDirection+'\n'+storyOpeningDirection],
  ['叙事与轻重',narrativeMeaningDirection],['静态画面与衔接',storyboardDirection],
  ['事实边界',sourceFidelityDirection],
