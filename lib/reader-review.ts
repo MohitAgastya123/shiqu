@@ -10,7 +10,7 @@ import type {Generated} from './reader-engine.ts';
 import {getArtStyle} from './reader-styles.ts';
 import {storyPageDirection} from './reader-generation-contract.ts';
 import {promptSections,inputBoundaryDirection,sourceFidelityDirection,storyboardDirection,narrativeMeaningDirection,reflectionMeaningDirection,editorialDirection,storyEditorialContext,storyScopeDirection,storyOpeningDirection,storySourceDirection,storyReviewDirection} from './reader-prompts.ts';
-import {readerStoryboardBatchSize} from './reader-limits.ts';
+import {readerStoryboardBatchSize,readerMinFrames,readerMaxFrames} from './reader-limits.ts';
 import {localPlanConstraint} from './reader-local-contract.ts';
 import {editorialAuditDirection,editorialCoverageSchema,editorialCoverageJson,validateEditorialCoverage} from './reader-editorial.ts';
 import type {EditorialCoverage} from './reader-editorial.ts';
@@ -24,11 +24,20 @@ const issueSchema=z.object({page:z.number().int().min(0),category:z.enum(categor
 export type ReviewIssue=z.infer<typeof issueSchema>;
 export type ReflectionChoice={index:number;reason:string};
 export type TitleReview={title:string;reason:string};
-export type ReviewReport={issues:ReviewIssue[];titleReview:TitleReview;reflectionChoice?:ReflectionChoice;coverage?:EditorialCoverage[]};
+export const frameCountReviewSchema=(count:number)=>z.object({decision:z.enum(['keep','expand','reduce','redistribute']),proposedCount:z.number().int().min(readerMinFrames).max(readerMaxFrames),reason:z.string().trim().min(1).max(400)}).strict().superRefine((value,ctx)=>{
+ if((value.decision==='keep'||value.decision==='redistribute')&&value.proposedCount!==count||value.decision==='expand'&&value.proposedCount<=count||value.decision==='reduce'&&value.proposedCount>=count)ctx.addIssue({code:z.ZodIssueCode.custom,message:'Frame-count verdict and proposed direction disagree'});
+});
+export type FrameCountReview=z.infer<ReturnType<typeof frameCountReviewSchema>>;
+export const frameRequirementSchema=(count:number)=>z.object({page:z.number().int().min(1).max(count),quote:z.string().trim().min(2).max(120),task:z.string().trim().min(1).max(120),captionEvidence:z.string().trim().min(1).max(180),visualEvidence:z.string().trim().min(1).max(180),loss:z.string().trim().min(1).max(180),instruction:z.string().trim().min(1).max(400)}).strict();
+export type FrameRequirement=z.infer<ReturnType<typeof frameRequirementSchema>>;
+export type FrameCountReport={frameCountReview:FrameCountReview;requirements:FrameRequirement[];issues:ReviewIssue[];coverage:EditorialCoverage[]};
+export type FrameCountContext=Pick<FrameCountReport,'frameCountReview'|'requirements'>;
+export type ReviewReport={frameCountReview?:FrameCountReview;issues:ReviewIssue[];titleReview:TitleReview;reflectionChoice?:ReflectionChoice;coverage?:EditorialCoverage[]};
 // Historical review reports remain readable without title audit metadata.
-export type ReviewCheckpoint={overridden?:boolean;stopReason?:'limit'|'unchanged'|'replan';history?:{round:number;requested:number[];changes:RepairedPage[];reflection?:string;structure?:StructuralEdits&{before:number;after:number;sourcePages:(number|null)[];removed:RepairedPage[];previousOutline?:StoryboardOutline}}[];status:'pending'|'repair'|'passed'|'blocked';round:number;repairs:number;issues:ReviewIssue[];repaired:number[];reports:{round:number;issues:ReviewIssue[];coverage?:EditorialCoverage[];titleReview?:TitleReview&{previousTitle:string};reflectionChoice?:ReflectionChoice&{candidates:ReflectionCandidates}}[]};
+export type ReviewCheckpoint={overridden?:boolean;stopReason?:'limit'|'unchanged'|'replan';history?:{round:number;requested:number[];changes:RepairedPage[];reflection?:string;structure?:StructuralEdits&{before:number;after:number;sourcePages:(number|null)[];removed:RepairedPage[];previousOutline?:StoryboardOutline}}[];status:'pending'|'repair'|'passed'|'blocked';round:number;repairs:number;issues:ReviewIssue[];repaired:number[];reports:{round:number;frameCountReview?:FrameCountReview;issues:ReviewIssue[];coverage?:EditorialCoverage[];titleReview?:TitleReview&{previousTitle:string};reflectionChoice?:ReflectionChoice&{candidates:ReflectionCandidates}}[]};
 export type RepairedPage={page:number;caption:string;prompt:string};
-export function reviewReportSchema(count:number,candidates?:ReflectionCandidates){return z.object({titleReview:z.object({title:planSchema.shape.title.trim().min(1),reason:z.string().trim().min(1).max(400)}),issues:z.array(issueSchema.extend({page:z.number().int().min(0).max(count)})).max(count+1),coverage:z.array(editorialCoverageSchema).min(1).max(32).optional(),reflectionChoice:z.object({index:z.number().int().min(1).max(3),reason:z.string().trim().min(1).max(400)}).optional()}).superRefine((report,ctx)=>{
+export function reviewReportSchema(count:number,candidates?:ReflectionCandidates){return z.object({frameCountReview:frameCountReviewSchema(count).optional(),titleReview:z.object({title:planSchema.shape.title.trim().min(1),reason:z.string().trim().min(1).max(400)}),issues:z.array(issueSchema.extend({page:z.number().int().min(0).max(count)})).max(count+1),coverage:z.array(editorialCoverageSchema).min(1).max(32).optional(),reflectionChoice:z.object({index:z.number().int().min(1).max(3),reason:z.string().trim().min(1).max(400)}).optional()}).superRefine((report,ctx)=>{
+ if(report.frameCountReview&&(report.frameCountReview.decision!=='keep')!==report.issues.some(issue=>issue.requiresReplan))ctx.addIssue({code:z.ZodIssueCode.custom,message:'Frame-count adjustment must correspond to concrete structural issues'});
  if(new Set(report.issues.map(issue=>issue.page)).size!==report.issues.length)ctx.addIssue({code:z.ZodIssueCode.custom,message:'Duplicate review page'});
  if(report.issues.some(issue=>(issue.page===0)!==(issue.category==='reflection')))ctx.addIssue({code:z.ZodIssueCode.custom,message:'Reflection issues must target the ending; frame issues require positive pages'});
  if(report.issues.some(issue=>issue.requiresReplan&&(issue.page===0||issue.category!=='progression')))ctx.addIssue({code:z.ZodIssueCode.custom,message:'Replanning issues must identify a positive frame and progression problem'});
@@ -37,6 +46,14 @@ export function reviewReportSchema(count:number,candidates?:ReflectionCandidates
   if(item.pages.some(page=>page>count)||new Set(item.pages).size!==item.pages.length||item.issuePage>count||item.assessment==='adequate'&&(!item.pages.length||item.issuePage!==0)||item.assessment==='needs-change'&&(!item.issuePage||!report.issues.some(issue=>issue.page===item.issuePage)))ctx.addIssue({code:z.ZodIssueCode.custom,message:'Editorial coverage must identify valid frames and its corresponding issue'});
  }
 });}
+export function parseFrameCountReport(count:number,value:unknown):FrameCountReport{
+ const parsed=z.object({frameCountReview:frameCountReviewSchema(count),requirements:z.array(frameRequirementSchema(count)).max(readerStoryboardBatchSize)}).strict().parse(value);
+ if((parsed.frameCountReview.decision==='keep')!==!parsed.requirements.length)throw Error('FRAME_COUNT_REVIEW_SCOPE');
+ const pages=[...new Set(parsed.requirements.map(item=>item.page))];
+ const issues:ReviewIssue[]=pages.map(page=>{const related=parsed.requirements.filter(item=>item.page===page);return {page,category:'progression',problem:related.map(item=>item.loss).join('；').slice(0,180),instruction:related.map(item=>item.instruction).join('；').slice(0,400),requiresReplan:true};});
+ const coverage:EditorialCoverage[]=parsed.requirements.map(item=>({quote:item.quote,task:item.task,pages:[item.page],assessment:'needs-change',reason:item.loss,issuePage:item.page}));
+ return {...parsed,issues,coverage};
+}
 export function repairOutputSchema(pages:number[]){return z.object({pages:z.array(planSchema.shape.pages.element.extend({page:z.number().int().min(1)})).length(pages.length)}).superRefine((result,ctx)=>{
  const actual=result.pages.map(page=>page.page);
  if(new Set(actual).size!==pages.length||actual.some(page=>!pages.includes(page)))ctx.addIssue({code:z.ZodIssueCode.custom,message:'Repair page set differs from requested pages'});
@@ -50,6 +67,15 @@ export const storyReplanMessage='故事主线或结局不完整，请修改制�
 export function newReview():ReviewCheckpoint{return {history:[],status:'pending',round:0,repairs:0,issues:[],repaired:[],reports:[]};}
 
 const string=(maxLength:number)=>({type:'string',minLength:1,maxLength});
+const frameCountReviewJson={type:'object',properties:{decision:{type:'string',enum:['keep','expand','reduce','redistribute']},proposedCount:{type:'integer',minimum:readerMinFrames,maximum:readerMaxFrames},reason:{type:'string',minLength:1,maxLength:400}},required:['decision','proposedCount','reason'],additionalProperties:false};
+export const frameCountReviewDirection=`本次必须审核画幅数是否足够，但数量是以下四步的结果，不能先定一个新数量再凑内容：
+1. 从完整原文找出有独立作用的言行、回应和停顿，说明谁对谁做/说了什么、对方如何承受或回应，关系、期待、立场或处境因此如何改变或显露；环境也须有叙事作用。不能只按旧稿已有事件列清单。
+2. 找这些任务在旧稿中的对应幅，分别检查caption说了什么、prompt实际定格并突出什么。提到了整场对答不等于每层作用已经表现；泪痕、笑容、物件已放下等事后状态，也不能自动替代此前发生的关键过程。
+3. 判断压缩损失：是否只交代结果，却省掉关系变化发生时的交锋、承受、误读、转圜或余波？能合在同一可见瞬间的保留合理合并；若先后任务作用不同或需要转换焦点，必须说明挤在同幅失去了什么，不以加长旁白或换景别糊过去。不是每句对白都要独占一幅。
+4. 将损失写成具体补戏要求，说明补/拆/合的原范围及各幅不同任务，才重编和计数。现有幅数不是目标，不能默认只能原幅内修清；确需增删或重分配时列入补戏清单。修法仍须有原文依据，保留有效对白及人物判断的归属，不自行补心理解说。
+只将有实质压缩损失的任务写进requirements补戏清单，每条包括：page为原稿中需重编的锚点幅号；quote为原文连续短句；task为这段言行/回应/停顿的独立作用；captionEvidence说明旧稿配文交代了什么；visualEvidence说明旧稿画面实际定格、突出什么；loss说明两者与原文作用相比压掉了什么过程；instruction写具体补/拆/合要求及各幅不同任务。不要为了列问题而要求每句对白分幅，合理合并保留作用就不列需求。缺整段可锚定最接近的原幅。quote只选原文一个连续短句，逐字照引，允许简繁与标点差别，不拼接、不用省略号；长段选最能定位的一句，不将改写当原引。
+最后返回frameCountReview：decision=keep/expand/reduce/redistribute，proposedCount为完成这些任务需要的1–80幅整数，reason根据具体关键戏说明取舍。keep仅在当前分配已足够时使用，建议数等于当前数且requirements为空；expand增加，reduce减少；redistribute数量不变但重新分配结构。任何非keep结论必须有具体补戏需求。建议数不是新硬锁，分批修订后仍须全篇复核并重新判断；不因较多就通过，不为增幅拆散有效瞬间。只返回requirements及frameCountReview，后续系统把需求交给结构修订；本阶段不输出全面审片表。`;
+
 const reflectionChoiceDirection='本次结语有三个候选（reflectionCandidates），按数组顺序编号1、2、3；plan.reflection 只是尚未选定时的占位，不表示推荐。先对照完整原文和分镜逐句判断成立与否，再在合格句中比较所保留的意味、准确程度、表达功能与语言取舍，选出最值得留下的一句。不要默认选第一句，不按长短、故事名词数量、修辞华丽或固定寓意排名；也不因覆盖更多情节、人物或支线，就优先选择更宽泛的一句。先比较判断是否明确、关系与分寸是否有原文依据、读完能带走什么，再结合入口规则选择表达角度。完整理解全篇不等于成句概括全篇；有据的不同读法可以成立，择优不等于只认可一种寓意。返回 reflectionChoice:{index,reason}，index 必须为现有候选编号，reason 简述所选句的原文依据及相对其余两句的具体优势；不能拼接、改写或另造第四句。有合格候选时，选定其中最优，不因淘汰句有问题或还能想到另一种说法而要求修订。结语的 reflection 问题只针对最终所选句；三个都不合格时也先选最接近要求的一句，并报告其具体问题，交给结语修订阶段处理。分镜仍按完整审核要求检查，择优不能跳过分镜审核。';
 export const reviewSystemPrompt=promptSections(
  ['任务与边界','你是独立的静态连环画审片编辑。完整阅读已核原文，连读全篇 caption 并结合 prompt，独立检查核心含义、分镜轻重、事实与连续性、语言；再参考主题/原典模式及核对摘要检查范围、关键阶段与结局遗漏。保护原稿有效表达，理解不等于把潜台词都写进旁白。审核文字分镜的可执行性，不能声称看过未生成图片。'],
@@ -76,6 +102,13 @@ type Call=(task:ReasoningTask,instructions:string,payload:unknown,schema:unknown
 export function storyboardReviewGenerator(call:Call){
  function payload(selection:Selection,plan:Plan,original:OriginalSource,outline?:StoryboardOutline,reviewing=true){assertStoryBriefReady(original);return {book:selection.customBook||selection.bookId,chosenStory:selection.storyTitle,editorialContext:storyEditorialContext(selection.theme),...(reviewing?storyBriefPayload(original):{}),exactPageCount:plan.pages.length,narrativeDetail:selection.narrativeDetail||'balanced',countPolicy:selection.length==='auto'?'adaptive':'fixed',productionPrompt:normalizeProductionPrompt(selection.productionPrompt||'',selection.theme),artDirection:getArtStyle(selection.artStyle).prompt,verifiedOriginal:verifiedOriginalPayload(original),plan:reviewing?plan:withoutStorySummary(plan),...(outline?{outline:reviewing?outline:withoutStorySummary(outline)}:{})};}
  return {
+  async reviewFrameCount(selection:Selection,plan:Plan,original:OriginalSource){
+   if(selection.length!=='auto')throw Error('FRAME_COUNT_REVIEW_MODE');
+   const count=plan.pages.length,schema={type:'object',properties:{requirements:{type:'array',maxItems:readerStoryboardBatchSize,items:{type:'object',properties:{page:{type:'integer',minimum:1,maximum:count},quote:{type:'string',minLength:2,maxLength:120},task:string(120),captionEvidence:string(180),visualEvidence:string(180),loss:string(180),instruction:string(400)},required:['page','quote','task','captionEvidence','visualEvidence','loss','instruction'],additionalProperties:false}},frameCountReview:frameCountReviewJson},required:['requirements','frameCountReview'],additionalProperties:false};
+   const instructions=promptSections(['任务','你是连环画叙事空间与幅数编辑，这是第一道审核门。只判断关键戏有没有获得足够空间，先补戏再计数；事实细查、语言润色、构图和连续性检查、标题与结语择优留给下一道原有全面审片。原文仍是依据，不凭改编说明或旧审核通过来放行。'],['审核顺序',frameCountReviewDirection],['输入边界',inputBoundaryDirection]);
+   const result=await call('review',instructions+(original.localSource?'\n'+localPlanConstraint:''),payload(selection,plan,original,undefined,false),schema,24000,original);
+   const value=parseFrameCountReport(count,result.value);validateEditorialCoverage(value.coverage,original);return {...result,value};
+  },
   async review(selection:Selection,plan:Plan,original:OriginalSource,outline?:StoryboardOutline,reflectionCandidates?:ReflectionCandidates){
    const candidates=reflectionCandidates?reflectionCandidatesSchema.parse(reflectionCandidates):undefined;
    const count=plan.pages.length,schema={type:'object',properties:{coverage:editorialCoverageJson(count),titleReview:{type:'object',properties:{title:string(40),reason:string(400)},required:['title','reason'],additionalProperties:false},issues:{type:'array',maxItems:count+1,items:{type:'object',properties:{page:{type:'integer',minimum:0,maximum:count},category:{type:'string',enum:categories},problem:string(180),instruction:string(400),requiresReplan:{type:'boolean'}},required:['page','category','problem','instruction','requiresReplan'],additionalProperties:false}},...(candidates?{reflectionChoice:{type:'object',properties:{index:{type:'integer',enum:[1,2,3]},reason:string(400)},required:['index','reason'],additionalProperties:false}}:{})},required:['issues','titleReview','coverage',...(candidates?['reflectionChoice']:[])],additionalProperties:false};
@@ -83,11 +116,11 @@ export function storyboardReviewGenerator(call:Call){
    const value=reviewReportSchema(count,candidates).parse(result.value);if(selection.length==='auto'&&!value.coverage)throw Error('EDITORIAL_COVERAGE_REQUIRED');if(value.coverage)validateEditorialCoverage(value.coverage,original);
    return {...result,value};
   },
-  async restructure(selection:Selection,plan:Plan,original:OriginalSource,issues:ReviewIssue[],coverage?:EditorialCoverage[]){
+  async restructure(selection:Selection,plan:Plan,original:OriginalSource,issues:ReviewIssue[],coverage?:EditorialCoverage[],frameCountContext?:FrameCountContext){
    if(selection.length!=='auto'||!issues.some(issue=>issue.requiresReplan))throw Error('INVALID_STRUCTURAL_SCOPE');
    const direction=`按完整原文和本轮issues修订结构，返回{edits:[{from,to,pages:[{caption,prompt}]}]}。from/to均指修改前plan.pages的1起始幅号，按from严格递增，范围不得重叠；替换from至to的原幅，from=k,to=k-1表示在原第k幅之前插入，from=原幅数+1可末尾追加；pages为空表示删除。只改需要协同的连续段落，不改无关幅，不回传完整稿或元数据。一次所有edits合计最多${readerStoryboardBatchSize}个新/替换画幅，总幅数仍在1至80内；保留原有有效对白、因果、人物设定和自然结局。缺失的关键言行与回应各有任务，合并或删除无独立任务的重复，不以长旁白替代关键戏，也不为多幅重演动作。完整原文才是事实依据，coverage是核对线索，不当作事实。结构修订后还将全篇复核；超过单次上限时先完成一个有据的局部，不用截断结局来凑预算。仅修改结构相关画幅，结语和其他局部问题留待复核后的定向修订。`;
-   const instructions=promptSections(['任务','你是古典静态连环画结构修订编辑。'],['原文编排',storySourceDirection],['叙事标准',narrativeMeaningDirection],['静态画面',storyboardDirection],['逐幅要求',storyPageDirection],['结构输出',direction],['输入边界',inputBoundaryDirection]);
-   const result=await call('repair',instructions+(original.localSource?'\n'+localPlanConstraint:''),{...payload(selection,plan,original,undefined,false),issues,...(coverage?{coverage}:{})},structuralEditsJson(plan.pages.length),16000,original);
+   const instructions=promptSections(['任务','你是古典静态连环画结构修订编辑。'],['原文编排',storySourceDirection],['叙事标准',narrativeMeaningDirection],['静态画面',storyboardDirection],['逐幅要求',storyPageDirection],['结构输出',direction+(frameCountContext?'\n本次数量审核的完整requirements逐项保留，不能只照截短的issues修订。frameCountReview是基于任务的建议数，不是新硬锁；先补各项有据任务，再计数。':'')],['输入边界',inputBoundaryDirection]);
+   const result=await call('repair',instructions+(original.localSource?'\n'+localPlanConstraint:''),{...payload(selection,plan,original,undefined,false),issues,...(coverage?{coverage}:{}),...(frameCountContext?{frameCountContext}:{})},structuralEditsJson(plan.pages.length),16000,original);
    return {...result,value:structuralEditsSchema.parse(result.value)};
   },
   async repair(selection:Selection,plan:Plan,original:OriginalSource,issues:ReviewIssue[],outline?:StoryboardOutline){
