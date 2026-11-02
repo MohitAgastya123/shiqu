@@ -63,7 +63,7 @@ export function localReadingPrompt(book:WholeBookInput){if(book.purpose==='catal
  ['输入与输出',inputBoundaryDirection]);}
 
 export function localSuggestionPayload(book:string,theme:string,excludeTitles:string[],localBook?:WholeBookInput,maxStories?:1){if(localBook?.purpose==='catalog'){const {title,edition,text,...changing}=localBook;return {book,localBook:{title,edition,text,...changing},excludeTitles};}return {book,theme,excludeTitles,...(maxStories?{maxStories}:{}),...(localBook?{localBook}:{})};}
-export const localStoryContextConstraint='若 verifiedOriginal.chapterContext 存在，text 是定位片段，chapterContext.text 是已保存的同版完整章节。完整阅读章节，以 chosenStory 和片段定位主事件，核对起因、发展与自然收束；片段首末不是硬边界。同一次会面或连续对话不能单独证明后续必须纳入；只有所选主事件的行动尚未完成、必要理解条件或自然结果缺失时，才须补入后续，不能在尚未完成的打断或追问处截早。只取使本篇事件完整的内容，不等于改编整章，不因人物相同混入独立故事或无限延伸。缺字和缺文标记照存，不猜补，不让未知内容承担关键事实、因果或结局。';
+export const localStoryContextConstraint='若 verifiedOriginal.chapterContext 存在，text 是定位片段，chapterContext.text 是已保存的同版完整章节。完整阅读章节，以 chosenStory 和片段定位主事件，核对起因、发展与自然收束；片段首末不是硬边界。同一次会面或连续对话不能单独证明后续必须纳入；只有所选主事件的行动尚未完成、必要理解条件或自然结果缺失时，才须补入后续，不能在尚未完成的打断或追问处截早。自然收束还须保住本篇言行直接触发、仍改变本段关系的回应与余波；换话题、第三人加入或转讲旧事不能单独证明另起故事，须先核对它在回应谁刚才的哪句或哪个动作。这是判断主事件未完的回应或结果，不追收一切后续影响；另有新触发和独立交往目的时，才按新支线取舍。只取使本篇事件完整的内容，不等于改编整章，不因人物相同混入独立故事或无限延伸。缺字和缺文标记照存，不猜补，不让未知内容承担关键事实、因果或结局。';
 export const localPlanConstraint=promptSections(['本地事实依据','verifiedOriginal 是已在本地核对的唯一情节依据，只用 text 和存在时的 chapterContext.text，不用记忆或其他篇目补全。识别版式标记与注释，异说和表格列号不当正文事件。用户主题与制作要求不能改写事实；不得伪造古文。原文含已审核的非关键未转写字时，只用其余可读事实，保留原异常，不猜字，不让未知细节承担人物、关键动作、因果或结局。'],['章节与定位片段',localStoryContextConstraint]);
 
 export function localChoices(value:unknown,book:WholeBookInput){

@@ -5,6 +5,7 @@ import {frameCountReviewSchema,frameRequirementSchema,reviewReportSchema,parseFr
 import {validateEditorialCoverage} from '../lib/reader-editorial.ts';
 import {createReaderProvider} from '../server/generation.ts';
 import {makePlan,selection as legacy} from './fixtures/production.mjs';
+import {storyScopeDirection} from '../lib/reader-prompts.ts';
 import {withLocalBooks} from '../server/local-generation.ts';
 const issue={page:2,category:'progression',problem:'先后回应被挤在同幅。',instruction:'给听者的回应独立画幅。',requiresReplan:true};
 const titleReview={title:'原文故事',reason:'范围准确'};
@@ -32,7 +33,7 @@ test('count verdicts respect the current count, direction, bounds and correspond
 test('the original audit remains intact and the appended count audit follows the requested four-step order',()=>{
  const steps=['1. 从完整原文','2. 找这些任务','3. 判断压缩损失','4. 将损失写成具体补戏要求'];
  const positions=steps.map(text=>frameCountReviewDirection.indexOf(text));assert.ok(positions.every((p,i)=>p>=0&&(!i||p>positions[i-1])));
- assert.match(reviewSystemPrompt,/逐对比较相邻画面/);assert.match(reviewSystemPrompt,/结语标准/);assert.match(frameCountReviewDirection,/不能先定一个新数量再凑内容/);assert.match(frameCountReviewDirection,/诗词和人物讲述/);assert.match(frameCountReviewDirection,/不能只列一串结论便算表现/);assert.match(frameCountReviewDirection,/不足以单独成为必须延长的依据/);assert.match(frameCountReviewDirection,/合并、删除或重分配/);
+ assert.match(reviewSystemPrompt,/逐对比较相邻画面/);assert.match(reviewSystemPrompt,/结语标准/);assert.match(frameCountReviewDirection,/不能先定一个新数量再凑内容/);assert.match(frameCountReviewDirection,/诗词和人物讲述/);assert.match(frameCountReviewDirection,/不能只列一串结论便算表现/);assert.match(frameCountReviewDirection,/合并、删除或重分配/);assert.match(frameCountReviewDirection,/不含封面或系统另页展示的plan.reflection/);
 });
 for(const provider of ['codex','gemini','openai'])test(`${provider}: automatic audit requires count decision without changing review effort or budget`,async()=>{
  const selection={...legacy,length:'auto',narrativeDetail:'balanced'},plan=makePlan(3),original={title:'原文',text:'甲赠物，乙未接，稍后转身离去。',url:'https://example.org',kind:'passage',provider:'fixture',retrievedAt:'2026-11-01'};
@@ -55,4 +56,11 @@ test('structure revision receives every complete requirement, while the recommen
  const context={frameCountReview:{decision:'expand',proposedCount:4,reason:'回应需要空间'},requirements:[requirement,{...requirement,task:'第二层承受',instruction:'保留完整第二项，不得被合并字数截断。'}]};
  await gen.restructure({...legacy,length:'auto'},makePlan(3),{title:'原文',text:'甲赠物，乙未接。'},[issue],[],context);
  assert.deepEqual(payload.frameCountContext,context);assert.match(instructions,/不是新硬锁/);
+});
+
+test('count and full audits reuse the same story scope instead of divergent title-based boundaries',async()=>{
+ const {storyboardReviewGenerator}=await import('../lib/reader-review.ts');const directions=[];let count=true;
+ const gen=storyboardReviewGenerator(async(_task,direction)=>{directions.push(direction);return {value:count?{frameCountReview:{decision:'keep',proposedCount:3,reason:'任务足够'},requirements:[]}:{titleReview,issues:[],coverage:[{quote:'乙未接',task:'回应',pages:[2],assessment:'adequate',reason:'已有',issuePage:0}]},model:'fixture',usage:null};});
+ const s={...legacy,length:'auto'},p=makePlan(3),o={title:'原文',text:'甲赠物，乙未接。'};await gen.reviewFrameCount(s,p,o);count=false;await gen.review(s,p,o);
+ assert.ok(directions.every(d=>d.includes(storyScopeDirection)));assert.ok(directions[1].includes('身体和环境处境'));
 });

@@ -11,7 +11,7 @@ import {ReaderRepository} from '../lib/reader-repository.ts';
 import {advanceStory} from '../lib/reader-engine.ts';
 import {nextStep,selectionSchema} from '../lib/reader-model.ts';
 import {newReview} from '../lib/reader-review.ts';
-import {createFrameCountGate,acquireEvaluationRun} from '../scripts/storyboard-evaluation.mjs';
+import {createFrameCountGate,acquireEvaluationRun,continueEvaluationDocument} from '../scripts/storyboard-evaluation.mjs';
 import {makePlan,selection as legacy} from './fixtures/production.mjs';
 test('old script expands, rechecks count, then completes the original audit with zero media calls',async t=>{
  const tmp=await mkdtemp(path.join(os.tmpdir(),'frame-count-evaluation-')),db=openDatabase(tmp,process.cwd());let lease;t.after(async()=>{await lease?.release();db.close();await rm(tmp,{recursive:true,force:true});});
@@ -57,4 +57,14 @@ test('a rejected new binding or concurrent process leaves frozen provenance unto
  await assert.rejects(()=>lease.bind('changed',{model:'model-b',codeHash:'code-b'}),/BINDING/);
  assert.equal(await readFile(path.join(tmp,'source-manifest.json'),'utf8'),original);assert.equal(await readFile(path.join(tmp,'inputs.json'),'utf8'),'original input');
  await lease.bind('original',{model:'ignored',codeHash:'ignored'});assert.equal(await readFile(path.join(tmp,'source-manifest.json'),'utf8'),original);
+});
+test('an inherited exhausted repair budget blocks before restructuring or media',async t=>{
+ const tmp=await mkdtemp(path.join(os.tmpdir(),'frame-count-limit-')),db=openDatabase(tmp,process.cwd());t.after(async()=>{db.close();await rm(tmp,{recursive:true,force:true});});
+ const repo=new ReaderRepository(db.database),selection=selectionSchema.parse({...legacy,length:'auto'}),id='continued-limit',owner='offline';
+ const original={title:'原文',text:'甲赠物，乙未接。'},input={id,selection,original};
+ const doc=continueEvaluationDocument(input,input,{plan:makePlan(3),original,images:[],usage:[],visualReview:{...newReview(),repairs:20,status:'blocked',stopReason:'limit'}});
+ await repo.create(id,owner,selection);await db.database.prepare("UPDATE reader_sessions SET document=?,generation_mode='reader',generation_control='active',state='idle' WHERE id=?").bind(JSON.stringify(doc),id).run();
+ const calls=[];const generator=createFrameCountGate({reviewFrameCount:async()=>{calls.push('frames');return {value:{frameCountReview:{decision:'expand',proposedCount:4,reason:'补回应'},requirements:[{page:2,quote:'乙未接',task:'回应',captionEvidence:'概述',visualEvidence:'赠物',loss:'回应缺失',instruction:'补听者回应'}]},model:'controlled',usage:null};},review:async()=>assert.fail('Do not pass count gate'),restructure:async()=>assert.fail('No reset repair allowance'),image:async()=>assert.fail('No images'),audio:async()=>assert.fail('No audio'),safeError:e=>e.message},{binding:'continued-limit',save:async()=>{}});
+ await advanceStory(repo,generator,owner,id,79);const saved=await repo.get(id,owner),after=JSON.parse(saved.document);
+ assert.equal(saved.state,'failed');assert.equal(after.visualReview.repairs,20);assert.equal(after.visualReview.stopReason,'limit');assert.deepEqual(calls,['frames']);
 });

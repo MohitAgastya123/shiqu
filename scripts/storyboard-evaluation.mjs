@@ -3,11 +3,40 @@
 import {createHash} from 'node:crypto';
 import {ownDesktopData} from '../server/desktop-owner.ts';
 import {readFile,writeFile} from 'node:fs/promises';
-import {parseFrameCountReport} from '../lib/reader-review.ts';
+import {readFileSync,writeFileSync,renameSync} from 'node:fs';
+import {isDeepStrictEqual} from 'node:util';
+import {parseFrameCountReport,newReview} from '../lib/reader-review.ts';
+import {planSchema} from '../lib/reader-model.ts';
+import {readerMaxAutomaticRepairs} from '../lib/reader-limits.ts';
 import {validateEditorialCoverage} from '../lib/reader-editorial.ts';
 
 const hash=value=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
 export const matchesEvaluationModel=(receipt,model)=>typeof model==='string'&&!!model&&receipt?.model===model;
+
+// Write receipt history before returning a model result, including count-keep calls absent from engine usage.
+export function openEvaluationHistory(directory){
+ let saved;
+ for(const file of ['text-history.json','result.json']){
+  try{saved=JSON.parse(readFileSync(directory+'/'+file,'utf8'));break;}catch(error){if(error.code!=='ENOENT')throw error;}
+ }
+ const calls=structuredClone(saved?.calls||[]),failures=structuredClone(saved?.failures||[]);
+ if(!Array.isArray(calls)||!Array.isArray(failures))throw Error('EVALUATION_HISTORY_INVALID');
+ const persist=()=>{const file=directory+'/text-history.json';writeFileSync(file+'.tmp',JSON.stringify({calls,failures},null,2));renameSync(file+'.tmp',file);};
+ return {calls,failures,receipt(value){calls.push(value);persist();},failure(value){failures.push(value);persist();}};
+}
+export function evaluationHistoryTotals(result){
+ const receiptIds=[...new Set([...(result.lineage?.previousReceiptIds||[]),...(result.calls||[]).map(call=>call.requestId||call.hash)])];
+ return {receiptIds,textReceipts:receiptIds.length,failures:(result.lineage?.previousFailures||0)+(result.failures||[]).length};
+}
+
+// Re-audit a stable system draft without inheriting its verdict or resetting the repair budget.
+export function continueEvaluationDocument(input,parentInput,parent){
+ if(!parentInput||!parent||input.id!==parentInput.id||!isDeepStrictEqual(input.selection,parentInput.selection)||!isDeepStrictEqual(input.original,parent.original)||!isDeepStrictEqual(input.original,parentInput.original))throw Error('EVALUATION_PARENT_MISMATCH');
+ planSchema.parse(parent.plan);
+ const previous=parent.visualReview;
+ if(!previous||!Number.isInteger(previous.repairs)||previous.repairs<0||previous.repairs>readerMaxAutomaticRepairs||!Number.isInteger(previous.round)||previous.round<0||!Array.isArray(parent.usage)||!Array.isArray(parent.images)||previous.history&&!Array.isArray(previous.history))throw Error('EVALUATION_PARENT_REVIEW');
+ return {plan:structuredClone(parent.plan),original:structuredClone(parent.original),images:structuredClone(parent.images),audio:[],usage:structuredClone(parent.usage),frameCountConfirmed:true,frameRecommendation:structuredClone(input.frameRecommendation),visualReview:{...newReview(),round:previous.round,repairs:previous.repairs,history:structuredClone(previous.history||[])}};
+}
 
 // A dead runner's isolated DB lock may be cleared only after obtaining exclusive ownership.
 export async function acquireEvaluationRun(directory){
