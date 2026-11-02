@@ -4,6 +4,15 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [0.6.6](https://github.com/yysun/shiqu/releases/tag/v0.6.6) - 2026-11-02
+
+修复发布流程中的测试超时与重复检查，包含 0.6.5 的署名和 ZIP 分享改进。
+
+### Fixed
+
+- 为 80 幅完整故事回归测试预留足够时间，避免并行测试负载导致桌面发布提前失败。
+- 正式标签推送前在独立 worktree 检查实际提交；共享测试只在本地执行一次，GitHub 保留各平台原生测试、安装资源检查与成功后的自动发布。PR 和手动运行仍执行一次共享检查。
+
 ## [0.6.5](https://github.com/yysun/shiqu/releases/tag/v0.6.5) - 2026-11-02
 
 完善作品署名与转载说明，支持默认署名、可调 WebP 签名字号，以及附带完整提示词和包内系统规则引用的 ZIP，方便分享故事的制作过程。
