@@ -127,7 +127,7 @@ export async function advanceStory(repo:ReaderRepository,generator:StoryGenerato
    const review=doc.visualReview!;
    if(review.status==='blocked'){
     // Only an explicit retry can reach a blocked session; reuse the saved issues without a new audit.
-    if(review.stopReason==='replan')throw new ReaderError(409,storyReplanMessage);
+    if(review.stopReason==='replan')throw new ReaderError(409,review.issues.some(issue=>issue.requiresReplan&&issue.category==='continuity')?'全局人物连续性说明需要修订，请调整制作要求后重新编排。':storyReplanMessage);
     if(!retry)throw new ReaderError(409,'分镜审片尚未通过，请手动继续修订。');
     // Give the continuation its own generation so the later recheck cannot reuse this receipt.
     const partial=review.stopReason==='unchanged';review.round++;review.status='repair';review.repairs=0;if(!partial)review.repaired=[];delete review.stopReason;
@@ -151,7 +151,7 @@ export async function advanceStory(repo:ReaderRepository,generator:StoryGenerato
     if(selection.length!=='auto'||!generator.restructure)throw new ReaderError(503,'生成服务暂不支持自动调整分镜结构。已保存审核结果，尚未绘图。');
     const before=doc.plan!,result=await generator.restructure(selection,structuredClone(before),doc.original!,review.issues,review.reports.at(-1)?.coverage);
     const edited=applyStructuralEdits(before,result.value);
-    (review.history??=[]).push({round:review.round,requested:review.issues.filter(issue=>issue.requiresReplan).map(issue=>issue.page),changes:[],structure:{edits:edited.edits,before:before.pages.length,after:edited.plan.pages.length,sourcePages:edited.sourcePages,removed:edited.removed,...(doc.storyboard?{previousOutline:doc.storyboard.outline}:{})}});
+    (review.history??=[]).push({round:review.round,requested:review.issues.filter(issue=>issue.requiresReplan).map(issue=>issue.page),changes:[],structure:{edits:edited.edits,before:before.pages.length,after:edited.plan.pages.length,sourcePages:edited.sourcePages,removed:edited.removed,...(edited.characters?{characters:edited.characters,previousCharacters:edited.previousCharacters}:{}),...(doc.storyboard?{previousOutline:doc.storyboard.outline}:{})}});
     generated=result;
     if(!edited.changed){review.status='blocked';review.stopReason='unchanged';}
     else{
@@ -195,7 +195,7 @@ export async function advanceStory(repo:ReaderRepository,generator:StoryGenerato
    doc.original=result.source;
   }
   if(doc.visualReview?.status==='blocked'){
-   if(doc.visualReview.stopReason==='replan')throw new ReaderError(422,storyReplanMessage+' '+doc.visualReview.issues.filter(issue=>issue.requiresReplan).map(issue=>issue.problem).join('；'));
+   if(doc.visualReview.stopReason==='replan')throw new ReaderError(422,(doc.visualReview.issues.some(issue=>issue.requiresReplan&&issue.category==='continuity')?'全局人物连续性说明需要修订，请调整制作要求后重新编排。':storyReplanMessage)+' '+doc.visualReview.issues.filter(issue=>issue.requiresReplan).map(issue=>issue.problem).join('；'));
    const issues=blockedIssues(doc.visualReview),summary=issues.slice(0,3).map(issue=>`${issue.category==='reflection'?'结语':`第 ${issue.page} 幅`}：${issue.problem}`).join('；');
    throw new ReaderError(422,`${doc.visualReview.stopReason==='unchanged'?'修订没有产生实际变化':`已自动修复 ${readerMaxAutomaticRepairs} 轮，复核未通过`}，仍有 ${issues.length} 处问题，已停止绘图。${summary}。可手动继续修订。`);
   }

@@ -63,5 +63,5 @@ for(const provider of ['codex','gemini','openai'])test(`${provider} editorial/st
  assert.equal((await gen.review(selection,plan,original)).value.coverage.length,1);
  assert.equal((await gen.restructure(selection,plan,original,[issue])).value.edits.length,1);
  assert.ok(seen[0].schema.required.includes('coverage'));assert.equal(seen[0].payload.countPolicy,'adaptive');assert.equal(seen[0].payload.narrativeDetail,'detailed');
- assert.deepEqual(seen[1].schema.required,['edits']);if(provider!=='codex')assert.deepEqual(seen.map(x=>x.budget),[24000,16000]);
+ assert.deepEqual(seen[1].schema.required,['characters','edits']);assert.ok(seen[1].schema.properties.characters);if(provider!=='codex')assert.deepEqual(seen.map(x=>x.budget),[24000,16000]);
 });
