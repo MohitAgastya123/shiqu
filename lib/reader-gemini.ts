@@ -1,4 +1,5 @@
 // Generate story plans and media through Gemini, preserving safe errors and validated results.
+import {formatSystemPrompt} from './reader-prompt-format.ts';
 import {promptRecord} from './reader-prompt-records.ts';
 import {acceptanceInput} from './reader-acceptance.ts';
 import {discoveryCall} from './reader-discovery-call.ts';
@@ -110,7 +111,7 @@ function client(key:string,transport:typeof fetch){
 }
 function textRequest(system:string,data:unknown,schema:unknown,url:string,maxOutputTokens:number,effort:ReasoningEffort){
  let thinkingLevel:string;try{thinkingLevel=geminiThinkingLevel(effort);}catch{throw new GeminiError('UNSUPPORTED_REASONING_EFFORT',400);}
- return {systemInstruction:{parts:[{text:system}]},contents:[{role:'user',parts:[{text:JSON.stringify(data)}]}],
+ return {systemInstruction:{parts:[{text:formatSystemPrompt(system)}]},contents:[{role:'user',parts:[{text:JSON.stringify(data)}]}],
   ...(url?{tools:[{urlContext:{}}]}:{}),
   generationConfig:{maxOutputTokens,thinkingConfig:{thinkingLevel},responseFormat:{text:{mimeType:'APPLICATION_JSON',schema}}}};
 }

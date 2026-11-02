@@ -1,5 +1,6 @@
 // Use official OpenAI text/image APIs with isolated API billing and validated local reference images.
 // Never log provider bodies or credentials, fetch returned image URLs, retry, or fall back to another provider.
+import {formatSystemPrompt} from '../lib/reader-prompt-format.ts';
 import {promptRecord} from '../lib/reader-prompt-records.ts';
 import {acceptanceInput} from '../lib/reader-acceptance.ts';
 import {discoveryCall} from '../lib/reader-discovery-call.ts';
@@ -70,6 +71,7 @@ export function createOpenAIProvider(variables:Record<string,string|undefined>,m
   return {value,requestId:response.headers.get('x-request-id')};
  }
  async function text(instructions:string,payload:unknown,schema:unknown,effort:ReasoningEffort,maxOutputTokens=8192,requestedModel=models.text){
+  instructions=formatSystemPrompt(instructions);
   const {value,requestId}=await request('/responses',{model:requestedModel,instructions,input:[{role:'user',content:JSON.stringify(payload)}],reasoning:{effort},text:{format:{type:'json_schema',name:'story_result',strict:true,schema:strictOpenAISchema(schema)}},max_output_tokens:maxOutputTokens,store:false});
   const fail=(code:string)=>Object.assign(new OpenAIError(code),{usage:value.usage,model:value.model});
   if(requestedModel===themeMatchModel&&value.model&&value.model!==requestedModel)throw fail('MODEL_UNAVAILABLE');

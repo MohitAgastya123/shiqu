@@ -1,4 +1,5 @@
 // Select a complete provider explicitly; subscription mode never falls back to API billing.
+import {formatSystemPrompt} from '../lib/reader-prompt-format.ts';
 import {promptRecord} from '../lib/reader-prompt-records.ts';
 import {acceptanceInput} from '../lib/reader-acceptance.ts';
 import {discoveryCall} from '../lib/reader-discovery-call.ts';
@@ -52,7 +53,7 @@ export function createReaderProvider(variables:Record<string,string|undefined>,m
   const key=variables.GEMINI_API_KEY?.trim()||'',models=configuredModels(variables);
   return {async status(){return {configured:!!key,provider:'gemini',models,voiceEnabled:false,taskReasoningEfforts,themeMatching:{model:models.text,reasoningEffort:themeMatchEffort}};},suggestions:(selection,excluded,localBook,reading)=>suggestStories(key,selection,models,transport,excluded,localBook,taskReasoningEfforts,reading?.maxStories,reading),matchStories:(theme,stories,context)=>matchStoryThemes(key,theme,stories,models,transport,context),async recommendArt(selection,original){if(!original?.localSource)throw new ReaderError(400,'请先选择已核对出处的故事。');return recommendStoryArt(key,selection,original,models,transport,taskReasoningEfforts);},generator:()=>makeGenerator(key,media,models,transport,taskReasoningEfforts),safeError:safeGeminiError};
  }
- const codex=runner||createCodexRunner(variables),models={text:variables.CODEX_MODEL?.trim()||'codex-default',image:'codex-image-generation'};
+ const rawCodex=runner||createCodexRunner(variables),codex:CodexRunner={status:()=>rawCodex.status(),run:job=>rawCodex.run({...job,instructions:formatSystemPrompt(job.instructions)})},models={text:variables.CODEX_MODEL?.trim()||'codex-default',image:'codex-image-generation'};
  let cached:Promise<ProviderStatus>|undefined,expires=0;
  function book(selection:Parameters<ReaderProvider['suggestions']>[0]){
   const source=storySource(selection);

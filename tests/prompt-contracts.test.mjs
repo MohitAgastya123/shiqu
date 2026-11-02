@@ -49,7 +49,7 @@ function responseFor(payload,schema){
 async function requestsFor(provider,acceptancePrompt){
  const inputSelection={...selection,...(acceptancePrompt?{acceptancePrompt}:{})};
  let stage;const seen=new Map(),stored=[];
- function record(instructions,prompt,schema){const payload=JSON.parse(prompt);assert.ok(!instructions.includes(marker));assert.match(instructions,/## /);seen.set(stage,{instructions,payload,schema});return responseFor(payload,schema);}
+ function record(instructions,prompt,schema){const payload=JSON.parse(prompt);assert.ok(!instructions.includes(marker));assert.match(instructions,/(?:任务|任务与边界)：\n/);assert.doesNotMatch(instructions,/^## /m);seen.set(stage,{instructions,payload,schema});return responseFor(payload,schema);}
  const runner={status:async()=>({configured:true}),run:async job=>{
   if(job.generateImage){seen.set(stage,{instructions:job.instructions,prompt:job.prompt});return {text:'',image:encoded,model:'controlled'};}
   return {text:JSON.stringify(record(job.instructions,job.prompt,job.schema)),model:'controlled',reasoningEffort:job.reasoningEffort};
