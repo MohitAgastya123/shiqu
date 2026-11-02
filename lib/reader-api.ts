@@ -1,4 +1,5 @@
 // Route reading, recovery and generation through the single local library.
+import {BookImageReferences,withBookReference} from '../server/book-image-reference.ts';
 import {events} from '../db/schema.ts';
 import type {Services} from './services.ts';
 import {z} from 'zod';
@@ -36,6 +37,11 @@ return async function readerApi(req:Request,path:string[]):Promise<Response>{
   if(path.join('/')==='deletions'&&req.method==='GET')return json(await repo.deletions(uid));
   if(path[0]==='library'&&path.length===2&&req.method==='DELETE'){const id=z.string().min(1).max(100).parse(path[1]);return json(await repo.remove(id,uid));}
   if(path[0]==='library'&&path.length===3&&path[2]==='restore'&&req.method==='POST'){const id=z.string().min(1).max(100).parse(path[1]);return json(await repo.restore(id,uid));}
+  if(path[0]==='library'&&path.length===3&&path[2]==='reference'){
+   const id=z.string().min(1).max(100).parse(path[1]),references=new BookImageReferences(services.database,services.media,uid);
+   if(req.method==='GET')return json(await references.get(id));
+   if(req.method==='POST'){const data=z.object({page:z.number().int().min(0).max(readerMaxFrames-1),starred:z.boolean(),token:uuid.optional()}).strict().parse(await body(req));return json(await references.set(id,data.page,data.starred,data.token));}
+  }
   if(path[0]==='library'&&path.length===3&&path[2]==='favorite'&&req.method==='POST'){const id=z.string().min(1).max(100).parse(path[1]);const b=z.object({saved:z.boolean()}).strict().parse(await body(req));return json(await repo.favorite(id,uid,b.saved));}
   if(path[0]==='books'&&path.length===3&&path[2]==='contents'&&req.method==='GET'){
    if(!services.localBooks)throw new ReaderError(503,'本地书库暂不可用');
@@ -132,7 +138,7 @@ return async function readerApi(req:Request,path:string[]):Promise<Response>{
    if(path[2]==='events'&&req.method==='POST'){const row=await repo.get(id,uid);const b=z.object({id:z.string().max(200),visitor:uuid,session:uuid,storyId:uuid,kind:z.enum(['start','page','complete','next','save','audio','feedback_positive','feedback_negative']),page:z.number().int().min(0).max(readerMaxFrames-1).nullable(),mode:z.enum(['manual','audio']),cohort:z.enum(['internal','pilot'])}).parse(await body(req));const current=view(row);if(b.storyId!==id||(b.page!==null&&!current.story?.pages[b.page]?.image))throw new ReaderError(400,'这幅画面还没有展开');await services.db.insert(events).values({...b,createdAt:new Date().toISOString()}).onConflictDoNothing();return json({ok:true});}
    if(path[2]==='progress'&&req.method==='POST'){const b=z.object({page:z.number().int().min(0).max(readerMaxFrames-1),saved:z.boolean()}).parse(await body(req));return json(view(await repo.progress(id,uid,b.page,b.saved)));}
    if(path[2]==='frame-count'&&path.length===3&&req.method==='POST'){const b=z.object({count:z.number().int().min(1).max(readerMaxFrames)}).strict().parse(await body(req));return json(view(await repo.confirmFrameCount(id,uid,b.count)));}
-   if(path[2]==='advance'&&req.method==='POST'){await requireProvider();const b=z.object({throughPage:z.number().int().min(0).max(readerMaxFrames-1),retry:z.boolean().default(false)}).parse(await body(req));const result=services.production&&await services.production.managed(uid,id)?await services.production.advance(uid,id,b.throughPage,b.retry):await advanceStory(repo,provider.generator(),uid,id,b.throughPage,b.retry);return json(result,result.state==='running'?202:200);}
+   if(path[2]==='advance'&&req.method==='POST'){await requireProvider();const b=z.object({throughPage:z.number().int().min(0).max(readerMaxFrames-1),retry:z.boolean().default(false)}).parse(await body(req));const result=services.production&&await services.production.managed(uid,id)?await services.production.advance(uid,id,b.throughPage,b.retry):await advanceStory(repo,withBookReference(provider.generator(),new BookImageReferences(services.database,services.media,uid)),uid,id,b.throughPage,b.retry);return json(result,result.state==='running'?202:200);}
   }
   if(path[0]==='media'&&path[1]&&path[2]&&path.length===3&&req.method==='GET'){
    const id=uuid.parse(path[1]);await repo.get(id,uid);const file=/^(0|[1-9][0-9]?)\.(png|jpg|webp|wav)$/.exec(path[2]);if(!file||Number(file[1])>=readerMaxFrames)throw new ReaderError(404,'画面不存在');const object=await services.media?.get(`reader/${id}/${path[2]}`);if(!object)throw new ReaderError(404,'这幅还没有生成');const headers=new Headers({'Cache-Control':'private, max-age=3600','X-Content-Type-Options':'nosniff'});headers.set('Content-Type',object.contentType);return new Response(object.body,{headers});

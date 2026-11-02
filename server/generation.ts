@@ -94,7 +94,7 @@ export function createReaderProvider(variables:Record<string,string|undefined>,m
    },
    async image(plan,page,id,reference,style='ink-pencil',productionPrompt='',artifactId){
     let image:{bytes:Uint8Array;contentType:string}|undefined;
-    if(page>0&&reference){
+    if(reference){
      const key=referenceImageKey(id,reference);if(!key)throw new CodexError('INVALID_ANCHOR');
      const object=await media.get(key);if(!object)throw new CodexError('INVALID_ANCHOR');
      const bytes=new Uint8Array(await object.arrayBuffer()),contentType=mediaType(bytes);

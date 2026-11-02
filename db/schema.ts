@@ -1,6 +1,6 @@
 // Define persisted library content, reading checkpoints and durable production jobs/demand.
 import {sql} from 'drizzle-orm';
-import { sqliteTable, text, integer, real, uniqueIndex, index } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, real, uniqueIndex, index, primaryKey } from 'drizzle-orm/sqlite-core';
 export const books = sqliteTable('books', { id: text('id').primaryKey(), title: text('title').notNull(), author: text('author').notNull(), era: text('era').notNull(), sourceUrl: text('source_url').notNull(), excerpt: text('excerpt').notNull(), note: text('note').notNull() });
 // actual_cost/currency are dormant legacy columns, retained to preserve existing library databases.
 export const stories = sqliteTable('stories', { id: text('id').primaryKey(), title: text('title').notNull(), summary: text('summary').notNull(), bookId: text('book_id').notNull(), theme: text('theme').notNull(), status: text('status').notNull(), pages: text('pages').notNull(), reflection: text('reflection').notNull(), sourceText: text('source_text').notNull(), sourceUrl: text('source_url').notNull(), adaptationNote: text('adaptation_note').notNull(), checks: text('checks').notNull(), actualCost: real('actual_cost'), currency: text('currency').notNull().default('CNY'), revision: integer('revision').notNull().default(1), createdAt: text('created_at').notNull(), updatedAt: text('updated_at').notNull() });
@@ -18,3 +18,5 @@ export const productionJobs=sqliteTable('production_jobs',{
 export const productionDemand=sqliteTable('production_demand',{
  sessionId:text('session_id').notNull(),ownerId:text('owner_id').notNull(),viewerId:text('viewer_id').notNull(),page:integer('page').notNull(),throughPage:integer('through_page').notNull(),expiresAt:integer('expires_at').notNull(),runtimeId:text('runtime_id').notNull(),
 },t=>[uniqueIndex('production_viewer').on(t.sessionId,t.ownerId,t.viewerId),index('production_live_demand').on(t.runtimeId,t.expiresAt)]);
+
+export const bookImageReferences=sqliteTable('book_image_references',{ownerId:text('owner_id').notNull(),bookKey:text('book_key').notNull(),storyId:text('story_id').notNull(),page:integer('page').notNull(),token:text('token').notNull(),assetKey:text('asset_key').notNull(),updatedAt:text('updated_at').notNull()},t=>[primaryKey({columns:[t.ownerId,t.bookKey]})]);

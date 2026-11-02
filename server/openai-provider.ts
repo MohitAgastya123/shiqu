@@ -102,9 +102,9 @@ export function createOpenAIProvider(variables:Record<string,string|undefined>,m
    },
    async image(plan,page,id,reference,style='ink-pencil',productionPrompt='',artifactId){
     const size=imageRequestSize(variables.IMAGE_SIZE);if(!size)throw new OpenAIError('INVALID_IMAGE_SIZE',400);
-    const prompt=imagePrompt(plan,page,style,productionPrompt,page>0&&!!reference);
+    const prompt=imagePrompt(plan,page,style,productionPrompt,!!reference);
     let body:Record<string,unknown>|FormData={model:models.image,prompt,n:1,size:size.size,output_format:'png'},route='/images/generations';
-    if(page>0&&reference){
+    if(reference){
      const ref=referenceImageKey(id,reference);if(!ref)throw new OpenAIError('INVALID_ANCHOR');
      const saved=await media.get(ref);if(!saved)throw new OpenAIError('INVALID_ANCHOR');
      const bytes=new Uint8Array(await saved.arrayBuffer()),mime=mediaType(bytes);

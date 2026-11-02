@@ -132,3 +132,10 @@ intake主题与原典两种模式在准备阶段核对摘要；非intake保持�
 ## 图片请求与展示
 
 新生成插图按 **9:16 竖幅**构图。Codex 通过提示词请求 864 × 1536，OpenAI API 直接请求该尺寸；Gemini 请求原生 9:16 / 1K。返回图片只检查格式与尺寸元数据是否有效，不设置分辨率、比例或最低尺寸的拒收门槛，也不裁切、拉伸或补边。手机阅读页在 9:16 范围内等比完整展示原图。后台兼容图片接口的 `IMAGE_SIZE` 默认 `864x1536`；自定义请求尺寸仅按[官方支持规则](https://developers.openai.com/api/docs/guides/image-generation#size-and-quality-options)校验（9:16、宽高为 16 的倍数、最长边不超过 3840 像素、总像素为 655,360–8,294,400），不将请求尺寸用作返回图片的保存门槛。
+
+
+## 书级星标参考
+
+`0010_book_image_references.sql`新增owner/book唯一选择；API从服务器故事记录推导归属，不接受客户端book或媒体URL。`GET/POST reader/library/:id/reference`返回`reference:{storyId,page,token}|null`；设星传`{page,starred:true}`，取消带当前token。每次设星新token防止迟到取消的ABA；删除来源故事清选择。源图片严格从已拥有生成故事或已发布本地故事导出，读写受可见性及图片URL条件保护。快照按内容哈希保存，用户/书级目录隔离，校验类型/尺寸/12MB及哈希。
+
+coordinator先解析实际参考，legacy advance调用同一解析器；将书级快照复制到目标故事不可变artifact后交给provider，保留严格同namespace校验。三个provider允许第一幅附件，星级优先、无星本篇首图fallback。生图派发时读取选择，旧调用字节固定；不把可变星标加入job版本，已有图片及成功待发布回执保持，只有后续尝试使用新选择。坏快照在付费前失败，用户可取消或重选。旧D1导入豁免本地0010，由openDatabase创建空表。

@@ -122,9 +122,9 @@ test('offline importer preserves records, identities, media keys and source byte
 });
 test('offline importer upgrades a pre-summary legacy database without requiring the local-only migration',async t=>{
  const f=await legacyFixture(t),db=new DatabaseSync(f.databaseFile);
- db.exec("ALTER TABLE stories RENAME COLUMN summary TO hook; DELETE FROM d1_migrations WHERE name='0009_story_summary.sql'");db.close();const before=await readFile(f.databaseFile);
+ db.exec("ALTER TABLE stories RENAME COLUMN summary TO hook; DROP TABLE book_image_references; DROP TRIGGER IF EXISTS book_image_reference_on_delete; DELETE FROM d1_migrations WHERE name IN('0009_story_summary.sql','0010_book_image_references.sql')");db.close();const before=await readFile(f.databaseFile);
  await importLegacy(f.source,f.target,f.root);assert.deepEqual(await readFile(f.databaseFile),before);
- const local=openDatabase(f.target,f.root);assert.ok(local.sqlite.prepare('PRAGMA table_info(stories)').all().some(column=>column.name==='summary'));assert.equal(local.sqlite.prepare('SELECT summary FROM stories').get().summary,makeStory().summary);local.close();
+ const local=openDatabase(f.target,f.root);assert.ok(local.sqlite.prepare('PRAGMA table_info(stories)').all().some(column=>column.name==='summary'));assert.equal(local.sqlite.prepare('SELECT summary FROM stories').get().summary,makeStory().summary);assert.equal(local.sqlite.prepare('SELECT count(*) n FROM book_image_references').get().n,0);local.close();
 });
 test('import failure keeps destination absent and rejects live WAL, missing blobs and unsupported multipart objects',async t=>{
  for(const mode of ['wal','blob','multipart']){

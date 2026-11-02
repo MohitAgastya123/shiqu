@@ -1,4 +1,5 @@
 // Convert an offline legacy local store without opening or modifying its source databases.
+import {bookReferenceMigration} from './book-image-reference.ts';
 import {DatabaseSync} from 'node:sqlite';
 import {readFile,writeFile,mkdir,readdir,stat,lstat,rm,rename} from 'node:fs/promises';
 import path from 'node:path';
@@ -50,7 +51,7 @@ export async function importLegacy(sourceDirectory:string,targetDirectory:string
    }
    const names=database.prepare('SELECT name FROM d1_migrations').all().map(row=>String(row.name));
    const migrations=(await readdir(path.join(root,'drizzle'))).filter(f=>f.endsWith('.sql'));
-   if(migrations.some(name=>name!==storySummaryMigration&&!names.includes(name)))throw Error('Legacy database migrations are incomplete; update the old edition before importing');
+   if(migrations.some(name=>![storySummaryMigration,bookReferenceMigration].includes(name)&&!names.includes(name)))throw Error('Legacy database migrations are incomplete; update the old edition before importing');
   }finally{database.close();}
   let objects=0;
   if(r2db.length){

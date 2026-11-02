@@ -158,8 +158,8 @@ export function makeGenerator(key:string,assets:Assets,config:Partial<Models>={}
   },
   async image(plan:Plan,page:number,id:string,reference:string,style:ArtStyleId='ink-pencil',productionPrompt='',artifactId?:string){
    const parts:Part[]=[];
-   if(page>0&&reference){
-    // Only load the existing first scene from this story's own bucket prefix.
+   if(reference){
+    // Authorized book snapshots are copied into the target story namespace before this call.
     const key=referenceImageKey(id,reference);
     if(!key)throw new GeminiError(reference.startsWith(`/api/reader/media/${id}/`)?'INVALID_ANCHOR':'MISSING_ANCHOR');
     const anchor=await assets.get(key);if(!anchor)throw new GeminiError('MISSING_ANCHOR');

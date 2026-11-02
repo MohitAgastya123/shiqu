@@ -8,6 +8,7 @@
 // story lock it stops when no longer wanted, and
 // its failures stay with the search unless a stop interrupted the call.
 // Only current image inputs may publish; their paid receipt can replace a stale version's slot.
+import {BookImageReferences} from './book-image-reference.ts';
 import {storyReplanMessage} from '../lib/reader-review.ts';
 import {randomUUID} from 'node:crypto';
 import {ReaderRepository,persistenceError,supersededSql,latestVersionMessage} from '../lib/reader-repository.ts';
@@ -487,11 +488,12 @@ export class ReaderProductionCoordinator implements ReaderProduction{
   if(doc.images[page])return {value:doc.images[page],model:'saved',requestId:null,usage:null};
   if(page>0&&!doc.images[0])throw new ReaderError(409,'角色参考尚未保存');
   // Check before paying. A key that can't resolve keeps the provider's existing error.
-  const reference=page>0?referenceImageKey(row.id,doc.images[0]):null;
+  const selectedReference=await new BookImageReferences(this.database,this.media,row.user_id).resolve(row.id,page>0?doc.images[0]:'');
+  const reference=selectedReference?referenceImageKey(row.id,selectedReference):null;
   if(reference&&await this.fileLost(reference).catch(()=>false))throw new ReaderError(409,lostImageMessage);
   if(!this.currentJob(await this.raw(job.session_id,job.owner_id),job))return {obsolete:true};
   if(await this.repository.superseded(row.id,row.user_id))throw new JobYield();
-  return this.provider.generator().image(doc.plan!,page,row.id,doc.images[0]||'',selection.artStyle,selection.productionPrompt,inputVersion([job.id,job.lease_token]));
+  return this.provider.generator().image(doc.plan!,page,row.id,selectedReference,selection.artStyle,selection.productionPrompt,inputVersion([job.id,job.lease_token]));
  }
  private async publish(job:ProductionJob,outputs:Record<string,unknown>){
   if(!this.currentJob(await this.raw(job.session_id,job.owner_id),job))return {obsolete:true};
