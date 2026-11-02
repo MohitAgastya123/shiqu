@@ -24,9 +24,10 @@ export const narrativeMeaningDirection=`先完整理解原文，再按“核心�
 export const storyboardDirection=`按静态连环画逐幅翻页编排，不按原文段落机械配图。默认按事件发生顺序讲述；只有读者明确要求非线性叙事，或原作核心依赖回忆、倒叙时才调整，并交代时间。开头不将后段危险、捆绑、冲突或结局前置，再回头补背景；悬念来自当前处境，不靠藏掉关键身份或因果。
 依据原典选择悬念、期待、两难、关系变化、幽默、遗憾或代价，不强求反转、冲突升级或每页悬念。人物目标和阻碍须有依据；不能新增秘密、恶人、苦难、事件或动机来制造刺激。每幅确定新增动作、状态、关系、信息或有价值的停顿，再选择一个可见瞬间承载。准备、决定与回应按叙事需要展开，不把关键戏挤成一句旁白，也不机械拆分拿取、转身等简单操作。
 全景建立处境、尺度与人物关系，中景承接互动，近景或特写强调值得停留的细节；环境画面可用具体空间、光线和物件状态承接时间与情绪。按需要安排开合与疏密，不一概特写、不固定景别比例，也不用无关风景或“悲伤下雨”代替情境。先确定第一视觉焦点，再安排前后层次、朝向、遮挡和留白。一个焦点可以是多人和空间的关系，不必清空背景，也不必塞入全体人物、完整身体和全部道具。
+首幅需要建立环境、空间尺度或人物位置关系时，优先用全景或远景；关键动作或细节更适合引入故事时，可用中近景，但应保留理解处境所需的环境线索，不另加纯风景介绍页。
 每幅只画一个静态可见瞬间。写清谁朝向谁、手脚接触何物、身体如何承重或抗拒、人与障碍相隔多远，使施力、靠近、退让或阻隔可读；表情配合姿态，不以抽象情绪代替动作。可补足不改变事实的站位、目光和姿势，保留动作成立的环境和支点；不用运镜、声音渐近、蒙太奇或先后动作拼图。
 相邻幅接续朝向、接触、关键物件的持有者与开合、空满、完损状态。旁白可直说必要动作、对白、时间和因果，但不逐项清点画面、重复解释或以抽象评语替代事件。人物长篇讲述可选择当下动作、听者回应、现场证据或有原文依据且明确归属的往事；回忆入口交代归属和时间，连续语境自然承接。指控、推测、谎言和未来设想以当下交谈和反应为主，不画成已证实事实，不编造回忆。
-结尾画面先交代事件结果，再以适合本篇的动作、处境或物件留下余波；可以呼应前文或直接停在结果，不强制物件回环、首尾同构或悬而不决。独立结束页的结语不属于末幅配文。
+结尾画面先交代事件结果，再以适合本篇的动作、处境或物件留下余波；可以呼应前文或直接停在结果，不强制物件回环、首尾同构或悬而不决。末幅在结果已清楚时，可用全景或远景呈现人物与环境的关系，留下余韵；意味落在表情、动作或物件细节上时，保留近景或特写，不为拉远而削弱结果。独立结束页的结语不属于末幅配文。
 完成提纲与分镜后分别核对：关键言行、回应和收尾是否获得画幅，是否被次要流程挤掉；遮住配文是否有可读动作与焦点；相邻幅是否有不同任务。发现重复或轻重失衡时，在事实与指定幅数内重分配，不靠加长旁白代替关键戏，不输出自检过程。`;
 
 export const imageCompositionDirection=`Stage this as ONE static lianhuanhua illustration with one dominant narrative focus and one visible instant, not a summary of the whole page or a sequence of actions. Follow the scene's chosen shot size, viewpoint, crop, subject placement and reveal/conceal decisions. Translate its narrative purpose into visible staging rather than written explanation. Use composition suited to a still illustration and retain the selected art style. Do not depict camera movements, animated transitions, multiple successive actions or sounds as if this were a video. A scene explicitly set within a source-supported character recollection may depict that stated past instant; preserve its attributed status without inventing corroborating details. For accusations, lies, speculation or predicted outcomes, keep the planned present interaction rather than treating the claim as an observed fact.
