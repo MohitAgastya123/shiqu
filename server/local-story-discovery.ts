@@ -1,6 +1,6 @@
 // Persist theme-neutral stories before matching; never let a reader's theme or exclusions shape extraction.
 // Expand only until new stories exist, carrying verified unfinished events across blocks and cancellation.
-// Per-theme decisions live separately, and story summaries never replace original text in production.
+// Binary theme receipts read originals; old catalog ranges resume without generating summaries.
 import {z} from 'zod';
 import {localSourceSchema,localSourceKey,localReadingPrompt,localCatalogJson,legacyLocalReadingPrompt,legacyLocalScanJson,localChapterStoriesPrompt} from '../lib/reader-local-contract.ts';
 import type {LocalSourceReference,PendingEvent,WholeBookInput} from '../lib/reader-local-contract.ts';
@@ -17,15 +17,19 @@ import type {ReadingLimits,ReadingBlock} from './story-reading-inputs.ts';
 import {requestTokens} from './story-token-budget.ts';
 import {sourceUnitIds,sourcesOverlap,sourceCovers,mergeSources} from './local-source-ranges.ts';
 import {matchLibraryStories} from './story-theme-matching.ts';
+import {legacySummaryCatalogPrompt,legacySummaryCatalogJson} from '../lib/reader-legacy-catalog.ts';
 
-const storySchema=suggestionBatchSchema.shape.stories.element.omit({storyBrief:true}).extend({source:localSourceSchema,summary:z.string().trim().min(1).max(1200)});
+const storySchema=suggestionBatchSchema.shape.stories.element.omit({storyBrief:true,matchReason:true}).extend({source:localSourceSchema});
 type Story=z.infer<typeof storySchema>;
-const pendingSchema=z.object({id:z.string().min(1).max(64),title:z.string().min(1).max(100),summary:z.string().min(1).max(1000),source:localSourceSchema});
+const pendingSchema=z.object({id:z.string().min(1).max(64),title:z.string().min(1).max(100),source:localSourceSchema});
 const stateSchema=z.object({stories:z.array(storySchema).max(50000),cursor:z.number().int().min(0),readThrough:z.number().int().min(0),pendingEvents:z.array(pendingSchema).max(16),exhausted:z.boolean(),rejected:z.boolean()});
 type State=z.infer<typeof stateSchema>;
 const failed=()=>new ReaderError(502,'本段选题未能完整核对，已保留进度，请重试或换个主题。');
 export function discoveryNamespace(book:LocalBook,provider:string,model:string,limits=defaultReadingLimits,effort?:string){
  return discoveryHash(['story-library-v1',readingPlanKey(book,provider,limits),model,localReadingPrompt({...book.input,purpose:'catalog'}),localCatalogJson,...(effort?[effort]:[])]);
+}
+export function legacySummaryDiscoveryNamespace(book:LocalBook,provider:string,model:string,limits=defaultReadingLimits,effort?:string){
+ return discoveryHash(['story-library-v1',readingPlanKey(book,provider,limits),model,legacySummaryCatalogPrompt,legacySummaryCatalogJson,...(effort?[effort]:[])]);
 }
 export function legacyDiscoveryNamespace(book:LocalBook,provider:string,model:string){
  return discoveryHash(['direct-reading-v2',legacyReadingPlanKey(book,provider),model,legacyLocalReadingPrompt({...book.input,purpose:'scan'}),legacyLocalScanJson]);
@@ -49,7 +53,7 @@ function mergePending(books:LocalBooks,book:LocalBook,old:PendingEvent[],updates
   const id=previous?.id||discoveryHash([localSourceKey(update.source),update.title]);
   if(resolved.includes(id)||resolved.some(done=>sourcesOverlap(book,old.find(event=>event.id===done)!.source,update.source)))throw failed();
   if(seen.has(id))throw failed();seen.add(id);
-  const event={...update,id,source:previous?mergeSources(book,previous.source,update.source):update.source};
+  const event={id,title:update.title,source:previous?mergeSources(book,previous.source,update.source):update.source};
   qualified(books,book,event.source);
   result.set(id,event);
  }
@@ -60,7 +64,9 @@ export async function discoverLocalStories(provider:ReaderProvider,books:LocalBo
  const batchLimit=observer?.maxStories||5;
  const status=await provider.status(),plan=await readingPlan(book,status.provider,cache,limits);
  const chapterStories=!!selection.discoverySources;
- const namespace=discoveryNamespace(book,status.provider,status.models.text,limits,status.taskReasoningEfforts?.suggest)+(selection.discoverySources?'/scope/'+discoveryHash(selection.discoverySources.map(localSourceKey))+'/main-first/'+discoveryHash(localChapterStoriesPrompt):'');
+ const scope=selection.discoverySources?'/scope/'+discoveryHash(selection.discoverySources.map(localSourceKey))+'/main-first/'+discoveryHash(localChapterStoriesPrompt):'';
+ const namespace=discoveryNamespace(book,status.provider,status.models.text,limits,status.taskReasoningEfforts?.suggest)+scope;
+ const legacyNamespace=legacySummaryDiscoveryNamespace(book,status.provider,status.models.text,limits,status.taskReasoningEfforts?.suggest)+scope;
  const theme=selection.theme.normalize('NFKC').trim(),key=namespace+'/library';
  const totalChars=plan.blocks.reduce((n,block)=>n+block.chars,0),excludedKeys=new Set(excludedSources.length?[]:excluded.map(titleKey));
  const validExclusions=excludedSources.filter(source=>{try{qualified(books,book,source);return true;}catch{return false;}});
@@ -105,9 +111,15 @@ export async function discoverLocalStories(provider:ReaderProvider,books:LocalBo
  const progress=(current:State,stage:'reading'|'checking'|'selecting'='reading',reading:ReadingObserver|undefined=observer,block:ReadingBlock|undefined=plan.blocks[current.cursor])=>reading?.onProgress({completed:current.cursor,total:plan.blocks.length,completedChars:plan.blocks.slice(0,current.cursor).reduce((n,block)=>n+block.chars,0),totalChars,stage,mode:plan.manifest.mode,currentChapters:block?.chapters||[]});
  const empty=():State=>({stories:[],cursor:0,readThrough:0,pendingEvents:[],exhausted:false,rejected:false});
  const read=async()=>await cache.read(key,stateSchema,validate)||empty();
+ // Migrate under the extraction lock; never let a late legacy read overwrite new progress.
+ if(!await cache.read(key,stateSchema,validate))await cache.shared(key,observer,async()=>{
+  if(await cache.read(key,stateSchema,validate))return;
+  const previous=await cache.read(legacyNamespace+'/library',stateSchema,validate);
+  if(previous)await cache.write(key,previous);
+ });
  const response=(state:State,stories:Story[],hit:boolean):SuggestionBatch=>{
   const note=(hit?'已复用本地故事库及主题判断缓存。':chapterStories?'已按先总故事、后小故事的顺序收录，再匹配主题。':'已逐篇收录原文故事并匹配主题。')+(state.rejected?'部分返回出处未能完整核对，已保留当前进度，可继续重试。':'')+(!stories.length&&state.exhausted?'已检查完所给原文，暂时没有更多符合主题的故事。':'')+(state.exhausted&&state.pendingEvents.length?'部分跨章线索尚未确认完整，未作为故事推荐。':'');
-  // Neutral catalog summaries stay internal; a matched production brief accompanies its source citation.
+  // Discovery returns ranges and a short match reason; preparation creates the synopsis after selection.
   return suggestionBatchSchema.parse({stories:stories.slice(0,batchLimit),note:note.slice(0,300)});
  };
  const extraction:Selection={bookId:selection.bookId,...(selection.bookId==='other'?{customBook:book.title}:{}),theme:'',artStyle:'ink-pencil',productionPrompt:'',length:'auto',voice:false};

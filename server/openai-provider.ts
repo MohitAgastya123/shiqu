@@ -13,7 +13,7 @@ import {openaiDefaultModels} from '../lib/system-settings.ts';
 import {storyboardGenerator} from '../lib/reader-storyboard.ts';
 import {freshSuggestions,suggestionBatchSchema} from '../lib/reader-suggestions.ts';
 import {localChoicesJson,localScanJson,localCatalogJson,localChoices,localReadingPrompt,localSuggestionPayload} from '../lib/reader-local-contract.ts';
-import {themeMatchPrompt,themeMatchPayload,themeMatchJson,themeMatchesSchema,themeMatchOutputTokens} from '../lib/reader-theme-match.ts';
+import {themeMatchPrompt,themeMatchPayload,themeMatchJson,themeMatchesSchema,themeMatchOutputTokens,themeMatchModel,themeMatchEffort} from '../lib/reader-theme-match.ts';
 import {choicesJson,storyDraftJson,suggestionSystemPrompt,draftInstructions,imagePrompt,imageTypes,mediaType,storySource} from '../lib/reader-generation-contract.ts';
 import {artRecommendationJson,artRecommendationSchema,selectedArtRecommendationPrompt,selectedArtRecommendationPayload} from '../lib/reader-art-recommendation.ts';
 import {frameRecommendationOutputSchema,frameRecommendationOutputJson,frameRecommendationPrompt,frameRecommendationPayload} from '../lib/reader-frame-recommendation.ts';
@@ -46,6 +46,7 @@ export function safeOpenAIError(error:unknown){
  const code=error instanceof OpenAIError?error.message:error instanceof z.ZodError?'INVALID_OUTPUT':error instanceof Error&&/abort|timeout/i.test(error.name)?'TIMEOUT':'PROVIDER_ERROR';
  console.error('openai_request_failed',JSON.stringify({code,status:error instanceof OpenAIError?error.status:undefined}));
  if(error instanceof OpenAIError){
+  if(code==='MODEL_UNAVAILABLE')return 'OpenAI 未采用指定的主题匹配模型，请检查 Luna 模型权限后重试。';
   if(error.status===401||error.status===403)return 'OpenAI API 密钥或模型权限不可用，请检查服务配置。';
   if(error.status===402||error.status===429)return 'OpenAI API 计费、额度或速率限制暂不可用；进度已保留。';
   if(error.status===404)return 'OpenAI API 模型不可用，请检查文本与图片模型设置。';
@@ -63,20 +64,21 @@ export function createOpenAIProvider(variables:Record<string,string|undefined>,m
   if(!response.ok){await response.body?.cancel();throw new OpenAIError('PROVIDER_ERROR',response.status);}
   return {value:await response.json() as any,requestId:response.headers.get('x-request-id')};
  }
- async function text(instructions:string,payload:unknown,schema:unknown,effort:ReasoningEffort,maxOutputTokens=8192){
-  const {value,requestId}=await request('/responses',{model:models.text,instructions,input:[{role:'user',content:JSON.stringify(payload)}],reasoning:{effort},text:{format:{type:'json_schema',name:'story_result',strict:true,schema:strictOpenAISchema(schema)}},max_output_tokens:maxOutputTokens,store:false});
+ async function text(instructions:string,payload:unknown,schema:unknown,effort:ReasoningEffort,maxOutputTokens=8192,requestedModel=models.text){
+  const {value,requestId}=await request('/responses',{model:requestedModel,instructions,input:[{role:'user',content:JSON.stringify(payload)}],reasoning:{effort},text:{format:{type:'json_schema',name:'story_result',strict:true,schema:strictOpenAISchema(schema)}},max_output_tokens:maxOutputTokens,store:false});
+  if(requestedModel===themeMatchModel&&value.model&&value.model!==requestedModel)throw new OpenAIError('MODEL_UNAVAILABLE');
   if(value.status!=='completed')throw new OpenAIError('INCOMPLETE_RESPONSE');
   const content=(value.output||[]).filter((item:any)=>item.type==='message').flatMap((item:any)=>item.content||[]);
   if(content.some((item:any)=>item.type==='refusal'))throw new OpenAIError('REFUSED');
   const output=content.filter((item:any)=>item.type==='output_text').map((item:any)=>item.text).join('');
   let parsed;try{parsed=JSON.parse(output);}catch{throw new OpenAIError('INVALID_OUTPUT');}
-  return {value:restoreOptional(parsed,schema),model:value.model||models.text,requestId:value.id||requestId,usage:value.usage||null,reasoningEffort:effort};
+  return {value:restoreOptional(parsed,schema),model:value.model||requestedModel,requestId:value.id||requestId,usage:value.usage||null,reasoningEffort:effort};
  }
  function book(selection:Parameters<ReaderProvider['suggestions']>[0]){
   const source=storySource(selection);if(source.isUrl)throw new ReaderError(400,'OpenAI API 模式请使用内置书籍或书名；网页 URL 来源请使用 Gemini。');return source.book;
  }
  return {
-  async status(){return {configured:!!key,provider:'openai',models,voiceEnabled:false,taskReasoningEfforts:reasoning};},
+  async status(){return {configured:!!key,provider:'openai',models,voiceEnabled:false,taskReasoningEfforts:reasoning,themeMatching:{model:themeMatchModel,reasoningEffort:themeMatchEffort}};},
   async suggestions(selection,excluded,localBook,reading){
    const scanning=localBook?.purpose==='scan'||localBook?.purpose==='catalog';
    const result=await text(localBook?localReadingPrompt(localBook):suggestionSystemPrompt,localSuggestionPayload(book(selection),selection.theme,excluded,localBook,reading?.maxStories),localBook?.purpose==='catalog'?localCatalogJson:scanning?localScanJson:localBook?localChoicesJson:choicesJson,reasoning.suggest,scanning?10000:localBook?5000:2500);
@@ -84,7 +86,7 @@ export function createOpenAIProvider(variables:Record<string,string|undefined>,m
    return reading?.maxStories?{...fresh,stories:fresh.stories.slice(0,reading.maxStories)}:fresh;
   },
   async matchStories(theme,stories){
-   const result=await text(themeMatchPrompt,themeMatchPayload(theme,stories),themeMatchJson,reasoning.suggest,themeMatchOutputTokens(stories.length));
+   const result=await text(themeMatchPrompt,themeMatchPayload(theme,stories),themeMatchJson,themeMatchEffort,themeMatchOutputTokens(stories.length),themeMatchModel);
    return themeMatchesSchema.parse(result.value);
   },
   async recommendArt(selection,original){

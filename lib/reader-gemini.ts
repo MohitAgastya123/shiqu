@@ -13,7 +13,7 @@ export {imageTypes} from './reader-generation-contract.ts';
 import type {ArtStyleId} from './reader-styles.ts';
 import {saveStoryOriginal} from './reader-source-storage.ts';
 import {localChoicesJson,localScanJson,localCatalogJson,localChoices,localReadingPrompt,localSuggestionPayload} from './reader-local-contract.ts';
-import {themeMatchPrompt,themeMatchPayload,themeMatchJson,themeMatchesSchema,themeMatchOutputTokens} from './reader-theme-match.ts';
+import {themeMatchPrompt,themeMatchPayload,themeMatchJson,themeMatchesSchema,themeMatchOutputTokens,themeMatchEffort} from './reader-theme-match.ts';
 import type {ThemeStory} from './reader-theme-match.ts';
 import type {WholeBookInput} from './reader-local-contract.ts';
 import {verifiedOriginalPayload} from './reader-source-types.ts';
@@ -122,9 +122,9 @@ export async function suggestStories(key:string,selection:Selection,config:Parti
  const fresh=scanning?batch:freshSuggestions(batch,excludeTitles);
  return maxStories?{...fresh,stories:fresh.stories.slice(0,maxStories)}:fresh;
 }
-export async function matchStoryThemes(key:string,theme:string,stories:ThemeStory[],config:Partial<Models>={},transport:typeof fetch=fetch,reasoning:TaskReasoningEfforts=taskReasoningDefaults){
+export async function matchStoryThemes(key:string,theme:string,stories:ThemeStory[],config:Partial<Models>={},transport:typeof fetch=fetch){
  const models={...defaultModels,...config};
- const {candidate}=await client(key,transport)(models.text,textRequest(themeMatchPrompt,themeMatchPayload(theme,stories),themeMatchJson,'',themeMatchOutputTokens(stories.length),reasoning.suggest),120000);
+ const {candidate}=await client(key,transport)(models.text,textRequest(themeMatchPrompt,themeMatchPayload(theme,stories),themeMatchJson,'',themeMatchOutputTokens(stories.length),themeMatchEffort),120000);
  return themeMatchesSchema.parse(parseText(candidate));
 }
 export async function recommendStoryArt(key:string,selection:Selection,original:OriginalSource,config:Models,transport:typeof fetch,reasoning:TaskReasoningEfforts=taskReasoningDefaults){

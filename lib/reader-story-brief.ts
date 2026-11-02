@@ -1,6 +1,7 @@
 // Prepare and audit a verified synopsis; production reads originals without synopsis metadata.
 import {z} from 'zod';
 import type {OriginalSource} from './reader-source-types.ts';
+export const storySummaryDirection='简短完整摘要：优先用2–3句，尽量80–150字，交代起因、关键行动和实际结果；简单故事不凑字，复杂故事仅为保留关键因果适当加长。不逐段复述，不停在开局、计谋目的或“打算做什么”，开放结尾保留原文真实停点。';
 export const storySummarySchema=z.string().trim().min(1).max(1200);
 export const storyBriefSchema=z.object({summary:storySummarySchema,matchReason:z.string().trim().min(1).max(300)});
 export type StoryBrief=z.infer<typeof storyBriefSchema>;

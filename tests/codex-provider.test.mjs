@@ -31,7 +31,7 @@ for await(const line of createInterface({input:process.stdin})){
  let result={};
  if(m.method==='account/read')result={account:mode==='signed-out'?null:{type:mode==='api-key'?'apiKey':'chatgpt'}};
  if(m.method==='config/read')result={config:{model_reasoning_effort:mode==='ignored-effort-config'?'high':effort,...(mode==='configured-model'?{model:'configured-text-model'}:{}),features:Object.fromEntries(process.argv.flatMap((arg,i)=>arg==='--disable'?[[process.argv[i+1],false]]:[])),mcp_servers:{'inherited-private-server':{enabled:true}}}};
- if(m.method==='thread/start')result={thread:{id:'fake-thread'},model:'test-codex-model',modelProvider:'openai',reasoningEffort:mode==='ignored-effort-thread'?'high':effort};
+ if(m.method==='thread/start')result={thread:{id:'fake-thread'},model:mode==='ignored-model'?'other-model':m.params.model||'test-codex-model',modelProvider:'openai',reasoningEffort:mode==='ignored-effort-thread'?'high':effort};
  if(m.method==='mcpServerStatus/list')result={data:mode==='unsafe'?[{tools:{read_secret:{}}}]:[{name:'inherited-private-server',tools:{}}],nextCursor:null};
  send({id:m.id,result});
  if(m.method==='turn/start'){
@@ -202,4 +202,13 @@ test('pnpm login helper shares the configured home, strips API keys and rejects 
  const child=(await fake.log()).find(row=>row.args);assert.deepEqual(child.args,['login','status']);assert.equal(child.home,path.resolve(os.tmpdir()));assert.ok(Object.values(child.credentials).every(value=>value===false));
  const login=spawnSync(process.execPath,['scripts/codex-login.mjs','login','--','--device-auth'],{env,encoding:'utf8'});assert.equal(login.status,0,login.stderr);assert.deepEqual((await fake.log()).filter(row=>row.args).at(-1).args,['login','--device-auth']);
  const rejected=spawnSync(globalThis.process.execPath,['scripts/codex-login.mjs','login','--with-api-key'],{env,encoding:'utf8'});assert.equal(rejected.status,1);assert.match(rejected.stderr,/codex:login/);
+});
+
+test('per-job model routing uses Luna only for matching and rejects ignored overrides before inference',async t=>{
+ const fake=await fakeCli(t),runner=createCodexRunner({CODEX_BIN:fake.binary,CODEX_MODEL:'main-text-model'});
+ const result=await runner.run({model:'gpt-6-luna',instructions:'JSON',prompt:'match',reasoningEffort:'low'});assert.equal(result.model,'gpt-6-luna');
+ await runner.run({instructions:'JSON',prompt:'normal'});const starts=(await fake.log()).filter(row=>row.method==='thread/start');assert.deepEqual(starts.map(row=>row.params.model),['gpt-6-luna','main-text-model']);
+ await assert.rejects(runner.run({model:'bad model',instructions:'JSON',prompt:'invalid'}),error=>error.message==='INVALID_MODEL');
+ const ignored=await fakeCli(t,'ignored-model');await assert.rejects(createCodexRunner({CODEX_BIN:ignored.binary}).run({model:'gpt-6-luna',instructions:'JSON',prompt:'match',reasoningEffort:'low'}),error=>error.message==='MODEL_UNAVAILABLE');
+ assert.ok(!(await ignored.log()).some(row=>row.method==='turn/start'));
 });

@@ -232,3 +232,48 @@ VR review round: 4; reviewer: reused
 用户后续授权《黛玉剪香囊》再次比较：源码未变，在隔离检查点复用原文/章节、制作设置及同一355字符核对摘要，以gpt-6.1-sol执行3次文字调用（plan/reflection/review），16幅、审核一次通过、0修订；编排请求不含摘要，审核有摘要，三版对照共48条配文。原版和上一份对照版不变，新副本暂停且无图片/语音、未增加生产作业。验证存于本地备份目录`daiyu-source-comparison-20261101T235102Z`，不纳入Git。该实测为单篇观察，不改变最终VR或宣称普遍质量提升。
 
 用户“DD GC”收尾：DD保留完整VR4原文并注明后续实测的时序；沿用源码`3b4c6e9`的完整TT/ET/typecheck/lint及CR/VR证据，仅提交本故事DD、AP、REQ和E2E执行记录四文档。既有continuous-story-discovery改动保持，不打包或push。
+
+## 无摘要提取、原文批量二元匹配（当前修正）
+
+入口ffe795d，原故事Git base保持e51429b85b30a505e6b58873a4cccc3709170360。本轮进入工作区干净；后续书籍参考图星标提交不属本故事，审查排除该独立功能。non-low：发现/候选契约、缓存升级、批量预算、模型路由及付费调用协调变化，重新AR/CR/VR。此前857项和16服务E2E不证明新契约。
+
+决定：catalog只输出title/description/source，pendingEvents也不再要求summary，续读依据已保存原文范围和contextText。保留旧直接scan契约与旧缓存指纹。冻结当前摘要catalog的prompt/schema指纹以定位旧通用库；新库缺失时在同一个cache.shared锁内读取、校验旧库并投影去掉摘要，原子保存新库，保留cursor/pending范围/完整故事定位。不把旧主题回执当新结果，不改实际SQL或成品。
+
+主题匹配输入为id/title/text（完整原文），输出严格id/verdict(yes|no)/reason（最多120字），每批最多4篇，2048输出token预算；按完整prompt/schema/payload的现有输入token估算贪心选择批次，单篇放不下则付费前失败，不能截文或把超预算当no。整批ID必须不重不漏，非法/失败不提交本批，之前成功判断保留。已缓存yes即时返回，其他匹配剩余项保留下一次消费；每次shared只发一个调用，保留取消/并发隔离。
+
+匹配ID不再依赖summary；主题key包含当前契约和实际匹配模型/档位，模型路由变化只使主题判断失效。ProviderStatus增加可选themeMatching模型/档位说明，Codex/OpenAI固定采用用户选定gpt-6-luna/low，Gemini使用自身文本模型/low。复用现有凭证，不增加全局设置或UI字段；CodexJob允许内部逐任务model覆盖并在thread/start采用/验证有效模型，API text函数只为matching显式指定模型。不会跨提供商、静默换模型或改其他阶段档位。
+
+候选新增可选matchReason，不再附新storyBrief；旧候选storyBrief仍兼容读。选中后的prepareRecommendation复用现有流程，从匹配理由或原典入口说明构造待核对资料，真实原文生成summary后保存verified检查点。description不升级成已核对摘要。现有编排去summary投影和审核原文优先/摘要查漏保持。
+
+- [x] 有界可行性探测：使用现有Codex订阅runner单次调用gpt-6-luna/low，2条短原文，验证实际模型和二元结构回执；仅临时目录和文字，无API凭证变更/图片。若模型不可用或被环境限制，停止依赖该运行条件的工作，记录原因；不静默退回Sol或换API，更新AR边界并继续不依赖该条件的必要工作。
+- [x] 修改catalog及pending契约、无摘要通用库与旧库安全接续；保留直接scan和旧指纹。更新候选理由与选中后摘要准备绑定，不改原文编排/摘要审核职责。
+- [x] 实施原文批量二元匹配、预算自适应分批、严格ID回执和取消/并发持久化；拆分Luna路由及匹配缓存模型身份，其他阶段沿用原模型。
+- [x] 更新fixture、三provider/runner/缓存/批量/跨章/候选/重选/准备回归；补实际REST/SQLite/队列服务E2E，验证候选无摘要、选中后首次编排前保存摘要，audit保留而plan/outline/batch/reflection/repair无摘要。
+- [x] 同步README、开发/使用指南及流程文档，移除现行需核对/摘要匹配说明，保留历史里程碑证据。
+- [ ] 运行pnpm typecheck、pnpm lint、完整pnpm test及增量故事库服务E2E，记录实证；无桌面/Docker打包。SS里程碑只提交本故事文件，最终到DD，无GC/push。
+
+主要风险：省去输出不省去读原文/划边界，换主题可能增加输入；缓存兼容锁不能覆盖新进度，单篇超预算必须清楚失败；Luna古文主题质量未由受控用例证明。无UI变化，浏览器禁用不是本轮交付依赖。原书架故事及三份黛玉对照不修改。
+
+AR passed: no blocking architecture flaws
+
+独立AR8核对无摘要提取、旧库共享锁接续、二元批量预算、模型路由和选中后摘要准备；OpenAI显式返回的实际模型也须符合Luna身份，缺省回执身份用requestedModel而非原text。未执行验证或修改源码。
+
+AR risk: non-low — discovery and candidate contracts, cache compatibility and concurrency, per-task model routing, and source-bound paid-generation prerequisites.
+AR review round: 8; reviewer: new
+
+用户在SS中新增“摘要也能否短”：将新生成摘要统一为2–3句、尽量80–150字，保留关键因果与实际结果；复杂篇目仅为完整性适度增加，不逐段重述，不硬截原文或已有摘要。新增一个共享简短摘要指令，供选中后recommend生成和plan归档元信息输出使用，1200字符存储/schema兼容不改，无额外调用。该项先返回独立AR9，其他已通过AR8的输入/缓存工作可继续。
+
+- [x] 将简短摘要要求同步到准备与归档提示词、当前文档和三provider契约回归；旧长摘要继续可读且不强制重写。
+
+SS首探测：初次受限沙箱子进程PROCESS_EXIT；同一临时脚本经授权运行后Luna/low可用，2篇短原文一次返回yes/no及理由，约3166ms，实际模型gpt-6-luna，未生成摘要。证据/tmp/shiqu-luna-match-probe.json及.log；没有更换凭证或改实际书库，不是延迟/准确率基准。首组76项受控回归通过；沙箱的桌面退出测试曾因127.0.0.1监听EPERM失败，同组获准本地端口后76/76通过，并非生产失败。
+
+AR passed: no blocking architecture flaws
+
+独立AR9确认简短摘要软要求不推翻AR8；共用指令覆盖准备和归档，旧1200字符记录兼容，无截断/强制重写/额外调用。三provider提示词契约足以验证实施，不冒充质量试验。
+
+AR risk: non-low — amendment remains within the story’s coordinated discovery, cache and model-routing changes; the new requirement itself changes prompting only, without new persistence or paid-call boundaries.
+AR review round: 9; reviewer: reused
+
+SS实现：catalog及pending不再输出摘要，新候选只带matchReason；选择后的准备复用原文生成简短完整摘要。冻结旧catalog指纹已与修改前捕获逐项一致校验，旧范围/游标在共享锁内迁移且旧文件不删；现有库命中绕过迁移锁，避免被正在扩展的读者阻塞。匹配直接批量读原文、二元严格ID核验、按完整输入预算缩批，Luna/low独立路由及实际模型拒绝防线已实现。
+
+定向78/78通过（/tmp/shiqu-deferred-focused.log，含17服务E2E、模型路由/runner、摘要隔离/简写及缓存接续）；原文/章节/缓存/取消等另一组78/78通过（/tmp/shiqu-deferred-library-tests.log）。typecheck/lint通过，diff检查通过。首轮受限环境EPERM已通过同组获准监听本地端口解决；未关闭/弱化断言。完整TT/最终ET及独立CR/VR待完成。

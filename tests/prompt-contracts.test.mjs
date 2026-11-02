@@ -34,7 +34,7 @@ const plan=makePlan(8),{reflection:_,...draft}=plan;void _;
 const issue={page:2,category:'caption',problem:'指代不清。',instruction:'只澄清说话者，保留画面。',requiresReplan:false};
 const candidate={title:plan.title,description:'人物经历梦与醒。',summary:'庄周梦为胡蝶，醒后思考庄周与胡蝶的关系。',source,artRecommendation:{artStyle:'ink-pencil',reason:'适合人物表情。'}};
 function responseFor(payload,schema){
- if(schema.properties.matches)return {matches:payload.stories.map(story=>({id:story.id,verdict:'yes',reason:'原文事件与结果支持本次选题。',summary:story.summary}))};
+ if(schema.properties.matches)return {matches:payload.stories.map(story=>({id:story.id,verdict:'yes',reason:'原文事件与结果支持本次选题。'}))};
  if(schema.properties.stories)return {stories:[candidate],note:'',...(schema.properties.scan?{scan:{blockComplete:false,pendingEvents:[],resolvedEventIds:[]}}:{})};
  if(schema.properties.count)return {count:8,reason:'关键言行和回应各有空间。'};
  if(schema.properties.artStyle)return candidate.artRecommendation;
@@ -60,7 +60,7 @@ async function requestsFor(provider){
    if(String(url).endsWith('/images/generations')){seen.set(stage,{prompt:body.prompt});return Response.json({data:[{b64_json:encoded}]});}
    assert.equal(body.store,false);assert.equal(body.text.format.strict,true);
    const value=record(body.instructions,body.input[0].content,body.text.format.schema);
-   return Response.json({status:'completed',model:'controlled',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify(value)}]}]});
+   return Response.json({status:'completed',model:body.model,output:[{type:'message',content:[{type:'output_text',text:JSON.stringify(value)}]}]});
   }
   assert.match(String(url),/^https:\/\/generativelanguage.googleapis.com\//);
   if(body.generationConfig.responseModalities){seen.set(stage,{prompt:body.contents[0].parts.find(p=>p.text).text});return Response.json({candidates:[{finishReason:'STOP',content:{parts:[{inlineData:{mimeType:'image/png',data:encoded}}]}}]});}
@@ -75,7 +75,7 @@ async function requestsFor(provider){
  await call('local',()=>p.suggestions(selection,[],local));
  for(const level of ['main','episodes'])await call('scan-'+level,()=>p.suggestions(selection,[],{...local,purpose:'scan',scan:{maxStories:5,excludedSources:[],pendingEvents:[],contextText:'',chapterStoryLevel:level}}));
  await call('catalog',()=>p.suggestions(selection,[],{...local,purpose:'catalog',scan:{maxStories:1,excludedSources:[],pendingEvents:[],contextText:''}}));
- await call('theme-match',()=>p.matchStories(selection.theme,[{id:'a'.repeat(64),title:candidate.title,summary:candidate.summary}]));
+ await call('theme-match',()=>p.matchStories(selection.theme,[{id:'a'.repeat(64),title:candidate.title,text:original.text}]));
  await call('art',()=>p.recommendArt(selection,original));
  await call('frames',()=>g.recommend(selection,'fixed-id',original));
  await call('draft',()=>g.plan(selection,'fixed-id',original));
@@ -131,9 +131,9 @@ test('all providers send the same stage-specific instructions, data and strict o
  assert.ok(get('review-candidates').schema.properties.reflectionChoice);
  for(const stage of ['scan-main','scan-episodes']){assert.doesNotMatch(get(stage).instructions,/artRecommendation/);assert.equal(get(stage).schema.properties.stories.items.properties.artRecommendation,undefined);}
  assert.ok(get('local').schema.properties.stories.items.properties.artRecommendation);
- assert.equal(get('catalog').payload.theme,undefined);assert.equal(get('catalog').payload.localBook.purpose,'catalog');assert.ok(get('catalog').schema.properties.stories.items.required.includes('summary'));
+ assert.equal(get('catalog').payload.theme,undefined);assert.equal(get('catalog').payload.localBook.purpose,'catalog');assert.ok(!get('catalog').schema.properties.stories.items.required.includes('summary'));assert.equal(get('catalog').schema.properties.scan.properties.pendingEvents.items.properties.summary,undefined);
  assert.equal(get('catalog').schema.properties.stories.items.properties.artRecommendation,undefined);assert.match(get('catalog').instructions,/不因读者主题过滤或改变故事边界/);
- assert.equal(get('theme-match').payload.theme,selection.theme);assert.equal(get('theme-match').payload.stories[0].text,undefined);assert.deepEqual(get('theme-match').schema.properties.matches.items.properties.verdict.enum,['yes','no','review']);
+ assert.equal(get('theme-match').payload.theme,selection.theme);assert.equal(get('theme-match').payload.stories[0].text,original.text);assert.deepEqual(get('theme-match').schema.properties.matches.items.properties.verdict.enum,['yes','no']);
  assert.match(get('image').prompt,/reference data/);assert.match(get('image').prompt,/Scene 1:/);
  assert.match(get('image').instructions,/native image generation tool directly/);
 });

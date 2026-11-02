@@ -6,7 +6,7 @@ import {readerMinFrames,readerMaxFrames} from './reader-limits.ts';
 import type {Selection} from './reader-model.ts';
 import {verifiedOriginalPayload} from './reader-source-types.ts';
 import type {OriginalSource} from './reader-source-types.ts';
-import {storySummarySchema,storyBriefPayload} from './reader-story-brief.ts';
+import {storySummarySchema,storyBriefPayload,storySummaryDirection} from './reader-story-brief.ts';
 export const narrativeDetailSchema=z.enum(['brief','balanced','detailed']);
 export type NarrativeDetail=z.infer<typeof narrativeDetailSchema>;
 export const narrativeDetails=[
@@ -23,6 +23,7 @@ export const narrativeDetailInstructions='叙事详略（narrativeDetail）决�
 export const frameRecommendationPrompt=promptSections(
  ['任务','你是古典连环画编剧。完整阅读 verifiedOriginal.text 和存在时的 chapterContext.text，结合叙事详略及制作要求，必要时校准输入摘要，再推荐完整改编需要的画幅数；不生成分镜、配文或图片。count 只计算故事画幅，独立结束页不计入幅数。'],
  ['主事件与开场',storyScopeDirection+'\n'+storyOpeningDirection],
+ ['摘要篇幅',storySummaryDirection],
  ['摘要核对','输入存在 storyBrief 时，先逐项对照原文/章节上下文核对拟改编摘要和匹配理由的人物、行动、因果、范围与结局，纠正无据的动机、误读、遗漏及截早，再据完整主线估算幅数。摘要必须交代实际行动、推进、变化和最终结果，不能停在计策目的、设局介绍或“打算做什么”；原作开放结尾保留其真实停点。额外返回 storySummary（核对后的完整摘要，最多1200字）和 storyMatchReason（按原文校准的匹配理由，最多300字）；无冲突则保留准确原意。匹配理由不能重新引入已被原文否定的事实。不存在 storyBrief 时只返回 count/reason，不另造摘要。'],
  ['选题与估算','主题仅用于核对匹配理由是否有原文依据；原典模式不额外套主题。幅数依据原文中的关键言行、回应与因果估算，不按摘要句子或字数分幅；核对摘要保存后供审核检查完整性。'],
  ['展开程度',narrativeDetailInstructions],

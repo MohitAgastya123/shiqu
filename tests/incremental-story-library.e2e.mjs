@@ -8,12 +8,15 @@ import {LocalBooks} from '../server/local-books.ts';
 import {bookContents} from '../server/local-book-contents.ts';
 import {ReaderRepository} from '../lib/reader-repository.ts';
 import {advanceStory} from '../lib/reader-engine.ts';
+import {StoryDiscoveryCache,discoveryHash} from '../server/story-discovery-cache.ts';
+import {legacySummaryDiscoveryNamespace,discoveryNamespace} from '../server/local-story-discovery.ts';
 import {makePlan} from './fixtures/production.mjs';
 
 async function fixture(t){
  const f=await productionFixture(t),library=libraryFixture();f.control.hold=false;
  f.generation.suggestions=(...args)=>library.provider.suggestions(...args);
  f.generation.matchStories=(...args)=>library.provider.matchStories(...args);
+ f.control.beforeText=async(kind,payload)=>{if(kind==='recommend'){const story=library.stories.find(story=>payload.verifiedOriginal.text.includes(library.book.sections[0].units.find(unit=>unit.id===story.source.firstUnit).text));if(story)return {storySummary:story.summary,storyMatchReason:payload.storyBrief.matchReason};}};
  async function restart(){f.options.generation=withLocalBooks(f.generation,library.books,f.media);await f.restart();f.app.services.localBooks=library.books;}
  await restart();return {f,library,restart};
 }
@@ -25,7 +28,8 @@ async function create(f,theme){
 test('cold theme discovery retains rejected stories; restart and new themes reuse them; production receives originals',async t=>{
  const {f,library,restart}=await fixture(t),first=await create(f,'勇气');
  assert.deepEqual(first.intake.batches[0].stories.map(story=>story.title),['勇士护民']);assert.equal(library.calls.catalog.length,2);
- assert.ok(first.intake.batches[0].stories[0].storyBrief.matchReason);assert.equal(first.intake.batches[0].stories[0].storyBrief.summary,library.stories[1].summary);
+ assert.ok(first.intake.batches[0].stories[0].matchReason);assert.equal(first.intake.batches[0].stories[0].storyBrief,undefined);assert.equal(first.intake.batches[0].stories[0].summary,undefined);assert.equal(f.control.recommendations.length,0);
+ for(const call of library.calls.matches)for(const story of call.stories){assert.ok(story.text);assert.equal(story.summary,undefined);}
  assert.ok(library.calls.catalog.every(call=>call.selection.theme===''&&call.input.purpose==='catalog'));
  const chosen=await f.json(`sessions/${first.id}/setup`,'POST',{requestId:crypto.randomUUID(),generation:0,action:'choose',batch:0,index:0});assert.equal(chosen.intake.search.state,'idle');
  await until(async()=>(await f.read(first.id)).intake.phase==='confirming');
@@ -42,12 +46,12 @@ test('cold theme discovery retains rejected stories; restart and new themes reus
  const matched=library.calls.matches.length;await restart();const again=await create(f,'知恩图报');assert.equal(again.intake.batches[0].stories[0].title,'乌龟报恩');assert.equal(library.calls.matches.length,matched);assert.equal(library.calls.catalog.length,extracted);
 });
 
-test('REST uncertainty retains the neutral library and retries only the original review',async t=>{
+test('REST rejects obsolete review receipts and retries binary matching without rescanning',async t=>{
  const {f,library}=await fixture(t);library.control.decide=()=> 'review';
- const failed=await f.request('suggestions','POST',{...selection,theme:'需要核对'});assert.equal(failed.status,502);assert.match((await failed.json()).error,/仍无法确认主题/);
- assert.equal(library.calls.catalog.length,1);assert.equal(library.calls.matches.length,2);assert.ok(library.calls.matches[1].stories[0].text.includes('渔夫'));
+ const failed=await f.request('suggestions','POST',{...selection,theme:'需要核对'});assert.equal(failed.status,502);assert.ok((await failed.json()).error);
+ assert.equal(library.calls.catalog.length,1);assert.equal(library.calls.matches.length,1);assert.ok(library.calls.matches[0].stories[0].text.includes('渔夫'));
  library.control.decide=(_theme,story)=>{assert.ok(story.text);return 'yes';};
- const result=await f.json('suggestions','POST',{...selection,theme:'需要核对'});assert.equal(result.stories[0].title,'乌龟报恩');assert.equal(library.calls.matches.length,3);assert.equal(library.calls.catalog.length,1);
+ const result=await f.json('suggestions','POST',{...selection,theme:'需要核对'});assert.equal(result.stories[0].title,'乌龟报恩');assert.equal(library.calls.matches.length,2);assert.equal(library.calls.catalog.length,1);
 });
 
 test('two streaming theme requests share extraction; one reader can leave while another receives its story',async t=>{
@@ -61,13 +65,13 @@ test('two streaming theme requests share extraction; one reader can leave while 
  assert.equal(result.batch.stories[0].title,'乌龟报恩');assert.equal(library.calls.catalog.length,1);assert.equal(library.calls.matches.filter(call=>call.theme==='主题甲').length,0);assert.equal(library.calls.matches.filter(call=>call.theme==='主题乙').length,1);
 });
 
-for(const [theme,length] of [['勇气',2],['原典故事',21]])test(`${theme}: an opening-only synopsis and unsupported reason are corrected before ${length}-frame production and survive restart`,async t=>{
+for(const [theme,length] of [['勇气',2],['原典故事',21]])test(`${theme}: synopsis is created only after selection and an unsupported reason is corrected before ${length}-frame production and survive restart`,async t=>{
  const {f,library,restart}=await fixture(t),match=library.provider.matchStories;
- library.provider.matchStories=async(...args)=>{const result=await match(...args);return {matches:result.matches.map(item=>item.verdict==='yes'?{...item,summary:'人物准备采取行动，打算改变处境。',reason:'人物因复仇杀死对手。'}:item)};};
+ library.provider.matchStories=async(...args)=>{const result=await match(...args);return {matches:result.matches.map(item=>item.verdict==='yes'?{...item,reason:'人物因复仇杀死对手。'}:item)};};
  const first=await create(f,theme),candidate=first.intake.batches[0].stories[0],complete=library.stories.find(story=>story.title===candidate.title).summary;
  const reason='原文中的行动和实际结果支持本次选题，没有复仇杀人的事实。';
  f.control.beforeText=async(kind,payload)=>{
-  if(kind==='recommend'){assert.equal(payload.storyBrief.summary,candidate.storyBrief.summary);assert.equal(payload.storyBrief.matchReason,candidate.storyBrief.matchReason);assert.ok(payload.verifiedOriginal.text);return {storySummary:complete,storyMatchReason:reason};}
+  if(kind==='recommend'){assert.equal(candidate.storyBrief,undefined);assert.equal(payload.storyBrief.summary,'尚未准备完整摘要，请依据已核原文生成。');assert.equal(payload.storyBrief.matchReason,candidate.matchReason);assert.ok(payload.verifiedOriginal.text);return {storySummary:complete,storyMatchReason:reason};}
  };
  await f.json(`sessions/${first.id}/setup`,'POST',{requestId:crypto.randomUUID(),generation:0,action:'choose',batch:0,index:0});
  await until(async()=>(await f.read(first.id)).intake.phase==='confirming');
@@ -114,7 +118,7 @@ test('direct original selection skips matching but still prepares a complete sou
  f.options.generation=withLocalBooks(f.generation,books,f.media);await f.restart();f.app.services.localBooks=books;
  const entry=(await bookContents(books,{bookId:'shishuo',theme:'原典故事'})).entries[0];
  const complete='陈仲举到任豫章太守后想先拜访徐孺子。主簿劝他先入官署，他援引武王礼贤的先例，说明自己礼贤并无不可。';
- f.control.beforeText=async(kind,payload)=>{if(kind==='recommend'){assert.deepEqual(payload.editorialContext,{mode:'source'});assert.equal(payload.storyBrief.summary,entry.excerpt);assert.match(payload.verifiedOriginal.text,/欲先看之/);return {storySummary:complete,storyMatchReason:'按原典保存到任先问贤士及其回应，不额外套主题。'};}};
+ f.control.beforeText=async(kind,payload)=>{if(kind==='recommend'){assert.deepEqual(payload.editorialContext,{mode:'source'});assert.equal(payload.storyBrief.summary,'尚未准备完整摘要，请依据已核原文生成。');assert.match(payload.verifiedOriginal.text,/欲先看之/);return {storySummary:complete,storyMatchReason:'按原典保存到任先问贤士及其回应，不额外套主题。'};}};
  const saved=await f.json('sessions','POST',{requestId:crypto.randomUUID(),intake:true,selection:{bookId:'shishuo',theme:'原典故事',source:entry.source,length:'auto',narrativeDetail:'balanced',artStyle:'ink-pencil',voice:false}});
  await until(async()=>(await f.read(saved.id)).intake.phase==='confirming');const ready=await f.read(saved.id),original=(await f.json(`sessions/${saved.id}/source`)).source;
  assert.equal(original.storyBrief.verified,true);assert.equal(original.storyBrief.summary,complete);assert.equal(f.control.recommendations.length,1);assert.equal(f.control.plans.length,0);
@@ -179,4 +183,15 @@ for(const unverified of [false,true])test(`saved outline batches resume after sy
  await advanceStory(repo,generator,'docker-local-owner',id,0);if(unverified){assert.equal(f.control.batches.length,0);await advanceStory(repo,generator,'docker-local-owner',id,0);}
  const saved=JSON.parse((await repo.get(id,'docker-local-owner')).document);assert.equal(saved.draft.summary,plan.summary);assert.deepEqual(saved.storyboard.outline.beats,doc.storyboard.outline.beats);assert.deepEqual(saved.draft.pages.slice(0,20),pages.slice(0,20));
  assert.equal(f.control.recommendations.length,1);assert.equal(f.control.outlines.length,0);assert.equal(f.control.batches.length,1);assert.deepEqual(f.control.batches[0].batch,{first:21,last:21});
+});
+
+test('REST resumes an old summary catalog from real media without rescanning and persists new binary receipts across restart',async t=>{
+ const {f,library,restart}=await fixture(t),cache=new StoryDiscoveryCache(f.media),status=await f.generation.status();
+ const previous=legacySummaryDiscoveryNamespace(library.book,status.provider,status.models.text,undefined,status.taskReasoningEfforts.suggest),current=discoveryNamespace(library.book,status.provider,status.models.text,undefined,status.taskReasoningEfforts.suggest);
+ const state={stories:library.stories,cursor:1,readThrough:1,pendingEvents:[],exhausted:true,rejected:false};await cache.write(previous+'/library',state);await cache.write(previous+'/themes/obsolete',{decisions:{old:'yes'}});
+ const request=()=>f.json('suggestions','POST',{...selection,theme:'勇气'});const result=await request();assert.equal(result.stories[0].title,'勇士护民');assert.equal(result.stories[0].storyBrief,undefined);assert.equal(result.stories[0].summary,undefined);assert.ok(result.stories[0].matchReason);
+ assert.equal(library.calls.catalog.length,0);assert.equal(library.calls.matches.length,1);assert.equal(library.calls.matches[0].stories.length,2);assert.ok(library.calls.matches[0].stories.every(story=>story.text&&!('summary' in story)));
+ const envelope=async key=>JSON.parse(new TextDecoder().decode(await (await f.media.get('reader-cache/'+discoveryHash(key)+'.json')).arrayBuffer()));
+ assert.deepEqual((await envelope(previous+'/library')).value,state);const migrated=(await envelope(current+'/library')).value;assert.equal(migrated.cursor,1);assert.ok(migrated.stories.every(story=>!('summary' in story)));
+ await restart();assert.deepEqual((await request()).stories,result.stories);assert.equal(library.calls.catalog.length,0);assert.equal(library.calls.matches.length,1);assert.equal(f.control.recommendations.length,0);
 });

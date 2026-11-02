@@ -63,7 +63,7 @@ export async function advanceStory(repo:ReaderRepository,generator:StoryGenerato
    }
    const chosen=doc.intake?.selected,candidate=chosen?doc.intake!.batches[chosen.batch]?.stories[chosen.index]:undefined;
    // Candidate guidance or an explicit placeholder stays bound to the saved original until checked.
-   const pendingBrief=candidate?.storyBrief||{summary:candidate?.description||doc.storyboard?.outline.summary||'尚未准备完整摘要，请依据已核原文生成。',matchReason:storyEditorialContext(selection.theme).mode==='source'?'直接选择原典故事，须按原文补齐完整主线，不额外套主题。':'已选中此故事，须对照原文确认具体主题依据并补齐完整主线。'};
+   const pendingBrief=candidate?.storyBrief||{summary:doc.storyboard?.outline.summary||'尚未准备完整摘要，请依据已核原文生成。',matchReason:candidate?.matchReason||(storyEditorialContext(selection.theme).mode==='source'?'直接选择原典故事，须按原文补齐完整主线，不额外套主题。':'已选中此故事，须对照原文确认具体主题依据并补齐完整主线。')};
    if(!doc.original.storyBrief){
     doc.original.storyBrief={...storyBriefSchema.parse(pendingBrief),verified:false};
     await repo.saveImageProgress(row,ownedToken,structuredClone(doc));

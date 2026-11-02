@@ -16,7 +16,7 @@ import type {ReaderProvider,ProviderStatus} from '../lib/reader-provider.ts';
 import {CodexError,createCodexRunner} from './codex-runner.ts';
 import type {CodexRunner} from './codex-runner.ts';
 import {localChoicesJson,localScanJson,localCatalogJson,localChoices,localReadingPrompt,localSuggestionPayload} from '../lib/reader-local-contract.ts';
-import {themeMatchPrompt,themeMatchPayload,themeMatchJson,themeMatchesSchema} from '../lib/reader-theme-match.ts';
+import {themeMatchPrompt,themeMatchPayload,themeMatchJson,themeMatchesSchema,themeMatchModel,themeMatchEffort} from '../lib/reader-theme-match.ts';
 import {readerImageAsset,referenceImageKey} from '../lib/reader-image-assets.ts';
 import {imageDimensions} from '../lib/reader-image-dimensions.ts';
 import {storyboardGenerator} from '../lib/reader-storyboard.ts';
@@ -25,6 +25,7 @@ import {configuredTaskReasoning} from '../lib/reader-reasoning.ts';
 
 function codexMessage(code:string){
  if(code==='INVALID_REASONING_EFFORT')return 'Codex 推理档位无效，请使用 low、medium、high、xhigh、max，或留空继承默认值。';
+ if(code==='MODEL_UNAVAILABLE')return 'Codex 未采用指定的主题匹配模型，请检查 Luna 模型权限后重试。';
  if(code==='REASONING_EFFORT_UNAVAILABLE')return 'Codex 未采用指定推理档位，请检查 CLI 版本及模型支持后重试。';
  if(code==='CHATGPT_LOGIN_REQUIRED')return '请先运行 codex login，使用 ChatGPT 账号登录 Codex。订阅模式不会使用 API 密钥。';
  if(code==='UNSUPPORTED_PLATFORM')return 'Codex 订阅模式目前支持 macOS 和 Linux；Windows 请使用 Docker 或 Gemini 模式。';
@@ -46,7 +47,7 @@ export function createReaderProvider(variables:Record<string,string|undefined>,m
  const taskReasoningEfforts=configuredTaskReasoning(variables);
  if(name==='gemini'){
   const key=variables.GEMINI_API_KEY?.trim()||'',models=configuredModels(variables);
-  return {async status(){return {configured:!!key,provider:'gemini',models,voiceEnabled:false,taskReasoningEfforts};},suggestions:(selection,excluded,localBook,reading)=>suggestStories(key,selection,models,transport,excluded,localBook,taskReasoningEfforts,reading?.maxStories),matchStories:(theme,stories)=>matchStoryThemes(key,theme,stories,models,transport,taskReasoningEfforts),async recommendArt(selection,original){if(!original?.localSource)throw new ReaderError(400,'请先选择已核对出处的故事。');return recommendStoryArt(key,selection,original,models,transport,taskReasoningEfforts);},generator:()=>makeGenerator(key,media,models,transport,taskReasoningEfforts),safeError:safeGeminiError};
+  return {async status(){return {configured:!!key,provider:'gemini',models,voiceEnabled:false,taskReasoningEfforts,themeMatching:{model:models.text,reasoningEffort:themeMatchEffort}};},suggestions:(selection,excluded,localBook,reading)=>suggestStories(key,selection,models,transport,excluded,localBook,taskReasoningEfforts,reading?.maxStories),matchStories:(theme,stories)=>matchStoryThemes(key,theme,stories,models,transport),async recommendArt(selection,original){if(!original?.localSource)throw new ReaderError(400,'请先选择已核对出处的故事。');return recommendStoryArt(key,selection,original,models,transport,taskReasoningEfforts);},generator:()=>makeGenerator(key,media,models,transport,taskReasoningEfforts),safeError:safeGeminiError};
  }
  const codex=runner||createCodexRunner(variables),models={text:variables.CODEX_MODEL?.trim()||'codex-default',image:'codex-image-generation'};
  let cached:Promise<ProviderStatus>|undefined,expires=0;
@@ -57,7 +58,7 @@ export function createReaderProvider(variables:Record<string,string|undefined>,m
  }
  const provider:ReaderProvider={
   status(){
-   if(!cached||Date.now()>=expires){expires=Date.now()+30000;cached=codex.status().then(({model:configuredModel,...result})=>({...result,...(!result.configured?{message:codexMessage(result.reason||'CLI_UNAVAILABLE')}:{ }),provider:'codex' as const,models:{...models,text:configuredModel||models.text},voiceEnabled:false as const,taskReasoningEfforts}));}
+   if(!cached||Date.now()>=expires){expires=Date.now()+30000;cached=codex.status().then(({model:configuredModel,...result})=>({...result,...(!result.configured?{message:codexMessage(result.reason||'CLI_UNAVAILABLE')}:{ }),provider:'codex' as const,models:{...models,text:configuredModel||models.text},voiceEnabled:false as const,taskReasoningEfforts,themeMatching:{model:themeMatchModel,reasoningEffort:themeMatchEffort}}));}
    return cached;
   },
   async suggestions(selection,excluded,localBook,reading){
@@ -68,7 +69,7 @@ export function createReaderProvider(variables:Record<string,string|undefined>,m
    return reading?.maxStories?{...fresh,stories:fresh.stories.slice(0,reading.maxStories)}:fresh;
   },
   async matchStories(theme,stories){
-   const result=await codex.run({instructions:themeMatchPrompt,prompt:JSON.stringify(themeMatchPayload(theme,stories)),schema:themeMatchJson,timeoutMs:120000,reasoningEffort:taskReasoningEfforts.suggest});
+   const result=await codex.run({model:themeMatchModel,instructions:themeMatchPrompt,prompt:JSON.stringify(themeMatchPayload(theme,stories)),schema:themeMatchJson,timeoutMs:120000,reasoningEffort:themeMatchEffort});
    return themeMatchesSchema.parse(JSON.parse(result.text));
   },
   async recommendArt(selection,original){

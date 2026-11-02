@@ -11,7 +11,7 @@ import type {CodexReasoningEffort} from '../lib/codex-settings.ts';
 export {codexEnvironment} from '../scripts/codex-env.mjs';
 
 export class CodexError extends Error {constructor(code:string){super(code);this.name='CodexError';}}
-export type CodexJob={prompt:string;instructions:string;schema?:unknown;image?:{bytes:Uint8Array;contentType:string};generateImage?:boolean;timeoutMs?:number;reasoningEffort?:CodexReasoningEffort};
+export type CodexJob={model?:string;prompt:string;instructions:string;schema?:unknown;image?:{bytes:Uint8Array;contentType:string};generateImage?:boolean;timeoutMs?:number;reasoningEffort?:CodexReasoningEffort};
 export type CodexResult={text:string;image:string|null;model:string;requestId:string;usage:unknown;reasoningEffort?:string};
 export interface CodexRunner {status():Promise<{configured:boolean;reason?:string;model?:string}>;run(job:CodexJob):Promise<CodexResult>}
 const disabled=['shell_tool','unified_exec','view_image','browser_use','computer_use','plugins','remote_plugin','apps','hooks','multi_agent','code_mode','code_mode_only','code_mode_tool_search','tool_suggest'];
@@ -36,6 +36,8 @@ export function createCodexRunner(variables:Record<string,string|undefined>,opti
  const setting=codexReasoningEffortSchema.safeParse(variables.CODEX_REASONING_EFFORT?.trim());
  if(!setting.success)throw new CodexError('INVALID_REASONING_EFFORT');
  async function execute(job?:CodexJob):Promise<CodexResult|null>{
+  const requestedModel=job?.model||model;
+  if(requestedModel&&!/^[a-zA-Z0-9._-]{1,100}$/.test(requestedModel))throw new CodexError('INVALID_MODEL');
   const selected=codexReasoningEffortSchema.safeParse(job?.reasoningEffort??setting.data);
   if(!selected.success)throw new CodexError('INVALID_REASONING_EFFORT');
   const effort=selected.data;
@@ -99,8 +101,9 @@ export function createCodexRunner(variables:Record<string,string|undefined>,opti
       if(disabled.some(feature=>config.config?.features?.[feature]!==false)||config.config?.features?.code_mode_host===false||config.config?.features?.image_generation===false)throw new CodexError('UNSAFE_CONFIGURATION');
       if(!job){closed=true;resolve({text:'',image:null,model:model||(typeof config.config?.model==='string'?config.config.model:''),requestId:'',usage:null});return;}
       const servers=config.config?.mcp_servers||{};
-      const thread=await call('thread/start',{cwd:directory,ephemeral:true,approvalPolicy:'never',modelProvider:'openai',...(model?{model}:{}),config:{forced_login_method:'chatgpt',mcp_servers:Object.fromEntries(Object.keys(servers).map(name=>[name,{enabled:false}]))},developerInstructions:job.instructions});
+      const thread=await call('thread/start',{cwd:directory,ephemeral:true,approvalPolicy:'never',modelProvider:'openai',...(requestedModel?{model:requestedModel}:{}),config:{forced_login_method:'chatgpt',mcp_servers:Object.fromEntries(Object.keys(servers).map(name=>[name,{enabled:false}]))},developerInstructions:job.instructions});
       if(thread.modelProvider!=='openai')throw new CodexError('UNSAFE_CONFIGURATION');
+      if(job.model&&thread.model!==requestedModel)throw new CodexError('MODEL_UNAVAILABLE');
       if(effort&&thread.reasoningEffort!==effort)throw new CodexError('REASONING_EFFORT_UNAVAILABLE');
       actualEffort=thread.reasoningEffort;
       threadId=thread.thread.id;actualModel=thread.model;
