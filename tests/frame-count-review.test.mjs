@@ -62,5 +62,5 @@ test('count and full audits reuse the same story scope instead of divergent titl
  const {storyboardReviewGenerator}=await import('../lib/reader-review.ts');const directions=[];let count=true;
  const gen=storyboardReviewGenerator(async(_task,direction)=>{directions.push(direction);return {value:count?{frameCountReview:{decision:'keep',proposedCount:3,reason:'任务足够'},requirements:[]}:{titleReview,issues:[],coverage:[{quote:'乙未接',task:'回应',pages:[2],assessment:'adequate',reason:'已有',issuePage:0}]},model:'fixture',usage:null};});
  const s={...legacy,length:'auto'},p=makePlan(3),o={title:'原文',text:'甲赠物，乙未接。'};await gen.reviewFrameCount(s,p,o);count=false;await gen.review(s,p,o);
- assert.ok(directions.every(d=>d.includes(storyScopeDirection)));assert.ok(directions[1].includes('身体和环境处境'));
+ assert.ok(directions.every(d=>d.includes(storyScopeDirection)));assert.ok(directions[1].includes('身体和环境处境'));assert.ok(directions.every(d=>d.includes('共同反应显露既有亲疏')&&d.includes('辨认身份、层级或规矩')&&d.includes('有独立作用不等于必须独占一幅')));
 });
