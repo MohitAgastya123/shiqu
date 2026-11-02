@@ -2,6 +2,7 @@
 // the application engine and bookshelf do not opt into this adapter.
 import {createHash} from 'node:crypto';
 import {ownDesktopData} from '../server/desktop-owner.ts';
+import {readFile,writeFile} from 'node:fs/promises';
 import {parseFrameCountReport} from '../lib/reader-review.ts';
 import {validateEditorialCoverage} from '../lib/reader-editorial.ts';
 
@@ -13,6 +14,15 @@ export async function acquireEvaluationRun(directory){
  let unlock;try{unlock=await ownDesktopData(directory);}catch(error){if(error.message==='DATA_BUSY')throw Error('EVALUATION_RUN_ACTIVE');throw error;}
  let active=true;
  return {
+  async bind(binding,metadata){
+   if(!active||!binding)throw Error('EVALUATION_RUN_RELEASED');
+   const manifest=directory+'/source-manifest.json';let saved;
+   try{saved=JSON.parse(await readFile(manifest,'utf8'));}catch(error){if(error.code!=='ENOENT')throw error;}
+   if(saved){if(saved.binding!==binding)throw Error('EVALUATION_BINDING_MISMATCH');return saved;}
+   // Never adopt an earlier manifest-less batch and relabel its provenance.
+   try{await readFile(directory+'/inputs.json');throw Error('EVALUATION_MANIFEST_REQUIRED');}catch(error){if(error.code!=='ENOENT')throw error;}
+   const value={...metadata,binding};await writeFile(manifest,JSON.stringify(value,null,2),{flag:'wx'});return value;
+  },
   async recover(database,owner){
    if(!active)throw Error('EVALUATION_RUN_RELEASED');
    return database.prepare("UPDATE reader_sessions SET state='idle',lock_token=NULL,lock_until=0,error=NULL WHERE user_id=? AND state='running'").bind(owner).run();

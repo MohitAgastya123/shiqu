@@ -1,7 +1,7 @@
 // Isolated v1→v2 replay uses the real engine/repository and the offline adapter, never the bookshelf or media.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,rm,writeFile} from 'node:fs/promises';
+import {mkdtemp,rm,writeFile,readFile} from 'node:fs/promises';
 import {spawn} from 'node:child_process';
 import {once} from 'node:events';
 import os from 'node:os';
@@ -45,4 +45,16 @@ test('two restarting processes cannot both reclaim a dead evaluation owner',asyn
  const contenders=[start(),start()],outcomes=await Promise.all(contenders.map(c=>c.output));
  assert.deepEqual(outcomes.sort(),['EVALUATION_RUN_ACTIVE','owned']);
  for(const c of contenders)c.child.stdin.end();await Promise.all(contenders.map(c=>c.exited));
+});
+test('a rejected new binding or concurrent process leaves frozen provenance untouched',async t=>{
+ const tmp=await mkdtemp(path.join(os.tmpdir(),'frame-count-binding-'));let lease;
+ t.after(async()=>{await lease?.release();await rm(tmp,{recursive:true,force:true});});
+ lease=await acquireEvaluationRun(tmp);await lease.bind('original',{model:'model-a',codeHash:'code-a'});
+ await writeFile(path.join(tmp,'inputs.json'),'original input');
+ const original=await readFile(path.join(tmp,'source-manifest.json'),'utf8');
+ await assert.rejects(()=>acquireEvaluationRun(tmp),/ACTIVE/);assert.equal(await readFile(path.join(tmp,'source-manifest.json'),'utf8'),original);
+ await lease.release();lease=await acquireEvaluationRun(tmp);
+ await assert.rejects(()=>lease.bind('changed',{model:'model-b',codeHash:'code-b'}),/BINDING/);
+ assert.equal(await readFile(path.join(tmp,'source-manifest.json'),'utf8'),original);assert.equal(await readFile(path.join(tmp,'inputs.json'),'utf8'),'original input');
+ await lease.bind('original',{model:'ignored',codeHash:'ignored'});assert.equal(await readFile(path.join(tmp,'source-manifest.json'),'utf8'),original);
 });

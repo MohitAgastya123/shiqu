@@ -32,7 +32,7 @@ test('count verdicts respect the current count, direction, bounds and correspond
 test('the original audit remains intact and the appended count audit follows the requested four-step order',()=>{
  const steps=['1. 从完整原文','2. 找这些任务','3. 判断压缩损失','4. 将损失写成具体补戏要求'];
  const positions=steps.map(text=>frameCountReviewDirection.indexOf(text));assert.ok(positions.every((p,i)=>p>=0&&(!i||p>positions[i-1])));
- assert.match(reviewSystemPrompt,/逐对比较相邻画面/);assert.match(reviewSystemPrompt,/结语标准/);assert.match(frameCountReviewDirection,/不能先定一个新数量再凑内容/);
+ assert.match(reviewSystemPrompt,/逐对比较相邻画面/);assert.match(reviewSystemPrompt,/结语标准/);assert.match(frameCountReviewDirection,/不能先定一个新数量再凑内容/);assert.match(frameCountReviewDirection,/诗词和人物讲述/);assert.match(frameCountReviewDirection,/不能只列一串结论便算表现/);assert.match(frameCountReviewDirection,/不足以单独成为必须延长的依据/);assert.match(frameCountReviewDirection,/合并、删除或重分配/);
 });
 for(const provider of ['codex','gemini','openai'])test(`${provider}: automatic audit requires count decision without changing review effort or budget`,async()=>{
  const selection={...legacy,length:'auto',narrativeDetail:'balanced'},plan=makePlan(3),original={title:'原文',text:'甲赠物，乙未接，稍后转身离去。',url:'https://example.org',kind:'passage',provider:'fixture',retrievedAt:'2026-11-01'};
