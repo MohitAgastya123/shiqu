@@ -2,7 +2,7 @@
 // the application engine and bookshelf do not opt into this adapter.
 import {createHash} from 'node:crypto';
 import {ownDesktopData} from '../server/desktop-owner.ts';
-import {readFile,writeFile} from 'node:fs/promises';
+import {readFile,writeFile,readdir} from 'node:fs/promises';
 import {readFileSync,writeFileSync,renameSync} from 'node:fs';
 import {isDeepStrictEqual} from 'node:util';
 import {parseFrameCountReport,newReview} from '../lib/reader-review.ts';
@@ -12,6 +12,49 @@ import {validateEditorialCoverage} from '../lib/reader-editorial.ts';
 
 const hash=value=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
 export const matchesEvaluationModel=(receipt,model)=>typeof model==='string'&&!!model&&receipt?.model===model;
+
+// Freeze exact native request/receipt pairs; never choose a receipt by its editorial verdict.
+export function evaluationReplayKey(job,model){
+ if(!model||job.model!==undefined&&job.model!==model)throw Error('EVALUATION_REPLAY_MODEL');
+ if(job.image||job.generateImage)throw Error('EVALUATION_NO_MEDIA');
+ const request={...job};delete request.model;return hash({...request,model});
+}
+export function failedEvaluationReceipts(result){
+ const calls=result.calls||[],failures=result.failures||[],rejected=[];
+ for(const failure of failures){
+  if(failure.error!=='EDITORIAL_SOURCE_QUOTE')continue;
+  let call;
+  if(failure.requestId&&failure.hash)call=calls.find(c=>c.requestId===failure.requestId&&c.hash===failure.hash&&c.step===failure.step);
+  else if(failure===failures.at(-1)&&result.state==='failed'&&result.error&&calls.at(-1)?.step===failure.step)call=calls.at(-1);
+  if(!call?.requestId||!call.hash)throw Error('EVALUATION_FAILURE_RECEIPT_AMBIGUOUS');
+  rejected.push({jobHash:call.hash,requestId:call.requestId,reason:failure.error});
+ }
+ return rejected;
+}
+export async function collectEvaluationReplays(directory,model,excluded=[]){
+ const rejected=new Map(excluded.map(value=>[value.requestId,value])),entries=[],receipts=new Map();
+ async function collect(folder){
+  for(const file of (await readdir(folder,{withFileTypes:true})).sort((a,b)=>a.name.localeCompare(b.name))){
+   const location=folder+'/'+file.name;
+   if(file.isSymbolicLink())throw Error('EVALUATION_REPLAY_SYMLINK');
+   if(file.isDirectory()){await collect(location);continue;}
+   if(!file.name.endsWith('-request.json'))continue;
+   const requestRaw=await readFile(location,'utf8'),request=JSON.parse(requestRaw),receiptFile=location.replace(/-request\.json$/,'-receipt.json');let receiptRaw;
+   try{receiptRaw=await readFile(receiptFile,'utf8');}catch(error){if(error.code==='ENOENT')continue;throw error;}
+   const receipt=JSON.parse(receiptRaw);
+   if(!request.job||request.job.model!==model||!matchesEvaluationModel(receipt,model)||!receipt.requestId||typeof receipt.text!=='string')throw Error('EVALUATION_REPLAY_MODEL');
+   if(receipt.image)throw Error('EVALUATION_NO_MEDIA');
+   const key=evaluationReplayKey(request.job,model),entry={request:location,receipt:receiptFile,key,requestHash:createHash('sha256').update(requestRaw).digest('hex'),receiptHash:createHash('sha256').update(receiptRaw).digest('hex'),requestId:receipt.requestId,...(rejected.has(receipt.requestId)?{excluded:rejected.get(receipt.requestId).reason}:{})};
+   entries.push(entry);
+   if(entry.excluded)continue;
+   const previous=receipts.get(key);
+   if(previous&&previous.entry.receiptHash!==entry.receiptHash)throw Error('EVALUATION_REPLAY_AMBIGUOUS');
+   receipts.set(key,{entry,receipt});
+  }
+ }
+ await collect(directory);
+ return {manifest:{directory,model,entries},get(job){const value=receipts.get(evaluationReplayKey(job,model));return value?structuredClone(value):undefined;}};
+}
 
 // Write receipt history before returning a model result, including count-keep calls absent from engine usage.
 export function openEvaluationHistory(directory){
