@@ -16,7 +16,7 @@ Turn Chinese classics into your own illustrated storybooks. Read in your browser
 | You want phone access on the same Wi-Fi | Both entries: CLI prints phone QR codes on startup; desktop shows them in its control window |
 | You need built-in internet tunnel controls | Desktop app: requires a separate cloudflared installation. CLI has no built-in internet tunnel |
 
-**Shared features:** Both entry points provide the same browser interface for story creation, generation queues, pause/resume, reading, library organization, and PDF / PNG export. The desktop window adds library, queue, settings, and service controls; full reading and story creation happen in the browser. Both support OpenAI API, Gemini, and read-only mode. Codex generation is supported on macOS / Linux and requires a separately installed, logged-in Codex CLI; the Shiqu CLI and Codex CLI are different tools.
+**Shared features:** Both entry points provide the same browser interface for story creation, production and acceptance requirements, generation queues, pause/resume, reading, library organization, and PDF / PNG / ZIP export. The desktop window adds library, queue, settings, and service controls; full reading and story creation happen in the browser. Both support OpenAI API, Gemini, and read-only mode. Codex generation is supported on macOS / Linux and requires a separately installed, logged-in Codex CLI; the Shiqu CLI and Codex CLI are different tools.
 
 **Shared settings and data:** Under the same local user account, both entry points reuse saved provider settings and API keys. With the same library directory, they share stories, images, and reading progress. Neither requires the other to be running.
 
@@ -80,6 +80,20 @@ npx @apprun/shiqu --config /path/to/shiqu.env
 
 No `.env` is loaded automatically. Existing shell variables beat the selected file; CLI flags beat both. Non-interactive startup requires saved settings or a complete provider override, and a discoverable/explicit library path. No prompt waits indefinitely. The package includes `.env.example` with optional settings.
 
+## Create, review, and read stories
+
+1. Choose one of the 24 books. Select a standalone story directly, extract candidates from up to 24 selected chapters, or search by theme. Theme search shows candidates one at a time while the picker stays open; selecting a story or leaving stops further discovery. Saved candidates and reading progress can be resumed. An incomplete-results notice means some stories could not be judged, not that they failed the theme.
+2. After the original and a verified summary are ready, choose an art style and **brief / balanced / detailed** narrative detail. The frame estimate is not a fixed count: the model plans from the original, and review can add, remove, or replace frames before drawing.
+3. Set production requirements for the adaptation and, optionally, acceptance requirements (one per line, up to 20). Start production explicitly. Review gives a verdict and evidence for each criterion; actionable failures enter repair, while conflicts or criteria that cannot be judged from the written storyboard stop drawing. Inspect the reason and revise the requirements rather than repeatedly resuming.
+4. Production continues in the background after confirmation. Pause/resume controls are shared across windows. Automatic repair stops after 20 rounds or no effective change; inspect the saved issues, continue repair, or edit and save for a fresh review. Explicitly skipping issues is recorded and does not mean acceptance passed.
+5. Read on your computer or phone. Rename a story independently without regenerating it. Once every illustration is ready, export PDF, a PNG overview, or a ZIP containing story JSON, storyboard Markdown, and full-resolution WebP images. Exports do not make generation requests.
+
+The production and acceptance editors let you inspect current system-rule previews, copy recorded actual prompts, and view saved acceptance results. Previews include unsaved edits and are not execution history; inherited records identify their source version, and missing historical records are not fabricated. Changing only acceptance requirements preserves the storyboard and reusable images for a new review; subsequent repair may still invalidate affected images. Written-storyboard acceptance is not a visual inspection of generated artwork. Prompt records may contain source text and custom requirements; check them before sharing.
+
+Use the star button on an illustrated page to select **one reference image per book**, separate from the bookmark for story favorites. Later image requests for that book, including a new story's first frame, prefer the star; without it, later frames use their own story's first image. Replacing or removing the star does not redraw saved images or change requests already in flight.
+
+See the [full creation and reading guide](https://github.com/yysun/shiqu/blob/main/.docs/user-guide.md#制作与阅读故事). Generation uses your configured provider's quota or API billing; quality and completeness still need human review.
+
 ## Options and data
 
 ```bash
@@ -112,6 +126,8 @@ Confirmed library choices now live in the shared settings database; legacy `cli-
 Relative paths resolve from the launch directory. Both entries use the same SQLite/media format; use matching versions and stop one before starting the other. A busy library is rejected even on a different port. Database and media survive package updates and npm-cache cleanup. Back up the entire library while stopped.
 
 Older CLI releases used `shiqu/library` rather than `com.shiqu.desktop/library` (Windows used LOCALAPPDATA, falling back to APPDATA). Existing data is never moved or merged automatically; pass the old directory with `--data-dir` to continue using it. CLI and desktop now share saved credentials; explicit invocation overrides remain separate and are not saved.
+
+Version 0.6.0 migrates legacy summary fields and adds book-reference storage without regenerating existing stories. Back up the entire stopped library before upgrading, refresh old browser tabs, and keep CLI and desktop versions matched. Older binaries may not read the upgraded schema; restore a pre-upgrade backup when rolling back.
 
 The CLI listens on `0.0.0.0` by default and prints LAN URLs and phone QR codes when a network interface is available. Every connected device shares the library and generation permissions; use a trusted LAN. Use `--host 127.0.0.1` (or `SHIQU_BIND_IP=127.0.0.1`) for local-only access without phone QR codes. Keep the computer awake while reading from a phone. This CLI does not provide the desktop app's internet tunnel or native control window.
 
