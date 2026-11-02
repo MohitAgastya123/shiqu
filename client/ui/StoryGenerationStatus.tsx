@@ -1,11 +1,12 @@
 // Lead with the active stage and saved milestones; only saved images have measurable progress.
 import {useEffect,useState} from 'react';
 import type {ReactNode} from 'react';
-import {ArrowRight,BookOpen,Check,Clock3,Feather,Pause,X} from 'lucide-react';
+import {Check,Clock3,Feather,Pause,X} from 'lucide-react';
 import type {ProductionAction,SessionView} from '@/lib/reader-model';
 import {shelfGenerationStatus} from '@/lib/shelf-generation';
 import {generationDuration,generationProgress,redrawNotice} from '@/lib/generation-progress';
 import StoryRetry from './StoryRetry';
+import StoryBackToShelf from './StoryBackToShelf';
 import ProductionTimeline from './ProductionTimeline';
 import type {ProductionTimelineNavigation} from './ProductionTimeline';
 import type {ProductionStage} from '@/lib/production-stages';
@@ -42,7 +43,7 @@ export default function StoryGenerationStatus({session,busy,controlBusy,error,on
   </section>
   {children}
   {paused&&generationControl}
-  <button type="button" className="yu-generation-back" onClick={onBack}><BookOpen size={17} aria-hidden="true"/>返回书架<ArrowRight size={17} aria-hidden="true"/></button>
+  <StoryBackToShelf onBack={onBack}/>
   {(!session.intake||session.intake.phase==='confirmed')&&<p className="yu-generation-exit-note">{session.state==='completed'?'完整故事已保存在书架。':stopped||failed?'已保存的内容会保留，可在书架中管理和继续生成。':'离开后继续生成整篇，可随时暂停或从书架查看进度。'}</p>}
  </div>;
 }

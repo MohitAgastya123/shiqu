@@ -12,6 +12,7 @@ import {generationProgress} from '@/lib/generation-progress';
 import StoryProductionEditor,{StoryEditorTabs} from './StoryProductionEditor';
 import type {StoryEditorTab} from './StoryProductionEditor';
 import Sheet from './StorySheet';
+import StoryBackToShelf from './StoryBackToShelf';
 import StorySource from './StorySource';
 import StoryGenerationStatus from './StoryGenerationStatus';
 import StoryGenerationControl from './StoryGenerationControl';
@@ -92,7 +93,7 @@ export default function StoryCreationSetup({session,book,busy,onAction,progress}
    {(session.error||progress.error)&&<p className="yu-batch-error" role="alert">{progress.error||session.error}</p>}
    {(session.state==='failed'||!!progress.error)&&<StoryRetry session={session} busy={progress.busy} onRetry={progress.onRetry}/>}
    {paused&&<StoryGenerationControl session={session} busy={progress.controlBusy} onControl={progress.onControl} primary/>}
-   <button type="button" className="yu-generation-later" onClick={progress.onBack}>稍后从书架继续</button>
+   <StoryBackToShelf onBack={progress.onBack}/>
   </>}
   {error&&<p className="yu-batch-error" role="alert">{error}</p>}
   {choosing&&<Sheet title="重新选择故事" busy={busy} onClose={()=>setChoosing(false)}>{candidateList}{error&&<p role="alert">{error}</p>}</Sheet>}

@@ -19,3 +19,7 @@ Capture screenshots and observable outcomes. Automated integration tests establi
 - Scenario 5: real REST/SQLite/queue integration verifies unknown evidence, requirements stop reason, no repair/drawing, retry rejection. Real shared UI rendering verifies the edit-acceptance route without fabricated frame issues; shared timeline and desktop summary parity verify failed/skipped/pending states and explicit reason.
 - Screenshot: [acceptance requirements and results](evidence/story-prompt-requirements/acceptance.jpg).
 - No live model semantic quality claim: test replies are controlled. Default-concurrency timeout and successful bounded-concurrency full-suite rerun are recorded in AP.
+
+6. Flow actions: paused generation and paused reading-settings show a green primary resume. Shelf return is a visible secondary button across discovery, confirmation, pause, failure, legacy count and reading settings. Clicking returns to shelf with saved work intact; inspecting/editing does not resume production.
+
+- Scenario 6 passed: IAB verified primary resume and secondary shelf exit both before script and in paused reading settings. Clicks closed the dialog, cleared the read URL, and showed 我的书架. Shared UI tests cover unselected discovery/choice, confirmation, paused idle/failed/running states and preserve compact shelf controls. Screenshots: [paused flow](evidence/story-prompt-requirements/flow-actions-paused.jpg), [reading flow](evidence/story-prompt-requirements/flow-actions-reading.jpg).

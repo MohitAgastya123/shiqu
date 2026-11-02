@@ -45,3 +45,17 @@ TT: pinned Node 24.22.1 / pnpm 11.25.0, typecheck and lint passed. Full `pnpm te
 ET: .docs/tests/test-story-prompt-requirements.md executed with tests/fixtures/story-requirements-preview.mjs in IAB at 127.0.0.1:3140. Two sibling links confirmed in creation, completed reading and paused pre-plan flows. Both creation drafts survived reload. Actual review call showed instructions/input/schema; copy succeeded and was verified by pasting the complete prompt into a temporary draft, then discarding it. Historical no-record display verified. Acceptance-only child submission showed 3 reusable / 0 redraw, completed audit and saved its own changed requirements/results/receipt. Failed→repair→passed and unknown→immediate stop are covered by real REST/SQLite/queue tests; status/result presentation is covered by shared UI rendering and stage parity tests. Screenshot: .docs/tests/evidence/story-prompt-requirements/acceptance.jpg. All data/providers were disposable and controlled; no live inference or user stories were changed.
 
 Additional compatibility repair: prompt inspection treats legacy documents without a usage array as having no captures, matching existing story rendering; regression added.
+
+## User correction: flow action hierarchy
+
+User observes resume rendered as a link and shelf return sometimes absent. Inspection identifies the completed-script reading settings branch passes no primary flag to StoryGenerationControl and has no shelf-return button; the generation status branch styles shelf return as green primary, while discovery/legacy-count branches use a faint text action.
+
+- [x] Add one shared secondary shelf-return button to generation status, unselected discovery, legacy count and reading flow settings; reuse a navigation handler that closes sheets and returns to the actual shelf.
+- [x] Request primary resume styling only in flow/settings surfaces; retain compact shelf controls. Preserve explicit confirmation/resume and busy/paused semantics.
+- [x] Verify affected shared UI controls/callbacks, typecheck/lint and browser confirmation, paused-before-plan and reading-settings branches; existing whole-suite evidence remains valid for unchanged provider/data behavior.
+
+AR passed: no blocking architecture flaws
+AR risk: low — localized, reversible action hierarchy/navigation changes.
+AR review round: 2; reviewer: reused (requirements_review). This extension changes UI presentation/navigation only, not generation/persistence contracts.
+
+User-correction verification: typecheck/lint passed; 10 existing shared-UI/revision checks and 17 UI/navigation checks passed. IAB verified paused pre-plan and paused reading-settings branches: resume has yu-primary, shelf exit has secondary yu-generation-back; both navigate to the actual shelf with URL / and no active dialog. The reading branch was missing this exit before. Screenshots flow-actions-paused.jpg and flow-actions-reading.jpg saved under .docs/tests/evidence/story-prompt-requirements/. Shared render tests cover discovery/choosing/confirming and idle/failed/running paused controls without auto-resume. No provider/data behavior changed; existing full981 plus focused16/13 results retained.
