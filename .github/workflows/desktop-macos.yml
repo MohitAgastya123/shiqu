@@ -1,4 +1,4 @@
-# Build shared assets once per native platform; publish only after both installers pass.
+# Release tags use the local pre-push checks; CI verifies each native installer before publishing.
 name: Desktop
 
 on:
@@ -12,8 +12,33 @@ permissions:
   contents: read
 
 jobs:
+  checks:
+    name: Shared checks
+    if: github.event_name != 'push'
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - name: Enable pinned pnpm
+        run: corepack enable pnpm
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.93.0
+          components: rustfmt
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm lint
+      # Unix CLI fixtures need macOS; this full suite also covers desktop/runtime JavaScript tests.
+      - run: pnpm test
+      - run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
+
   build:
     name: Desktop / ${{ matrix.platform }} ${{ matrix.arch }}
+    needs: checks
+    if: ${{ !cancelled() && (needs.checks.result == 'success' || (github.event_name == 'push' && needs.checks.result == 'skipped')) }}
     strategy:
       fail-fast: false
       matrix:
@@ -57,23 +82,13 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.93.0
-          components: rustfmt
       - run: pnpm install --frozen-lockfile
-      - run: pnpm typecheck
-      - run: pnpm lint
-      - run: pnpm test
-        if: runner.os == 'macOS'
-      # Codex CLI integration fixtures use Unix executables; Windows supports API providers and read-only.
-      - name: Test Windows desktop runtime
-        if: runner.os == 'Windows'
-        timeout-minutes: 5
-        run: node --experimental-strip-types --test --test-timeout=60000 tests/desktop-*.test.mjs tests/library-directory.test.mjs
-      - run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
       - name: Build shared reader, desktop UI, and runtime resources
         run: |
           pnpm run build
           pnpm exec vite build --config desktop/vite.config.ts
           node scripts/desktop-resources.mjs
+      # Native Rust behavior and the packaged runtime must be checked on their actual OS.
       - name: Test and package macOS desktop
         if: runner.os == 'macOS'
         run: |
@@ -136,7 +151,7 @@ jobs:
   release:
     name: Publish desktop release
     needs: build
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    if: ${{ !cancelled() && needs.build.result == 'success' && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
     runs-on: macos-15
     permissions:
       contents: write

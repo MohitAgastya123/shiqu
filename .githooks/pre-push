@@ -1,0 +1,3 @@
+#!/bin/sh
+# Validate release-tag snapshots before Git transfers any refs; ordinary pushes pass through.
+exec node "$(git rev-parse --show-toplevel)/scripts/pre-push.mjs" "$@"

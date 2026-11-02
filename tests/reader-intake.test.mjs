@@ -135,7 +135,8 @@ test('confirmed intake draws eighty frames once across four storyboard batches',
  const f=await fixture(t),id=await create(f);await until(async()=>(await f.read(id)).intake.phase==='choosing');
  await setup(f,id,{action:'choose',batch:0,index:0});await until(async()=>(await f.read(id)).intake.phase==='confirming');
  await setup(f,id,{action:'confirm',settings:{artStyle:'paper-cut',productionPrompt:'Complete causality without repeated scenes.',narrativeDetail:'detailed',length:80}});
- await until(async()=>(await f.read(id)).state==='completed',15000);
+ // Eighty durable image/prompt receipts need headroom while the full suite shares the CI runner.
+ await until(async()=>(await f.read(id)).state==='completed',60000);
  assert.deepEqual(f.control.batches.map(p=>p.batch),[{first:1,last:20},{first:21,last:40},{first:41,last:60},{first:61,last:80}]);
  assert.equal(f.control.calls.length,80);assert.equal((await f.read(id)).ready,80);
 });

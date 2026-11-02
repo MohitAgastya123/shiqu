@@ -33,7 +33,8 @@ for(const provider of ['codex','gemini'])test(`${provider}: outline and 20/20/5 
 for(const provider of ['codex','gemini'])test(`${provider}: 80 frames complete four batches and background drawing reaches frame 80`,async t=>{
  const f=await productionFixture(t,provider),id=await f.createLegacyReader(80);f.control.hold=false;
  await f.json(`sessions/${id}/production-control`,'POST',{action:'background'});
- await until(async()=>(await f.read(id)).state==='completed',15000);
+ // Eighty durable image/prompt receipts need headroom while the full suite shares the CI runner.
+ await until(async()=>(await f.read(id)).state==='completed',60000);
  assert.deepEqual(f.control.batches.map(p=>p.batch),[{first:1,last:20},{first:21,last:40},{first:41,last:60},{first:61,last:80}]);
  assert.equal(f.control.calls.length,80);assert.deepEqual(f.control.calls.map(p=>p.page).sort((a,b)=>a-b),Array.from({length:80},(_,i)=>i));
  const session=await f.read(id);assert.equal(session.ready,80);assert.equal(session.story.pages.length,80);

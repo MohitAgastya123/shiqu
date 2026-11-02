@@ -108,9 +108,21 @@ CLI 复用共享数据库中的书库目录，没有时可导入原 `cli-library
 
 ## GitHub macOS / Windows 发布
 
-[Desktop 工作流](../.github/workflows/desktop-macos.yml) 使用两个原生 runner：Apple Silicon（`macos-15` / arm64）和 Windows（`windows-2022` / x64）。每个平台只打包内置 Node 的桌面版，产出一个未签名 DMG 与一个未签名 NSIS EXE；不构建 Intel Mac、Windows ARM64 或 Linux 安装包。类型检查、lint、Rust 格式检查、阅读端与桌面 UI 构建及运行资源准备在每个平台执行一次。完整 JavaScript 测试在 macOS 执行；Windows 执行桌面与书库路径测试，Unix Codex CLI / helper 模拟进程测试不在 Windows 执行。
+[版本化的 pre-push hook](../.githooks/pre-push) 在推送 `v*` 标签前执行一次共享检查；[Desktop 工作流](../.github/workflows/desktop-macos.yml) 随后并行构建 macOS 和 Windows 安装包，不再重复共享测试。PR 和手动运行仍通过 macOS 的独立 `Shared checks` 任务执行类型检查、lint、完整 JavaScript 测试与 Rust 格式检查，通过后才打包。Unix Codex CLI / helper 模拟进程测试需要 Unix 环境。
 
-每个平台各运行一次原生测试、打包及资源 smoke 检查。Windows 会静默安装 EXE 到含空格的临时目录，对实际安装后的 runtime 执行 smoke，再卸载。CI 跳过 Tauri 中重复的准备钩子，本地打包命令仍自动准备资源。任一平台失败都会阻止发布。无需 Apple / Windows 签名证书或额外发布密钥；仅发布任务拥有 `GITHUB_TOKEN` 的 `contents: write` 权限。
+两个打包任务使用原生 runner：Apple Silicon（`macos-15` / arm64）和 Windows（`windows-2022` / x64）。每个平台只打包内置 Node 的桌面版，各产出一个未签名 DMG 或 NSIS EXE；不构建 Intel Mac、Windows ARM64 或 Linux 安装包。阅读端与桌面 UI 构建及运行资源准备仍须在各自平台执行一次，以包含对应平台的依赖与 Node。
+
+每个平台保留一次原生 Rust 测试、打包及资源 smoke 检查，验证各自的系统行为与最终运行资源。Windows 会静默安装 EXE 到含空格的临时目录，对实际安装后的 runtime 执行 smoke，再卸载。CI 跳过 Tauri 中重复的准备钩子，本地打包命令仍自动准备资源。共享检查或任一平台失败都会阻止发布。无需 Apple / Windows 签名证书或额外发布密钥；仅发布任务拥有 `GITHUB_TOKEN` 的 `contents: write` 权限。
+
+`pnpm run setup` 会为当前克隆启用 Git hook；已有依赖的克隆只需执行一次：
+
+```bash
+pnpm run hooks:install
+```
+
+推送 `v*` 标签时，hook 为每个不同的标签提交创建临时独立 worktree，使用该提交固定的 Node / pnpm 版本执行 `pnpm install --frozen-lockfile` 和 `pnpm run release:check`（typecheck → lint → 完整 JavaScript 测试 → Rust 格式检查）。同次推送的多个标签若指向同一提交只测一次；普通分支推送及标签删除不运行测试。任何检查失败都会阻止本次推送，临时 worktree 随后删除；本地未提交修改不会混入检查。标签所在提交必须包含 `release:check` 脚本。可单独运行 `pnpm run release:check` 检查当前目录，但发布 hook 始终重新核对实际标签提交。
+
+hook 是每个克隆的本地配置，不能约束网页创建标签、其他未安装 hook 的克隆或 `git push --no-verify`。正式标签应从已启用 hook 的 Unix 开发环境推送；GitHub 不会补跑共享测试，仍检查两个平台的原生 Rust 测试与最终安装资源。
 
 手动运行或匹配路径的 pull request 只上传 Actions artifacts，不创建 Release。推送 `vX.Y.Z` 正式版本标签后，两个安装包全部构建并检查成功才创建草稿、上传安装包和 `SHA256SUMS.txt`，最后自动公开发布。发布失败可重新运行并继续未发布的草稿；已公开的版本不会覆盖。暂不接受预发布标签。
 
