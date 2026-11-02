@@ -311,7 +311,7 @@ VR review round: 5; reviewer: reused
 - [x] 用实际缓存/模型回执的最小公开原文定位fixture在修改前本地复现；不存用户身份、凭证或私人制作要求，不再调用模型。
 - [x] 修改local-story-discovery.ts的服务器完成证据、缓存校验及统一交叉判定，保留无依据交叉、未知resolved ID、重复/未读/非法范围拒绝，不放宽原文事实或故事完整性。
 - [x] 补接受/显示/排除/重启的合法续完及伪造证据、共享超界、同范围重复、缓存证据无效等回归；服务E2E覆盖真REST/SQLite/媒体的继续查找和候选返回。更新当前文档的范围规则。
-- [ ] 跑typecheck/lint、完整TT及增量故事库E2E，记录捕获回执本地回放结果；独立CR/VR后到DD，不自动push或打包。真实失败任务的再次模型查找不在这次一次重放授权内，可在修复可审查后单独取得明确授权。
+- [x] 跑typecheck/lint、完整TT及增量故事库E2E，记录捕获回执本地回放结果；不自动push或打包。真实失败任务的再次模型查找不在这次一次重放授权内，可在修复可审查后单独取得明确授权。
 
 回滚仅恢复源码（缓存新字段可被旧Zod忽略），不删库。主要风险是把任意交叉误当完成关系、已读过滤再次丢失合法候选；严格以服务器旧pending证据限制共享交集，并覆盖所有筛选入口。该修复不改变Luna路由、二元主题判断、摘要延后或付费调用顺序。
 
@@ -325,3 +325,42 @@ AR review round: 10; reviewer: reused
 SS回归先行：公开原文定位fixture基于捕获回执，不含身份/凭证/私人制作要求；修改前本地回放在mergePending46行复现同一失败（/tmp/shiqu-continuation-before.log）。
 
 SS：加入服务器continuedFrom范围证据，统一接受/展示/已读排除规则，按整段交集验证共享；读缓存核验source并属于故事，模型自带元信息丢弃。公开定位fixture的原始失败已复现，修复后74/74定向通过（/tmp/shiqu-continuation-focused.log），含真实REST/SQLite/媒体回归。第一轮修复后的测试只因maxStories=1断言误以为返回所有匹配项失败；用排除其他记录精准选择共享的资助故事后通过，保护条件不变。未追加真实模型调用、未改真实书库。
+
+SS milestone: `9d37585` (`fix: retain verified shared evidence when completing cross-chapter stories`)。修改前捕获回执本地复现失败、修复后74/74与typecheck/lint通过；完整TT/最终ET与独立CR/VR待完成。真实任务仍待用户决定是否另行重试，未追加外部调用。
+
+CR passed: no major findings
+
+独立CR7完整审查至9d37585并聚焦本轮6499388..9d37585：服务器证据派生/模型元信息剥离、整段共享交集、同范围/无据交叉拒绝、接受/展示/双向排除一致、缓存归属校验和pending原子清理均无重大问题。内部字段不外泄，原提示词/namespace/Luna/摘要职责与历史迁移/付费回执不变。74项定向含6新单元及18服务E2E、typecheck/lint已核对，完整TT/最终ET待执行；后续未再真实推理或修改真实库。
+
+CR risk: non-low — coordinated story acceptance and filtering rules, persistent continuation evidence, and atomic pending-event resolution.
+CR review round: 7; reviewer: reused
+
+TT最终：`pnpm test`883/883通过，约53.8秒（/tmp/shiqu-continuation-all-tests.log）；ET最终18/18通过，约12.2秒（/tmp/shiqu-continuation-e2e.log）；typecheck/lint及diff检查通过。74项定向和修改前失败日志保留。CR7后无源码改动。UI已在内置浏览器确认真实任务仍保持原失败状态，开发bundle已含新规则，未越过一次隔离重放授权去点重试；完整验证后已单独询问是否允许真实任务查找，答复待收。
+
+## 查找仍慢、第三回拒绝后的修正（当前）
+
+入口9d37585，base仍e51429b。用户已另行明确允许实际任务重试直到首篇或再次失败；实际正常调用已入库多篇、续到第三回，随后再次失败，按授权已停止，未继续点重试。VR6关于“真实任务未重试”的历史边界已过时，最终DD须以新结果为准，不声称任务已恢复。此前74/883/18只证明狭窄pending修复，不证明整体查找恢复。
+
+事实：observer.maxStories=1用于response.slice，也被误用于scanRequest，从而每次只提取一篇，整章反复进大模型，Luna批量难以利用。第二回已存11篇后第三回仍0候选，说明延迟真实存在。末次原始回执未留，缓存rejected=true只能定位候选拒绝；不追加真实推理找原始回执，新增诊断将保存未来的确切拒绝原因。
+
+决定：展示仍一篇；冷库初次仍提取1，已有库无匹配时提取上限4（复用themeMatchBatchSize），已完成符合项逐个缓存消费。为3provider加catalog输出schema生成函数，仅将stories.maxItems绑定input.scan.maxStories（不改静态catalog指纹/提示词/namespace），token预算使用同一动态schema。现有缓存和匹配判断保持，不重扫。
+
+完整事件可共享原文：同范围仍拒绝；同名且重叠仍拒绝；严格包含仍允许。交叉新事件仅在引入未被现有全库及本批已接受项覆盖并集包含的原文、明确完成旧pending或被既有主故事完整包含时接受；没有上述增量关系的交叉拼接拒绝。事件本身的完整因果由现有提取契约要求，选中后摘要准备和独立审核复核；不额外增加判重模型调用。已接受缓存记录代表通过此接纳流程的完整故事，显示层和已读source排除只按同范围/同名重叠去重，不再把不同故事的部分共享过滤掉；continuedFrom旧字段仍验证并保存以核对pending，但不再是共享背景的唯一依据。接受层忽略模型自带字段。
+
+诊断：内部cache保存最近拒绝的固定原因码、受限标题及可解析的source定位（不含原文/模型原始正文/凭证），每次成功清除陈旧原因；保存前校验原子性不变。无有效新故事时根据重复、非增量交叉、无效出处、无进展给明确消息；不以自动跳章或无限重试掩盖错误。
+
+- [x] 本地复现第三回独立完整事件共享背景、以及viewer只显示1导致重复提取1的回归；只用公开定位与本地替身，不追加真实调用。
+- [x] 实施展示/提取解耦、动态catalog输出上限和一致token估算，保留第一篇冷启动与批量缓存/取消。
+- [x] 修正接纳/显示/排除的完整事件重叠规则及内部拒绝诊断，保留重复、非法范围、未知pending等安全防线；不改namespace/模型路由/摘要职责。
+- [ ] 更新相应回归和当前文档；跑typecheck/lint、完整TT、服务E2E并记录证据。真实任务的再次模型调用须另遵用户授权范围，不自动追加。
+
+non-low：缓存/接受契约与批量性能行为协同改变，AR11重新审查；无SQL迁移、无清缓存、无自动改历史分镜。展示层一篇不再限制后端每次只产出一篇。新候选可能在被选中后进一步核对完整性，禁止为结构去重任意扩张或截断原文。
+
+AR passed: no blocking architecture flaws
+
+独立AR11确认展示/提取解耦、动态schema预算一致及受限诊断有依据；“新原文”按全库+本批已接受项的覆盖并集判断，回归覆盖多篇旧记录共同覆盖的拼接拒绝和既有主故事内合法交叉。结构增量不单独证明语义完整，不能把未捕获末次回执认定为黛玉进府。无额外模型调用或机制要求。
+
+AR risk: non-low — coordinated acceptance and display filtering, persistent rejection diagnostics, extraction batching and provider output-contract enforcement.
+AR review round: 11; reviewer: reused
+
+SS：第二轮新增回归在旧代码复现viewer只提取1及第三回独立事件共享背景被拒绝（/tmp/shiqu-discovery-speed-before.log）。已实现首冷1/续批4/显示1、三provider动态schema与token预算一致；结构增量按全库和本批覆盖并集，已接受事件仅按重复过滤；受限拒绝诊断与成功清除、失败时不部分提交pending均落实。96/96定向通过（/tmp/shiqu-discovery-speed-focused.log），含20服务E2E及动态schema、批量缓存、第三回共享背景/诊断回归。旧5篇批量和全交叉拒绝预期已按新规则调整，保留拒绝无增量拼接、重复/未知事件/非法范围及并发缓存断言；typecheck/lint通过。未追加真实调用，真实任务仍保留失败状态。

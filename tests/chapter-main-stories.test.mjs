@@ -47,7 +47,7 @@ for(const name of ['codex','gemini'])test(`${name}: chapter thirty offers Guandu
  assert.deepEqual((await wrapped.suggestions(selected,[])).stories,first.stories);assert.equal(jobs.length,mainCalls);
  const next=await wrapped.suggestions(selected,[main.title],undefined,undefined,[main.source]);
  assert.deepEqual(next.stories.map(s=>s.title),episodes.map(s=>s.title));assert.equal(jobs.length,mainCalls+1);
- assert.equal(jobs.at(-1).localBook.scan.chapterStoryLevel,'episodes');assert.equal(jobs.at(-1).localBook.scan.maxStories,5);
+ assert.equal(jobs.at(-1).localBook.scan.chapterStoryLevel,'episodes');assert.equal(jobs.at(-1).localBook.scan.maxStories,4);
  assert.deepEqual(jobs.at(-1).localBook.scan.excludedSources,[main.source]);assert.deepEqual(jobs.at(-1).excludeTitles,[main.title]);
  const both=await withLocalBooks(base,library,store).suggestions(selected,[]);
  assert.deepEqual(both.stories.map(s=>s.title),[main.title,...episodes.map(s=>s.title)]);assert.equal(jobs.length,mainCalls+1);
@@ -68,12 +68,12 @@ function synthetic(){
  return {book,selected,provider,cache,limits,calls,run};
 }
 
-test('nested episodes pass while renamed exact ranges and partial intersections remain rejected',async()=>{
+test('nested complete events may share background while renamed exact ranges remain rejected',async()=>{
  const f=synthetic(),section=f.book.sections[0],main=story('主故事',ref(f.book,section,1,6)),child=story('子故事',ref(f.book,section,2,3));
  f.provider.suggestions=async()=>({stories:[main],note:'',scan:scan()});await f.run();
- f.provider.suggestions=async()=>({stories:[{...main,title:'换名主故事'},child,story('交叉片段',ref(f.book,section,3,4)),story('重叠另名',ref(f.book,section,0,2))],note:'',scan:scan(true)});
- const next=await f.run([main.source]);assert.deepEqual(next.stories.map(s=>s.title),['子故事']);assert.match(next.note,/未能完整核对/);
- assert.deepEqual((await f.run()).stories.map(s=>s.title),['主故事','子故事']);
+ f.provider.suggestions=async()=>({stories:[{...main,title:'换名主故事'},child,story('交叉子故事',ref(f.book,section,3,4)),story('独立旁线',ref(f.book,section,0,2))],note:'',scan:scan(true)});
+ const next=await f.run([main.source]);assert.deepEqual(next.stories.map(s=>s.title),['子故事','交叉子故事','独立旁线']);assert.match(next.note,/未能完整核对/);
+ assert.deepEqual((await f.run()).stories.map(s=>s.title),['主故事','子故事','交叉子故事','独立旁线']);
 });
 
 test('a main event spanning reading blocks keeps its earlier original available for episodes',async()=>{

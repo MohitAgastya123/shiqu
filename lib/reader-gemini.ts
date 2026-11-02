@@ -12,7 +12,7 @@ import {choicesJson,storyDraftJson,suggestionSystemPrompt,draftInstructions,imag
 export {imageTypes} from './reader-generation-contract.ts';
 import type {ArtStyleId} from './reader-styles.ts';
 import {saveStoryOriginal} from './reader-source-storage.ts';
-import {localChoicesJson,localScanJson,localCatalogJson,localChoices,localReadingPrompt,localSuggestionPayload} from './reader-local-contract.ts';
+import {localChoicesJson,localScanJson,localCatalogOutputJson,localChoices,localReadingPrompt,localSuggestionPayload} from './reader-local-contract.ts';
 import {themeMatchPrompt,themeMatchPayload,themeMatchJson,themeMatchesSchema,themeMatchOutputTokens,themeMatchEffort} from './reader-theme-match.ts';
 import type {ThemeStory} from './reader-theme-match.ts';
 import type {WholeBookInput} from './reader-local-contract.ts';
@@ -116,7 +116,7 @@ export async function suggestStories(key:string,selection:Selection,config:Parti
  const models={...defaultModels,...config},{book,url}=source(selection),scanning=localBook?.purpose==='scan'||localBook?.purpose==='catalog';
  const {candidate}=await client(key,transport)(models.text,textRequest(
   localBook?localReadingPrompt(localBook):suggestionSystemPrompt,
-  localSuggestionPayload(book,selection.theme,excludeTitles,localBook,maxStories),localBook?.purpose==='catalog'?localCatalogJson:scanning?localScanJson:localBook?localChoicesJson:choicesJson,url,scanning?10000:localBook?5000:2500,reasoning.suggest),localBook?120000:60000);
+  localSuggestionPayload(book,selection.theme,excludeTitles,localBook,maxStories),localBook?.purpose==='catalog'?localCatalogOutputJson(localBook):scanning?localScanJson:localBook?localChoicesJson:choicesJson,url,scanning?10000:localBook?5000:2500,reasoning.suggest),localBook?120000:60000);
  if(url&&!wasRead(candidate,url))return {stories:[],note:'暂时无法读取这个链接，请提供可公开访问的原文页面，或直接输入书名。'};
  const batch=localBook?localChoices(parseText(candidate),localBook):choicesSchema.parse(parseText(candidate));
  const fresh=scanning?batch:freshSuggestions(batch,excludeTitles);

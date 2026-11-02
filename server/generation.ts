@@ -15,7 +15,7 @@ import type {MediaStore} from '../lib/services.ts';
 import type {ReaderProvider,ProviderStatus} from '../lib/reader-provider.ts';
 import {CodexError,createCodexRunner} from './codex-runner.ts';
 import type {CodexRunner} from './codex-runner.ts';
-import {localChoicesJson,localScanJson,localCatalogJson,localChoices,localReadingPrompt,localSuggestionPayload} from '../lib/reader-local-contract.ts';
+import {localChoicesJson,localScanJson,localCatalogOutputJson,localChoices,localReadingPrompt,localSuggestionPayload} from '../lib/reader-local-contract.ts';
 import {themeMatchPrompt,themeMatchPayload,themeMatchJson,themeMatchesSchema,themeMatchModel,themeMatchEffort} from '../lib/reader-theme-match.ts';
 import {readerImageAsset,referenceImageKey} from '../lib/reader-image-assets.ts';
 import {imageDimensions} from '../lib/reader-image-dimensions.ts';
@@ -63,7 +63,7 @@ export function createReaderProvider(variables:Record<string,string|undefined>,m
   },
   async suggestions(selection,excluded,localBook,reading){
    const scanning=localBook?.purpose==='scan'||localBook?.purpose==='catalog';
-   const result=await codex.run({instructions:localBook?localReadingPrompt(localBook):suggestionSystemPrompt,prompt:JSON.stringify(localSuggestionPayload(book(selection),selection.theme,excluded,localBook,reading?.maxStories)),schema:localBook?.purpose==='catalog'?localCatalogJson:scanning?localScanJson:localBook?localChoicesJson:choicesJson,timeoutMs:localBook?120000:60000,reasoningEffort:taskReasoningEfforts.suggest});
+   const result=await codex.run({instructions:localBook?localReadingPrompt(localBook):suggestionSystemPrompt,prompt:JSON.stringify(localSuggestionPayload(book(selection),selection.theme,excluded,localBook,reading?.maxStories)),schema:localBook?.purpose==='catalog'?localCatalogOutputJson(localBook):scanning?localScanJson:localBook?localChoicesJson:choicesJson,timeoutMs:localBook?120000:60000,reasoningEffort:taskReasoningEfforts.suggest});
    const batch=localBook?localChoices(JSON.parse(result.text),localBook):suggestionBatchSchema.parse(JSON.parse(result.text));
    const fresh=scanning?batch:freshSuggestions(batch,excluded);
    return reading?.maxStories?{...fresh,stories:fresh.stories.slice(0,reading.maxStories)}:fresh;

@@ -1,7 +1,7 @@
 // Persist theme-neutral stories before matching; never let a reader's theme or exclusions shape extraction.
 // Expand only until new stories exist, carrying verified unfinished events across blocks and cancellation.
 // Binary theme receipts read originals; old catalog ranges resume without generating summaries.
-// Completed pending events may share only their server-verified earlier evidence with another story.
+// Complete events may share background; structural novelty is checked before admission, not display.
 import {z} from 'zod';
 import {localSourceSchema,localSourceKey,localReadingPrompt,localCatalogJson,legacyLocalReadingPrompt,legacyLocalScanJson,localChapterStoriesPrompt} from '../lib/reader-local-contract.ts';
 import type {LocalSourceReference,PendingEvent,WholeBookInput} from '../lib/reader-local-contract.ts';
@@ -17,15 +17,29 @@ import {readingPlan,readingPlanKey,defaultReadingLimits,legacyReadingPlanKey} fr
 import type {ReadingLimits,ReadingBlock} from './story-reading-inputs.ts';
 import {requestTokens} from './story-token-budget.ts';
 import {sourceUnitIds,sourcesOverlap,sourceCovers,mergeSources} from './local-source-ranges.ts';
+import {themeMatchBatchSize} from '../lib/reader-theme-match.ts';
 import {matchLibraryStories} from './story-theme-matching.ts';
 import {legacySummaryCatalogPrompt,legacySummaryCatalogJson} from '../lib/reader-legacy-catalog.ts';
 
 const storySchema=suggestionBatchSchema.shape.stories.element.omit({storyBrief:true,matchReason:true}).extend({source:localSourceSchema,continuedFrom:z.array(localSourceSchema).min(1).max(16).optional()});
 type Story=z.infer<typeof storySchema>;
 const pendingSchema=z.object({id:z.string().min(1).max(64),title:z.string().min(1).max(100),source:localSourceSchema});
-const stateSchema=z.object({stories:z.array(storySchema).max(50000),cursor:z.number().int().min(0),readThrough:z.number().int().min(0),pendingEvents:z.array(pendingSchema).max(16),exhausted:z.boolean(),rejected:z.boolean()});
+const rejectionSchema=z.object({code:z.enum(['duplicate','no-new-evidence','invalid-source','no-progress','pending-resolution']),title:z.string().max(100).optional(),source:localSourceSchema.optional()});
+const stateSchema=z.object({stories:z.array(storySchema).max(50000),cursor:z.number().int().min(0),readThrough:z.number().int().min(0),pendingEvents:z.array(pendingSchema).max(16),exhausted:z.boolean(),rejected:z.boolean(),lastRejection:rejectionSchema.optional()});
 type State=z.infer<typeof stateSchema>;
+type Rejection=z.infer<typeof rejectionSchema>;
 const failed=()=>new ReaderError(502,'本段选题未能完整核对，已保留进度，请重试或换个主题。');
+const rejectionMessage=(reason:Rejection)=>({
+ duplicate:'本次提取只返回了已保存的故事，已保留进度，请重试查找。',
+ 'no-new-evidence':'本次提取的交叉范围没有新的故事证据，已保留进度，请重试查找。',
+ 'invalid-source':'本次提取引用的原文范围无法核对，已保留进度，请重试查找。',
+ 'no-progress':'本次提取未给出新故事，也未确认本段已读完，已保留进度，请重试查找。',
+ 'pending-resolution':'本次跨章事件的收束记录与原文覆盖不一致，已保留进度，请重试查找。',
+}[reason.code]);
+function rejectedStory(code:Rejection['code'],raw:unknown):Rejection{
+ const value=raw as {title?:unknown;source?:unknown},source=localSourceSchema.safeParse(value?.source);
+ return {code,...(typeof value?.title==='string'?{title:value.title.slice(0,100)}:{}),...(source.success?{source:source.data}:{})};
+}
 export function discoveryNamespace(book:LocalBook,provider:string,model:string,limits=defaultReadingLimits,effort?:string){
  return discoveryHash(['story-library-v1',readingPlanKey(book,provider,limits),model,localReadingPrompt({...book.input,purpose:'catalog'}),localCatalogJson,...(effort?[effort]:[])]);
 }
@@ -71,21 +85,14 @@ export async function discoverLocalStories(provider:ReaderProvider,books:LocalBo
  const theme=selection.theme.normalize('NFKC').trim(),key=namespace+'/library';
  const totalChars=plan.blocks.reduce((n,block)=>n+block.chars,0),excludedKeys=new Set(excludedSources.length?[]:excluded.map(titleKey));
  const validExclusions=excludedSources.filter(source=>{try{qualified(books,book,source);return true;}catch{return false;}});
- const proofs=(...stories:(Story|undefined)[])=>stories.flatMap(story=>story?.continuedFrom||[]);
- const conflicts=(a:LocalSourceReference,b:LocalSourceReference,evidence:LocalSourceReference[]=[])=>{
-  const left=new Set(sourceUnitIds(book,a)),right=new Set(sourceUnitIds(book,b)),overlap=[...right].filter(id=>left.has(id));
-  if(!overlap.length)return false;
-  const leftCovers=overlap.length===right.size,rightCovers=overlap.length===left.size;
-  if(leftCovers!==rightCovers)return false;
-  if(leftCovers)return true; // Equal coverage remains a duplicate, even for a completed pending event.
-  const shared=new Set(evidence.flatMap(source=>sourceUnitIds(book,source)));
-  return overlap.some(id=>!shared.has(id));
- };
+ const sameRange=(a:LocalSourceReference,b:LocalSourceReference)=>sourceCovers(book,a,b)&&sourceCovers(book,b,a);
+ const duplicate=(a:Story,b:Story)=>sameRange(a.source,b.source)||titleKey(a.title)===titleKey(b.title)&&sourcesOverlap(book,a.source,b.source);
+ const crossing=(a:LocalSourceReference,b:LocalSourceReference)=>sourcesOverlap(book,a,b)&&!sourceCovers(book,a,b)&&!sourceCovers(book,b,a);
  const visibleStories=(stories:Story[])=>{
-  const shown:Story[]=[],exclusions=validExclusions.map(source=>({source,known:stories.find(other=>sourceCovers(book,source,other.source)&&sourceCovers(book,other.source,source))}));
+  const shown:Story[]=[],exclusions=validExclusions.map(source=>({source,known:stories.find(other=>sameRange(source,other.source))}));
   for(const story of stories){
-   const title=titleKey(story.title);if(excludedKeys.has(title)||exclusions.some(excluded=>conflicts(excluded.source,story.source,proofs(story,excluded.known))))continue;
-   if(shown.some(other=>conflicts(other.source,story.source,proofs(other,story))))continue;
+   if(excludedKeys.has(titleKey(story.title))||exclusions.some(excluded=>sameRange(excluded.source,story.source)||excluded.known&&duplicate(story,excluded.known)))continue;
+   if(shown.some(other=>duplicate(other,story)))continue;
    shown.push(story);
   }
   return shown;
@@ -145,24 +152,32 @@ export async function discoverLocalStories(provider:ReaderProvider,books:LocalBo
    // A simultaneous theme may already have extended the shared library while matching ran.
    while(current.stories.length<=baseline&&!current.exhausted){
     reading.signal.throwIfAborted();
-    const {input,titles,visible}=scanRequest(current,current.cursor,current.stories.length?batchLimit:1);
+    const {input,titles,visible}=scanRequest(current,current.cursor,current.stories.length?themeMatchBatchSize:1);
     if(requestTokens(input,'',titles,status.provider)>limits.whole)throw new ReaderError(502,'跨章原文或已入库记录超过本次输入预算，故事库和进度已保留，请缩小章节范围。');
     const result=await provider.suggestions(extraction,titles,input);
     progress(current,'checking',reading);
     if(result.stories.length>input.scan!.maxStories)throw failed();
     if(!result.scan||!Array.isArray(result.scan.pendingEvents)||!Array.isArray(result.scan.resolvedEventIds))throw failed();
-    const accepted:Story[]=[];let rejected=false;
+    const accepted:Story[]=[],rejections:Rejection[]=[],covered=new Set(current.stories.flatMap(story=>sourceUnitIds(book,story.source)));
     for(const raw of result.stories){
      try{
       const parsed=storySchema.omit({continuedFrom:true}).parse(raw);qualified(books,book,parsed.source,visible);
       const continuedFrom=current.pendingEvents.filter(event=>result.scan!.resolvedEventIds.includes(event.id)&&sourceCovers(book,parsed.source,event.source)).map(event=>event.source);
-      const story:Story={...parsed,...(continuedFrom.length?{continuedFrom}:{})};
-      if(current.stories.some(old=>conflicts(old.source,story.source,proofs(old,story)))||accepted.some(old=>conflicts(old.source,story.source,proofs(old,story)))){rejected=true;continue;}
-      accepted.push({...story,sourceLabel:books.resolve(book,story.source).title.slice(0,150)});
-     }catch{rejected=true;}
+      const story:Story={...parsed,...(continuedFrom.length?{continuedFrom}:{})},known=[...current.stories,...accepted];
+      if(known.some(other=>duplicate(other,story))){rejections.push(rejectedStory('duplicate',raw));continue;}
+      const units=sourceUnitIds(book,story.source),fresh=units.some(id=>!covered.has(id)),nested=known.some(other=>sourceCovers(book,other.source,story.source));
+      if(known.some(other=>crossing(other.source,story.source))&&!fresh&&!nested&&!continuedFrom.length){rejections.push(rejectedStory('no-new-evidence',raw));continue;}
+      accepted.push({...story,sourceLabel:books.resolve(book,story.source).title.slice(0,150)});for(const id of units)covered.add(id);
+     }catch{rejections.push(rejectedStory('invalid-source',raw));}
     }
-    const pending=mergePending(books,book,current.pendingEvents,result.scan.pendingEvents,result.scan.resolvedEventIds,accepted,visible);
-    const next:State={...current,stories:[...current.stories,...accepted],pendingEvents:pending,rejected};
+    let pending:PendingEvent[];
+    try{pending=mergePending(books,book,current.pendingEvents,result.scan.pendingEvents,result.scan.resolvedEventIds,accepted,visible);}
+    catch{
+     const lastRejection=rejections[0]||{code:'pending-resolution' as const};
+     await cache.write(key,{...current,lastRejection});throw new ReaderError(502,rejectionMessage(lastRejection));
+    }
+    const rejected=!!rejections.length,lastRejection=rejections[0]||(!accepted.length&&!result.scan.blockComplete?{code:'no-progress' as const}:undefined);
+    const next:State={...current,stories:[...current.stories,...accepted],pendingEvents:pending,rejected,lastRejection};
     // A full response is not proof that all stories in this block have been catalogued.
     if(!rejected&&result.stories.length<input.scan!.maxStories&&result.scan.blockComplete)next.cursor++;
     next.readThrough=next.cursor;next.exhausted=next.cursor===plan.blocks.length;
@@ -172,7 +187,7 @@ export async function discoverLocalStories(provider:ReaderProvider,books:LocalBo
     }
     await cache.write(key,next);current=next;progress(current,'reading',reading);
     if(reading.signal.aborted)break;
-    if(!accepted.length&&(rejected||!result.scan.blockComplete))throw failed();
+    if(!accepted.length&&lastRejection)throw new ReaderError(502,rejectionMessage(lastRejection));
    }
   });
   hit=false;

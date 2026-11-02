@@ -178,3 +178,12 @@ test('legacy pending ranges lose synopsis metadata and a failed upgrade write re
  assert.deepEqual(documents(f).find(doc=>doc.key===key).value,old);fail=false;await f.run('主题');assert.equal(f.calls.catalog.length,0);
  assert.deepEqual(library(f).pendingEvents,[{id:'pending',title:f.stories[1].title,source:f.stories[1].source}]);
 });
+
+test('one-at-a-time presentation extracts four after a cold miss and consumes the batch without re-reading',async()=>{
+ const f=libraryFixture();
+ for(let i=3;i<=5;i++){const unit={id:'u'+i,text:'勇士'+i+'面对猛虎仍然向前，保护村民并驱走猛虎，最后平安归来。',narrative:true};f.book.sections[0].units.push(unit);f.stories.push({title:'护民故事'+i,description:'人物面对危险作出选择。',source:{...f.stories[1].source,firstUnit:unit.id,lastUnit:unit.id}});}
+ f.book.input.text='篇章 s1：第一章\n'+f.book.sections[0].units.map(unit=>'['+unit.id+']\n'+unit.text).join('\n\n');
+ const control=new AbortController(),first=await f.run('勇气',[],observer(control));assert.equal(first.stories.length,1);assert.deepEqual(f.calls.catalog.map(call=>call.input.scan.maxStories),[1,4]);assert.deepEqual(f.calls.matches.map(call=>call.stories.length),[1,4]);
+ const seen=[first.stories[0].source];for(let i=0;i<3;i++){const next=await f.run('勇气',seen,observer(control));assert.equal(next.stories.length,1);seen.push(next.stories[0].source);}
+ assert.equal(f.calls.catalog.length,2);assert.equal(f.calls.matches.length,2);assert.equal(new Set(seen.map(source=>source.firstUnit)).size,4);
+});

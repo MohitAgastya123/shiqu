@@ -12,7 +12,7 @@ import type {ReasoningEffort} from '../lib/reader-reasoning.ts';
 import {openaiDefaultModels} from '../lib/system-settings.ts';
 import {storyboardGenerator} from '../lib/reader-storyboard.ts';
 import {freshSuggestions,suggestionBatchSchema} from '../lib/reader-suggestions.ts';
-import {localChoicesJson,localScanJson,localCatalogJson,localChoices,localReadingPrompt,localSuggestionPayload} from '../lib/reader-local-contract.ts';
+import {localChoicesJson,localScanJson,localCatalogOutputJson,localChoices,localReadingPrompt,localSuggestionPayload} from '../lib/reader-local-contract.ts';
 import {themeMatchPrompt,themeMatchPayload,themeMatchJson,themeMatchesSchema,themeMatchOutputTokens,themeMatchModel,themeMatchEffort} from '../lib/reader-theme-match.ts';
 import {choicesJson,storyDraftJson,suggestionSystemPrompt,draftInstructions,imagePrompt,imageTypes,mediaType,storySource} from '../lib/reader-generation-contract.ts';
 import {artRecommendationJson,artRecommendationSchema,selectedArtRecommendationPrompt,selectedArtRecommendationPayload} from '../lib/reader-art-recommendation.ts';
@@ -81,7 +81,7 @@ export function createOpenAIProvider(variables:Record<string,string|undefined>,m
   async status(){return {configured:!!key,provider:'openai',models,voiceEnabled:false,taskReasoningEfforts:reasoning,themeMatching:{model:themeMatchModel,reasoningEffort:themeMatchEffort}};},
   async suggestions(selection,excluded,localBook,reading){
    const scanning=localBook?.purpose==='scan'||localBook?.purpose==='catalog';
-   const result=await text(localBook?localReadingPrompt(localBook):suggestionSystemPrompt,localSuggestionPayload(book(selection),selection.theme,excluded,localBook,reading?.maxStories),localBook?.purpose==='catalog'?localCatalogJson:scanning?localScanJson:localBook?localChoicesJson:choicesJson,reasoning.suggest,scanning?10000:localBook?5000:2500);
+   const result=await text(localBook?localReadingPrompt(localBook):suggestionSystemPrompt,localSuggestionPayload(book(selection),selection.theme,excluded,localBook,reading?.maxStories),localBook?.purpose==='catalog'?localCatalogOutputJson(localBook):scanning?localScanJson:localBook?localChoicesJson:choicesJson,reasoning.suggest,scanning?10000:localBook?5000:2500);
    const batch=localBook?localChoices(result.value,localBook):suggestionBatchSchema.parse(result.value),fresh=scanning?batch:freshSuggestions(batch,excluded);
    return reading?.maxStories?{...fresh,stories:fresh.stories.slice(0,reading.maxStories)}:fresh;
   },

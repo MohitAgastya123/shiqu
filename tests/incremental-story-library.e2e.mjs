@@ -211,3 +211,22 @@ test('REST accepts a captured pending completion with shared old evidence and pr
  const before=matches,again=await f.json('suggestions','POST',selection);assert.equal(again.stories[0].title,candidate.title);assert.equal(matches,before);assert.equal(catalogs,1);
  const other=await f.json('suggestions','POST',{...selection,theme:'everything',excludeSources:[candidate.source]});assert.ok(other.stories.some(story=>story.title===receipt.catalog.stories[2].title));assert.equal(catalogs,1);
 });
+
+test('one-card intake fills four after a cold miss and shows the remaining batch without extraction',async t=>{
+ const {f,library}=await fixture(t);
+ for(let i=3;i<=5;i++){const unit={id:'u'+i,text:'勇士'+i+'面对猛虎仍然向前，保护村民并驱走猛虎，最后平安归来。',narrative:true};library.book.sections[0].units.push(unit);library.stories.push({title:'护民故事'+i,description:'人物面对危险作出选择。',source:{...library.stories[1].source,firstUnit:unit.id,lastUnit:unit.id}});}
+ library.book.input.text='篇章 s1：第一章\n'+library.book.sections[0].units.map(unit=>'['+unit.id+']\n'+unit.text).join('\n\n');
+ const first=await create(f,'勇气');assert.equal(first.intake.batches[0].stories.length,1);assert.deepEqual(library.calls.catalog.map(call=>call.input.scan.maxStories),[1,4]);assert.deepEqual(library.calls.matches.map(call=>call.stories.length),[1,4]);
+ for(let i=0;i<3;i++){const saved=await f.read(first.id);await f.json(`sessions/${first.id}/setup`,'POST',{requestId:crypto.randomUUID(),generation:saved.intake.generation,action:'more'});await f.demand(first.id,crypto.randomUUID());await until(async()=>(await f.read(first.id)).intake.batches.length===i+2);}
+ const saved=await f.read(first.id);assert.equal(new Set(saved.intake.batches.flatMap(batch=>batch.stories.map(story=>story.source.firstUnit))).size,4);assert.equal(library.calls.catalog.length,2);assert.equal(library.calls.matches.length,2);assert.equal(f.control.recommendations.length,0);assert.equal(f.control.calls.length,0);
+});
+
+test('REST reports a source-specific extraction failure and clears its private diagnostic after retry',async t=>{
+ const {f,library}=await fixture(t),base=library.provider.suggestions;
+ library.provider.suggestions=async()=>({stories:[{...library.stories[0],source:{...library.stories[0].source,firstUnit:'missing'}}],note:'',scan:{blockComplete:true,pendingEvents:[],resolvedEventIds:[]}});
+ const response=await f.request('suggestions','POST',{...selection,theme:'勇气'});assert.equal(response.status,502);const error=(await response.json()).error;assert.match(error,/原文范围无法核对/);assert.doesNotMatch(error,/换个主题|missing/);
+ const status=await f.generation.status(),key=discoveryNamespace(library.book,status.provider,status.models.text,undefined,status.taskReasoningEfforts.suggest)+'/library';
+ const read=async()=>JSON.parse(new TextDecoder().decode(await (await f.media.get('reader-cache/'+discoveryHash(key)+'.json')).arrayBuffer())).value;
+ assert.equal((await read()).lastRejection.code,'invalid-source');assert.equal((await read()).cursor,0);assert.deepEqual((await read()).stories,[]);
+ library.provider.suggestions=base;const result=await f.json('suggestions','POST',{...selection,theme:'勇气'});assert.equal(result.stories[0].title,'勇士护民');assert.equal((await read()).lastRejection,undefined);
+});
