@@ -59,7 +59,7 @@ export async function forkRevision(repo:ReaderRepository,media:MediaStore,ownerI
   }
  }
  const base={...original,images};
- const document:Document={plan,original:doc.original,frameRecommendation:doc.frameRecommendation,frameCountConfirmed:true,visualReview:newReview(),images:[],audio:[],usage:[],revision:{parentId,rootId,number:epoch+1,baseToken:token,requestHash,base,...(impact.replan?{}:{previewedRedraw:impact.redraw}),...(lostPages.length?{lostPages}:{})}};
+ const document:Document={plan,original:doc.original,frameRecommendation:doc.frameRecommendation,frameCountConfirmed:true,visualReview:newReview(),images:[],audio:[],usage:(doc.usage||[]).map(item=>({...item,originId:item.originId||parentId})),revision:{parentId,rootId,number:epoch+1,baseToken:token,requestHash,base,...(impact.replan?{}:{previewedRedraw:impact.redraw}),...(lostPages.length?{lostPages}:{})}};
  if(plan)document.images=reusableRevisionImages(base,selection,plan);
  if(impact.preserveScript){document.storyboard=doc.storyboard;document.draft=doc.draft;}
  const now=new Date().toISOString();

@@ -1,4 +1,5 @@
 // Share story/image contracts across providers; shot direction stays independent of art style and cast identity.
+import {acceptanceDirection} from './reader-acceptance.ts';
 import {imageSizeDirection} from './reader-image-dimensions.ts';
 import {readerBooks,ReaderError} from './reader-model.ts';
 import type {Plan,Selection} from './reader-model.ts';
@@ -32,7 +33,7 @@ export const storyPlanningDirection=promptSections(
  ['叙事与轻重',narrativeMeaningDirection],['静态画面与衔接',storyboardDirection],
  ['事实边界',sourceFidelityDirection],
  ['幅数与制作要求',narrativeDetailInstructions+`全篇 exactPageCount 为数字时严格遵守；为 auto 时按关键事件、因果、转折与停顿决定 ${readerMinFrames} 至 ${readerMaxFrames} 幅，不预设常见数量区间，不为凑数重复或为压缩丢掉关键转折。只有1幅时，用一个核心瞬间配合旁白交代必要因果与结果，不拼入连续动作。productionPrompt 优先于默认叙事建议，仍服从原文事实及选定故事、总幅数、画风和 schema，不能为主题、误会、反转或温暖余味改变动机、行为性质或结局。`],
- ['输入与输出',inputBoundaryDirection]);
+ ['本篇验收要求',acceptanceDirection],['输入与输出',inputBoundaryDirection]);
 export const storyMetadataDirection=storySummaryDirection+'\n'+'summary 只作归档元信息，依据原文记录完整主事件及实际结果，最多1200字；先依据原文编排，不以摘要决定分镜顺序、轻重或分幅，也不把开场引子当作完整摘要。sourceReference 写书名与篇名；有 chapterContext 时使用 chapterContext.title，否则使用 verifiedOriginal.title，不伪造古文或网址。adaptationNote 说明新增、压缩和改写，明确属于 AI 演绎。characters 用简体中文记录有依据的时代、年龄、外貌、服饰和辨识特征，必要物件写稳定外观，作为全篇身份依据；不重复画风、排线、光影或构图，不要求每幅全员或全身出场，也不阻止有原文依据的配角。';
 export const storyPageDirection=promptSections(
  ['配文','caption 正常目标8至55字，最多3个短句；必要时可超过55字，但不得超过 schema 的90字硬上限，不为凑字数解释画面。可用现代旁白、对白或两者。对白默认自然现代译写，保留原意、口气、条件与力度，今天仍易懂的原句可保留；不改成概括转述或潜台词解说。'],

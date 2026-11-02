@@ -38,7 +38,7 @@ function responseFor(payload,schema){
  if(schema.properties.stories)return {stories:[candidate],note:'',...(schema.properties.scan?{scan:{blockComplete:false,pendingEvents:[],resolvedEventIds:[]}}:{})};
  if(schema.properties.count)return {count:8,reason:'关键言行和回应各有空间。'};
  if(schema.properties.artStyle)return candidate.artRecommendation;
- if(schema.properties.issues)return {titleReview:{title:plan.title,reason:'符合实际范围。'},issues:[],...(payload.reflectionCandidates?{reflectionChoice:{index:2,reason:'保留关键关系。'}}:{})};
+ if(schema.properties.issues)return {...(payload.acceptanceCriteria?.length?{acceptanceResults:payload.acceptanceCriteria.map((_,index)=>({criterion:index+1,status:'passed',pages:[1],evidence:'第一幅保留了要求中的可见反应。'}))}:{}),titleReview:{title:plan.title,reason:'符合实际范围。'},issues:[],...(payload.reflectionCandidates?{reflectionChoice:{index:2,reason:'保留关键关系。'}}:{})};
  if(payload.requestedPages)return {pages:payload.requestedPages.map(page=>({page,...plan.pages[page-1]}))};
  if(schema.properties.candidates)return {title:plan.title,candidates:makeReflectionCandidates(plan.reflection)};
  if(payload.draft)return {reflection:plan.reflection};
@@ -46,7 +46,8 @@ function responseFor(payload,schema){
  if(payload.batch)return {pages:plan.pages};
  return draft;
 }
-async function requestsFor(provider){
+async function requestsFor(provider,acceptancePrompt){
+ const inputSelection={...selection,...(acceptancePrompt?{acceptancePrompt}:{})};
  let stage;const seen=new Map(),stored=[];
  function record(instructions,prompt,schema){const payload=JSON.parse(prompt);assert.ok(!instructions.includes(marker));assert.match(instructions,/## /);seen.set(stage,{instructions,payload,schema});return responseFor(payload,schema);}
  const runner={status:async()=>({configured:true}),run:async job=>{
@@ -69,25 +70,31 @@ async function requestsFor(provider){
  };
  const media={get(){throw Error('Unexpected media read');},async put(...args){stored.push(args);}};
  const p=createReaderProvider({SHIQU_AI_PROVIDER:provider,GEMINI_API_KEY:'controlled',OPENAI_API_KEY:'controlled'},media,transport,runner),g=p.generator();
- async function call(name,fn){stage=name;return (await fn())?.value;}
- await call('remote',()=>p.suggestions(selection,[]));
+ async function call(name,fn){stage=name;const result=await fn();
+  if(result&&'value' in result){const capture=result.promptRecord,actual=seen.get(stage);assert.ok(capture,`${provider}:${stage} captured`);
+   if(stage==='image'){assert.equal(capture.input,actual.prompt);assert.equal(capture.instructions,actual.instructions||'');}
+   else{assert.equal(capture.instructions,actual.instructions);assert.deepEqual(JSON.parse(capture.input),actual.payload);assert.deepEqual(capture.schema,actual.schema);}
+  }
+  return result?.value;
+ }
+ await call('remote',()=>p.suggestions(inputSelection,[]));
  const local={title:'庄子',edition:source.edition,text:'[u1] 昔者庄周梦为胡蝶。'+marker};
- await call('local',()=>p.suggestions(selection,[],local));
- for(const level of ['main','episodes'])await call('scan-'+level,()=>p.suggestions(selection,[],{...local,purpose:'scan',scan:{maxStories:5,excludedSources:[],pendingEvents:[],contextText:'',chapterStoryLevel:level}}));
- await call('catalog',()=>p.suggestions(selection,[],{...local,purpose:'catalog',scan:{maxStories:1,excludedSources:[],pendingEvents:[],contextText:''}}));
- await call('theme-match',()=>p.matchStories(selection.theme,[{id:'a'.repeat(64),title:candidate.title,text:original.text}]));
- await call('art',()=>p.recommendArt(selection,original));
- await call('frames',()=>g.recommend(selection,'fixed-id',original));
- await call('draft',()=>g.plan(selection,'fixed-id',original));
- const outline=await call('outline',()=>g.outline(selection,'fixed-id',original));
- await call('batch',()=>g.planBatch(selection,'fixed-id',{outline,pages:[]},original));
- await call('candidates',()=>g.reflectionCandidates(selection,draft,original));
- await call('reflection',()=>g.reflection(selection,draft,original));
- await call('reflection-repair',()=>g.reflection(selection,draft,original,{reflection:plan.reflection,issues:[{...issue,page:0,category:'reflection'}]}));
- await call('review',()=>g.review(selection,plan,original,outline));
- await call('review-candidates',()=>g.review(selection,plan,original,outline,makeReflectionCandidates(plan.reflection)));
- await call('repair',()=>g.repair(selection,plan,original,[issue],outline));
- await call('image',()=>g.image(plan,0,'fixed-id','',selection.artStyle,selection.productionPrompt));
+ await call('local',()=>p.suggestions(inputSelection,[],local));
+ for(const level of ['main','episodes'])await call('scan-'+level,()=>p.suggestions(inputSelection,[],{...local,purpose:'scan',scan:{maxStories:5,excludedSources:[],pendingEvents:[],contextText:'',chapterStoryLevel:level}}));
+ await call('catalog',()=>p.suggestions(inputSelection,[],{...local,purpose:'catalog',scan:{maxStories:1,excludedSources:[],pendingEvents:[],contextText:''}}));
+ await call('theme-match',()=>p.matchStories(inputSelection.theme,[{id:'a'.repeat(64),title:candidate.title,text:original.text}]));
+ await call('art',()=>p.recommendArt(inputSelection,original));
+ await call('frames',()=>g.recommend(inputSelection,'fixed-id',original));
+ await call('draft',()=>g.plan(inputSelection,'fixed-id',original));
+ const outline=await call('outline',()=>g.outline(inputSelection,'fixed-id',original));
+ await call('batch',()=>g.planBatch(inputSelection,'fixed-id',{outline,pages:[]},original));
+ await call('candidates',()=>g.reflectionCandidates(inputSelection,draft,original));
+ await call('reflection',()=>g.reflection(inputSelection,draft,original));
+ await call('reflection-repair',()=>g.reflection(inputSelection,draft,original,{reflection:plan.reflection,issues:[{...issue,page:0,category:'reflection'}]}));
+ await call('review',()=>g.review(inputSelection,plan,original,outline));
+ await call('review-candidates',()=>g.review(inputSelection,plan,original,outline,makeReflectionCandidates(plan.reflection)));
+ await call('repair',()=>g.repair(inputSelection,plan,original,[issue],outline));
+ await call('image',()=>g.image(plan,0,'fixed-id','',inputSelection.artStyle,inputSelection.productionPrompt));
  assert.equal(stored.length,1);
  return seen;
 }
@@ -145,4 +152,14 @@ test('legacy studio retains its own caption target, fixed art and independent en
  assert.match(studioPlanPrompt,/余味写给已经读完故事的人/);
  assert.match(studioPlanPrompt,/reflection 在故事后独立展示/);
  assert.match(studioImagePrompt(marker),/reference data/);
+});
+
+for(const provider of ['codex','gemini','openai'])test(`${provider}: story-specific acceptance criteria reach production, review and repairs with exact prompt captures`,async()=>{
+ const prompt='关键反应落实到画面。\n保留对白的条件。',requests=await requestsFor(provider,prompt);
+ for(const stage of ['frames','draft','outline','batch','candidates','reflection','reflection-repair','review','review-candidates','repair']){
+  assert.equal(requests.get(stage).payload.acceptancePrompt,prompt,stage);
+  assert.deepEqual(requests.get(stage).payload.acceptanceCriteria,prompt.split('\n'),stage);
+ }
+ assert.ok(requests.get('review').schema.required.includes('acceptanceResults'));
+ assert.match(requests.get('review').instructions,/passed\/failed\/unknown/);
 });

@@ -1,4 +1,6 @@
 // Generate story plans and media through Gemini, preserving safe errors and validated results.
+import {promptRecord} from './reader-prompt-records.ts';
+import {acceptanceInput} from './reader-acceptance.ts';
 import {discoveryCall} from './reader-discovery-call.ts';
 import type {DiscoveryContext} from './reader-discovery-call.ts';
 import {normalizeProductionPrompt,storyEditorialContext} from './reader-prompts.ts';
@@ -149,23 +151,23 @@ export function makeGenerator(key:string,assets:Assets,config:Partial<Models>={}
    const book=(payload as {book:string}).book,url=!original&&/^https?:/i.test(book)?book:'';
    const {candidate,metadata}=await generate(models.text,textRequest(instructions,payload,schema,url,maxOutputTokens,reasoning[task]),readerStoryboardTimeoutMs);
    if(url&&!wasRead(candidate,url))throw new GeminiError('SOURCE_UNAVAILABLE');
-   return {value:parseText(candidate),...metadata,reasoningEffort:reasoning[task]};
+   return {value:parseText(candidate),...metadata,reasoningEffort:reasoning[task],promptRecord:promptRecord(instructions,payload,schema)};
   }),
   original:(selection,plan,id)=>saveStoryOriginal(assets,selection,plan,id,transport),
   async recommend(selection,id,original){
-   const {candidate,metadata}=await generate(models.text,textRequest(frameRecommendationPrompt,frameRecommendationPayload(selection,original),frameRecommendationOutputJson(original),'',original.storyBrief?4096:2000,reasoning.frames));
-   return {value:frameRecommendationOutputSchema(original).parse(parseText(candidate)),...metadata,reasoningEffort:reasoning.frames};
+   const payload=frameRecommendationPayload(selection,original),schema=frameRecommendationOutputJson(original);
+   const {candidate,metadata}=await generate(models.text,textRequest(frameRecommendationPrompt,payload,schema,'',original.storyBrief?4096:2000,reasoning.frames));
+   return {value:frameRecommendationOutputSchema(original).parse(parseText(candidate)),...metadata,reasoningEffort:reasoning.frames,promptRecord:promptRecord(frameRecommendationPrompt,payload,schema)};
   },
   async plan(selection:Selection,id:string,original?:OriginalSource){
    assertStoryBriefReady(original);
    const {book,url}=source(selection);
-   const {candidate,metadata}=await generate(models.text,textRequest(
-    draftInstructions(!!original?.localSource),
-    {book,chosenStory:selection.storyTitle,...(selection.storyTitle?{}:{theme:selection.theme}),editorialContext:storyEditorialContext(selection.theme),exactPageCount:selection.length,narrativeDetail:selection.narrativeDetail,productionPrompt:normalizeProductionPrompt(selection.productionPrompt||'',selection.theme),artDirection:getArtStyle(selection.artStyle).prompt,variationSeed:id,...(original?{verifiedOriginal:verifiedOriginalPayload(original)}:{})},storyDraftJson(selection.length),original?'':url,Math.max(8192,(selection.length==='auto'?readerMaxFrames:selection.length)*800),reasoning.plan),readerStoryboardTimeoutMs);
+   const instructions=draftInstructions(!!original?.localSource),payload={book,chosenStory:selection.storyTitle,...(selection.storyTitle?{}:{theme:selection.theme}),editorialContext:storyEditorialContext(selection.theme),exactPageCount:selection.length,narrativeDetail:selection.narrativeDetail,...acceptanceInput(selection),productionPrompt:normalizeProductionPrompt(selection.productionPrompt||'',selection.theme),artDirection:getArtStyle(selection.artStyle).prompt,variationSeed:id,...(original?{verifiedOriginal:verifiedOriginalPayload(original)}:{})},schema=storyDraftJson(selection.length);
+   const {candidate,metadata}=await generate(models.text,textRequest(instructions,payload,schema,original?'':url,Math.max(8192,(selection.length==='auto'?readerMaxFrames:selection.length)*800),reasoning.plan),readerStoryboardTimeoutMs);
    if(url&&!original&&!wasRead(candidate,url))throw new GeminiError('SOURCE_UNAVAILABLE');
    const value=storyDraftSchema.parse(parseText(candidate));
    if(selection.length!=='auto'&&value.pages.length!==selection.length)throw new GeminiError('INVALID_PLAN');
-   return {value,...metadata,reasoningEffort:reasoning.plan};
+   return {value,...metadata,reasoningEffort:reasoning.plan,promptRecord:promptRecord(instructions,payload,schema)};
   },
   async image(plan:Plan,page:number,id:string,reference:string,style:ArtStyleId='ink-pencil',productionPrompt='',artifactId?:string){
    const parts:Part[]=[];
@@ -178,7 +180,8 @@ export function makeGenerator(key:string,assets:Assets,config:Partial<Models>={}
     if(!mimeType||bytes.length>12*1024*1024)throw new GeminiError('INVALID_ANCHOR');
     parts.push({inlineData:{mimeType,data:encode(bytes)}});
    }
-   parts.push({text:imagePrompt(plan,page,style,productionPrompt,!!reference)});
+   const prompt=imagePrompt(plan,page,style,productionPrompt,!!reference);
+   parts.push({text:prompt});
    const {candidate,metadata}=await generate(models.image,{contents:[{role:'user',parts}],generationConfig:{responseModalities:['TEXT','IMAGE'],imageConfig:{aspectRatio:'9:16',imageSize:'1K'}}});
    const output=candidate.content?.parts?.find(p=>!p.thought&&p.inlineData)?.inlineData;
    if(!output||!(output.mimeType in imageTypes)||output.data.length>17*1024*1024)throw new GeminiError('INVALID_MEDIA');
@@ -187,7 +190,7 @@ export function makeGenerator(key:string,assets:Assets,config:Partial<Models>={}
    if(!imageDimensions(bytes))throw new GeminiError('INVALID_MEDIA');
    const asset=readerImageAsset(id,page,imageTypes[output.mimeType as keyof typeof imageTypes],artifactId);
    await assets.put(asset.key,bytes,{contentType:output.mimeType});
-   return {value:asset.url,...metadata};
+   return {value:asset.url,...metadata,promptRecord:promptRecord('',prompt,undefined,reference||undefined)};
   },
   async audio(){throw new GeminiError('VOICE_DISABLED');},
   safeError:safeGeminiError,

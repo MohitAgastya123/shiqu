@@ -1,4 +1,6 @@
 // Select a complete provider explicitly; subscription mode never falls back to API billing.
+import {promptRecord} from '../lib/reader-prompt-records.ts';
+import {acceptanceInput} from '../lib/reader-acceptance.ts';
 import {discoveryCall} from '../lib/reader-discovery-call.ts';
 import {normalizeProductionPrompt,storyEditorialContext} from '../lib/reader-prompts.ts';
 import {verifiedOriginalPayload} from '../lib/reader-source-types.ts';
@@ -84,21 +86,23 @@ export function createReaderProvider(variables:Record<string,string|undefined>,m
    const result=await codex.run({instructions:selectedArtRecommendationPrompt,prompt:JSON.stringify(selectedArtRecommendationPayload(selection,original)),schema:artRecommendationJson,timeoutMs:codexGenerationTimeoutMs,reasoningEffort:taskReasoningEfforts.art});
    return artRecommendationSchema.parse(JSON.parse(result.text));
   },
-  generator(){return {
+  generator(){
+   const run=async(job:Parameters<typeof codex.run>[0])=>({...await codex.run(job),promptRecord:promptRecord(job.instructions||'',job.prompt,job.schema)});
+   return {
    ...storyboardGenerator(book,async(task,instructions,payload,schema)=>{
-    const result=await codex.run({instructions,prompt:JSON.stringify(payload),schema,timeoutMs:codexGenerationTimeoutMs,reasoningEffort:taskReasoningEfforts[task]});
-    return {value:JSON.parse(result.text),model:result.model,requestId:result.requestId,usage:result.usage,reasoningEffort:result.reasoningEffort};
+    const result=await run({instructions,prompt:JSON.stringify(payload),schema,timeoutMs:codexGenerationTimeoutMs,reasoningEffort:taskReasoningEfforts[task]});
+    return {value:JSON.parse(result.text),model:result.model,requestId:result.requestId,usage:result.usage,promptRecord:result.promptRecord,reasoningEffort:result.reasoningEffort};
    }),
    original:(selection,plan,id)=>saveStoryOriginal(media,selection,plan,id,transport),
    async recommend(selection,id,original){
-    const result=await codex.run({instructions:frameRecommendationPrompt,prompt:JSON.stringify(frameRecommendationPayload(selection,original)),schema:frameRecommendationOutputJson(original),reasoningEffort:taskReasoningEfforts.frames});
-    return {value:frameRecommendationOutputSchema(original).parse(JSON.parse(result.text)),model:result.model,requestId:result.requestId,usage:result.usage,reasoningEffort:result.reasoningEffort};
+    const result=await run({instructions:frameRecommendationPrompt,prompt:JSON.stringify(frameRecommendationPayload(selection,original)),schema:frameRecommendationOutputJson(original),reasoningEffort:taskReasoningEfforts.frames});
+    return {value:frameRecommendationOutputSchema(original).parse(JSON.parse(result.text)),model:result.model,requestId:result.requestId,usage:result.usage,promptRecord:result.promptRecord,reasoningEffort:result.reasoningEffort};
    },
    async plan(selection,id,original){
     assertStoryBriefReady(original);
-    const result=await codex.run({instructions:draftInstructions(!!original?.localSource),prompt:JSON.stringify({book:book(selection),chosenStory:selection.storyTitle,...(selection.storyTitle?{}:{theme:selection.theme}),editorialContext:storyEditorialContext(selection.theme),exactPageCount:selection.length,narrativeDetail:selection.narrativeDetail,productionPrompt:normalizeProductionPrompt(selection.productionPrompt||'',selection.theme),artDirection:getArtStyle(selection.artStyle).prompt,variationSeed:id,...(original?{verifiedOriginal:verifiedOriginalPayload(original)}:{})}),schema:storyDraftJson(selection.length),timeoutMs:codexGenerationTimeoutMs,reasoningEffort:taskReasoningEfforts.plan});
+    const result=await run({instructions:draftInstructions(!!original?.localSource),prompt:JSON.stringify({book:book(selection),chosenStory:selection.storyTitle,...(selection.storyTitle?{}:{theme:selection.theme}),editorialContext:storyEditorialContext(selection.theme),exactPageCount:selection.length,narrativeDetail:selection.narrativeDetail,...acceptanceInput(selection),productionPrompt:normalizeProductionPrompt(selection.productionPrompt||'',selection.theme),artDirection:getArtStyle(selection.artStyle).prompt,variationSeed:id,...(original?{verifiedOriginal:verifiedOriginalPayload(original)}:{})}),schema:storyDraftJson(selection.length),timeoutMs:codexGenerationTimeoutMs,reasoningEffort:taskReasoningEfforts.plan});
     const value=storyDraftSchema.parse(JSON.parse(result.text));if(selection.length!=='auto'&&value.pages.length!==selection.length)throw new CodexError('INVALID_PLAN');
-    return {value,model:result.model,requestId:result.requestId,usage:result.usage,reasoningEffort:result.reasoningEffort};
+    return {value,model:result.model,requestId:result.requestId,usage:result.usage,promptRecord:result.promptRecord,reasoningEffort:result.reasoningEffort};
    },
    async image(plan,page,id,reference,style='ink-pencil',productionPrompt='',artifactId){
     let image:{bytes:Uint8Array;contentType:string}|undefined;
@@ -108,13 +112,13 @@ export function createReaderProvider(variables:Record<string,string|undefined>,m
      const bytes=new Uint8Array(await object.arrayBuffer()),contentType=mediaType(bytes);
      if(!contentType||bytes.length>12*1024*1024)throw new CodexError('INVALID_ANCHOR');image={bytes,contentType};
     }
-    const result=await codex.run({instructions:nativeImageInstructions,prompt:imagePrompt(plan,page,style,productionPrompt,!!image),image,generateImage:true});
+    const result=await run({instructions:nativeImageInstructions,prompt:imagePrompt(plan,page,style,productionPrompt,!!image),image,generateImage:true});
     if(!result.image)throw new CodexError('IMAGE_UNAVAILABLE');
     const bytes=new Uint8Array(Buffer.from(result.image,'base64')),contentType=mediaType(bytes);
     if(!contentType||!bytes.length||bytes.length>12*1024*1024)throw new CodexError('INVALID_IMAGE');
     if(!imageDimensions(bytes))throw new CodexError('INVALID_IMAGE');
     const asset=readerImageAsset(id,page,imageTypes[contentType],artifactId);await media.put(asset.key,bytes,{contentType});
-    return {value:asset.url,model:models.image,requestId:result.requestId,usage:result.usage};
+    return {value:asset.url,model:models.image,requestId:result.requestId,usage:result.usage,promptRecord:{...result.promptRecord,...(reference?{reference}:{})}};
    },
    async audio(){throw new CodexError('VOICE_DISABLED');},safeError:safeCodexError,
   };},safeError:safeCodexError,

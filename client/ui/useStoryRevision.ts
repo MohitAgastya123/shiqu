@@ -48,6 +48,6 @@ export function useStoryRevision(storyId:string|undefined,onSubmitted:(session:S
   }catch(e){setError(e instanceof Error?e.message:'新版暂未提交，请重试。');if((e as {status?:number}).status===409)await refresh();}
   finally{lock.current=false;setBusy(false);}
  }
- return {tab,setTab,scriptPage,setScriptPage,base,changes,setChanges,loading,busy,error,conflict,load,open,discard,submit,impact:base?revisionImpact(base,changes):null};
+ return {sessionId:storyId,tab,setTab,scriptPage,setScriptPage,base,changes,setChanges,loading,busy,error,conflict,load,open,discard,submit,impact:base?revisionImpact(base,changes):null};
 }
 export type StoryRevisionEditorState=ReturnType<typeof useStoryRevision>;

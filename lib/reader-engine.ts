@@ -20,7 +20,8 @@ import type {StructuralEdits} from './reader-structure.ts';
 import {validateEditorialCoverage} from './reader-editorial.ts';
 import type {EditorialCoverage} from './reader-editorial.ts';
 import type {ReviewIssue,ReviewReport,RepairedPage,FrameCountReport,FrameCountContext} from './reader-review.ts';
-export type Generated<T>={value:T;model:string;requestId:string|null;usage:unknown;reasoningEffort?:string};
+import type {PromptRecord} from './reader-prompt-records.ts';
+export type Generated<T>={promptRecord?:PromptRecord;value:T;model:string;requestId:string|null;usage:unknown;reasoningEffort?:string};
 export interface StoryGenerator{recommendArt?(selection:Selection,original:OriginalSource):Promise<ArtRecommendation>;prepareOriginal?(selection:Selection,id:string):Promise<OriginalSource|null>;recommend?(selection:Selection,id:string,original:OriginalSource):Promise<Generated<FrameRecommendation>>;outline?(selection:Selection,id:string,original?:OriginalSource):Promise<Generated<StoryboardOutline>>;planBatch?(selection:Selection,id:string,storyboard:Storyboard,original:OriginalSource):Promise<Generated<Plan['pages']>>;reviewFrameCount?(selection:Selection,plan:Plan,original:OriginalSource):Promise<Generated<FrameCountReport>>;review?(selection:Selection,plan:Plan,original:OriginalSource,outline?:StoryboardOutline,candidates?:ReflectionCandidates):Promise<Generated<ReviewReport>>;restructure?(selection:Selection,plan:Plan,original:OriginalSource,issues:ReviewIssue[],coverage?:EditorialCoverage[],frameCountContext?:FrameCountContext):Promise<Generated<StructuralEdits>>;repair?(selection:Selection,plan:Plan,original:OriginalSource,issues:ReviewIssue[],outline?:StoryboardOutline):Promise<Generated<RepairedPage[]>>;reflectionCandidates(selection:Selection,draft:StoryDraft,original:OriginalSource):Promise<Generated<StoryPresentation>>;reflection(selection:Selection,draft:StoryDraft,original:OriginalSource,revision?:{reflection:string;issues:ReviewIssue[]}):Promise<Generated<string>>;plan(selection:Selection,id:string,original?:OriginalSource):Promise<Generated<StoryDraft>>;original(selection:Selection,plan:SourceHint,id:string):Promise<SourceResult>;image(plan:Plan,page:number,id:string,reference:string,style?:ArtStyleId,productionPrompt?:string,artifactId?:string):Promise<Generated<string>>;audio(caption:string,id:string,page:number):Promise<Generated<string>>;safeError(error:unknown):string;}
 
 async function drawRequestedImages(repo:ReaderRepository,generator:StoryGenerator,row:SessionRow,token:string,doc:Document,selection:Selection,throughPage:number){
@@ -32,7 +33,7 @@ async function drawRequestedImages(repo:ReaderRepository,generator:StoryGenerato
  const drawing=batch.map(async page=>{
   const image=await generator.image(doc.plan!,page,row.id,reference,selection.artStyle,selection.productionPrompt);
   doc.images[page]=image.value;
-  doc.usage.push({step:`image:${page}`,model:image.model,requestId:image.requestId,usage:image.usage});
+  doc.usage.push({step:`image:${page}`,model:image.model,requestId:image.requestId,usage:image.usage,...(image.promptRecord?{promptRecord:image.promptRecord}:{})});
   // Queue immutable snapshots; once a write fails, skip later writes until final recovery.
   const snapshot=structuredClone(doc);
   writes=writes.then(()=>repo.saveImageProgress(row,token,snapshot));
@@ -87,7 +88,7 @@ export async function advanceStory(repo:ReaderRepository,generator:StoryGenerato
   else if(step.kind==='plan'){
    if(doc.original?.storyBrief&&!storyBriefVerified(doc.original)||!storyBriefVerified(doc.original)&&!doc.storyboard?.outline.summary?.trim()){
     const result=await prepareRecommendation(token);
-    doc.usage.push({step:'summary',model:result.model,requestId:result.requestId,usage:result.usage,...(result.reasoningEffort?{reasoningEffort:result.reasoningEffort}:{})});
+    doc.usage.push({step:'summary',model:result.model,requestId:result.requestId,usage:result.usage,...(result.promptRecord?{promptRecord:result.promptRecord}:{}),...(result.reasoningEffort?{reasoningEffort:result.reasoningEffort}:{})});
     await repo.saveImageProgress(row,token,structuredClone(doc));
    }
    if(generator.prepareOriginal&&!doc.original){
@@ -127,6 +128,7 @@ export async function advanceStory(repo:ReaderRepository,generator:StoryGenerato
    const review=doc.visualReview!;
    if(review.status==='blocked'){
     // Only an explicit retry can reach a blocked session; reuse the saved issues without a new audit.
+    if(review.stopReason==='requirements')throw new ReaderError(409,'验收要求存在冲突或无法判断，请修改验收要求后创建新版。');
     if(review.stopReason==='replan')throw new ReaderError(409,review.issues.some(issue=>issue.requiresReplan&&issue.category==='continuity')?'全局人物连续性说明需要修订，请调整制作要求后重新编排。':storyReplanMessage);
     if(!retry)throw new ReaderError(409,'分镜审片尚未通过，请手动继续修订。');
     // Give the continuation its own generation so the later recheck cannot reuse this receipt.
@@ -135,14 +137,15 @@ export async function advanceStory(repo:ReaderRepository,generator:StoryGenerato
     if(!generator.review)throw new ReaderError(503,'生成服务暂不支持分镜审片，请更新服务后重试。');
     const candidates=doc.reflectionCandidates?reflectionCandidatesSchema.parse(doc.reflectionCandidates):undefined;
     const result=await generator.review(selection,structuredClone(doc.plan!),doc.original!,doc.storyboard?.outline,candidates);
-    const report=reviewReportSchema(doc.plan!.pages.length,candidates).parse(result.value);
+    const report=reviewReportSchema(doc.plan!.pages.length,candidates,selection.acceptancePrompt).parse(result.value);
     if(selection.length==='auto'&&!report.coverage)throw new ReaderError(502,'审核未返回原文与分镜核对记录，已保留文稿，尚未绘图。');
     if(report.coverage)validateEditorialCoverage(report.coverage,doc.original!);
     const previousTitle=doc.plan!.title;doc.plan={...doc.plan!,title:report.titleReview.title};
     if(candidates&&report.reflectionChoice){doc.plan={...doc.plan!,reflection:candidates[report.reflectionChoice.index-1]};delete doc.reflectionCandidates;}
-    review.reports.push({round:review.round,issues:report.issues,...(report.coverage?{coverage:report.coverage}:{}),titleReview:{...report.titleReview,previousTitle},...(candidates&&report.reflectionChoice?{reflectionChoice:{...report.reflectionChoice,candidates}}:{})});review.round++;review.issues=report.issues;review.repaired=[];
+    review.reports.push({round:review.round,...(report.acceptanceResults?{acceptanceResults:report.acceptanceResults}:{}),issues:report.issues,...(report.coverage?{coverage:report.coverage}:{}),titleReview:{...report.titleReview,previousTitle},...(candidates&&report.reflectionChoice?{reflectionChoice:{...report.reflectionChoice,candidates}}:{})});review.round++;review.issues=report.issues;review.repaired=[];
+    const unknown=report.acceptanceResults?.some(result=>result.status==='unknown');
     const replan=report.issues.some(issue=>issue.requiresReplan);
-    review.status=!report.issues.length?'passed':replan&&selection.length!=='auto'||review.repairs>=readerMaxAutomaticRepairs?'blocked':'repair';if(review.status==='blocked')review.stopReason=replan&&selection.length!=='auto'?'replan':'limit';else delete review.stopReason;generated=result;
+    review.status=unknown?'blocked':!report.issues.length?'passed':replan&&selection.length!=='auto'||review.repairs>=readerMaxAutomaticRepairs?'blocked':'repair';if(review.status==='blocked')review.stopReason=unknown?'requirements':replan&&selection.length!=='auto'?'replan':'limit';else delete review.stopReason;generated=result;
    }
   }
   else if(step.kind==='repair'){
@@ -184,7 +187,7 @@ export async function advanceStory(repo:ReaderRepository,generator:StoryGenerato
   if((step.kind==='plan'||step.kind==='reflection')&&doc.plan)syncRevisionImages(doc,selection);
   // Freeze the current script's redraw requirement before drawing fills its empty image slots.
   if(doc.revision&&doc.plan&&step.kind!=='image'&&step.kind!=='audio')doc.revision.actualRedraw=doc.plan.pages.length-doc.images.slice(0,doc.plan.pages.length).filter(Boolean).length;
-  if(generated)doc.usage.push({step:step.key,model:generated.model,requestId:generated.requestId,usage:generated.usage,...(generated.reasoningEffort?{reasoningEffort:generated.reasoningEffort}:{})});
+  if(generated)doc.usage.push({step:step.key,model:generated.model,requestId:generated.requestId,usage:generated.usage,...(generated.promptRecord?{promptRecord:generated.promptRecord}:{}),...(generated.reasoningEffort?{reasoningEffort:generated.reasoningEffort}:{})});
   if((step.kind==='plan'||step.kind==='reflection')&&doc.plan&&!doc.visualReview&&(doc.reflectionCandidates||generator.review&&generator.repair))doc.visualReview=newReview();
   if((step.kind==='plan'||step.kind==='source')&&!doc.original){
    // URL-backed legacy sessions first resolve a real citation through provider URL context.
@@ -195,6 +198,7 @@ export async function advanceStory(repo:ReaderRepository,generator:StoryGenerato
    doc.original=result.source;
   }
   if(doc.visualReview?.status==='blocked'){
+   if(doc.visualReview.stopReason==='requirements')throw new ReaderError(422,'验收要求存在冲突或无法判断，已停止绘图。'+(doc.visualReview.reports.at(-1)?.acceptanceResults||[]).filter(result=>result.status==='unknown').map(result=>result.evidence).join('；')+' 请修改验收要求后创建新版。');
    if(doc.visualReview.stopReason==='replan')throw new ReaderError(422,(doc.visualReview.issues.some(issue=>issue.requiresReplan&&issue.category==='continuity')?'全局人物连续性说明需要修订，请调整制作要求后重新编排。':storyReplanMessage)+' '+doc.visualReview.issues.filter(issue=>issue.requiresReplan).map(issue=>issue.problem).join('；'));
    const issues=blockedIssues(doc.visualReview),summary=issues.slice(0,3).map(issue=>`${issue.category==='reflection'?'结语':`第 ${issue.page} 幅`}：${issue.problem}`).join('；');
    throw new ReaderError(422,`${doc.visualReview.stopReason==='unchanged'?'修订没有产生实际变化':`已自动修复 ${readerMaxAutomaticRepairs} 轮，复核未通过`}，仍有 ${issues.length} 处问题，已停止绘图。${summary}。可手动继续修订。`);

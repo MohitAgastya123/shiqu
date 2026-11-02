@@ -1,5 +1,7 @@
 // Use official OpenAI text/image APIs with isolated API billing and validated local reference images.
 // Never log provider bodies or credentials, fetch returned image URLs, retry, or fall back to another provider.
+import {promptRecord} from '../lib/reader-prompt-records.ts';
+import {acceptanceInput} from '../lib/reader-acceptance.ts';
 import {discoveryCall} from '../lib/reader-discovery-call.ts';
 import {normalizeProductionPrompt,storyEditorialContext} from '../lib/reader-prompts.ts';
 import {verifiedOriginalPayload} from '../lib/reader-source-types.ts';
@@ -76,7 +78,7 @@ export function createOpenAIProvider(variables:Record<string,string|undefined>,m
   if(content.some((item:any)=>item.type==='refusal'))throw fail('REFUSED');
   const output=content.filter((item:any)=>item.type==='output_text').map((item:any)=>item.text).join('');
   let parsed;try{parsed=JSON.parse(output);}catch{throw fail('INVALID_OUTPUT');}
-  return {value:restoreOptional(parsed,schema),model:value.model||requestedModel,requestId:value.id||requestId,usage:value.usage||null,reasoningEffort:effort};
+  return {value:restoreOptional(parsed,schema),model:value.model||requestedModel,requestId:value.id||requestId,usage:value.usage||null,reasoningEffort:effort,promptRecord:promptRecord(instructions,payload,strictOpenAISchema(schema))};
  }
  function book(selection:Parameters<ReaderProvider['suggestions']>[0]){
   const source=storySource(selection);if(source.isUrl)throw new ReaderError(400,'OpenAI API 模式请使用内置书籍或书名；网页 URL 来源请使用 Gemini。');return source.book;
@@ -108,7 +110,7 @@ export function createOpenAIProvider(variables:Record<string,string|undefined>,m
    async recommend(selection,_id,original){const result=await text(frameRecommendationPrompt,frameRecommendationPayload(selection,original),frameRecommendationOutputJson(original),reasoning.frames,original.storyBrief?4096:2048);return {...result,value:frameRecommendationOutputSchema(original).parse(result.value)};},
    async plan(selection,id,original){
     assertStoryBriefReady(original);
-    const result=await text(draftInstructions(!!original?.localSource),{book:book(selection),chosenStory:selection.storyTitle,...(selection.storyTitle?{}:{theme:selection.theme}),editorialContext:storyEditorialContext(selection.theme),exactPageCount:selection.length,narrativeDetail:selection.narrativeDetail,productionPrompt:normalizeProductionPrompt(selection.productionPrompt||'',selection.theme),artDirection:getArtStyle(selection.artStyle).prompt,variationSeed:id,...(original?{verifiedOriginal:verifiedOriginalPayload(original)}:{})},storyDraftJson(selection.length),reasoning.plan,Math.max(8192,(selection.length==='auto'?20:selection.length)*800));
+    const result=await text(draftInstructions(!!original?.localSource),{book:book(selection),chosenStory:selection.storyTitle,...(selection.storyTitle?{}:{theme:selection.theme}),editorialContext:storyEditorialContext(selection.theme),exactPageCount:selection.length,narrativeDetail:selection.narrativeDetail,...acceptanceInput(selection),productionPrompt:normalizeProductionPrompt(selection.productionPrompt||'',selection.theme),artDirection:getArtStyle(selection.artStyle).prompt,variationSeed:id,...(original?{verifiedOriginal:verifiedOriginalPayload(original)}:{})},storyDraftJson(selection.length),reasoning.plan,Math.max(8192,(selection.length==='auto'?20:selection.length)*800));
     const value=storyDraftSchema.parse(result.value);if(selection.length!=='auto'&&value.pages.length!==selection.length)throw new OpenAIError('PLAN_LENGTH');return {...result,value};
    },
    async image(plan,page,id,reference,style='ink-pencil',productionPrompt='',artifactId){
@@ -128,7 +130,7 @@ export function createOpenAIProvider(variables:Record<string,string|undefined>,m
     const bytes=new Uint8Array(Buffer.from(encoded,'base64')),mime=mediaType(bytes);
     if(!mime||!imageDimensions(bytes)||bytes.length>12*1024*1024)throw new OpenAIError('INVALID_IMAGE');
     const asset=readerImageAsset(id,page,imageTypes[mime],artifactId);await media.put(asset.key,bytes,{contentType:mime});
-    return {value:asset.url,model:models.image,requestId,usage:value.usage||null};
+    return {value:asset.url,model:models.image,requestId,usage:value.usage||null,promptRecord:promptRecord('',prompt,undefined,reference||undefined)};
    },
    async audio(){throw new ReaderError(400,'当前不提供配音。');},safeError:safeOpenAIError,
   };},safeError:safeOpenAIError,

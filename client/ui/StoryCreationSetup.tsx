@@ -21,7 +21,7 @@ type SetupTab=Exclude<StoryEditorTab,'script'>;
 type Props={session:SessionView;book:string;busy:boolean;onAction:(command:IntakeCommand)=>Promise<void>;progress:Omit<ComponentProps<typeof StoryGenerationStatus>,'session'|'timeline'|'stages'|'children'|'compact'>};
 // Stable titles prevent the initial discovery snapshot from flashing a production screen.
 export function storyCreationTitle(session:SessionView){return session.intake?(session.intake.selected?'故事流程':'选择故事'):session.story?.title||session.selection.storyTitle||'你的故事，正在展开';}
-const savedSettings=(session:SessionView)=>session.intake!.draft||{artStyle:session.selection.artStyle,productionPrompt:session.selection.productionPrompt,narrativeDetail:session.selection.narrativeDetail||'balanced' as const,length:'auto' as const};
+const savedSettings=(session:SessionView)=>session.intake!.draft||{artStyle:session.selection.artStyle,productionPrompt:session.selection.productionPrompt,...(session.selection.acceptancePrompt!==undefined?{acceptancePrompt:session.selection.acceptancePrompt}:{}),narrativeDetail:session.selection.narrativeDetail||'balanced' as const,length:'auto' as const};
 export default function StoryCreationSetup({session,book,busy,onAction,progress}:Props){
  const intake=session.intake!,saved={...savedSettings(session),length:'auto' as const},savedKey=JSON.stringify(saved);
  const [error,setError]=useState('');
@@ -43,7 +43,7 @@ export default function StoryCreationSetup({session,book,busy,onAction,progress}
  const candidates=intake.batches.flatMap((saved,batchIndex)=>saved.stories.map((candidate,index)=>({candidate,batchIndex,index})));
  const selected=intake.selected?intake.batches[intake.selected.batch]?.stories[intake.selected.index]:null;
  const preparable=!!selected&&intake.phase==='choosing'&&session.state!=='failed';
- const preferences={artStyle:settings.artStyle,productionPrompt:settings.productionPrompt,narrativeDetail:settings.narrativeDetail};
+ const preferences={artStyle:settings.artStyle,productionPrompt:settings.productionPrompt,...(settings.acceptancePrompt!==undefined?{acceptancePrompt:settings.acceptancePrompt}:{}),narrativeDetail:settings.narrativeDetail};
  async function act(command:IntakeCommand){
   setError('');
   if(command.action==='more')setFinding(true);else own.current=true;
@@ -82,7 +82,7 @@ export default function StoryCreationSetup({session,book,busy,onAction,progress}
   {!editing&&remoteChoice}
   {!selected&&(intake.batches.length>0||search.state==='failed')&&candidateList}
   {selected?<StoryGenerationStatus session={session} {...progress} compact={ready} control={ready?null:undefined} stages={stages} timeline={{
-   links:{source:[{label:'重新选择故事',onClick:()=>{if(!busy)setChoosing(true);}},...(editable?[{label:'制作要求（可选）',onClick:()=>setEditing('requirements')}]:[])]},
+   links:{source:[{label:'重新选择故事',onClick:()=>{if(!busy)setChoosing(true);}},...(editable?[{label:'制作要求（可选）',onClick:()=>setEditing('requirements')},{label:'验收要求（可选）',onClick:()=>setEditing('acceptance')}]:[])]},
    detailActions:editable?{source:{label:'修改画风',onClick:()=>setEditing('style')}}:undefined,
    actions:editable?{count:{label:'修改叙事详略',onClick:()=>setEditing('count')}}:undefined
   }}>
@@ -100,7 +100,7 @@ export default function StoryCreationSetup({session,book,busy,onAction,progress}
   {editing&&<Sheet title="修改故事" busy={busy} onClose={closeEditor}>
    {remoteChoice}
    <StoryEditorTabs tab={editing} disabled={locked} onChange={tab=>{if(tab!=='script')setEditing(tab);}}/>
-   <StoryProductionEditor tab={editing} settings={settings} creation disabled={locked} recommendation={session.frameRecommendation} artRecommendation={selected?.artRecommendation} onChange={patch=>setSettings(s=>({...s,...patch,length:'auto'}))} onRecommend={ready&&session.state!=='running'?()=>void act({action:'recommend',settings:preferences}):undefined}/>
+   <StoryProductionEditor sessionId={session.id} tab={editing} settings={settings} creation disabled={locked} recommendation={session.frameRecommendation} artRecommendation={selected?.artRecommendation} onChange={patch=>setSettings(s=>({...s,...patch,length:'auto'}))} onRecommend={ready&&session.state!=='running'?()=>void act({action:'recommend',settings:preferences}):undefined}/>
    {error&&<p className="yu-batch-error" role="alert">{error}</p>}
    <button type="button" className="yu-primary" disabled={busy} onClick={closeEditor}>完成编辑</button><p className="yu-revision-note">设置会保存在这里，离开后也保留；确认制作后才开始生成。</p>
   </Sheet>}

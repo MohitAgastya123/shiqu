@@ -1,4 +1,5 @@
 // Recommend pacing from a saved original before committing to a storyboard or images.
+import {acceptanceInput,acceptanceDirection} from './reader-acceptance.ts';
 import {promptSections,inputBoundaryDirection,normalizeProductionPrompt,storyScopeDirection,storyOpeningDirection,storyEditorialContext} from './reader-prompts.ts';
 import {z} from 'zod';
 import {localStoryContextConstraint} from './reader-local-contract.ts';
@@ -33,4 +34,4 @@ export const frameRecommendationPrompt=promptSections(
  ['输出','按给定schema返回 count 及一句不剧透的简体中文 reason，说明为什么适合本篇和所选详略，最多180字；有 storyBrief 时还必须返回核对后的 storySummary 和 storyMatchReason。'],
  ['输入边界',inputBoundaryDirection]);
 
-export function frameRecommendationPayload(selection:Selection,original:OriginalSource){return {chosenStory:selection.storyTitle,editorialContext:storyEditorialContext(selection.theme),...storyBriefPayload(original,true),narrativeDetail:selection.narrativeDetail||'balanced',productionPrompt:normalizeProductionPrompt(selection.productionPrompt||'',selection.theme),verifiedOriginal:verifiedOriginalPayload(original)};}
+export function frameRecommendationPayload(selection:Selection,original:OriginalSource){return {chosenStory:selection.storyTitle,editorialContext:storyEditorialContext(selection.theme),...storyBriefPayload(original,true),narrativeDetail:selection.narrativeDetail||'balanced',...acceptanceInput(selection),productionPrompt:normalizeProductionPrompt(selection.productionPrompt||'',selection.theme),verifiedOriginal:verifiedOriginalPayload(original)};}

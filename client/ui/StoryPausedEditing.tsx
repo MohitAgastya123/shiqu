@@ -14,7 +14,7 @@ export default function StoryPausedEditing({editor,onReselect,...props}:Props){
  const stages=changed&&editor.base?revisionDraftSteps(editor.base,editor.changes):generationProgress(session,Date.now()).steps.map(step=>step.id==='source'?{...step,detail:`画风：${getArtStyle(session.selection.artStyle).label}`}:step);
  const edit=(tab:Parameters<typeof editor.open>[0])=>{if(!locked)editor.open(tab);};
  return <StoryGenerationStatus {...props} controlBusy={locked} stages={stages} timeline={{
-  links:{source:[{label:'重新选择故事',onClick:()=>{if(!locked)onReselect();}},{label:'制作要求',onClick:()=>edit('requirements')}]},
+  links:{source:[{label:'重新选择故事',onClick:()=>{if(!locked)onReselect();}},{label:'制作要求',onClick:()=>edit('requirements')},{label:'验收要求',onClick:()=>edit('acceptance')}]},
   detailActions:{source:{label:'修改画风',onClick:()=>edit('style')}},
   actions:{count:{label:'修改叙事详略',onClick:()=>edit('count')},...(session.story?{plan:{label:'修改分镜',onClick:()=>edit('script')}}:{})}
  }} control={changed?<StoryRevisionActions editor={{...editor,busy:locked}} resuming/>:undefined}/>;

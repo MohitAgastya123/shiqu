@@ -171,6 +171,7 @@ export class ReaderProductionCoordinator implements ReaderProduction{
  private async demand(ownerId:string,id:string,viewerId:string,page:number,throughPage:number,retry:boolean){
   if(this.stopping)throw new ReaderError(503,'制作服务正在停止，请稍后重新打开故事。');
   const row=await this.repository.get(id,ownerId),doc=JSON.parse(row.document) as Document;
+  if(retry&&doc.visualReview?.stopReason==='requirements')throw new ReaderError(409,'请修改存在冲突或无法判断的验收要求后创建新版。');
   if(retry&&doc.visualReview?.status==='blocked'&&doc.visualReview.stopReason==='replan')throw new ReaderError(409,storyReplanMessage);
   if(row.generation_control!=='active'||await this.repository.superseded(id,ownerId))return this.snapshot(ownerId,id);
   if(doc.plan&&page>=doc.plan.pages.length)throw new ReaderError(400,'请选择有效画幅');
@@ -216,7 +217,7 @@ export class ReaderProductionCoordinator implements ReaderProduction{
   const working=active.length>0||jobs.some(job=>job.kind==='image-publish'&&job.state==='queued'&&jobs.some(parent=>parent.id===jobDependencies(job)[0]&&parent.state==='succeeded'));
   if(failed&&!working){
    const lost=lostImageError(failed.error);
-   return {...session,state:'failed',error:lost?lostImageMessage:failed.error,retryAllowed:saved.generationProgress?.reviewStopReason!=='replan',...(lost?{retryStage:'redraw' as const}:failed.kind==='image-publish'?{retryStage:'publication' as const}:{})};
+   return {...session,state:'failed',error:lost?lostImageMessage:failed.error,retryAllowed:!['replan','requirements'].includes(saved.generationProgress?.reviewStopReason||''),...(lost?{retryStage:'redraw' as const}:failed.kind==='image-publish'?{retryStage:'publication' as const}:{})};
   }
   const demands=await this.demands(id),eligible=jobs.some(job=>job.state==='queued'&&demands.some(d=>job.pool==='text'||(JSON.parse(job.payload) as {page:number}).page<=d.through_page));
   const manual=row.generation_control!=='active';
@@ -510,7 +511,7 @@ export class ReaderProductionCoordinator implements ReaderProduction{
   if(!this.currentJob(row,job))return {obsolete:true};
   if(doc.images[page]===result.value)return {value:result.value};
   const lease=this.leases.get(row.id);if(!lease)throw new ReaderError(409,'故事状态已更新，请重新打开后继续。');
-  const usage={step:`image:${page}`,model:result.model,requestId:result.requestId,usage:result.usage};
+  const usage={step:`image:${page}`,model:result.model,requestId:result.requestId,usage:result.usage,...(result.promptRecord?{promptRecord:result.promptRecord}:{})};
   const saved=await this.database.prepare(`UPDATE reader_sessions SET document=json_set(document,?, ?, '$.usage',json_insert(json_extract(document,'$.usage'),'$[#]',json(?))),updated_at=?
    WHERE id=? AND user_id=? AND state='running' AND lock_token=? AND COALESCE(json_extract(document,?),'')=?
    AND selection=? AND json_extract(document,'$.plan')=json_extract(?,'$.plan')

@@ -1,6 +1,7 @@
 // Persist book/theme intent and user confirmation gates before any storyboard is commissioned.
 // Search keeps its own state beside the selection: finding more stories never changes the chosen one.
 import {z} from 'zod';
+import {acceptancePromptSchema} from './reader-acceptance.ts';
 import {artStyleIds} from './reader-styles.ts';
 import {narrativeDetailSchema} from './reader-frame-recommendation.ts';
 import {readerMinFrames,readerMaxFrames} from './reader-limits.ts';
@@ -9,7 +10,7 @@ import {localSourceKey} from './reader-source-key.ts';
 import {storyBriefVerified} from './reader-story-brief.ts';
 import type {SuggestionBatch,SuggestionProgress} from './reader-suggestions.ts';
 export type IntakeSearch={round:number;state:'idle'|'searching'|'failed';error?:string|null;requestId?:string;cycleId?:string};
-export const setupSettingsSchema=z.object({artStyle:z.enum(artStyleIds),productionPrompt:z.string().max(1200),narrativeDetail:narrativeDetailSchema});
+export const setupSettingsSchema=z.object({artStyle:z.enum(artStyleIds),productionPrompt:z.string().max(1200),acceptancePrompt:acceptancePromptSchema.optional(),narrativeDetail:narrativeDetailSchema});
 const productionSettingsSchema=setupSettingsSchema.extend({length:z.union([z.number().int().min(readerMinFrames).max(readerMaxFrames),z.literal('auto')])});
 export type IntakeDraft=z.infer<typeof productionSettingsSchema>;
 export type StoryIntake={phase:'discovering'|'choosing'|'preparing'|'confirming'|'confirmed';generation:number;creationHash:string;batches:SuggestionBatch[];briefRequired?:boolean;selected?:{batch:number;index:number};search?:IntakeSearch|null;draft?:IntakeDraft;manualArt?:boolean;lastAction?:{id:string;hash:string}};
