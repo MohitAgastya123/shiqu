@@ -15,7 +15,7 @@ export const revisionChangesSchema=z.object({productionPrompt:z.string().max(120
 export type RevisionChanges=z.infer<typeof revisionChangesSchema>;
 export type RevisionInfo={parentId:string;rootId:string;number:number};
 export type RevisionView=RevisionInfo&{redraw?:RevisionRedraw};
-export type RevisionRecord=RevisionInfo&{baseToken:string;requestHash:string;handoff?:boolean;base:RevisionBase;previewedRedraw?:number;lostPages?:number[]};
+export type RevisionRecord=RevisionInfo&{baseToken:string;requestHash:string;handoff?:boolean;base:RevisionBase;previewedRedraw?:number;actualRedraw?:number;lostPages?:number[]};
 export type RevisionSnapshot=RevisionBase&{token:string;epoch:number;revision?:RevisionInfo};
 export type RevisionImpact={changed:boolean;replan:boolean;preserveScript:boolean;review:boolean;reused:number;redraw:number;total:number;reusePending:boolean;conflict:boolean};
 export const revisionFrameCount=(base:RevisionBase)=>base.plan?.pages.length??(typeof base.selection.length==='number'?base.selection.length:base.frameRecommendation?.count??8);
@@ -40,7 +40,7 @@ export function checkedRevision(base:RevisionBase,changes:RevisionChanges){
  if(!impact.changed)throw new ReaderError(400,'尚未修改内容，无需创建新版。');
  if(impact.conflict)throw new ReaderError(400,'重新编排与手动分镜不能同时提交，请选择保留哪一类修改。');
  if(changes.plan&&(['title','summary','sourceReference','adaptationNote'] as const).some(key=>changes.plan![key]!==base.plan![key]))throw new ReaderError(400,'本次仅修改分镜、人物与余味，原文出处和故事元信息保持不变。');
- if(changes.plan&&changes.plan.pages.length!==base.plan!.pages.length)throw new ReaderError(400,'请通过画幅数调整数量，不要直接增删分镜。');
+ if(changes.plan&&changes.plan.pages.length!==base.plan!.pages.length)throw new ReaderError(400,'请调整叙事详略，由模型重新编排数量，不要直接增删分镜。');
  const selection:Selection={...base.selection,productionPrompt:changes.productionPrompt??base.selection.productionPrompt,artStyle:changes.artStyle??base.selection.artStyle,narrativeDetail:changes.narrativeDetail??base.selection.narrativeDetail,length:changes.length??(impact.replan?'auto':base.selection.length)};
  return {impact,selection,plan:impact.replan?null:structuredClone(changes.plan||base.plan)};
 }

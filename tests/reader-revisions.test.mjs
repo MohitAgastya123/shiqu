@@ -109,7 +109,7 @@ test('style changes preserve planning; requirements replan; count changes reuse 
  const style=await revise(f,id,{artStyle:'paper-cut'});await until(async()=>(await f.read(style.id)).state==='completed');assert.equal(f.control.plans.length,plans);assert.equal(f.control.calls.length-before,8);
  before=f.control.calls.length;plans=f.control.plans.length;const count=await revise(f,style.id,{length:5});await until(async()=>(await f.read(count.id)).state==='completed');
  assert.equal((await f.read(count.id)).story.pages.length,5);assert.equal(f.control.plans.length,plans+1);assert.equal(f.control.calls.length,before);
- before=f.control.calls.length;plans=f.control.plans.length;const requirements=await revise(f,count.id,{productionPrompt:'Keep actions clear and captions natural.'});await until(async()=>(await f.read(requirements.id)).state==='completed');assert.equal(f.control.plans.length,plans+1);assert.equal(f.control.calls.length-before,5);
+ before=f.control.calls.length;plans=f.control.plans.length;f.control.autoLength=6;const requirements=await revise(f,count.id,{productionPrompt:'Keep actions clear and captions natural.'});await until(async()=>(await f.read(requirements.id)).state==='completed');assert.equal(f.control.plans.length,plans+1);assert.equal((await f.read(requirements.id)).selection.length,'auto');assert.equal((await f.read(requirements.id)).story.pages.length,6);assert.equal(f.control.calls.length-before,6);
 });
 
 test('review repair invalidates newly changed staging but preserves caption-only repair images',async t=>{

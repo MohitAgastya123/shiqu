@@ -32,3 +32,10 @@ AR fixed: 旧数值纯配文/画风编辑保持原模式；结构编辑提供显
 AR passed: no blocking architecture flaws
 
 SS 已实现上述前五项。受控三提供方 schema/预算探针通过，单位回归8项通过；服务E2E最初7项通过（补充上限/无依据阻断回归进行中）。原文绑定已增加 restructure 验证。首次端到端探针发现 auto 准备检查点仍被调度器视作未完成脚本，现已返回独立 prepared 回执并通过实际推进。浏览器已在原 IAB 标签验证旧暂停故事的新详略入口，点选详细只改本地草稿，随后丢弃；未恢复故事或调用真实模型。截图 `.data/evidence/adaptive-storyboard-detail.png`。完整TT首次沙箱内因本地端口 EPERM 中断，改为本机运行同一受控套件；没有构建或打包。
+
+SS 里程碑：`134893e`，实现与初次受控验证已提交；非最终验收。10项服务E2E全部通过。完整TT本机第一次940项中935通过，5项失败：两项旧数量断言已改为验证auto重新编排；三项发现实际重绘提示在生图后消失，已在文字步骤保存actualRedraw快照，75项定向复验全部通过。
+
+CR risk: non-low — 涉及持久化、并发恢复和图片来源。
+CR review round: 1; reviewer: reused
+CR blocked: 阅读进度存在跨结构保存的竞争写回。
+修正：进度按读取时的plan版本CAS，过期写回409，不以完整document锁住正常图片发布。新增正反交错测试，含服务E2E12项及reader-generation共56项通过。最终完整TT与独立CR复审进行中。

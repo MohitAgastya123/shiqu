@@ -182,6 +182,8 @@ export async function advanceStory(repo:ReaderRepository,generator:StoryGenerato
   else if(step.kind==='image')await drawRequestedImages(repo,generator,row,token,doc,selection,throughPage);
   else{const result=await generator.audio(doc.plan!.pages[step.page].caption,id,step.page);doc.audio[step.page]=result.value;generated=result;}
   if((step.kind==='plan'||step.kind==='reflection')&&doc.plan)syncRevisionImages(doc,selection);
+  // Freeze the current script's redraw requirement before drawing fills its empty image slots.
+  if(doc.revision&&doc.plan&&step.kind!=='image'&&step.kind!=='audio')doc.revision.actualRedraw=doc.plan.pages.length-doc.images.slice(0,doc.plan.pages.length).filter(Boolean).length;
   if(generated)doc.usage.push({step:step.key,model:generated.model,requestId:generated.requestId,usage:generated.usage,...(generated.reasoningEffort?{reasoningEffort:generated.reasoningEffort}:{})});
   if((step.kind==='plan'||step.kind==='reflection')&&doc.plan&&!doc.visualReview&&(doc.reflectionCandidates||generator.review&&generator.repair))doc.visualReview=newReview();
   if((step.kind==='plan'||step.kind==='source')&&!doc.original){

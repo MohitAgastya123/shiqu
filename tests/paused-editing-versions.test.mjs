@@ -78,7 +78,7 @@ test('pre-confirmation drafts cannot bypass intake; empty-plan impact does not i
  assert.equal((await f.request(`sessions/${id}/revisions`)).status,409);
  const base={selection:{...selection,length:5},plan:null,images:[]};
  assert.equal(revisionImpact(base,{}).changed,false);assert.equal(revisionImpact(base,{artStyle:'paper-cut'}).replan,true);
- const revision=checkedRevision(base,{productionPrompt:'new'});assert.equal(revision.plan,null);assert.equal(revision.selection.length,5);
+ const revision=checkedRevision(base,{productionPrompt:'new'});assert.equal(revision.plan,null);assert.equal(revision.selection.length,'auto');
  assert.throws(()=>checkedRevision(base,{plan:makePlan(5)}),/完整分镜/);
 });
 

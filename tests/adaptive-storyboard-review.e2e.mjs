@@ -3,6 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {productionFixture,until,makePlan} from './fixtures/production.mjs';
 import {newReview} from '../lib/reader-review.ts';
+import {applyStructuralEdits} from '../lib/reader-structure.ts';
 const owner='docker-local-owner';
 const issue={page:2,category:'progression',problem:'赠物之后缺少听者没有接取的回应。',instruction:'在原第二幅前补一幅回应。',requiresReplan:true};
 const inserted={caption:'听者没有伸手接取，稍稍停了一会儿。',prompt:'The listener pauses with empty hands before an offered object.'};
@@ -86,4 +87,18 @@ for(const missing of [true,false])test(`${missing?'missing coverage':'invented s
  f.control.beforeText=async kind=>kind==='review'?{issues:[],coverage:missing?undefined:[{quote:'原文不存在的受控引用',task:'受控核对',pages:[1],assessment:'adequate',reason:'此记录应被拒绝。',issuePage:0}]}:undefined;
  const id=await f.createLegacyReader('auto');await f.demand(id);await until(async()=>(await f.read(id)).state==='failed');
  assert.equal(f.control.calls.length,0);assert.notEqual((await document(f,id)).visualReview.status,'passed');
+});
+
+for(const structural of [true,false])test(`late reading progress ${structural?'cannot cross a structural save':'survives an unrelated image checkpoint'}`,async t=>{
+ const f=await productionFixture(t);f.control.hold=false;const id=await f.create(4);await until(async()=>(await f.read(id)).state==='completed');
+ f.app.services.production.stop();await f.app.services.production.queue.settle();
+ const repo=f.app.services.production.repository;await repo.progress(id,owner,3,false);
+ const row=await repo.get(id,owner),doc=JSON.parse(row.document),token=await repo.acquire(row,{kind:'repair',page:0,key:'controlled:structure'});
+ const get=repo.get.bind(repo);let captured=false,entered,release;const started=new Promise(r=>entered=r),hold=new Promise(r=>release=r);t.after(()=>release());
+ t.mock.method(repo,'get',async(...args)=>{const saved=await get(...args);if(!captured){captured=true;entered();await hold;}return saved;});
+ const late=repo.progress(id,owner,3,true);await started;
+ if(structural){const edit=applyStructuralEdits(doc.plan,{edits:[{from:2,to:3,pages:[]}]});doc.plan=edit.plan;doc.images=[doc.images[0],doc.images[3]];await repo.save(row,token,doc,false,null,edit.progressMap);}
+ else{doc.images[1]='';await repo.save(row,token,doc,false);}
+ const outcome=structural?assert.rejects(late,e=>e.status===409):late;release();await outcome;
+ const saved=await get(id,owner);assert.equal(saved.page,structural?1:3);assert.equal(saved.saved,structural?0:1);
 });
