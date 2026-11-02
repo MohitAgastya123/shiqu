@@ -6,6 +6,7 @@ import {reviewSystemPrompt,repairSystemPrompt} from './reader-review.ts';
 import {acceptanceInput,acceptanceDirection,acceptanceCriteria} from './reader-acceptance.ts';
 import {getArtStyle} from './reader-styles.ts';
 import {promptRecord} from './reader-prompt-records.ts';
+import type {StoryPromptHistory} from './reader-prompt-records.ts';
 import {BookImageReferences,withBookReference} from '../server/book-image-reference.ts';
 import {events} from '../db/schema.ts';
 import type {Services} from './services.ts';
@@ -92,7 +93,12 @@ return async function readerApi(req:Request,path:string[]):Promise<Response>{
    if(path[2]==='prompts'&&path.length===3&&req.method==='GET'){
     const row=await repo.get(id,uid),doc=JSON.parse(row.document) as Document,selection=selectionSchema.parse(JSON.parse(row.selection));
     const preferences={productionPrompt:selection.productionPrompt,...acceptanceInput(selection),artDirection:getArtStyle(selection.artStyle).prompt,narrativeDetail:selection.narrativeDetail||'balanced',exactPageCount:selection.length};
-    return json({records:(doc.usage||[]).flatMap((item,index)=>item.promptRecord?[{step:item.step,model:item.model,originId:item.originId||id,index,record:item.promptRecord}]:[]),criteria:acceptanceCriteria(selection.acceptancePrompt),results:doc.visualReview?.reports.at(-1)?.acceptanceResults||[],overridden:!!doc.visualReview?.overridden,previews:{production:promptRecord(draftInstructions(!!doc.original?.localSource)+'\n\n## 提纲阶段\n'+outlineDirection+'\n\n## 分批细化阶段\n'+batchDirection,preferences),acceptance:promptRecord(reviewSystemPrompt+'\n\n'+acceptanceDirection+'\n\n## 定向修订\n'+repairSystemPrompt,preferences)}});
+    const history:StoryPromptHistory={
+     productionPrompt:selection.productionPrompt,acceptancePrompt:selection.acceptancePrompt||'',
+     records:(doc.usage||[]).flatMap((item,index)=>item.promptRecord?[{step:item.step,model:item.model,originId:item.originId||id,index,record:item.promptRecord}]:[]),
+     missingRecords:(doc.usage||[]).flatMap((item,index)=>item.promptRecord?[]:[{step:item.step,model:item.model,originId:item.originId||id,index}]),
+    };
+    return json({...history,criteria:acceptanceCriteria(selection.acceptancePrompt),results:doc.visualReview?.reports.at(-1)?.acceptanceResults||[],overridden:!!doc.visualReview?.overridden,previews:{production:promptRecord(draftInstructions(!!doc.original?.localSource)+'\n\n## 提纲阶段\n'+outlineDirection+'\n\n## 分批细化阶段\n'+batchDirection,preferences),acceptance:promptRecord(reviewSystemPrompt+'\n\n'+acceptanceDirection+'\n\n## 定向修订\n'+repairSystemPrompt,preferences)}});
    }
    if(path[2]==='publication'&&path.length===3&&req.method==='POST'){
     const parsed=z.object({publication:publicationSchema,expected:publicationSchema.nullable()}).strict().safeParse(await body(req,32768));

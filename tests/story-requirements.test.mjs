@@ -29,6 +29,7 @@ for(const provider of ['codex','gemini'])test(`${provider}: saved per-story requ
  const id=await f.create(3,{acceptancePrompt:criteria});await until(async()=>(await f.read(id)).state==='completed');
  const before=await f.read(id),captures=await f.json(`sessions/${id}/prompts`);
  assert.equal(before.selection.acceptancePrompt,criteria);assert.deepEqual(captures.results,results('passed'));assert.deepEqual(captures.criteria,criteria.split('\n'));
+ assert.equal(captures.productionPrompt,before.selection.productionPrompt);assert.equal(captures.acceptancePrompt,criteria);assert.deepEqual(captures.missingRecords,[]);
  assert.ok(captures.records.some(record=>record.step==='image:1'&&record.record.input.includes('Scene 2:')),'queued publication retains actual image prompt');
  assert.ok(captures.records.some(record=>record.step.startsWith('review')&&JSON.parse(record.record.input).acceptancePrompt===criteria));
  assert.equal('records' in before,false);assert.equal('usage' in before,false);
@@ -39,6 +40,7 @@ for(const provider of ['codex','gemini'])test(`${provider}: saved per-story requ
  await f.json(`sessions/${child.id}/production-control`,'POST',{action:'resume'});await until(async()=>(await f.read(child.id)).state==='completed');
  assert.equal(f.control.calls.length,imageCalls);assert.equal(f.control.plans.length,planCalls);assert.equal(f.control.reviews.length,reviews+1);
  const latest=await f.json(`sessions/${child.id}/prompts`);assert.ok(latest.records.some(record=>record.originId===id&&record.step==='image:1'));assert.ok(latest.records.some(record=>record.originId===child.id&&record.step.startsWith('review')));
+ assert.equal(latest.acceptancePrompt,criteria+'\n结语不复述情节。');
  assert.equal((await f.read(id)).selection.acceptancePrompt,criteria);
  await f.restart();assert.deepEqual((await f.json(`sessions/${child.id}/prompts`)).results,latest.results);
  const database=f.app.services.database;await database.prepare('UPDATE reader_sessions SET user_id=? WHERE id=?').bind('other-owner',id).run();assert.equal((await f.request(`sessions/${id}/prompts`)).status,404);
@@ -61,6 +63,23 @@ test('historical rows have no invented capture history, and previews do not comm
  const f=await productionFixture(t),id=await f.createLegacyReader(3);f.app.stopGeneration();
  await f.app.services.database.prepare("UPDATE reader_sessions SET document=json_remove(document,'$.usage') WHERE id=?").bind(id).run();
  const initial=await f.json(`sessions/${id}/prompts`);assert.deepEqual(initial.records,[]);assert.deepEqual(initial.results,[]);assert.ok(initial.previews.production.instructions.includes('本篇验收要求'));assert.equal(f.control.plans.length,0);
+ assert.deepEqual(initial.missingRecords,[]);assert.equal(initial.productionPrompt,selection.productionPrompt);assert.equal(initial.acceptancePrompt,'');
+});
+
+test('prompt export metadata identifies partially retained and inherited calls without leaking raw receipts',async t=>{
+ const f=await productionFixture(t),id=await f.createLegacyReader(3);f.app.stopGeneration();
+ const record={instructions:'Saved historical rules',input:'Saved historical input',schema:{type:'object'},reference:'/api/media/old-reference.webp'};
+ const usage=[
+  {step:'plan',model:'old-text',originId:'parent-version',requestId:'private-request-id',usage:{private:'private-usage'},promptRecord:record},
+  {step:'image:0',model:'old-image',originId:'parent-version',requestId:'private-image-id',usage:null},
+  {step:'review:0',model:'new-review',requestId:null,usage:null,promptRecord:record},
+ ];
+ await f.app.services.database.prepare("UPDATE reader_sessions SET document=json_set(document,'$.usage',json(?)) WHERE id=?").bind(JSON.stringify(usage),id).run();
+ const history=await f.json(`sessions/${id}/prompts`);
+ assert.deepEqual(history.records,[{step:'plan',model:'old-text',originId:'parent-version',index:0,record},{step:'review:0',model:'new-review',originId:id,index:2,record}]);
+ assert.deepEqual(history.missingRecords,[{step:'image:0',model:'old-image',originId:'parent-version',index:1}]);
+ assert.ok(!JSON.stringify(history).includes('private-'));
+ assert.equal(f.control.plans.length,0);assert.equal(f.control.calls.length,0);
 });
 
 test('confirmation drafts retain both requirements through restart and apply them only on explicit confirmation',async t=>{

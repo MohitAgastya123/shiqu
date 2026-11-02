@@ -53,7 +53,7 @@ type ExportFormat='pdf'|'png'|'zip';
 const exportOptions={
  pdf:{label:'下载 PDF',description:'逐幅阅读',Icon:FileDown},
  png:{label:'下载 PNG',description:'一页总览',Icon:ImageDown},
- zip:{label:'下载 ZIP',description:'署名与原文',Icon:FileArchive},
+ zip:{label:'下载 ZIP',description:'原文与完整提示词',Icon:FileArchive},
 };
 const choices:Book[] = [...readerBooks,{id:'other',title:'其他',author:'书名或 URL',era:'自选',genre:'自选',note:'带上你自己的那本书'}];
 const moods:Selection['theme'][] = ['给我一个反转','人情冷暖','放下执念','聪明与糊涂','善意与误解','命运与选择','欲望与代价','勇气与成长','爱情与错过','幽默与讽刺','因果与报应','其他'];
@@ -178,7 +178,7 @@ export default function Reader(){
    if(format==='zip'){
     const {downloadStoryZip}=await import('@/lib/reader-zip');
     const result=await downloadStoryZip(story,setExportProgress);setZipDownload({...result,storyId:story.id,key});
-    notify('ZIP 已准备好，保留署名、出处与全部图片，不含内部提示词。');
+    notify('ZIP 已包含已留存的完整提示词与制作要求，分享前请检查自定义内容。');
    }else if(format==='png'){
     const {downloadStoryPng}=await import('@/lib/reader-png');
     const result=await downloadStoryPng(story,setExportProgress);setPngDownload({...result,storyId:story.id,key});

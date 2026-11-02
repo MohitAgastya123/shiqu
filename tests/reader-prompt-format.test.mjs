@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {formatSystemPrompt} from '../lib/reader-prompt-format.ts';
-import {promptRecord,promptRecordText} from '../lib/reader-prompt-records.ts';
+import {archivePromptHistory,promptRecord,promptRecordText} from '../lib/reader-prompt-records.ts';
 import {promptSections} from '../lib/reader-prompts.ts';
 import {draftInstructions,suggestionSystemPrompt} from '../lib/reader-generation-contract.ts';
 import {reviewSystemPrompt,repairSystemPrompt} from '../lib/reader-review.ts';
@@ -44,4 +44,36 @@ test('new previews/captures share the dispatch layout while historical records a
  const record=promptRecord(instructions,input,schema);
  assert.equal(record.instructions,formatSystemPrompt(instructions));assert.equal(record.input,JSON.stringify(input));assert.equal(record.schema,schema);
  const historical={instructions,input:JSON.stringify(input),schema};assert.ok(promptRecordText(historical).includes(instructions));assert.equal(historical.instructions,instructions);
+});
+test('archives share only byte-identical historical system rules and preserve every actual input and receipt origin',()=>{
+ const receipt=(step,instructions,index)=>({step,model:'recorded-model',originId:index?'current':'parent',index,record:{instructions,input:`input-${index}`,schema:{type:'object'},reference:'/api/media/reference.webp'}});
+ const history={productionPrompt:'制作要求',acceptancePrompt:'验收要求',records:[
+  receipt('plan','Historical production rules',0),receipt('plan:4','Historical production rules',1),
+  receipt('repair:0','Historical production rules\n',2),receipt('review:0','Historical acceptance rules',3),
+  receipt('image:0','',4),receipt('image:1','Historical image rules',5),
+ ],missingRecords:[{step:'plan:8',model:'old-model',originId:'parent',index:6}]};
+ const before=structuredClone(history),archive=archivePromptHistory(history);
+ assert.deepEqual(history,before);
+ assert.deepEqual(archive.systemPrompts,[
+  {id:'system-production-1',label:'系统制作提示词',instructions:'Historical production rules'},
+  {id:'system-production-2',label:'系统制作提示词 2',instructions:'Historical production rules\n'},
+  {id:'system-acceptance-1',label:'系统验收提示词',instructions:'Historical acceptance rules'},
+  {id:'system-image-1',label:'系统绘图提示词',instructions:'Historical image rules'},
+ ]);
+ assert.deepEqual(archive.records.map(item=>item.record.instructionsRef),['system-production-1','system-production-1','system-production-2','system-acceptance-1',null,'system-image-1']);
+ for(const [index,item] of archive.records.entries()){
+  const {instructionsRef,...input}=item.record;
+  const restored={...input,instructions:instructionsRef?archive.systemPrompts.find(system=>system.id===instructionsRef).instructions:''};
+  assert.deepEqual({...item,record:restored},history.records[index]);
+ }
+ assert.deepEqual(archive.missingRecords,history.missingRecords);
+});
+test('deduplicating repeated system rules avoids the 1 MiB metadata limit without dropping call inputs',()=>{
+ const instructions='原样保存的系统规则。'.repeat(10000),records=Array.from({length:10},(_,index)=>({step:`plan:${index}`,model:'recorded-model',originId:'story',index,record:{instructions,input:`Actual input ${index}`}}));
+ const history={productionPrompt:'',acceptancePrompt:'',records,missingRecords:[]},archive=archivePromptHistory(history);
+ assert.ok(Buffer.byteLength(JSON.stringify(history))>1024*1024);
+ assert.ok(Buffer.byteLength(JSON.stringify(archive,null,2))<1024*1024);
+ assert.equal(archive.systemPrompts.length,1);assert.equal(archive.records.length,10);
+ assert.deepEqual(archive.records.map(item=>item.record.input),records.map(item=>item.record.input));
+ assert.deepEqual(archivePromptHistory(null),{productionPrompt:null,acceptancePrompt:null,systemPrompts:[],records:[],missingRecords:[]});
 });

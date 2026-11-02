@@ -1,23 +1,25 @@
-// Verify prompt-free ZIPs, pixel attribution and fail-closed image decoding/encoding.
+// Verify complete saved prompt exports, pixel attribution and fail-closed history/image reads.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {unzipSync,strFromU8} from 'fflate';
 import {makeStory} from './fixtures/story.mjs';
-import {assertZipReady,createStoryZip,zipFilename} from '../lib/reader-zip.ts';
+import {assertZipReady,createStoryZip,downloadStoryZip,zipFilename} from '../lib/reader-zip.ts';
 import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {webpPayloadHash} from '../lib/story-webp-metadata.ts';
 const mockEncoded=readFileSync(new URL('./fixtures/images/publication.webp',import.meta.url));
 import {view} from '../lib/reader-model.ts';
+import {archivePromptHistory} from '../lib/reader-prompt-records.ts';
 
 function browserImages(t){
  const previous={Image:globalThis.Image,document:globalThis.document},urls=new Map(),canvases=[],revoked=[];
- const controls={failure:null,canvases,revoked};
+ const controls={failure:null,canvases,revoked,urls,downloads:[]};
  globalThis.Image=class{
   naturalWidth=941;naturalHeight=1672;src='';
   async decode(){if(controls.failure==='decode')throw Error('invalid image');this.bytes=new Uint8Array(await urls.get(this.src).arrayBuffer());}
  };
- globalThis.document={createElement(tag){
+ globalThis.document={querySelector(){return null;},body:{appendChild(){}},createElement(tag){
+  if(tag==='a')return {click(){controls.downloads.push({href:this.href,download:this.download});},remove(){}};
   assert.equal(tag,'canvas');
   const canvas={width:0,height:0,getContext(){return controls.failure==='context'?null:{save(){},restore(){},translate(){},rotate(){},measureText(text){return {width:[...text].length*20};},fillRect(){},fillText(text,x,y){(canvas.labels||=[]).push({text,x,y});},drawImage(image,x,y){assert.equal(x,0);assert.equal(y,0);canvas.image=image;}};},toBlob(callback,type,quality){
    assert.equal(type,'image/webp');assert.equal(quality,.85);
@@ -32,6 +34,17 @@ function browserImages(t){
  return controls;
 }
 
+function promptHistory(story){
+ return {
+  productionPrompt:story.productionPrompt||'',acceptancePrompt:'保留条件与结局。',
+  records:[
+   {step:'plan',model:'test-text',originId:'old-version',index:0,record:{instructions:'HISTORICAL_SYSTEM_RULES\n\n保留原文的完整因果。',input:'{"productionPrompt":"原版制作要求"}',schema:{type:'object',properties:{title:{type:'string'}}}}},
+   {step:'image:0',model:'test-image',originId:story.id,index:1,record:{instructions:'',input:'ACTUAL_IMAGE_PROMPT',reference:'/api/media/reference.webp'}},
+  ],
+  missingRecords:[{step:'review:0',model:'old-model',originId:'old-version',index:2}],
+ };
+}
+
 test('ZIP requires every image and sanitizes the archive filename',()=>{
  const story=makeStory();
  assert.throws(()=>assertZipReady({...story,pages:[]}),/所有画面/);
@@ -39,7 +52,7 @@ test('ZIP requires every image and sanitizes the archive filename',()=>{
  assert.equal(zipFilename('故事/名字?'),'故事名字.zip');
 });
 
-test('ZIP labels every PNG/JPEG/WebP without cropping or adding a footer and exports only public metadata',async t=>{
+test('ZIP preserves images and public metadata while exporting requirements, page prompts and actual history',async t=>{
  const browser=browserImages(t);
  globalThis.location={origin:'http://localhost:3000'};
  t.after(()=>{delete globalThis.location;});
@@ -52,15 +65,24 @@ test('ZIP labels every PNG/JPEG/WebP without cropping or adding a footer and exp
  });
  const saved=makeStory(12),usage=[{step:'plan',model:'test-text',requestId:'private-request',usage:{private:'metadata'}},{step:'image:0',model:'test-image',requestId:null,usage:null}];
  const story=view({id:saved.id,selection:JSON.stringify({bookId:saved.bookId,theme:saved.theme,length:12,artStyle:'paper-cut',productionPrompt:'保留故事的转折。'}),document:JSON.stringify({plan:{...saved,sourceReference:'庄子·逍遥游'},images:saved.pages.map(page=>page.image),audio:[],usage}),state:'completed',page:0,saved:1,step_attempts:0,created_at:saved.createdAt,updated_at:saved.updatedAt}).story;
- const progress=[],blob=await createStoryZip(story,value=>progress.push(value));
+ const history=promptHistory(story),progress=[],blob=await createStoryZip(story,history,value=>progress.push(value));
  assert.equal(blob.type,'application/zip');
  const files=unzipSync(new Uint8Array(await blob.arrayBuffer()));
- assert.equal(Object.keys(files).length,15);
+ assert.equal(Object.keys(files).length,18);
  const script=strFromU8(files['分镜.md']);
  const json=JSON.parse(strFromU8(files['故事.json']));
  assert.deepEqual(json.generationModels,[{step:'plan',model:'test-text'},{step:'image:0',model:'test-image'}]);
  assert.ok(!strFromU8(files['故事.json']).includes('private'));
- assert.equal(json.productionPrompt,undefined);assert.equal(json.aiGenerated,true);assert.ok(!script.includes(story.productionPrompt));assert.ok(script.includes(story.sourceText));
+ assert.equal(json.productionPrompt,story.productionPrompt);assert.equal(json.acceptancePrompt,history.acceptancePrompt);assert.equal(json.aiGenerated,true);assert.ok(script.includes(story.sourceText));
+ assert.equal(json.promptHistoryFile,'提示词.json');
+ assert.deepEqual(JSON.parse(strFromU8(files[json.promptHistoryFile])),archivePromptHistory(history));
+ assert.equal(json.promptHistory,undefined);
+ const prompts=strFromU8(files['提示词.md']);
+ for(const value of [history.productionPrompt,history.acceptancePrompt,history.records[0].record.input,JSON.stringify(history.records[0].record.schema,null,2),history.records[1].record.input,history.records[1].record.reference,'沿用旧版本记录','本版本实际使用','未留存完整提示词的调用','review:0','[系统制作提示词](系统提示词.md#system-production-1)','未使用独立系统指令。'])assert.ok(prompts.includes(value),value);
+ assert.ok(!prompts.includes(history.records[0].record.instructions));
+ const systems=strFromU8(files['系统提示词.md']);
+ assert.ok(systems.includes(history.records[0].record.instructions));assert.ok(systems.includes('<a id="system-production-1"></a>'));
+ for(const file of ['故事.json','提示词.json','提示词.md'])for(const excluded of ['private-request','metadata','CURRENT_PREVIEW_ONLY'])assert.ok(!strFromU8(files[file]).includes(excluded));
  for(const key of ['title','summary','bookId','theme','sourceText','sourceUrl','reflection','adaptationNote','revision','createdAt','updatedAt','artStyleLabel'])assert.deepEqual(json[key],story[key]);
  assert.equal(json.sourceReference,story.sourceReference);
  assert.equal(json.pages.length,12);
@@ -70,10 +92,10 @@ test('ZIP labels every PNG/JPEG/WebP without cropping or adding a footer and exp
   assert.equal(json.pages[i].sha256,createHash('sha256').update(files[filename]).digest('hex'));
   assert.equal(json.pages[i].originalSha256,createHash('sha256').update(bodies[i]).digest('hex'));
   assert.equal(json.pages[i].imagePayloadSha256,webpPayloadHash(files[filename]));
-  assert.equal(json.pages[i].caption,story.pages[i].caption);assert.equal(json.pages[i].image,filename);assert.equal(json.pages[i].prompt,undefined);
+  assert.equal(json.pages[i].caption,story.pages[i].caption);assert.equal(json.pages[i].image,filename);assert.equal(json.pages[i].prompt,story.pages[i].prompt);
   assert.ok(script.includes(`图片：${filename}`));
   assert.ok(script.includes(story.pages[i].caption));
-  assert.ok(!script.includes(story.pages[i].prompt));
+  assert.ok(script.includes(story.pages[i].prompt));assert.ok(prompts.includes(story.pages[i].prompt));
   assert.equal(fetched[i],`http://localhost:3000${story.pages[i].image}`);
  }
  assert.ok(script.indexOf('## 第 2 幅')<script.indexOf('## 第 10 幅'));
@@ -89,11 +111,15 @@ test('ZIP exports stories without generation metadata with an empty model list',
  globalThis.location={origin:'http://localhost:3000'};
  t.after(()=>{delete globalThis.location;});
  t.mock.method(globalThis,'fetch',async()=>new Response('image',{headers:{'Content-Type':'image/png'}}));
- const story=makeStory(1),blob=await createStoryZip(story),files=unzipSync(new Uint8Array(await blob.arrayBuffer()));
+ const story=makeStory(1),blob=await createStoryZip(story,null),files=unzipSync(new Uint8Array(await blob.arrayBuffer()));
  const json=JSON.parse(strFromU8(files['故事.json']));
  assert.equal(json.title,story.title);
  assert.deepEqual(json.generationModels,[]);
  assert.equal(json.pages[0].image,'图片/01.webp');
+ assert.equal(json.productionPrompt,null);assert.equal(json.acceptancePrompt,null);
+ assert.deepEqual(JSON.parse(strFromU8(files['提示词.json'])),{productionPrompt:null,acceptancePrompt:null,systemPrompts:[],records:[],missingRecords:[]});
+ assert.match(strFromU8(files['提示词.md']),/未留存完整提示词调用记录/);
+ assert.match(strFromU8(files['提示词.md']),/## 制作要求\n\n未留存/);
 });
 
 test('ZIP rejects failed decoding, missing canvas, empty encoding and PNG fallbacks',async t=>{
@@ -103,7 +129,7 @@ test('ZIP rejects failed decoding, missing canvas, empty encoding and PNG fallba
  t.mock.method(globalThis,'fetch',async()=>new Response('image',{headers:{'Content-Type':'image/png'}}));
  for(const failure of ['decode','context','empty','format']){
   browser.failure=failure;
-  await assert.rejects(createStoryZip(makeStory(1)),/第 1 幅.*WebP/);
+  await assert.rejects(createStoryZip(makeStory(1),null),/第 1 幅.*WebP/);
  }
  assert.equal(browser.revoked.length,4);
  assert.ok(browser.canvases.every(canvas=>canvas.width===0&&canvas.height===0));
@@ -115,28 +141,94 @@ test('ZIP rejects incomplete, foreign, failed, empty and non-image responses',as
  t.after(()=>{delete globalThis.location;});
  const story=makeStory(2);
  const fetch=t.mock.method(globalThis,'fetch',async()=>new Response('image',{headers:{'Content-Type':'image/png'}}));
- await assert.rejects(createStoryZip({...story,pages:[{...story.pages[0],image:''}]}),/所有画面/);
- await assert.rejects(createStoryZip({...story,pages:[{...story.pages[0],image:'https://other.example/image.png'}]}),/来源不可用/);
+ await assert.rejects(createStoryZip({...story,pages:[{...story.pages[0],image:''}]},null),/所有画面/);
+ await assert.rejects(createStoryZip({...story,pages:[{...story.pages[0],image:'https://other.example/image.png'}]},null),/来源不可用/);
  assert.equal(fetch.mock.callCount(),0);
  for(const response of [new Response('missing',{status:404}),new Response('html',{headers:{'Content-Type':'text/html'}}),new Response('',{headers:{'Content-Type':'image/png'}})]){
   fetch.mock.mockImplementation(async()=>response);
-  await assert.rejects(createStoryZip(story),/第 1 幅/);
+  await assert.rejects(createStoryZip(story,null),/第 1 幅/);
  }
  fetch.mock.mockImplementation(async()=>{throw Error('network offline');});
- await assert.rejects(createStoryZip(story),/network offline/);
+ await assert.rejects(createStoryZip(story,null),/network offline/);
 });
 
 
-test('ZIP credits and reuse notices agree in JSON, Markdown and rights file without publishing internal records',async t=>{
+test('ZIP credits remain consistent and image metadata does not inherit prompt contents',async t=>{
  browserImages(t);globalThis.location={origin:'http://localhost:3000'};t.after(()=>{delete globalThis.location;});
  t.mock.method(globalThis,'fetch',async()=>new Response('image',{headers:{'Content-Type':'image/webp'}}));
  const publication={author:'公开制作人',workUrl:'https://example.org/work',contact:'公开联系',sourceNote:'原文转录遵循 CC BY-SA 4.0。',reuse:'本次受保护贡献的商业使用请联系制作人。'};
  const story={...makeStory(1),generated:true,publication,productionPrompt:'PRIVATE_PRODUCTION_SENTINEL',pages:[{...makeStory(1).pages[0],prompt:'PRIVATE_IMAGE_SENTINEL'}]};
- const files=unzipSync(new Uint8Array(await (await createStoryZip(story)).arrayBuffer())),json=JSON.parse(strFromU8(files['故事.json']));
+ const files=unzipSync(new Uint8Array(await (await createStoryZip(story,promptHistory(story))).arrayBuffer())),json=JSON.parse(strFromU8(files['故事.json']));
  assert.deepEqual(json.publication,publication);assert.equal(json.author,publication.author);assert.equal(json.aiGenerated,true);
  for(const file of ['故事.json','分镜.md','署名与转载.txt']){
-  const text=strFromU8(files[file]);assert.ok(!text.includes('PRIVATE_'));
+  const text=strFromU8(files[file]);
   for(const value of Object.values(publication))assert.ok(text.includes(value));
  }
+ assert.equal(json.productionPrompt,story.productionPrompt);assert.equal(json.pages[0].prompt,story.pages[0].prompt);
+ assert.ok(strFromU8(files['提示词.md']).includes(story.productionPrompt));
+ assert.ok(!new TextDecoder().decode(files['图片/01.webp']).includes('PRIVATE_'));
  assert.ok(strFromU8(files['署名与转载.txt']).includes('不能收紧公版材料'));
+});
+
+test('ZIP labels genuinely missing history without inventing system rules or treating empty requirements as missing',async t=>{
+ browserImages(t);globalThis.location={origin:'http://localhost:3000'};t.after(()=>{delete globalThis.location;});
+ t.mock.method(globalThis,'fetch',async()=>new Response('image',{headers:{'Content-Type':'image/png'}}));
+ const story={...makeStory(1),generated:true,productionPrompt:'',pages:[{...makeStory(1).pages[0],prompt:''}]};
+ const history={productionPrompt:'',acceptancePrompt:'',records:[],missingRecords:[]};
+ const files=unzipSync(new Uint8Array(await (await createStoryZip(story,history)).arrayBuffer()));
+ const text=strFromU8(files['提示词.md']),json=JSON.parse(strFromU8(files['故事.json']));
+ assert.equal(json.productionPrompt,'');assert.equal(json.acceptancePrompt,'');assert.equal(json.pages[0].prompt,null);
+ assert.match(text,/## 制作要求\n\n未填写/);assert.match(text,/## 验收要求\n\n未填写/);
+ assert.match(text,/### 第 1 幅\n\n未留存/);assert.match(text,/未留存完整提示词调用记录/);
+ assert.ok(!text.includes('HISTORICAL_SYSTEM_RULES'));
+});
+
+test('ZIP uses working internal references and keeps repeated large system rules below the existing 1 MiB text limit',async t=>{
+ browserImages(t);globalThis.location={origin:'http://localhost:3000'};t.after(()=>{delete globalThis.location;});
+ t.mock.method(globalThis,'fetch',async()=>new Response('image',{headers:{'Content-Type':'image/png'}}));
+ const story={...makeStory(1),generated:true,productionPrompt:'分享制作过程'},instructions='原样保存的系统规则。'.repeat(10000);
+ const history={productionPrompt:story.productionPrompt,acceptancePrompt:'',missingRecords:[],records:Array.from({length:10},(_,index)=>({step:`plan:${index}`,model:'recorded-model',originId:story.id,index,record:{instructions,input:`完整输入 ${index}`}}))};
+ assert.ok(Buffer.byteLength(JSON.stringify(history))>1024*1024);
+ const files=unzipSync(new Uint8Array(await (await createStoryZip(story,history)).arrayBuffer()));
+ for(const [name,bytes] of Object.entries(files))if(/\.(?:md|json|txt)$/.test(name))assert.ok(bytes.length<1024*1024,`${name}: ${bytes.length}`);
+ const archive=JSON.parse(strFromU8(files['提示词.json'])),prompts=strFromU8(files['提示词.md']),systems=strFromU8(files['系统提示词.md']);
+ assert.equal(archive.systemPrompts.length,1);assert.equal(archive.records.length,10);
+ assert.equal(systems.split(instructions).length-1,1);
+ for(const record of archive.records){
+  const system=archive.systemPrompts.find(item=>item.id===record.record.instructionsRef);
+  assert.equal(system.instructions,instructions);
+  assert.ok(prompts.includes(`[${system.label}](系统提示词.md#${system.id})`));
+  assert.ok(systems.includes(`<a id="${system.id}"></a>`));
+  assert.ok(prompts.includes(record.record.input));
+ }
+});
+
+test('download loads actual prompt history on demand and excludes API previews and raw receipts',async t=>{
+ const browser=browserImages(t);globalThis.location={origin:'http://localhost:3000'};t.after(()=>{delete globalThis.location;});
+ const story={...makeStory(1),generated:true,productionPrompt:'分享制作过程'},history=promptHistory(story),calls=[];
+ t.mock.method(globalThis,'fetch',async(url,options)=>{
+  calls.push(url);
+  if(String(url).endsWith('/prompts')){
+   assert.equal(options.method,'GET');
+   return Response.json({...history,previews:{production:{instructions:'CURRENT_PREVIEW_ONLY',input:'not history'}}});
+  }
+  return new Response('image',{headers:{'Content-Type':'image/png'}});
+ });
+ const progress=[],result=await downloadStoryZip(story,value=>progress.push(value));
+ assert.deepEqual(calls,[`/api/reader/sessions/${story.id}/prompts`,`http://localhost:3000${story.pages[0].image}`]);
+ assert.deepEqual(browser.downloads,[{href:result.url,download:result.filename}]);
+ const files=unzipSync(new Uint8Array(await browser.urls.get(result.url).arrayBuffer()));
+ assert.deepEqual(JSON.parse(strFromU8(files['提示词.json'])),archivePromptHistory(history));
+ assert.ok(!strFromU8(files['提示词.md']).includes('CURRENT_PREVIEW_ONLY'));
+ assert.ok(progress.includes('正在读取已保存的提示词'));
+});
+
+test('download fails explicitly before creating an incomplete archive if prompt history cannot be read',async t=>{
+ const browser=browserImages(t),story={...makeStory(1),generated:true,productionPrompt:'制作要求'};
+ const fetch=t.mock.method(globalThis,'fetch',async()=>Response.json({error:'提示词读取失败'},{status:404}));
+ await assert.rejects(downloadStoryZip(story,()=>{}),/提示词读取失败/);
+ assert.equal(fetch.mock.callCount(),1);assert.equal(browser.downloads.length,0);assert.equal(browser.canvases.length,0);
+ await assert.rejects(createStoryZip(story,null),/提示词记录未载入/);
+ await assert.rejects(downloadStoryZip({...story,pages:[{...story.pages[0],image:''}]},()=>{}),/所有画面/);
+ assert.equal(fetch.mock.callCount(),1);
 });
