@@ -7,7 +7,7 @@ import {createOpenAIProvider} from './openai-provider.ts';
 import {frameRecommendationOutputSchema,frameRecommendationOutputJson,frameRecommendationPrompt,frameRecommendationPayload} from '../lib/reader-frame-recommendation.ts';
 import {configuredModels,makeGenerator,suggestStories,safeGeminiError,recommendStoryArt,matchStoryThemes} from '../lib/reader-gemini.ts';
 import {storyDraftSchema,ReaderError} from '../lib/reader-model.ts';
-import {readerStoryboardTimeoutMs} from '../lib/reader-limits.ts';
+import {codexGenerationTimeoutMs} from '../lib/codex-settings.ts';
 import {choicesJson,storyDraftJson,suggestionSystemPrompt,draftInstructions,imagePrompt,nativeImageInstructions,imageTypes,mediaType,storySource} from '../lib/reader-generation-contract.ts';
 import {freshSuggestions,suggestionBatchSchema} from '../lib/reader-suggestions.ts';
 import {getArtStyle} from '../lib/reader-styles.ts';
@@ -65,7 +65,7 @@ export function createReaderProvider(variables:Record<string,string|undefined>,m
   async suggestions(selection,excluded,localBook,reading){
    const scanning=localBook?.purpose==='scan'||localBook?.purpose==='catalog';
    const run=async(report:(meta:{model?:string;usage?:unknown;acceptedCount?:number})=>void)=>{
-    const result=await codex.run({instructions:localBook?localReadingPrompt(localBook):suggestionSystemPrompt,prompt:JSON.stringify(localSuggestionPayload(book(selection),selection.theme,excluded,localBook,reading?.maxStories)),schema:localBook?.purpose==='catalog'?localCatalogOutputJson(localBook):scanning?localScanJson:localBook?localChoicesJson:choicesJson,timeoutMs:localBook?120000:60000,reasoningEffort:taskReasoningEfforts.suggest});
+    const result=await codex.run({instructions:localBook?localReadingPrompt(localBook):suggestionSystemPrompt,prompt:JSON.stringify(localSuggestionPayload(book(selection),selection.theme,excluded,localBook,reading?.maxStories)),schema:localBook?.purpose==='catalog'?localCatalogOutputJson(localBook):scanning?localScanJson:localBook?localChoicesJson:choicesJson,timeoutMs:codexGenerationTimeoutMs,reasoningEffort:taskReasoningEfforts.suggest});
     report(result);
     const batch=localBook?localChoices(JSON.parse(result.text),localBook):suggestionBatchSchema.parse(JSON.parse(result.text));
     const fresh=scanning?batch:freshSuggestions(batch,excluded);report({acceptedCount:fresh.stories.length});
@@ -75,18 +75,18 @@ export function createReaderProvider(variables:Record<string,string|undefined>,m
   },
   async matchStories(theme,stories,context){
    return discoveryCall({stage:'matching',provider:'codex',model:themeMatchModel,effort:themeMatchEffort,requestedCount:stories.length},context,async report=>{
-    const result=await codex.run({model:themeMatchModel,instructions:themeMatchPrompt,prompt:JSON.stringify(themeMatchPayload(theme,stories)),schema:themeMatchJson,timeoutMs:120000,reasoningEffort:themeMatchEffort});report(result);
+    const result=await codex.run({model:themeMatchModel,instructions:themeMatchPrompt,prompt:JSON.stringify(themeMatchPayload(theme,stories)),schema:themeMatchJson,timeoutMs:codexGenerationTimeoutMs,reasoningEffort:themeMatchEffort});report(result);
     const parsed=parseThemeMatches(JSON.parse(result.text),stories);report({acceptedCount:parsed.matches.length});return parsed;
    });
   },
   async recommendArt(selection,original){
    if(!original?.localSource)throw new ReaderError(400,'请先选择已核对出处的故事。');
-   const result=await codex.run({instructions:selectedArtRecommendationPrompt,prompt:JSON.stringify(selectedArtRecommendationPayload(selection,original)),schema:artRecommendationJson,timeoutMs:60000,reasoningEffort:taskReasoningEfforts.art});
+   const result=await codex.run({instructions:selectedArtRecommendationPrompt,prompt:JSON.stringify(selectedArtRecommendationPayload(selection,original)),schema:artRecommendationJson,timeoutMs:codexGenerationTimeoutMs,reasoningEffort:taskReasoningEfforts.art});
    return artRecommendationSchema.parse(JSON.parse(result.text));
   },
   generator(){return {
    ...storyboardGenerator(book,async(task,instructions,payload,schema)=>{
-    const result=await codex.run({instructions,prompt:JSON.stringify(payload),schema,timeoutMs:readerStoryboardTimeoutMs,reasoningEffort:taskReasoningEfforts[task]});
+    const result=await codex.run({instructions,prompt:JSON.stringify(payload),schema,timeoutMs:codexGenerationTimeoutMs,reasoningEffort:taskReasoningEfforts[task]});
     return {value:JSON.parse(result.text),model:result.model,requestId:result.requestId,usage:result.usage,reasoningEffort:result.reasoningEffort};
    }),
    original:(selection,plan,id)=>saveStoryOriginal(media,selection,plan,id,transport),
@@ -96,7 +96,7 @@ export function createReaderProvider(variables:Record<string,string|undefined>,m
    },
    async plan(selection,id,original){
     assertStoryBriefReady(original);
-    const result=await codex.run({instructions:draftInstructions(!!original?.localSource),prompt:JSON.stringify({book:book(selection),chosenStory:selection.storyTitle,...(selection.storyTitle?{}:{theme:selection.theme}),editorialContext:storyEditorialContext(selection.theme),exactPageCount:selection.length,narrativeDetail:selection.narrativeDetail,productionPrompt:normalizeProductionPrompt(selection.productionPrompt||'',selection.theme),artDirection:getArtStyle(selection.artStyle).prompt,variationSeed:id,...(original?{verifiedOriginal:verifiedOriginalPayload(original)}:{})}),schema:storyDraftJson(selection.length),timeoutMs:readerStoryboardTimeoutMs,reasoningEffort:taskReasoningEfforts.plan});
+    const result=await codex.run({instructions:draftInstructions(!!original?.localSource),prompt:JSON.stringify({book:book(selection),chosenStory:selection.storyTitle,...(selection.storyTitle?{}:{theme:selection.theme}),editorialContext:storyEditorialContext(selection.theme),exactPageCount:selection.length,narrativeDetail:selection.narrativeDetail,productionPrompt:normalizeProductionPrompt(selection.productionPrompt||'',selection.theme),artDirection:getArtStyle(selection.artStyle).prompt,variationSeed:id,...(original?{verifiedOriginal:verifiedOriginalPayload(original)}:{})}),schema:storyDraftJson(selection.length),timeoutMs:codexGenerationTimeoutMs,reasoningEffort:taskReasoningEfforts.plan});
     const value=storyDraftSchema.parse(JSON.parse(result.text));if(selection.length!=='auto'&&value.pages.length!==selection.length)throw new CodexError('INVALID_PLAN');
     return {value,model:result.model,requestId:result.requestId,usage:result.usage,reasoningEffort:result.reasoningEffort};
    },
