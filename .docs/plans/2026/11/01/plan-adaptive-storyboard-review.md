@@ -22,7 +22,7 @@ Git base: `56b0b82a8aa558e5fd4ddccf74dc27b9ce7fb2b3`。开始时工作树干净�
 - [x] 更新 `reader-revision-images`、修订 settings/impact、进度及必要队列条件，保护原版、位移图片及失败恢复。
 - [x] 更新 intake、画幅确认兼容入口和制作/修订 UI，改为叙事详略及自动幅数。
 - [x] 添加有意义的受控回归：插入/删除、范围校验、预算边界、复核前0图片、重启不重复、位移复用和重复歧义、legacy读取/旧数值接口、新 UI 详略控制。
-- [ ] 使用 Node24.22.1 / pnpm11.25.0 完成 typecheck、lint、完整TT和本故事受控服务E2E；原内置浏览器完成 UI 验证。无真实付费/生图验证要求。
+- [x] 使用 Node24.22.1 / pnpm11.25.0 完成 typecheck、lint、完整TT和本故事受控服务E2E；原内置浏览器完成 UI 验证。无真实付费/生图验证要求。
 
 独立 AR1 指出并已明确上述旧编辑分界与重复图来源映射。实施同时覆盖 `reader-production` preparing 判定和 `local-generation` 的 restructure 原文绑定校验。首次 SS 探针验证三提供方 coverage/edits schema 与输出预算、auto 推荐后的实际推进；采用受控调用，不追加真实付费。完成 AR 复审后才编辑源码。
 
@@ -31,11 +31,24 @@ AR review round: 2; reviewer: reused
 AR fixed: 旧数值纯配文/画风编辑保持原模式；结构编辑提供显式来源映射，重复提示词不猜配；rerun result passed
 AR passed: no blocking architecture flaws
 
-SS 已实现上述前五项。受控三提供方 schema/预算探针通过，单位回归8项通过；服务E2E最初7项通过（补充上限/无依据阻断回归进行中）。原文绑定已增加 restructure 验证。首次端到端探针发现 auto 准备检查点仍被调度器视作未完成脚本，现已返回独立 prepared 回执并通过实际推进。浏览器已在原 IAB 标签验证旧暂停故事的新详略入口，点选详细只改本地草稿，随后丢弃；未恢复故事或调用真实模型。截图 `.data/evidence/adaptive-storyboard-detail.png`。完整TT首次沙箱内因本地端口 EPERM 中断，改为本机运行同一受控套件；没有构建或打包。
+SS 已实现上述前五项。受控三提供方 schema/预算探针通过，单位回归8项通过；服务E2E最初7项通过，补充上限/无依据阻断和并发交错后12项通过。原文绑定已增加 restructure 验证。首次端到端探针发现 auto 准备检查点仍被调度器视作未完成脚本，现已返回独立 prepared 回执并通过实际推进。浏览器已在原 IAB 标签验证旧暂停故事的新详略入口，点选详细只改本地草稿，随后丢弃；未恢复故事或调用真实模型。截图 `.data/evidence/adaptive-storyboard-detail.png`。完整TT首次沙箱内因本地端口 EPERM 中断，改为本机运行同一受控套件；没有构建或打包。
 
 SS 里程碑：`134893e`，实现与初次受控验证已提交；非最终验收。10项服务E2E全部通过。完整TT本机第一次940项中935通过，5项失败：两项旧数量断言已改为验证auto重新编排；三项发现实际重绘提示在生图后消失，已在文字步骤保存actualRedraw快照，75项定向复验全部通过。
 
 CR risk: non-low — 涉及持久化、并发恢复和图片来源。
 CR review round: 1; reviewer: reused
 CR blocked: 阅读进度存在跨结构保存的竞争写回。
-修正：进度按读取时的plan版本CAS，过期写回409，不以完整document锁住正常图片发布。新增正反交错测试，含服务E2E12项及reader-generation共56项通过。最终完整TT与独立CR复审进行中。
+修正：进度按读取时的plan版本CAS，过期写回409，不以完整document锁住正常图片发布。新增正反交错测试，含服务E2E12项及reader-generation共56项通过。最终完整TT与独立CR复审结果见后续记录。
+
+SS 修正里程碑：`c95ace4`，保存文字阶段重绘快照并封闭过期阅读进度竞争，75项修订回归及56项进度/服务回归通过。
+CR fixed: 阅读进度写入增加分镜 CAS，跨结构保存的旧请求返回409；同分镜的图片检查点仍允许保存进度。原阻断项已修复，复审通过。
+CR passed: no major findings
+CR risk: non-low — 涉及持久化、并发恢复和图片来源。
+CR review round: 2; reviewer: reused
+
+最终验证：Node v24.22.1，pnpm11.25.0；typecheck、lint退出0；完整TT940/940通过（63.33s）；本故事服务E2E12/12通过（记录在56项进度+服务定向日志中），修订回归75/75通过。均为受控提供方；真实模型语义质量和未生成图片不在本轮验证声明内。日志归档 `.data/evidence/adaptive-storyboard-review/`，原IAB截图 `.data/evidence/adaptive-storyboard-detail.png`。
+
+VR passed: all acceptance criteria complete
+VR risk: non-low — 审核契约、持久化、并发恢复及图片来源跨组件变化。
+VR review round: 1; reviewer: reused
+逐条证据和完整最终VR见 `.docs/done/2026/11/01/adaptive-storyboard-review.md`。
