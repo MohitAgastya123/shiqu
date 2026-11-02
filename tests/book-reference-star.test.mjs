@@ -92,6 +92,7 @@ test('page changes ignore late reads/saves and keep the write lock until authori
  requests[2].resolve({reference:null});await saving;await flush();assert.match(requests[4].url,/library\/C\/reference/);assert.equal(messages.length,0);
  requests[4].resolve({reference:{storyId:'C',page:0,token:'C-token'}});await flush();assert.equal(result.selected,true);
  const failing=result.toggle();requests[5].reject(Error('保存失败'));await failing;await flush();assert.equal(messages.at(-1),'保存失败');requests[6].resolve({reference:{storyId:'C',page:0,token:'C-token'}});await flush();assert.equal(result.selected,true);assert.equal(result.busy,false);
+ const staleCancel=result.toggle();requests[7].resolve({reference:{storyId:'other',page:0,token:'new-token'}});await staleCancel;await flush();requests[8].resolve({reference:{storyId:'other',page:0,token:'new-token'}});await flush();assert.equal(result.selected,false);assert.equal(messages.at(-1),'本书参考图已更换，已同步最新星标。');
  props=[undefined,0,undefined,props[3]];render();assert.equal(result.selected,false);assert.equal(result.disabled,true);
  alive=false;for(const hook of hooks)hook.cleanup?.();
 });

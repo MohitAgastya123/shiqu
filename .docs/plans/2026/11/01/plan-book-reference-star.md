@@ -39,3 +39,11 @@ SS探测：实际库74任务/2118作业，一致性备份位于`library-backups/
 SS：存储/API/共享参考解析、三provider首幅附件、UI及文档已实现。55项组合回归通过；删除触发器与旧库导入空表断言完善后，最新26项（含6服务E2E）通过，日志`/tmp/shiqu-star-final-subset.log`，三provider与页面乱序hook均有直接回归。typecheck/lint通过，diff检查通过。in-app禁用，无视觉验收。
 
 实际dev库在开发中先装载空0010表，最终触发器确定后已补建同一DDL，与最终0010对齐；无历史迁移改写。74任务、2118作业、0星标保持（`/tmp/shiqu-star-live-upgrade.json`），备份已先完成。GET原《黛玉剪香囊》reference返回200/null，未自动替用户选图。完整TT和独立CR/VR待执行。
+
+SS milestone: `a82ea25` (`feat: star one page per book as a shared image reference`)。
+
+CR passed: no major findings
+CR risk: non-low — persistent ownership, concurrent selection changes, media authorization, legacy import and paid-generation dispatch.
+CR review round: 1; reviewer: reused
+
+CR1完整覆盖base至a82ea25，主要边界无重大问题。随后自查UI旧token取消响应：服务端保留新星时不能提示“已取消”；窄修提示为已更换并同步，添加同页迟到取消响应测试，返回CR2影响复核。

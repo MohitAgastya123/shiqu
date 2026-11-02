@@ -19,7 +19,7 @@ export function useBookReference(storyId:string|undefined,page:number,image:stri
   const selected=!!reference&&reference.storyId===storyId&&reference.page===page;
   try{
    const result=await request('reader/library/'+encodeURIComponent(storyId)+'/reference','POST',{page,starred:!selected,...(selected&&reference?{token:reference.token}:{})});
-   if(mounted.current&&latest.current.storyId===storyId&&latest.current.page===page){setReference(result.reference);notify(selected?'已取消本书参考图。':'已设为本书参考图，同书后续生图会使用；每本书仅一幅。');}
+   if(mounted.current&&latest.current.storyId===storyId&&latest.current.page===page){setReference(result.reference);notify(selected?(result.reference?'本书参考图已更换，已同步最新星标。':'已取消本书参考图。'):'已设为本书参考图，同书后续生图会使用；每本书仅一幅。');}
   }catch(error){if(mounted.current)notify(error instanceof Error?error.message:'参考图暂未保存，请重试。');}
   finally{locked.current=false;if(mounted.current){setBusy(false);setRefresh(value=>value+1);}}
  }
