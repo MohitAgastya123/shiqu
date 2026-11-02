@@ -42,7 +42,8 @@
     "desktop:preview": "vite --config desktop/vite.config.ts",
     "desktop:build": "pnpm exec tauri build",
     "desktop:test": "cd src-tauri && cargo test --locked",
-    "desktop:smoke": "node scripts/desktop-smoke.mjs"
+    "desktop:smoke": "node scripts/desktop-smoke.mjs",
+    "eval:discovery": "node --experimental-strip-types scripts/eval-story-discovery.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

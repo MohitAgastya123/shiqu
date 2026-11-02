@@ -1,6 +1,7 @@
 // Keep discovery in the story picker; a chosen story enters one continuous production flow.
 // Edits are saved as a draft on the side; only a recommendation or final confirmation starts work.
 // Discovery continues one story at a time while open, and stops when a story is chosen or the picker closes.
+import {readingChapterLabel} from '@/lib/reader-suggestions';
 import {useEffect,useRef,useState} from 'react';
 import type {ComponentProps} from 'react';
 import {Loader2} from 'lucide-react';
@@ -75,7 +76,7 @@ export default function StoryCreationSetup({session,book,busy,onAction,progress}
  return <section className="yu-creation-setup" aria-label={selected?'故事流程':'选择故事'}>
   <p className="yu-sheet-intro">《{book}》 · {session.selection.theme}{session.selection.discoverySources?.length?` · 已选 ${session.selection.discoverySources.length} 章`:''}</p>
   {selected?<div className="yu-batch-heading"><h3>{session.selection.storyTitle}</h3><button type="button" className="yu-revision-open" disabled={!ready||busy} onClick={()=>setSourceOpen(true)}>原文</button></div>:<p className="yu-count-help">找到一篇就显示一篇，选中或离开后停止查找。已找到的故事会保留，重开后可继续。</p>}
-  {search.state==='searching'&&(paused?<p role="status">查找已暂停，恢复生成后继续。已找到的故事都保留。</p>:<p role="status">正在寻找更多故事，找到后逐篇显示，已有故事可以直接选择。{intake.progress?.currentChapters?.length?`正在翻阅：${intake.progress.currentChapters.join('、')}`:''}{intake.progress?.completedChars?`已读 ${intake.progress.completedChars.toLocaleString('zh-CN')} 字。`:''}</p>)}
+  {search.state==='searching'&&(paused?<p role="status">查找已暂停，恢复生成后继续。已找到的故事都保留。</p>:<p role="status">正在寻找更多故事，找到后逐篇显示，已有故事可以直接选择。{intake.progress?.currentChapters?.length?`正在翻阅：${readingChapterLabel(intake.progress.currentChapters)}`:''}{intake.progress?.completedChars?`已读 ${intake.progress.completedChars.toLocaleString('zh-CN')} 字。`:''}</p>)}
   {search.state==='failed'&&<div className="yu-batch-error" role="alert"><p>这次查找未完成。{search.error}</p><p>已找到的故事和已选内容都保留，可以重试查找，也可以直接继续。</p>{selected&&findMore}</div>}
   {!editing&&remoteChoice}
   {!selected&&(intake.batches.length>0||search.state==='failed')&&candidateList}

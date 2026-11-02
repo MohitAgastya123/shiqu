@@ -4,11 +4,13 @@
 import {createHash} from 'node:crypto';
 import {z} from 'zod';
 import type {MediaStore} from '../lib/services.ts';
+import type {DiscoveryContext} from '../lib/reader-discovery-call.ts';
 import type {SuggestionProgress} from '../lib/reader-suggestions.ts';
 import {ReaderError} from '../lib/reader-model.ts';
 
-export type ReadingObserver={signal:AbortSignal;onProgress:(progress:SuggestionProgress)=>void;drain?:boolean;maxStories?:1;cycleId?:string};
+export type ReadingObserver={signal:AbortSignal;onProgress:(progress:SuggestionProgress)=>void;drain?:boolean;maxStories?:1;cycleId?:string;onCall?:DiscoveryContext['onCall']};
 type Flight={controller:AbortController;promise:Promise<unknown>;listeners:Set<ReadingObserver|undefined>;progress?:SuggestionProgress;settled:boolean};
+const writesByStore=new WeakMap<object,Map<string,Promise<unknown>>>();
 const envelope=z.object({version:z.literal(1),key:z.string(),value:z.unknown()});
 export function discoveryHash(value:unknown){return createHash('sha256').update(JSON.stringify(value)).digest('hex');}
 
@@ -25,8 +27,9 @@ function wait<T>(promise:Promise<T>,signal?:AbortSignal):Promise<T>{
 export class StoryDiscoveryCache{
  private flights=new Map<string,Flight>();
  private updates=new Map<string,Promise<unknown>>();
+ readonly identity:object;
  private store:MediaStore;
- constructor(store:MediaStore){this.store=store;}
+ constructor(store:MediaStore){this.store=store;this.identity=store;let updates=writesByStore.get(store);if(!updates){updates=new Map();writesByStore.set(store,updates);}this.updates=updates;}
  async read<T>(key:string,schema:z.ZodType<T>,valid:(value:T)=>boolean=()=>true):Promise<T|null>{
   let object;
   try{object=await this.store.get(`reader-cache/${discoveryHash(key)}.json`);}
@@ -59,7 +62,7 @@ export class StoryDiscoveryCache{
   if(flight?.controller.signal.aborted){await wait(flight.promise.catch(()=>{}),observer?.signal);return this.shared(key,observer,work);}
   if(!flight){
    const current:Flight={controller:new AbortController(),listeners:new Set(),settled:false,promise:Promise.resolve()};
-   current.promise=Promise.resolve().then(()=>work({signal:current.controller.signal,onProgress:progress=>{
+   current.promise=Promise.resolve().then(()=>work({signal:current.controller.signal,cycleId:observer?.cycleId,onCall:event=>{for(const listener of current.listeners)listener?.onCall?.(event);},onProgress:progress=>{
     current.progress=progress;
     for(const listener of current.listeners)if(!listener?.signal.aborted)listener?.onProgress(progress);
    }}));

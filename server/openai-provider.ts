@@ -1,5 +1,6 @@
 // Use official OpenAI text/image APIs with isolated API billing and validated local reference images.
 // Never log provider bodies or credentials, fetch returned image URLs, retry, or fall back to another provider.
+import {discoveryCall} from '../lib/reader-discovery-call.ts';
 import {normalizeProductionPrompt,storyEditorialContext} from '../lib/reader-prompts.ts';
 import {verifiedOriginalPayload} from '../lib/reader-source-types.ts';
 import {assertStoryBriefReady} from '../lib/reader-story-brief.ts';
@@ -12,8 +13,8 @@ import type {ReasoningEffort} from '../lib/reader-reasoning.ts';
 import {openaiDefaultModels} from '../lib/system-settings.ts';
 import {storyboardGenerator} from '../lib/reader-storyboard.ts';
 import {freshSuggestions,suggestionBatchSchema} from '../lib/reader-suggestions.ts';
-import {localChoicesJson,localScanJson,localCatalogOutputJson,localChoices,localReadingPrompt,localSuggestionPayload} from '../lib/reader-local-contract.ts';
-import {themeMatchPrompt,themeMatchPayload,themeMatchJson,themeMatchesSchema,themeMatchOutputTokens,themeMatchModel,themeMatchEffort} from '../lib/reader-theme-match.ts';
+import {localChoicesJson,localScanJson,localCatalogOutputJson,localCatalogOutputTokens,localChoices,localReadingPrompt,localSuggestionPayload} from '../lib/reader-local-contract.ts';
+import {themeMatchPrompt,themeMatchPayload,themeMatchJson,parseThemeMatches,themeMatchOutputTokens,themeMatchModel,themeMatchEffort} from '../lib/reader-theme-match.ts';
 import {choicesJson,storyDraftJson,suggestionSystemPrompt,draftInstructions,imagePrompt,imageTypes,mediaType,storySource} from '../lib/reader-generation-contract.ts';
 import {artRecommendationJson,artRecommendationSchema,selectedArtRecommendationPrompt,selectedArtRecommendationPayload} from '../lib/reader-art-recommendation.ts';
 import {frameRecommendationOutputSchema,frameRecommendationOutputJson,frameRecommendationPrompt,frameRecommendationPayload} from '../lib/reader-frame-recommendation.ts';
@@ -24,7 +25,7 @@ import {imageDimensions,imageRequestSize} from '../lib/reader-image-dimensions.t
 import {readerStoryboardTimeoutMs} from '../lib/reader-limits.ts';
 
 const base='https://api.openai.com/v1';
-export class OpenAIError extends Error{status:number;constructor(code:string,status=502){super(code);this.status=status;}}
+export class OpenAIError extends Error{usage?:unknown;model?:string;status:number;constructor(code:string,status=502){super(code);this.status=status;}}
 // Responses strict schemas require every property. Nullable optional properties are restored before Zod validation.
 export function strictOpenAISchema(input:unknown):any{
  if(!input||typeof input!=='object')return input;
@@ -66,12 +67,13 @@ export function createOpenAIProvider(variables:Record<string,string|undefined>,m
  }
  async function text(instructions:string,payload:unknown,schema:unknown,effort:ReasoningEffort,maxOutputTokens=8192,requestedModel=models.text){
   const {value,requestId}=await request('/responses',{model:requestedModel,instructions,input:[{role:'user',content:JSON.stringify(payload)}],reasoning:{effort},text:{format:{type:'json_schema',name:'story_result',strict:true,schema:strictOpenAISchema(schema)}},max_output_tokens:maxOutputTokens,store:false});
-  if(requestedModel===themeMatchModel&&value.model&&value.model!==requestedModel)throw new OpenAIError('MODEL_UNAVAILABLE');
-  if(value.status!=='completed')throw new OpenAIError('INCOMPLETE_RESPONSE');
+  const fail=(code:string)=>Object.assign(new OpenAIError(code),{usage:value.usage,model:value.model});
+  if(requestedModel===themeMatchModel&&value.model&&value.model!==requestedModel)throw fail('MODEL_UNAVAILABLE');
+  if(value.status!=='completed')throw fail('INCOMPLETE_RESPONSE');
   const content=(value.output||[]).filter((item:any)=>item.type==='message').flatMap((item:any)=>item.content||[]);
-  if(content.some((item:any)=>item.type==='refusal'))throw new OpenAIError('REFUSED');
+  if(content.some((item:any)=>item.type==='refusal'))throw fail('REFUSED');
   const output=content.filter((item:any)=>item.type==='output_text').map((item:any)=>item.text).join('');
-  let parsed;try{parsed=JSON.parse(output);}catch{throw new OpenAIError('INVALID_OUTPUT');}
+  let parsed;try{parsed=JSON.parse(output);}catch{throw fail('INVALID_OUTPUT');}
   return {value:restoreOptional(parsed,schema),model:value.model||requestedModel,requestId:value.id||requestId,usage:value.usage||null,reasoningEffort:effort};
  }
  function book(selection:Parameters<ReaderProvider['suggestions']>[0]){
@@ -81,13 +83,18 @@ export function createOpenAIProvider(variables:Record<string,string|undefined>,m
   async status(){return {configured:!!key,provider:'openai',models,voiceEnabled:false,taskReasoningEfforts:reasoning,themeMatching:{model:themeMatchModel,reasoningEffort:themeMatchEffort}};},
   async suggestions(selection,excluded,localBook,reading){
    const scanning=localBook?.purpose==='scan'||localBook?.purpose==='catalog';
-   const result=await text(localBook?localReadingPrompt(localBook):suggestionSystemPrompt,localSuggestionPayload(book(selection),selection.theme,excluded,localBook,reading?.maxStories),localBook?.purpose==='catalog'?localCatalogOutputJson(localBook):scanning?localScanJson:localBook?localChoicesJson:choicesJson,reasoning.suggest,scanning?10000:localBook?5000:2500);
-   const batch=localBook?localChoices(result.value,localBook):suggestionBatchSchema.parse(result.value),fresh=scanning?batch:freshSuggestions(batch,excluded);
-   return reading?.maxStories?{...fresh,stories:fresh.stories.slice(0,reading.maxStories)}:fresh;
+   const run=async(report:(meta:{model?:string;usage?:unknown;acceptedCount?:number})=>void)=>{
+    const result=await text(localBook?localReadingPrompt(localBook):suggestionSystemPrompt,localSuggestionPayload(book(selection),selection.theme,excluded,localBook,reading?.maxStories),localBook?.purpose==='catalog'?localCatalogOutputJson(localBook):scanning?localScanJson:localBook?localChoicesJson:choicesJson,reasoning.suggest,localBook?.purpose==='catalog'?localCatalogOutputTokens(localBook.scan?.maxStories||1):scanning?10000:localBook?5000:2500);
+    report(result);const batch=localBook?localChoices(result.value,localBook):suggestionBatchSchema.parse(result.value),fresh=scanning?batch:freshSuggestions(batch,excluded);report({acceptedCount:fresh.stories.length});
+    return reading?.maxStories?{...fresh,stories:fresh.stories.slice(0,reading.maxStories)}:fresh;
+   };
+   return localBook?.purpose==='catalog'?discoveryCall({stage:'extraction',provider:'openai',model:models.text,effort:reasoning.suggest,requestedCount:localBook.scan?.maxStories||1},reading,run):run(()=>{});
   },
-  async matchStories(theme,stories){
-   const result=await text(themeMatchPrompt,themeMatchPayload(theme,stories),themeMatchJson,themeMatchEffort,themeMatchOutputTokens(stories.length),themeMatchModel);
-   return themeMatchesSchema.parse(result.value);
+  async matchStories(theme,stories,context){
+   return discoveryCall({stage:'matching',provider:'openai',model:themeMatchModel,effort:themeMatchEffort,requestedCount:stories.length},context,async report=>{
+    const result=await text(themeMatchPrompt,themeMatchPayload(theme,stories),themeMatchJson,themeMatchEffort,themeMatchOutputTokens(stories.length),themeMatchModel);report(result);
+    const parsed=parseThemeMatches(result.value,stories);report({acceptedCount:parsed.matches.length});return parsed;
+   });
   },
   async recommendArt(selection,original){
    if(!original?.localSource)throw new ReaderError(400,'请先选择已核对出处的故事。');

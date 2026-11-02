@@ -10,7 +10,7 @@ import {readerStoryboardTimeoutMs} from '../lib/reader-limits.ts';
 import type {CodexReasoningEffort} from '../lib/codex-settings.ts';
 export {codexEnvironment} from '../scripts/codex-env.mjs';
 
-export class CodexError extends Error {constructor(code:string){super(code);this.name='CodexError';}}
+export class CodexError extends Error {inferenceStarted?:boolean;usage?:unknown;constructor(code:string){super(code);this.name='CodexError';}}
 export type CodexJob={model?:string;prompt:string;instructions:string;schema?:unknown;image?:{bytes:Uint8Array;contentType:string};generateImage?:boolean;timeoutMs?:number;reasoningEffort?:CodexReasoningEffort};
 export type CodexResult={text:string;image:string|null;model:string;requestId:string;usage:unknown;reasoningEffort?:string};
 export interface CodexRunner {status():Promise<{configured:boolean;reason?:string;model?:string}>;run(job:CodexJob):Promise<CodexResult>}
@@ -43,11 +43,11 @@ export function createCodexRunner(variables:Record<string,string|undefined>,opti
   const effort=selected.data;
   const directory=await mkdtemp(path.join(tmpdir(),'shiqu-codex-'));
   let child:ReturnType<typeof spawn>|undefined,timer:ReturnType<typeof setTimeout>|undefined;
-  let failure:(error:Error)=>void=()=>{},sequence=0,closed=false,bytes=0;
+  let failure:(error:Error)=>void=()=>{},sequence=0,closed=false,bytes=0,inferenceStarted=false;let callUsage:unknown=null;
   const pending=new Map<number,{resolve:(value:any)=>void;reject:(error:Error)=>void}>();
   const env=codexEnvironment(variables.SHIQU_CODEX_HOME,options.environment);
   function kill(){if(child)killChild(child);}
-  function fail(error:Error){if(closed)return;closed=true;failure(error);for(const p of pending.values())p.reject(error);pending.clear();kill();}
+  function fail(error:Error){if(closed)return;if(error instanceof CodexError){error.inferenceStarted=inferenceStarted;error.usage=callUsage;}closed=true;failure(error);for(const p of pending.values())p.reject(error);pending.clear();kill();}
   let lines:ReturnType<typeof createInterface>|undefined,exited:Promise<void>|undefined;
   if(process.platform==='win32'){await rm(directory,{recursive:true,force:true});throw new CodexError('UNSUPPORTED_PLATFORM');}
   try{
@@ -73,7 +73,8 @@ export function createCodexRunner(variables:Record<string,string|undefined>,opti
       return;
      }
      if(message.params?.threadId&&message.params.threadId!==threadId)return;
-     if(message.method==='thread/tokenUsage/updated')usage=message.params.tokenUsage?.last;
+     if(message.method==='turn/started')inferenceStarted=true;
+     if(message.method==='thread/tokenUsage/updated')callUsage=usage=message.params.tokenUsage?.last;
      if(message.method==='item/started'||message.method==='item/completed'){
       const item=message.params.item;
       if(['commandExecution','fileChange','mcpToolCall','dynamicToolCall','webSearch','imageView','collabAgentToolCall'].includes(item?.type)){fail(new CodexError('UNEXPECTED_TOOL'));return;}

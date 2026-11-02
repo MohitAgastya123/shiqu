@@ -1,4 +1,5 @@
 // Select a complete provider explicitly; subscription mode never falls back to API billing.
+import {discoveryCall} from '../lib/reader-discovery-call.ts';
 import {normalizeProductionPrompt,storyEditorialContext} from '../lib/reader-prompts.ts';
 import {verifiedOriginalPayload} from '../lib/reader-source-types.ts';
 import {assertStoryBriefReady} from '../lib/reader-story-brief.ts';
@@ -16,7 +17,7 @@ import type {ReaderProvider,ProviderStatus} from '../lib/reader-provider.ts';
 import {CodexError,createCodexRunner} from './codex-runner.ts';
 import type {CodexRunner} from './codex-runner.ts';
 import {localChoicesJson,localScanJson,localCatalogOutputJson,localChoices,localReadingPrompt,localSuggestionPayload} from '../lib/reader-local-contract.ts';
-import {themeMatchPrompt,themeMatchPayload,themeMatchJson,themeMatchesSchema,themeMatchModel,themeMatchEffort} from '../lib/reader-theme-match.ts';
+import {themeMatchPrompt,themeMatchPayload,themeMatchJson,parseThemeMatches,themeMatchModel,themeMatchEffort} from '../lib/reader-theme-match.ts';
 import {readerImageAsset,referenceImageKey} from '../lib/reader-image-assets.ts';
 import {imageDimensions} from '../lib/reader-image-dimensions.ts';
 import {storyboardGenerator} from '../lib/reader-storyboard.ts';
@@ -47,7 +48,7 @@ export function createReaderProvider(variables:Record<string,string|undefined>,m
  const taskReasoningEfforts=configuredTaskReasoning(variables);
  if(name==='gemini'){
   const key=variables.GEMINI_API_KEY?.trim()||'',models=configuredModels(variables);
-  return {async status(){return {configured:!!key,provider:'gemini',models,voiceEnabled:false,taskReasoningEfforts,themeMatching:{model:models.text,reasoningEffort:themeMatchEffort}};},suggestions:(selection,excluded,localBook,reading)=>suggestStories(key,selection,models,transport,excluded,localBook,taskReasoningEfforts,reading?.maxStories),matchStories:(theme,stories)=>matchStoryThemes(key,theme,stories,models,transport),async recommendArt(selection,original){if(!original?.localSource)throw new ReaderError(400,'请先选择已核对出处的故事。');return recommendStoryArt(key,selection,original,models,transport,taskReasoningEfforts);},generator:()=>makeGenerator(key,media,models,transport,taskReasoningEfforts),safeError:safeGeminiError};
+  return {async status(){return {configured:!!key,provider:'gemini',models,voiceEnabled:false,taskReasoningEfforts,themeMatching:{model:models.text,reasoningEffort:themeMatchEffort}};},suggestions:(selection,excluded,localBook,reading)=>suggestStories(key,selection,models,transport,excluded,localBook,taskReasoningEfforts,reading?.maxStories,reading),matchStories:(theme,stories,context)=>matchStoryThemes(key,theme,stories,models,transport,context),async recommendArt(selection,original){if(!original?.localSource)throw new ReaderError(400,'请先选择已核对出处的故事。');return recommendStoryArt(key,selection,original,models,transport,taskReasoningEfforts);},generator:()=>makeGenerator(key,media,models,transport,taskReasoningEfforts),safeError:safeGeminiError};
  }
  const codex=runner||createCodexRunner(variables),models={text:variables.CODEX_MODEL?.trim()||'codex-default',image:'codex-image-generation'};
  let cached:Promise<ProviderStatus>|undefined,expires=0;
@@ -63,14 +64,20 @@ export function createReaderProvider(variables:Record<string,string|undefined>,m
   },
   async suggestions(selection,excluded,localBook,reading){
    const scanning=localBook?.purpose==='scan'||localBook?.purpose==='catalog';
-   const result=await codex.run({instructions:localBook?localReadingPrompt(localBook):suggestionSystemPrompt,prompt:JSON.stringify(localSuggestionPayload(book(selection),selection.theme,excluded,localBook,reading?.maxStories)),schema:localBook?.purpose==='catalog'?localCatalogOutputJson(localBook):scanning?localScanJson:localBook?localChoicesJson:choicesJson,timeoutMs:localBook?120000:60000,reasoningEffort:taskReasoningEfforts.suggest});
-   const batch=localBook?localChoices(JSON.parse(result.text),localBook):suggestionBatchSchema.parse(JSON.parse(result.text));
-   const fresh=scanning?batch:freshSuggestions(batch,excluded);
-   return reading?.maxStories?{...fresh,stories:fresh.stories.slice(0,reading.maxStories)}:fresh;
+   const run=async(report:(meta:{model?:string;usage?:unknown;acceptedCount?:number})=>void)=>{
+    const result=await codex.run({instructions:localBook?localReadingPrompt(localBook):suggestionSystemPrompt,prompt:JSON.stringify(localSuggestionPayload(book(selection),selection.theme,excluded,localBook,reading?.maxStories)),schema:localBook?.purpose==='catalog'?localCatalogOutputJson(localBook):scanning?localScanJson:localBook?localChoicesJson:choicesJson,timeoutMs:localBook?120000:60000,reasoningEffort:taskReasoningEfforts.suggest});
+    report(result);
+    const batch=localBook?localChoices(JSON.parse(result.text),localBook):suggestionBatchSchema.parse(JSON.parse(result.text));
+    const fresh=scanning?batch:freshSuggestions(batch,excluded);report({acceptedCount:fresh.stories.length});
+    return reading?.maxStories?{...fresh,stories:fresh.stories.slice(0,reading.maxStories)}:fresh;
+   };
+   return localBook?.purpose==='catalog'?discoveryCall({stage:'extraction',provider:'codex',model:models.text,effort:taskReasoningEfforts.suggest,requestedCount:localBook.scan?.maxStories||1},reading,run):run(()=>{});
   },
-  async matchStories(theme,stories){
-   const result=await codex.run({model:themeMatchModel,instructions:themeMatchPrompt,prompt:JSON.stringify(themeMatchPayload(theme,stories)),schema:themeMatchJson,timeoutMs:120000,reasoningEffort:themeMatchEffort});
-   return themeMatchesSchema.parse(JSON.parse(result.text));
+  async matchStories(theme,stories,context){
+   return discoveryCall({stage:'matching',provider:'codex',model:themeMatchModel,effort:themeMatchEffort,requestedCount:stories.length},context,async report=>{
+    const result=await codex.run({model:themeMatchModel,instructions:themeMatchPrompt,prompt:JSON.stringify(themeMatchPayload(theme,stories)),schema:themeMatchJson,timeoutMs:120000,reasoningEffort:themeMatchEffort});report(result);
+    const parsed=parseThemeMatches(JSON.parse(result.text),stories);report({acceptedCount:parsed.matches.length});return parsed;
+   });
   },
   async recommendArt(selection,original){
    if(!original?.localSource)throw new ReaderError(400,'请先选择已核对出处的故事。');

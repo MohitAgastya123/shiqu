@@ -119,3 +119,10 @@ Node24.22.1 / pnpm11.25.0，Git base保持上述提交。探测仅加载仓库�
 其余有界探测通过：九篇假模型fixture当前确为4次提取；32篇真实有效定位样本经临时扩容schema解析成功，输出约1974本地估算token，低于拟定25,600容量；五书旧键/故事ID及两个非硬编码主题的旧判断键均与当前实现一致。容量报告位于`/tmp/shiqu-story-discovery-capacity.json`，原典/短条目清单保存在上述仓库fixture。尚未声称三适配器32篇真实推理容量已验证。
 
 用户已确认保留原文防线：1129条完整覆盖、1072篇各入库一次、57条拒绝按定位/原因核算。已同步REQ/E2E，重新AR后继续SS；不放宽短文或异常字规则。
+
+AR risk: non-low — 付费调度、缓存迁移、并发及阅读位置。
+AR review round: 3; reviewer: reused
+用户确认的1129条核算修正已由同一独立reviewer复核；保留全部原文防线。
+AR passed: no blocking architecture flaws
+
+SS里程碑：`fe2d25c`保留有效缓存/跨章部分结果；新增3项针对性用例通过。后续核心调度/回执/分块/评测实现的typecheck与23项新/适配器定向用例通过（`/tmp/shiqu-discovery-milestone.log`）。旧整批失败、续4和两章断言仍待按新REQ更新并执行完整回归，不作为已通过。未调用真实模型、未打包、未改用户库。

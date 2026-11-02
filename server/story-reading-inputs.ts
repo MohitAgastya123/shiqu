@@ -36,12 +36,12 @@ export function buildReadingPlan(book:LocalBook,provider:string,limits=defaultRe
  const flush=()=>{if(rows.length){const text=render(rows),tokens=readingTokens(text,provider);if(tokens>limits.chapter)throw Error('Reading block exceeded budget');blocks.push({ranges:ranges(rows),tokens});rows=[];size=0;}};
  for(const section of book.sections){
   const sectionRows=section.units.map(unit=>({section,unit})),tokens=readingTokens(render(sectionRows),provider);
-  if(tokens<=limits.chapter){if(rows.length&&(size+tokens+10>limits.chapter||new Set(rows.map(r=>r.section.id)).size>=2))flush();rows.push(...sectionRows);size+=tokens+10;}
+  if(tokens<=limits.chapter){if(rows.length&&(size+tokens+10>limits.chapter))flush();rows.push(...sectionRows);size+=tokens+10;}
   else {flush();for(const row of sectionRows){const tokens=readingTokens(render([row]),provider)+10;if(tokens>limits.chapter)throw Error('Single source unit exceeds reading budget');if(size+tokens>limits.chapter)flush();rows.push(row);size+=tokens;}}
  }
  flush();return {mode:'chapters',blocks};
 }
-export function readingPlanKey(book:LocalBook,provider:string,limits=defaultReadingLimits){return discoveryHash(['reading-plan-v3',book.id,book.edition,discoveryHash(book.input.text),provider,limits,localReadingPrompt({...book.input,purpose:'scan'}),localScanJson]);}
+export function readingPlanKey(book:LocalBook,provider:string,limits=defaultReadingLimits){return discoveryHash(['reading-plan-v4',book.id,book.edition,discoveryHash(book.input.text),provider,limits,localReadingPrompt({...book.input,purpose:'scan'}),localScanJson]);}
 export function legacyReadingPlanKey(book:LocalBook,provider:string,limits=legacyReadingLimits){return discoveryHash(['reading-plan-v2',book.id,book.edition,discoveryHash(book.input.text),provider,limits,legacyLocalReadingPrompt({...book.input,purpose:'scan'}),legacyLocalScanJson]);}
 export async function readingPlan(book:LocalBook,provider:string,cache:StoryDiscoveryCache,limits=defaultReadingLimits){
  const key=`${readingPlanKey(book,provider,limits)}/blocks`;

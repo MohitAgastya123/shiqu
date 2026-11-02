@@ -3,7 +3,10 @@
 // Binary theme receipts read originals; old catalog ranges resume without generating summaries.
 // Complete events may share background; structural novelty is checked before admission, not display.
 import {z} from 'zod';
-import {localSourceSchema,localSourceKey,localReadingPrompt,localCatalogJson,legacyLocalReadingPrompt,legacyLocalScanJson,localChapterStoriesPrompt} from '../lib/reader-local-contract.ts';
+import {randomUUID} from 'node:crypto';
+import {previousReadingPlanKey,previousDiscoveryNamespace,previousSummaryNamespace} from './story-discovery-legacy.ts';
+import {discoveryMeasurement} from './story-discovery-metrics.ts';
+import {localSourceSchema,localSourceKey,localReadingPrompt,localCatalogJson,legacyLocalReadingPrompt,legacyLocalScanJson,localChapterStoriesPrompt,catalogStoryLimit} from '../lib/reader-local-contract.ts';
 import type {LocalSourceReference,PendingEvent,WholeBookInput} from '../lib/reader-local-contract.ts';
 import {suggestionBatchSchema,titleKey} from '../lib/reader-suggestions.ts';
 import type {SuggestionBatch} from '../lib/reader-suggestions.ts';
@@ -13,19 +16,17 @@ import type {ReaderProvider} from '../lib/reader-provider.ts';
 import type {LocalBook,LocalBooks} from './local-books.ts';
 import {StoryDiscoveryCache,discoveryHash} from './story-discovery-cache.ts';
 import type {ReadingObserver} from './story-discovery-cache.ts';
-import {readingPlan,readingPlanKey,defaultReadingLimits,legacyReadingPlanKey} from './story-reading-inputs.ts';
+import {readingPlan,readingPlanKey,manifestSchema,hydrateReadingPlan,defaultReadingLimits,legacyReadingPlanKey} from './story-reading-inputs.ts';
 import type {ReadingLimits,ReadingBlock} from './story-reading-inputs.ts';
 import {requestTokens} from './story-token-budget.ts';
 import {sourceUnitIds,sourcesOverlap,sourceCovers,mergeSources} from './local-source-ranges.ts';
-import {themeMatchBatchSize} from '../lib/reader-theme-match.ts';
-import {matchLibraryStories} from './story-theme-matching.ts';
-import {legacySummaryCatalogPrompt,legacySummaryCatalogJson} from '../lib/reader-legacy-catalog.ts';
+import {matchLibraryStories,hasUnknownJudgments} from './story-theme-matching.ts';
 
 const storySchema=suggestionBatchSchema.shape.stories.element.omit({storyBrief:true,matchReason:true}).extend({source:localSourceSchema,continuedFrom:z.array(localSourceSchema).min(1).max(16).optional()});
 type Story=z.infer<typeof storySchema>;
 const pendingSchema=z.object({id:z.string().min(1).max(64),title:z.string().min(1).max(100),source:localSourceSchema});
 const rejectionSchema=z.object({code:z.enum(['duplicate','no-new-evidence','invalid-source','no-progress','pending-resolution']),title:z.string().max(100).optional(),source:localSourceSchema.optional()});
-const stateSchema=z.object({stories:z.array(storySchema).max(50000),cursor:z.number().int().min(0),readThrough:z.number().int().min(0),pendingEvents:z.array(pendingSchema).max(16),exhausted:z.boolean(),rejected:z.boolean(),lastRejection:rejectionSchema.optional()});
+const stateSchema=z.object({stories:z.array(storySchema).max(50000),cursor:z.number().int().min(0),readThrough:z.number().int().min(0),pendingEvents:z.array(pendingSchema).max(16),exhausted:z.boolean(),rejected:z.boolean(),lastRejection:rejectionSchema.optional(),overlapDiagnostics:z.array(z.object({source:localSourceSchema,other:localSourceSchema,ratio:z.number().min(0).max(1)})).max(32).optional()});
 const stateEnvelope=stateSchema.extend({stories:z.array(z.unknown()).max(50000),pendingEvents:z.array(z.unknown()).max(16)});
 type State=z.infer<typeof stateSchema>;
 type Rejection=z.infer<typeof rejectionSchema>;
@@ -42,11 +43,9 @@ function rejectedStory(code:Rejection['code'],raw:unknown):Rejection{
  return {code,...(typeof value?.title==='string'?{title:value.title.slice(0,100)}:{}),...(source.success?{source:source.data}:{})};
 }
 export function discoveryNamespace(book:LocalBook,provider:string,model:string,limits=defaultReadingLimits,effort?:string){
- return discoveryHash(['story-library-v1',readingPlanKey(book,provider,limits),model,localReadingPrompt({...book.input,purpose:'catalog'}),localCatalogJson,...(effort?[effort]:[])]);
+ return discoveryHash(['story-library-v2',readingPlanKey(book,provider,limits),model,localReadingPrompt({...book.input,purpose:'catalog'}),localCatalogJson,...(effort?[effort]:[])]);
 }
-export function legacySummaryDiscoveryNamespace(book:LocalBook,provider:string,model:string,limits=defaultReadingLimits,effort?:string){
- return discoveryHash(['story-library-v1',readingPlanKey(book,provider,limits),model,legacySummaryCatalogPrompt,legacySummaryCatalogJson,...(effort?[effort]:[])]);
-}
+export const legacySummaryDiscoveryNamespace=previousSummaryNamespace;
 export function legacyDiscoveryNamespace(book:LocalBook,provider:string,model:string){
  return discoveryHash(['direct-reading-v2',legacyReadingPlanKey(book,provider),model,legacyLocalReadingPrompt({...book.input,purpose:'scan'}),legacyLocalScanJson]);
 }
@@ -77,11 +76,13 @@ function mergePending(books:LocalBooks,book:LocalBook,old:PendingEvent[],updates
  return [...result.values()];
 }
 export async function discoverLocalStories(provider:ReaderProvider,books:LocalBooks,cache:StoryDiscoveryCache,book:LocalBook,selection:Selection,excluded:string[],observer?:ReadingObserver,excludedSources:LocalSourceReference[]=[],limits:ReadingLimits=defaultReadingLimits):Promise<SuggestionBatch>{
- const batchLimit=observer?.maxStories||5;
+ observer={signal:observer?.signal||new AbortController().signal,onProgress:observer?.onProgress||(()=>{}),...observer,cycleId:observer?.cycleId||randomUUID()};
+ const batchLimit=observer.maxStories||4;
  const status=await provider.status(),plan=await readingPlan(book,status.provider,cache,limits);
  const chapterStories=!!selection.discoverySources;
  const scope=selection.discoverySources?'/scope/'+discoveryHash(selection.discoverySources.map(localSourceKey))+'/main-first/'+discoveryHash(localChapterStoriesPrompt):'';
  const namespace=discoveryNamespace(book,status.provider,status.models.text,limits,status.taskReasoningEfforts?.suggest)+scope;
+ const oldNamespace=previousDiscoveryNamespace(book,status.provider,status.models.text,limits,status.taskReasoningEfforts?.suggest)+scope;
  const legacyNamespace=legacySummaryDiscoveryNamespace(book,status.provider,status.models.text,limits,status.taskReasoningEfforts?.suggest)+scope;
  const theme=selection.theme.normalize('NFKC').trim(),key=namespace+'/library';
  const totalChars=plan.blocks.reduce((n,block)=>n+block.chars,0),excludedKeys=new Set(excludedSources.length?[]:excluded.map(titleKey));
@@ -98,10 +99,11 @@ export async function discoverLocalStories(provider:ReaderProvider,books:LocalBo
   }
   return shown;
  };
- const validate=(state:Pick<State,'cursor'|'readThrough'|'exhausted'>)=>{
-  if(state.cursor>plan.blocks.length||state.readThrough>plan.blocks.length||state.readThrough<state.cursor||state.readThrough>state.cursor+1||state.exhausted!==(state.cursor===plan.blocks.length))return false;
+ const validFor=(state:Pick<State,'cursor'|'readThrough'|'exhausted'>,length:number)=>{
+  if(state.cursor>length||state.readThrough>length||state.readThrough<state.cursor||state.readThrough>state.cursor+1||state.exhausted!==(state.cursor===length))return false;
   return true;
  };
+ const validate=(state:Pick<State,'cursor'|'readThrough'|'exhausted'>)=>validFor(state,plan.blocks.length);
  const restore=(raw:z.infer<typeof stateEnvelope>):State=>{
   const stories:Story[]=[],pendingEvents:PendingEvent[]=[],ids=new Set<string>();
   for(const item of raw.stories)try{
@@ -146,21 +148,32 @@ export async function discoverLocalStories(provider:ReaderProvider,books:LocalBo
  // Migrate under the extraction lock; never let a late legacy read overwrite new progress.
  if(!await cache.read(key,stateEnvelope,validate))await cache.shared(key,observer,async()=>{
   if(await cache.read(key,stateEnvelope,validate))return;
-  const previous=await cache.read(legacyNamespace+'/library',stateEnvelope,validate);
-  if(previous)await cache.write(key,restore(previous));
+  const manifest=await cache.read(previousReadingPlanKey(book,status.provider,limits)+'/blocks',manifestSchema,value=>{hydrateReadingPlan(book,value);return true;});
+  if(!manifest)return;
+  const oldBlocks=hydrateReadingPlan(book,manifest);
+  for(const oldKey of [oldNamespace,legacyNamespace]){
+   const previous=await cache.read(oldKey+'/library',stateEnvelope,value=>validFor(value,oldBlocks.length));if(!previous)continue;
+   const completed=new Set(oldBlocks.slice(0,previous.cursor).flatMap(block=>[...block.visible]));
+   let cursor=0;while(cursor<plan.blocks.length&&[...plan.blocks[cursor].visible].every(id=>completed.has(id)))cursor++;
+   await cache.write(key,{...restore(previous),cursor,readThrough:cursor,exhausted:cursor===plan.blocks.length});break;
+  }
  });
- const response=(state:State,stories:Story[],hit:boolean):SuggestionBatch=>{
-  const note=(hit?'已复用本地故事库及主题判断缓存。':chapterStories?'已按先总故事、后小故事的顺序收录，再匹配主题。':'已逐篇收录原文故事并匹配主题。')+(state.rejected?'部分返回出处未能完整核对，已保留当前进度，可继续重试。':'')+(!stories.length&&state.exhausted?'已检查完所给原文，暂时没有更多符合主题的故事。':'')+(state.exhausted&&state.pendingEvents.length?'部分跨章线索尚未确认完整，未作为故事推荐。':'');
+ const measurement=await discoveryMeasurement(cache,observer.cycleId!,!(await read()).stories.length);
+ const existingCall=observer.onCall;observer.onCall=event=>{measurement.call(event);existingCall?.(event);};
+ const response=async(state:State,stories:Story[],hit:boolean):Promise<SuggestionBatch>=>{
+  const unknown=await hasUnknownJudgments(provider,cache,book.id,theme,state.stories,status.provider);
+  await measurement.finish(stories.length?'matched':unknown?'incomplete':'none');
+  const note=(hit?'已复用本地故事库及主题判断缓存。':chapterStories?'已按先总故事、后小故事的顺序收录，再匹配主题。':'已逐篇收录原文故事并匹配主题。')+(state.rejected?'部分返回出处未能完整核对，已保留当前进度，可继续重试。':'')+(!stories.length&&state.exhausted?(unknown?'原文已读完，但有未能判断的故事，主题检查尚不完整。':'已检查完所给原文，暂时没有更多符合主题的故事。'):'')+(state.exhausted&&state.pendingEvents.length?'部分跨章线索尚未确认完整，未作为故事推荐。':'');
   // Discovery returns ranges and a short match reason; preparation creates the synopsis after selection.
   return suggestionBatchSchema.parse({stories:stories.slice(0,batchLimit),note:note.slice(0,300)});
  };
  const extraction:Selection={bookId:selection.bookId,...(selection.bookId==='other'?{customBook:book.title}:{}),theme:'',artStyle:'ink-pencil',productionPrompt:'',length:'auto',voice:false};
  let hit=true;
- while(true){
+ try{while(true){
   observer?.signal.throwIfAborted();
   const saved=await read(),candidates=visibleStories(saved.stories);
   if(candidates.length)progress(saved,'selecting');
-  const matched=await matchLibraryStories(provider,cache,namespace,theme,candidates,story=>books.resolve(book,story.source).text,limits.whole,status.provider,observer);
+  const matched=await matchLibraryStories(provider,cache,namespace,theme,candidates,story=>books.resolve(book,story.source).text,limits.whole,status.provider,observer,{bookId:book.id,legacyNamespaces:[oldNamespace],retryUnknown:saved.exhausted,context:observer});
   if(matched.length||saved.exhausted)return response(saved,matched,hit);
   const baseline=saved.stories.length;
   await cache.shared(key,observer,async reading=>{
@@ -168,20 +181,22 @@ export async function discoverLocalStories(provider:ReaderProvider,books:LocalBo
    // A simultaneous theme may already have extended the shared library while matching ran.
    while(current.stories.length<=baseline&&!current.exhausted){
     reading.signal.throwIfAborted();
-    const {input,titles,visible}=scanRequest(current,current.cursor,current.stories.length?themeMatchBatchSize:1);
+    const {input,titles,visible}=scanRequest(current,current.cursor,current.stories.length?catalogStoryLimit:1);
     if(requestTokens(input,'',titles,status.provider)>limits.whole)throw new ReaderError(502,'跨章原文或已入库记录超过本次输入预算，故事库和进度已保留，请缩小章节范围。');
-    const result=await provider.suggestions(extraction,titles,input);
+    const result=await provider.suggestions(extraction,titles,input,{...reading,maxStories:undefined});
     progress(current,'checking',reading);
     if(result.stories.length>input.scan!.maxStories)throw failed();
     if(!result.scan||!Array.isArray(result.scan.pendingEvents)||!Array.isArray(result.scan.resolvedEventIds))throw failed();
-    const accepted:Story[]=[],rejections:Rejection[]=[],initialCovered=new Set(current.stories.flatMap(story=>sourceUnitIds(book,story.source))),covered=new Set(initialCovered);
+    const overlapDiagnostics:NonNullable<State['overlapDiagnostics']>=[],accepted:Story[]=[],rejections:Rejection[]=[],initialCovered=new Set(current.stories.flatMap(story=>sourceUnitIds(book,story.source))),covered=new Set(initialCovered);
     for(const raw of result.stories){
      try{
       const parsed=storySchema.omit({continuedFrom:true}).parse(raw);qualified(books,book,parsed.source,visible);
       const continuedFrom=current.pendingEvents.filter(event=>result.scan!.resolvedEventIds.includes(event.id)&&sourceCovers(book,parsed.source,event.source)).map(event=>event.source);
       const story:Story={...parsed,...(continuedFrom.length?{continuedFrom}:{})},known=[...current.stories,...accepted];
       if(known.some(other=>duplicate(other,story))){rejections.push(rejectedStory('duplicate',raw));continue;}
-      const units=sourceUnitIds(book,story.source),fresh=units.some(id=>!covered.has(id)),nested=known.some(other=>sourceCovers(book,other.source,story.source));
+      const storyUnits=sourceUnitIds(book,story.source);
+      for(const other of known){if(!crossing(other.source,story.source))continue;const otherUnits=sourceUnitIds(book,other.source),set=new Set(otherUnits),ratio=storyUnits.filter(id=>set.has(id)).length/Math.min(storyUnits.length,otherUnits.length);if(ratio>.8&&overlapDiagnostics.length<32)overlapDiagnostics.push({source:story.source,other:other.source,ratio});}
+      const units=storyUnits,fresh=units.some(id=>!covered.has(id)),nested=known.some(other=>sourceCovers(book,other.source,story.source));
       if(known.some(other=>crossing(other.source,story.source))&&!fresh&&!nested&&!continuedFrom.length){rejections.push(rejectedStory('no-new-evidence',raw));continue;}
       accepted.push({...story,sourceLabel:books.resolve(book,story.source).title.slice(0,150)});for(const id of units)covered.add(id);
      }catch{rejections.push(rejectedStory('invalid-source',raw));}
@@ -191,25 +206,22 @@ export async function discoverLocalStories(provider:ReaderProvider,books:LocalBo
     catch{
      const independent=accepted.filter(story=>!story.continuedFrom?.length||sourceUnitIds(book,story.source).some(id=>!initialCovered.has(id)));
      const lastRejection={code:'pending-resolution' as const};
-     await cache.write(key,{...current,stories:[...current.stories,...independent],lastRejection});
-     if(independent.length)break;
+     await cache.write(key,{...current,stories:[...current.stories,...independent.map(({continuedFrom,...story})=>{void continuedFrom;return story;})],lastRejection});
+     if(independent.length){await measurement.stored();break;}
      throw new ReaderError(502,rejectionMessage(lastRejection));
     }
     const rejected=!!rejections.length,lastRejection=rejections[0]||(!accepted.length&&!result.scan.blockComplete?{code:'no-progress' as const}:undefined);
-    const next:State={...current,stories:[...current.stories,...accepted],pendingEvents:pending,rejected,lastRejection};
+    const next:State={...current,stories:[...current.stories,...accepted],pendingEvents:pending,rejected,lastRejection,overlapDiagnostics};
     // A full response is not proof that all stories in this block have been catalogued.
     if(rejections.every(reason=>reason.code==='duplicate')&&result.stories.length<input.scan!.maxStories&&result.scan.blockComplete)next.cursor++;
     next.readThrough=next.cursor;next.exhausted=next.cursor===plan.blocks.length;
-    if(!next.exhausted&&next.pendingEvents.length){
-     const upcoming=scanRequest(next,next.cursor);
-     if(requestTokens(upcoming.input,'',upcoming.titles,status.provider)>limits.whole)throw new ReaderError(502,'跨章上下文超过输入预算，旧故事库和进度已保留，请缩小章节范围。');
-    }
     const advanced=next.cursor>current.cursor||pending.length<current.pendingEvents.length;
-    await cache.write(key,next);current=next;progress(current,'reading',reading);
+    await cache.write(key,next);if(accepted.length)await measurement.stored();current=next;progress(current,'reading',reading);
     if(reading.signal.aborted)break;
     if(!accepted.length&&lastRejection&&!advanced)throw new ReaderError(502,rejectionMessage(lastRejection));
    }
   });
   hit=false;
  }
+ }catch(error){await measurement.finish(observer.signal.aborted?'cancelled':'failed');throw error;}
 }

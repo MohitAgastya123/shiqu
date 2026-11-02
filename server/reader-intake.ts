@@ -21,7 +21,7 @@ export async function createIntake(repo:ReaderRepository,id:string,uid:string,in
  const choice=input.source?await directBookChoice(books!,input):null;
  const selection=selectionSchema.parse({...input,storyTitle:choice?.entry.title,source:choice?.entry.source,discoverySources:scope?.discoverySources,length:'auto',narrativeDetail:input.narrativeDetail||'balanced'});
  if(selection.bookId==='other'&&!selection.customBook?.trim())throw new ReaderError(400,'请先填写书名或 URL。');
- const creationHash=hash(selection),now=new Date().toISOString(),doc:Document={...emptyDocument(),intake:{phase:'discovering',generation:0,creationHash,batches:[],briefRequired:true,search:{round:1,state:'searching'}}};
+ const creationHash=hash(selection),now=new Date().toISOString(),doc:Document={...emptyDocument(),intake:{phase:'discovering',generation:0,creationHash,batches:[],briefRequired:true,search:{round:1,state:'searching',cycleId:id}}};
  if(choice){doc.original=choice.original;doc.intake!.phase='preparing';doc.intake!.search={round:0,state:'idle'};doc.intake!.selected={batch:0,index:0};doc.intake!.batches=[{stories:[{title:choice.entry.title,description:choice.entry.excerpt,source:choice.entry.source,sourceLabel:choice.original.title.slice(0,150)}],note:''}];}
  await repo.db.prepare("INSERT INTO reader_sessions(id,user_id,selection,document,generation_mode,generation_control,state,step_attempts,lock_until,page,saved,created_at,updated_at) VALUES(?,?,?,?,'background','active','idle',0,0,0,0,?,?) ON CONFLICT(id) DO NOTHING")
   .bind(id,uid,JSON.stringify(selection),JSON.stringify(doc),now,now).run();
@@ -36,7 +36,7 @@ async function requestSearch(repo:ReaderRepository,row:SessionRow,doc:Document,r
  if(search.state==='searching'||search.state==='idle'&&search.requestId===requestId)return row;
  if(doc.plan||intake.phase==='confirmed')throw new ReaderError(409,'制作已确认；需要调整时请创建修订版本。');
  if(intake.batches.length>=maxSuggestionBatches)throw new ReaderError(400,'已保存40批候选，请回看选择，或新建其他书籍与主题。');
- const next:IntakeSearch={round:search.round+1,state:'searching',requestId};
+ const next:IntakeSearch={round:search.round+1,state:'searching',requestId,cycleId:automatic?(search.cycleId||hash([row.id,search.round])):requestId};
  await repo.db.prepare(`UPDATE reader_sessions SET document=json_set(document,'$.intake.search',json(?),'$.intake.phase',CASE WHEN json_type(document,'$.intake.selected')='object' THEN json_extract(document,'$.intake.phase') ELSE 'discovering' END),updated_at=?
   WHERE id=? AND user_id=? AND COALESCE(json_extract(document,'$.intake.search.round'),0)=? AND json_extract(document,'$.intake.phase')!='confirmed'${automatic?" AND json_type(document,'$.intake.selected') IS NOT 'object' AND json_extract(document,'$.intake.phase')='choosing' AND json_extract(document,'$.intake.search.state')='idle'":''} AND ${visible}`)
   .bind(JSON.stringify(next),new Date().toISOString(),row.id,row.user_id,search.round).run();

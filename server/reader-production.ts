@@ -371,10 +371,14 @@ export class ReaderProductionCoordinator implements ReaderProduction{
   if(round===undefined||!this.searchCurrent(row,round))return {obsolete:true};
   if(!await this.searchRunnable(row,round))throw new JobYield();
   const doc=JSON.parse(row.document) as Document,intake=doc.intake!,search=intakeSearch(intake),selection=selectionSchema.parse(JSON.parse(row.selection));
+  if(!search.cycleId){
+   search.cycleId=row.id+'-'+round;
+   await this.database.prepare("UPDATE reader_sessions SET document=json_set(document,'$.intake.search.cycleId',?) WHERE id=? AND json_extract(document,'$.intake.search.round')=?").bind(search.cycleId,row.id,round).run();
+  }
   const excluded=intake.batches.flatMap(batch=>batch.stories),titles=excluded.map(story=>story.title),sources=excluded.flatMap(story=>story.source?[story.source]:[]);
   const active:ActiveSearch={round,controller:new AbortController(),startedAt:this.clock()};this.searches.set(row.id,active);
   try{
-   const result=await this.provider.suggestions(selection,titles,undefined,{signal:active.controller.signal,drain:true,maxStories:1,onProgress:progress=>{active.progress=progress;}},sources);
+   const result=await this.provider.suggestions(selection,titles,undefined,{signal:active.controller.signal,drain:true,maxStories:1,cycleId:search.cycleId,onProgress:progress=>{active.progress=progress;}},sources);
    const batch=freshSuggestions(suggestionBatchSchema.parse(result),titles,sources);
    const saved=await this.finishSearch(row.id,row.user_id,round,{...search,state:'idle',error:null},batch);
    return saved?{batches:intake.batches.length+1}:{obsolete:true};

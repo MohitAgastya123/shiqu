@@ -8,7 +8,7 @@ import type {Document,Selection} from './reader-model.ts';
 import {localSourceKey} from './reader-source-key.ts';
 import {storyBriefVerified} from './reader-story-brief.ts';
 import type {SuggestionBatch,SuggestionProgress} from './reader-suggestions.ts';
-export type IntakeSearch={round:number;state:'idle'|'searching'|'failed';error?:string|null;requestId?:string};
+export type IntakeSearch={round:number;state:'idle'|'searching'|'failed';error?:string|null;requestId?:string;cycleId?:string};
 export const setupSettingsSchema=z.object({artStyle:z.enum(artStyleIds),productionPrompt:z.string().max(1200),narrativeDetail:narrativeDetailSchema});
 const productionSettingsSchema=setupSettingsSchema.extend({length:z.number().int().min(readerMinFrames).max(readerMaxFrames)});
 export type IntakeDraft=z.infer<typeof productionSettingsSchema>;

@@ -9,7 +9,7 @@ import {storyBriefSchema} from './reader-story-brief.ts';
 export const suggestionRequestSchema=selectionSchema.extend({excludeTitles:z.array(z.string().min(1).max(100)).max(200).default([]),excludeSources:z.array(localSourceSchema).max(200).default([])});
 export const suggestionBatchSchema=z.object({stories:z.array(z.object({title:z.string().min(1).max(100),description:z.string().min(1).max(180),source:localSourceSchema.optional(),sourceLabel:z.string().max(150).optional(),artRecommendation:artRecommendationSchema.optional(),matchReason:z.string().trim().min(1).max(120).optional(),storyBrief:storyBriefSchema.optional()})).max(5),note:z.string().max(300)});
 export type SuggestionBatch=z.infer<typeof suggestionBatchSchema>;
-export const suggestionProgressSchema=z.object({completed:z.number().int().min(0),total:z.number().int().min(1),completedChars:z.number().int().min(0),totalChars:z.number().int().min(0),stage:z.enum(['reading','checking','selecting']),mode:z.enum(['whole','chapters']).optional(),currentChapters:z.array(z.string().min(1).max(500)).max(2).optional()}).refine(p=>p.completed<=p.total&&p.completedChars<=p.totalChars);
+export const suggestionProgressSchema=z.object({completed:z.number().int().min(0),total:z.number().int().min(1),completedChars:z.number().int().min(0),totalChars:z.number().int().min(0),stage:z.enum(['reading','checking','selecting']),mode:z.enum(['whole','chapters']).optional(),currentChapters:z.array(z.string().min(1).max(500)).max(1024).optional()}).refine(p=>p.completed<=p.total&&p.completedChars<=p.totalChars);
 export type SuggestionProgress=z.infer<typeof suggestionProgressSchema>;
 export function suggestionReadingPercent(progress:SuggestionProgress){return progress.totalChars?Math.floor(progress.completedChars/progress.totalChars*100):null;}
 export const maxSuggestionBatches=40;
@@ -21,3 +21,6 @@ export function freshSuggestions(batch:SuggestionBatch,excluded:string[],exclude
  const note=batch.note||(stories.length===0?'暂时没有更多可确认的故事，可以回看前面的批次，或换个主题。':stories.length<5?'本批可确认的新故事不足 5 篇，先列出这些。':'');
  return {stories,note};
 }
+
+// Keep long multi-chapter reading blocks compact in both discovery status surfaces.
+export const readingChapterLabel=(chapters:string[])=>chapters.length>2?`${chapters[0]}至${chapters.at(-1)}（共${chapters.length}章）`:chapters.join('、');

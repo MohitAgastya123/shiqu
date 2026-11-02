@@ -1,4 +1,6 @@
 // Generate story plans and media through Gemini, preserving safe errors and validated results.
+import {discoveryCall} from './reader-discovery-call.ts';
+import type {DiscoveryContext} from './reader-discovery-call.ts';
 import {normalizeProductionPrompt,storyEditorialContext} from './reader-prompts.ts';
 import {z} from 'zod';
 import {frameRecommendationOutputSchema,frameRecommendationOutputJson,frameRecommendationPrompt,frameRecommendationPayload} from './reader-frame-recommendation.ts';
@@ -12,8 +14,8 @@ import {choicesJson,storyDraftJson,suggestionSystemPrompt,draftInstructions,imag
 export {imageTypes} from './reader-generation-contract.ts';
 import type {ArtStyleId} from './reader-styles.ts';
 import {saveStoryOriginal} from './reader-source-storage.ts';
-import {localChoicesJson,localScanJson,localCatalogOutputJson,localChoices,localReadingPrompt,localSuggestionPayload} from './reader-local-contract.ts';
-import {themeMatchPrompt,themeMatchPayload,themeMatchJson,themeMatchesSchema,themeMatchOutputTokens,themeMatchEffort} from './reader-theme-match.ts';
+import {localChoicesJson,localScanJson,localCatalogOutputJson,localCatalogOutputTokens,localChoices,localReadingPrompt,localSuggestionPayload} from './reader-local-contract.ts';
+import {themeMatchPrompt,themeMatchPayload,themeMatchJson,parseThemeMatches,themeMatchOutputTokens,themeMatchEffort} from './reader-theme-match.ts';
 import type {ThemeStory} from './reader-theme-match.ts';
 import type {WholeBookInput} from './reader-local-contract.ts';
 import {verifiedOriginalPayload} from './reader-source-types.ts';
@@ -96,8 +98,9 @@ function client(key:string,transport:typeof fetch){
    throw new GeminiError('PROVIDER_ERROR',response.status);
   }
   const result=await response.json() as Result,candidate=result.candidates?.[0];
-  if(result.promptFeedback?.blockReason||candidate?.finishReason&&['SAFETY','IMAGE_SAFETY','PROHIBITED_CONTENT','BLOCKLIST','RECITATION'].includes(candidate.finishReason))throw new GeminiError('CONTENT_BLOCKED');
-  if(!candidate||candidate.finishReason&&candidate.finishReason!=='STOP')throw new GeminiError('INCOMPLETE_RESPONSE');
+  const fail=(code:string)=>Object.assign(new GeminiError(code),{usage:result.usageMetadata,model:result.modelVersion||model});
+  if(result.promptFeedback?.blockReason||candidate?.finishReason&&['SAFETY','IMAGE_SAFETY','PROHIBITED_CONTENT','BLOCKLIST','RECITATION'].includes(candidate.finishReason))throw fail('CONTENT_BLOCKED');
+  if(!candidate||candidate.finishReason&&candidate.finishReason!=='STOP')throw fail('INCOMPLETE_RESPONSE');
   return {result,candidate,metadata:{model:result.modelVersion||model,requestId:result.responseId||response.headers.get('x-request-id')||null,usage:result.usageMetadata||null}};
  };
 }
@@ -112,21 +115,27 @@ function parseText(candidate:Candidate){
  if(!value)throw new GeminiError('INVALID_TEXT');
  try{return JSON.parse(value);}catch{throw new GeminiError('INVALID_JSON');}
 }
-export async function suggestStories(key:string,selection:Selection,config:Partial<Models>={},transport:typeof fetch=fetch,excludeTitles:string[]=[],localBook?:WholeBookInput,reasoning:TaskReasoningEfforts=taskReasoningDefaults,maxStories?:1){
+export async function suggestStories(key:string,selection:Selection,config:Partial<Models>={},transport:typeof fetch=fetch,excludeTitles:string[]=[],localBook?:WholeBookInput,reasoning:TaskReasoningEfforts=taskReasoningDefaults,maxStories?:1,context?:DiscoveryContext){
  const models={...defaultModels,...config},{book,url}=source(selection),scanning=localBook?.purpose==='scan'||localBook?.purpose==='catalog';
- const {candidate}=await client(key,transport)(models.text,textRequest(
-  localBook?localReadingPrompt(localBook):suggestionSystemPrompt,
-  localSuggestionPayload(book,selection.theme,excludeTitles,localBook,maxStories),localBook?.purpose==='catalog'?localCatalogOutputJson(localBook):scanning?localScanJson:localBook?localChoicesJson:choicesJson,url,scanning?10000:localBook?5000:2500,reasoning.suggest),localBook?120000:60000);
- if(url&&!wasRead(candidate,url))return {stories:[],note:'暂时无法读取这个链接，请提供可公开访问的原文页面，或直接输入书名。'};
- const batch=localBook?localChoices(parseText(candidate),localBook):choicesSchema.parse(parseText(candidate));
- const fresh=scanning?batch:freshSuggestions(batch,excludeTitles);
- return maxStories?{...fresh,stories:fresh.stories.slice(0,maxStories)}:fresh;
+ const run=async(report:(meta:{model?:string;usage?:unknown;acceptedCount?:number})=>void)=>{
+  const {candidate,metadata}=await client(key,transport)(models.text,textRequest(
+   localBook?localReadingPrompt(localBook):suggestionSystemPrompt,
+   localSuggestionPayload(book,selection.theme,excludeTitles,localBook,maxStories),localBook?.purpose==='catalog'?localCatalogOutputJson(localBook):scanning?localScanJson:localBook?localChoicesJson:choicesJson,url,localBook?.purpose==='catalog'?localCatalogOutputTokens(localBook.scan?.maxStories||1):scanning?10000:localBook?5000:2500,reasoning.suggest),localBook?120000:60000);report(metadata);
+  if(url&&!wasRead(candidate,url))return {stories:[],note:'暂时无法读取这个链接，请提供可公开访问的原文页面，或直接输入书名。'};
+  const batch=localBook?localChoices(parseText(candidate),localBook):choicesSchema.parse(parseText(candidate));
+  const fresh=scanning?batch:freshSuggestions(batch,excludeTitles);report({acceptedCount:fresh.stories.length});
+  return maxStories?{...fresh,stories:fresh.stories.slice(0,maxStories)}:fresh;
+ };
+ return localBook?.purpose==='catalog'?discoveryCall({stage:'extraction',provider:'gemini',model:models.text,effort:reasoning.suggest,requestedCount:localBook.scan?.maxStories||1},context,run):run(()=>{});
 }
-export async function matchStoryThemes(key:string,theme:string,stories:ThemeStory[],config:Partial<Models>={},transport:typeof fetch=fetch){
+export async function matchStoryThemes(key:string,theme:string,stories:ThemeStory[],config:Partial<Models>={},transport:typeof fetch=fetch,context?:DiscoveryContext){
  const models={...defaultModels,...config};
- const {candidate}=await client(key,transport)(models.text,textRequest(themeMatchPrompt,themeMatchPayload(theme,stories),themeMatchJson,'',themeMatchOutputTokens(stories.length),themeMatchEffort),120000);
- return themeMatchesSchema.parse(parseText(candidate));
+ return discoveryCall({stage:'matching',provider:'gemini',model:models.text,effort:themeMatchEffort,requestedCount:stories.length},context,async report=>{
+  const {candidate,metadata}=await client(key,transport)(models.text,textRequest(themeMatchPrompt,themeMatchPayload(theme,stories),themeMatchJson,'',themeMatchOutputTokens(stories.length),themeMatchEffort),120000);report(metadata);
+  const parsed=parseThemeMatches(parseText(candidate),stories);report({acceptedCount:parsed.matches.length});return parsed;
+ });
 }
+
 export async function recommendStoryArt(key:string,selection:Selection,original:OriginalSource,config:Models,transport:typeof fetch,reasoning:TaskReasoningEfforts=taskReasoningDefaults){
  const {candidate}=await client(key,transport)(config.text,textRequest(selectedArtRecommendationPrompt,selectedArtRecommendationPayload(selection,original),artRecommendationJson,'',600,reasoning.art));
  return artRecommendationSchema.parse(parseText(candidate));
