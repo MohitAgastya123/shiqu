@@ -15,7 +15,20 @@ test('range matching is one-to-one and deterministic; merge/split/endpoints are 
  const result=scoreBoundaries(gold,[{id:'merged',units:['1','2','3','4']},{id:'p1',units:['5','6']},{id:'p2',units:['7','8']},{id:'exact',units:['9']},{id:'dup',units:['9']}]);assert.equal(result.exact,1);assert.equal(result.exactRate,.25);assert.equal(result.duplicates,1);assert.equal(result.diagnostics.merged.length,1);assert.equal(result.diagnostics.split.length,1);assert.ok(result.diagnostics.missingStart.length);assert.ok(result.diagnostics.missingEnd.length);assert.deepEqual(result.omitted,[]);
  const shared=scoreBoundaries([{id:'main',units:['1','2','3']},{id:'child',units:['2']}],[{id:'main',units:['1','2','3']},{id:'child',units:['2']}]);assert.equal(shared.exactRate,1);assert.equal(shared.diagnostics.merged.length,0);
 });
-test('shipped annotations cover 40 pairs, three books and three complete chapters, with controlled provenance',async()=>{
+test('shipped annotations cover 44 pairs, four books and three complete chapters, with controlled provenance',async()=>{
  const d=JSON.parse(await readFile('data/evals/story-discovery/annotations.json','utf8')),r=JSON.parse(await readFile('data/evals/story-discovery/controlled.json','utf8'));
- assert.equal(d.samples.length,40);assert.equal(new Set(d.stories.map(s=>s.bookId)).size,3);assert.equal(d.boundaries.length,3);assert.equal(d.annotationStatus,'draft');assert.equal(r.source,'controlled');assert.equal(evaluate(d,r).comparable,true);assert.equal(evaluate(d,null).comparable,false);
+ assert.equal(d.samples.length,44);assert.equal(new Set(d.stories.map(s=>s.bookId)).size,4);assert.equal(d.boundaries.length,3);assert.equal(d.annotationStatus,'draft');assert.equal(r.source,'controlled');assert.equal(evaluate(d,r).comparable,true);assert.equal(evaluate(d,null).comparable,false);
+});
+
+// Check the shipped shared-background examples against real edition-bound source units.
+import {LocalBooks} from '../server/local-books.ts';
+import {sourceUnitIds} from '../server/local-source-ranges.ts';
+test('shipped distinct complete events share verified background without sharing their outcomes',async()=>{
+ const d=JSON.parse(await readFile('data/evals/story-discovery/annotations.json','utf8')),books=new LocalBooks(process.cwd());
+ for(const group of d.sharedBackgroundEvents){const stories=group.storyIds.map(id=>d.stories.find(s=>s.id===id)),book=await books.book({bookId:stories[0].bookId});
+  for(const story of stories){assert.equal(story.edition,book.edition);assert.equal(books.resolve(book,story.source).text,story.text);}
+  const [a,b]=stories.map(s=>sourceUnitIds(book,s.source));assert.deepEqual(a.filter(id=>b.includes(id)),group.sharedUnits);assert.ok(group.sharedUnits.length);assert.ok(a.some(id=>!b.includes(id)));assert.ok(b.some(id=>!a.includes(id)));
+  assert.match(stories[0].text,/正室夫人/);assert.match(stories[1].text,/五十兩白銀/);assert.doesNotMatch(stories[1].text,/正室夫人/);
+  const themes=new Set(d.samples.filter(s=>group.storyIds.includes(s.storyId)).map(s=>s.theme));for(const theme of themes){const labels=d.samples.filter(s=>group.storyIds.includes(s.storyId)&&s.theme===theme).map(s=>s.label).sort();assert.deepEqual(labels,['no','yes']);}
+ }
 });

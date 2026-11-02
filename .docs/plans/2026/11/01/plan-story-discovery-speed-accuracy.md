@@ -78,7 +78,7 @@ catalog路径也重排`localSuggestionPayload`：book/edition及稳定的本块t
 - [x] **再扩批、合块及迁移。** `lib/reader-local-contract.ts`解除catalog固定5上限并绑定本次有限容量，重排catalog payload使本块稳定原文先于排除项、pending及上下文；三适配器绑定同一容量函数并捕获实际请求验证字段顺序。`server/story-token-budget.ts`、`server/story-reading-inputs.ts`实现新分块和估算；`server/local-story-discovery.ts`采用新旧manifest前沿迁移，旧序列化按首任务固定fixture保存到明确的legacy helper，不能重定义旧导出改变历史键。更新`lib/reader-suggestions.ts`和`client/ui/StoryReadingState.tsx`、`client/ui/StoryCreationSetup.tsx`多章进度。相应书库/首篇/范围/连续查找测试去掉旧“两章/续4”断言，替换为完整覆盖、有限容量和当前REQ阈值；测试已读完、跨前沿及迁移失败重启。
 - [x] **完成测量聚合与离线评测。** 增加`server/story-discovery-metrics.ts`受限事件与周期聚合（适配器边界接入前项），新增上述eval数据、脚本及`tests/story-discovery-eval.test.mjs`、`tests/story-discovery-metrics.test.mjs`；仅package scripts变动，无依赖/锁文件变动。用手算小样本覆盖TP/FP/FN/unknown、空分母、不可比身份、缺失/冲突回执、边界一对一和失败覆盖。新增调用预算/块数专项回归`tests/story-discovery-speed-accuracy.test.mjs`；文档说明受控回放与真实质量的边界。
 - [x] **补足服务与现有界面验收。** 按[E2E规范](../../../../tests/test-story-discovery-speed-accuracy.md)新增`tests/story-discovery-speed-accuracy.e2e.mjs`，复用productionFixture的真实REST/SQLite/FileMedia、隔离数据和假模型；所有自动round/重启/迟到写围栏走真实服务入口。复用既有原文准备与选中防线，不调用分镜/图片。新增测试专用`tests/fixtures/story-discovery-preview.mjs`：临时书库中将productionFixture的`app.handle`绑定到loopback HTTP服务，假provider拒绝外部网络，使用`developmentServerOptions`程序化启动代理至该服务的reader Vite；不运行会加载.env并启动真实后端的`pnpm dev`。桌面preview只提供shell，设置同一临时`SHIQU_DATA_DIR`和`VITE_DESKTOP_READER_URL`再运行`pnpm desktop:preview`。复用相关现有in-app browser标签，从桌面阅读入口进入该受控reader，检查多章进度压缩、不完整提示、选中后停止。该harness只作测试，不增加产品开关；若本机IAB不可用，记录具体缺口，不换浏览器冒充当前页验证。
-- [ ] **验证。** Node24.22.1、pnpm11.25.0；有需要才`pnpm install --frozen-lockfile`。先运行受影响定向测试；TT执行`pnpm typecheck`、`pnpm lint`、`pnpm test`。ET执行`pnpm exec node --experimental-strip-types --test tests/story-discovery-speed-accuracy.e2e.mjs tests/incremental-story-library.e2e.mjs`。执行`pnpm eval:discovery`确认默认离线、草稿状态和不可比较输出。不得运行Docker/桌面prepare/build、真实评测或改实际用户库。
+- [x] **验证。** Node24.22.1、pnpm11.25.0；有需要才`pnpm install --frozen-lockfile`。先运行受影响定向测试；TT执行`pnpm typecheck`、`pnpm lint`、`pnpm test`。ET执行`pnpm exec node --experimental-strip-types --test tests/story-discovery-speed-accuracy.e2e.mjs tests/incremental-story-library.e2e.mjs`。执行`pnpm eval:discovery`确认默认离线、草稿状态和不可比较输出。不得运行Docker/桌面prepare/build、真实评测或改实际用户库。
 
 ## 风险与证据边界
 
@@ -148,3 +148,40 @@ CR review round: 2; reviewer: reused
 CR fixed: 调用隔离、部分结果保留、费用归属及迁移边界已修复；rerun result passed
 
 CR passed: no major findings
+
+最终实现里程碑：`4ccaff0`，含CR修复、服务/界面测试harness、回归及草稿评测数据。提交前typecheck、lint及所有新增故障/归属/重试/迁移定向回归通过；完整TT/ET仍以其下方最终证据为准。
+
+
+## 最终验证
+
+- Node24.22.1 / pnpm11.25.0；`pnpm typecheck`、`pnpm lint`通过。
+- `pnpm test`最终931/931通过，0失败/取消/跳过（`/tmp/shiqu-discovery-tt-complete.log`），包含全部原典、缓存/预算/并发/迁移及费用归属回归。
+- 其中真实协调层全世说扫描满足1129条覆盖、1072篇唯一有效故事、57条显式拒绝及≤60次提取；九篇2次提取，五书完整有序覆盖及块数阈值通过。
+- E2E与完整TT并行时，一项真实红楼原典fixture的5秒等待窗口耗尽，观察到受控任务取消而非错误结果；完整TT结束后顺序重新执行两个E2E文件，以最终结果为准。
+
+- 最终ET顺序运行`pnpm exec node --experimental-strip-types --test tests/story-discovery-speed-accuracy.e2e.mjs tests/incremental-story-library.e2e.mjs`，26/26通过，0失败/取消/跳过（`/tmp/shiqu-discovery-et-complete.log`）。
+- `pnpm eval:discovery`默认离线输出40组draft/controlled样本及3章边界；真实模型录制缺失时不可比较。此回放只验证工具，不作为准确度基线。
+- IAB证据保留四张截图；所有交互使用临时假模型任务，经桌面入口进入reader，未开始制作。未调用真实模型、Docker/桌面打包或操作用户实际库。全部AP任务已完成，等待独立VR。
+
+
+## VR首轮补齐
+
+独立VR指出评测草稿的原40组虽覆盖同人物，但没有两个共享原文背景的不同完整事件，REQ标注集要求尚未满足。补充固定同版红楼“娇杏一顾结奇缘”与“甄士隐资助贾雨村进京”真实范围，二者共享`honglou-001-023/024`中秋怀人诗，各有独立行动及自然收束；为两个相同主题各设yes/no，共44组、4书，仍保留3章完整边界。原文由`LocalBooks.resolve`核对并保存版本/定位，标注升为draft-2，受控回执同步身份哈希；不是模型质量证据。新增回归检查原文逐字一致、真实交集与各自独有原文，以及不能借共享背景转移另一事件结局。5项eval测试通过，默认离线回放可比较；真实模型结果仍缺失。
+
+
+CR risk: non-low — inherits discovery/cache boundaries.
+CR review round: 3; reviewer: reused
+新增draft-2重叠原文标注、受控回执/哈希、README及源文件核验测试已由独立reviewer复核；没有生产行为变化。
+CR passed: no major findings
+
+补充实现里程碑：`222ea0a`（共享背景评测样本及原文核验），提交时5/5定向测试及默认离线回放通过。最终全量TT再次通过932/932（`/tmp/shiqu-discovery-tt-delivery.log`），typecheck/lint通过（`/tmp/shiqu-discovery-static-delivery.log`）；ET沿用最终顺序26/26结果，补充数据不影响服务/界面行为。
+
+
+## VR与完成
+
+VR risk: non-low — 涉及付费调用、持久缓存、并发及阅读位置迁移。
+VR review round: 2; reviewer: reused
+独立reviewer逐项确认27项REQ与9项AP任务全部完成；补齐共享背景标注后复核通过。REQ已据此全部勾选。完整最终VR逐字保存在DD。
+VR passed: all acceptance criteria complete
+
+DD：`.docs/done/2026/11/01/story-discovery-speed-accuracy.md`。SS里程碑已本地提交，按工作流止于DD，未执行GC或push；最终验收文档保留工作区变更。

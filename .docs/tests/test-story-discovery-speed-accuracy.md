@@ -2,7 +2,7 @@
 
 依据：[REQ](../reqs/2026/11/01/req-story-discovery-speed-accuracy.md)、[AP](../plans/2026/11/01/plan-story-discovery-speed-accuracy.md)。
 
-执行文件计划为`tests/story-discovery-speed-accuracy.e2e.mjs`，复用`tests/fixtures/production.mjs`、真实REST/队列/SQLite/FileMedia与可核对原文的假provider。每项使用临时数据目录、独立调用计数/可控promise；所有网络和Codex runner均由替身控制，不访问真实凭证/模型/用户任务。此文为规范，尚未执行。
+执行文件为`tests/story-discovery-speed-accuracy.e2e.mjs`，复用`tests/fixtures/production.mjs`、真实REST/队列/SQLite/FileMedia与可核对原文的假provider。每项使用临时数据目录、独立调用计数/可控promise；所有网络和Codex runner均由替身控制，不访问真实凭证/模型/用户任务。此文为规范；最终执行结果记录在AP与DD中。
 
 1. **坏故事不挡后面的故事和未读原文。** 预置一个含4篇的库，第一篇拒答，其余包含符合项；发起按主题查找。合法项保存并返回，坏项不为no；移除本轮符合项并自动继续，可读后面的块。改为单篇超预算时该篇0调用，其余仍可找到。最后所有原文已读完且仍有unknown，接口及现有界面note说明判断不完整，不宣称全部检查无符合项。
 

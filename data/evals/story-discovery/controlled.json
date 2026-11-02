@@ -6,8 +6,8 @@
     "effort": "none",
     "contract": "original-binary-v1"
   },
-  "datasetHash": "2c891e4c06eacc411fd1b50871e2af99f7b172e22082103a931d327f89933e57",
-  "annotationVersion": "draft-1",
+  "datasetHash": "3d931d26903734c4796fb59473b79814b9fb9c7e2ac869ba86a80841daf59331",
+  "annotationVersion": "draft-2",
   "matches": [
     {
       "sampleId": "story-0-yes",
@@ -206,6 +206,26 @@
     },
     {
       "sampleId": "story-19-no",
+      "verdict": "no",
+      "status": "success"
+    },
+    {
+      "sampleId": "story-20-yes",
+      "verdict": "yes",
+      "status": "success"
+    },
+    {
+      "sampleId": "story-20-no",
+      "verdict": "no",
+      "status": "success"
+    },
+    {
+      "sampleId": "story-21-yes",
+      "verdict": "yes",
+      "status": "success"
+    },
+    {
+      "sampleId": "story-21-no",
       "verdict": "no",
       "status": "success"
     }
