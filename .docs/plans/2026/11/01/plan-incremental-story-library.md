@@ -297,3 +297,31 @@ VR risk: non-low — discovery and candidate contracts, persistent cache compati
 VR review round: 5; reviewer: reused
 
 用户“DD GC”收尾：确认HEAD仍为已验证实现5b03678，工作区仅本故事DD/AP/REQ/E2E执行记录四文档。DD保留完整VR5原文，复用CR6、TT877/877、ET17/17及typecheck/lint证据；本次GC提交四份收尾文档，保留里程碑，不重跑无变更的测试，不打包或push。awesome-shiqu未改。
+
+## 跨章完成故事的共享证据修复（当前）
+
+入口6499388，故事base保持e51429b85b30a505e6b58873a4cccc3709170360。工作区原先干净。non-low：故事库接受与排除规则、缓存元信息和跨章证据清理协同变化。重新AR/CR/VR；先前877/17不证明这一边界。
+
+实际已复现：缓存保留4篇完整故事，cursor=1、2条pending；真实模型回执“娇杏一顾结奇缘”完整覆盖pending，但与旧资助故事共享第一回23—24段。被冲突规则拒绝后mergePending在46行要求accepted覆盖而报错。原文和回执位于/tmp/shiqu-discovery-replay-path所指临时副本，真实书库未改；仅一次已授权提取约9815ms，其他匹配为本地替身。不得自动追加真实调用。
+
+最小修复：内部缓存故事可附continuedFrom（最多16个原文source），只由服务器从本轮明确resolved的旧pending、且新故事完整覆盖的证据生成；模型回执中的同名字段丢弃。读缓存时验证每个source有效且被本故事范围覆盖。源指纹、catalog提示词/schema和namespace不变，旧记录无该字段正常读取，不迁移或重扫。
+
+交叉判定先维持同范围拒绝、严格包含允许；仅当交叉处全部落在某故事continuedFrom的已核对旧证据中时允许共享，否则仍拒绝。接受新故事、已存候选去重和已读source排除统一使用相同规则，排除项可从相同范围的已存故事取得服务器证据，避免接受后又在展示层被丢弃。continuedFrom不进入候选API、主题模型或分镜，不含摘要，保留已解析原文校验和pending清理的原子性。
+
+- [x] 用实际缓存/模型回执的最小公开原文定位fixture在修改前本地复现；不存用户身份、凭证或私人制作要求，不再调用模型。
+- [x] 修改local-story-discovery.ts的服务器完成证据、缓存校验及统一交叉判定，保留无依据交叉、未知resolved ID、重复/未读/非法范围拒绝，不放宽原文事实或故事完整性。
+- [x] 补接受/显示/排除/重启的合法续完及伪造证据、共享超界、同范围重复、缓存证据无效等回归；服务E2E覆盖真REST/SQLite/媒体的继续查找和候选返回。更新当前文档的范围规则。
+- [ ] 跑typecheck/lint、完整TT及增量故事库E2E，记录捕获回执本地回放结果；独立CR/VR后到DD，不自动push或打包。真实失败任务的再次模型查找不在这次一次重放授权内，可在修复可审查后单独取得明确授权。
+
+回滚仅恢复源码（缓存新字段可被旧Zod忽略），不删库。主要风险是把任意交叉误当完成关系、已读过滤再次丢失合法候选；严格以服务器旧pending证据限制共享交集，并覆盖所有筛选入口。该修复不改变Luna路由、二元主题判断、摘要延后或付费调用顺序。
+
+AR passed: no blocking architecture flaws
+
+独立AR10核对真实回执与旧pending，确认以服务器验证的续完旧证据限制共享交集、统一接受/展示/排除规则可解决根因；同范围和无据交叉仍拒绝，缓存校验与API剥离明确，无需追加推理。
+
+AR risk: non-low — coordinated story acceptance and filtering rules, persistent continuation evidence, and atomic pending-event resolution.
+AR review round: 10; reviewer: reused
+
+SS回归先行：公开原文定位fixture基于捕获回执，不含身份/凭证/私人制作要求；修改前本地回放在mergePending46行复现同一失败（/tmp/shiqu-continuation-before.log）。
+
+SS：加入服务器continuedFrom范围证据，统一接受/展示/已读排除规则，按整段交集验证共享；读缓存核验source并属于故事，模型自带元信息丢弃。公开定位fixture的原始失败已复现，修复后74/74定向通过（/tmp/shiqu-continuation-focused.log），含真实REST/SQLite/媒体回归。第一轮修复后的测试只因maxStories=1断言误以为返回所有匹配项失败；用排除其他记录精准选择共享的资助故事后通过，保护条件不变。未追加真实模型调用、未改真实书库。

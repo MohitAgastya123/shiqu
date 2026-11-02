@@ -1,0 +1,126 @@
+{
+  "bookId": "红楼梦",
+  "catalog": {
+    "stories": [
+      {
+        "title": "顽石入世与《石头记》缘起",
+        "description": "一块未被女娲选中补天的顽石，遇见一僧一道，获得进入繁华人世的机会。多年以后，空空道人发现了它留下的故事。",
+        "source": {
+          "sectionId": "honglou-001",
+          "firstUnit": "honglou-001-003",
+          "lastUnit": "honglou-001-009",
+          "edition": "4dbe192e89b80819a769366ac0c343dbb7c143467b0d5f4989b729d9dcee734f"
+        }
+      },
+      {
+        "title": "甄士隐梦幻识通灵",
+        "description": "甄士隐午睡时偶遇一僧一道，得见一件奇物；梦醒后，街前又来了两位言语奇异的出家人。",
+        "source": {
+          "sectionId": "honglou-001",
+          "firstUnit": "honglou-001-011",
+          "lastUnit": "honglou-001-017",
+          "edition": "4dbe192e89b80819a769366ac0c343dbb7c143467b0d5f4989b729d9dcee734f"
+        }
+      },
+      {
+        "title": "甄士隐资助贾雨村进京",
+        "description": "寄居古庙的穷儒贾雨村有志求取功名，却苦于路费无着。中秋夜，甄士隐邀他饮酒，一席畅谈促成了远行。",
+        "source": {
+          "sectionId": "honglou-001",
+          "firstUnit": "honglou-001-018",
+          "lastUnit": "honglou-001-019",
+          "continuations": [
+            {
+              "sectionId": "honglou-001",
+              "firstUnit": "honglou-001-022",
+              "lastUnit": "honglou-001-029"
+            }
+          ],
+          "edition": "4dbe192e89b80819a769366ac0c343dbb7c143467b0d5f4989b729d9dcee734f"
+        }
+      },
+      {
+        "title": "甄士隐遭祸出家",
+        "description": "女儿元宵失踪后，甄士隐又接连遭遇火灾与生计困顿，直到街头遇见一位唱《好了歌》的跛足道人。",
+        "source": {
+          "sectionId": "honglou-001",
+          "firstUnit": "honglou-001-030",
+          "lastUnit": "honglou-001-042",
+          "edition": "4dbe192e89b80819a769366ac0c343dbb7c143467b0d5f4989b729d9dcee734f"
+        }
+      }
+    ],
+    "cursor": 1,
+    "readThrough": 1,
+    "pendingEvents": [
+      {
+        "id": "ccb761ca66ddcbb46a30273716030f2c823281e4341d5a1bbddfdaaf24329aa9",
+        "title": "贾雨村与甄家丫鬟的相遇",
+        "source": {
+          "sectionId": "honglou-001",
+          "firstUnit": "honglou-001-020",
+          "lastUnit": "honglou-001-021",
+          "continuations": [
+            {
+              "sectionId": "honglou-001",
+              "firstUnit": "honglou-001-023",
+              "lastUnit": "honglou-001-024"
+            }
+          ],
+          "edition": "4dbe192e89b80819a769366ac0c343dbb7c143467b0d5f4989b729d9dcee734f"
+        }
+      },
+      {
+        "id": "b2ed302f8968522f9be6ae46e1c32b9d23ed160677f6e30b3a210ef7d37bbc5e",
+        "title": "新县官到任与封肃遭传问",
+        "source": {
+          "sectionId": "honglou-001",
+          "firstUnit": "honglou-001-043",
+          "lastUnit": "honglou-001-044",
+          "edition": "4dbe192e89b80819a769366ac0c343dbb7c143467b0d5f4989b729d9dcee734f"
+        }
+      }
+    ],
+    "exhausted": false,
+    "rejected": false
+  },
+  "receipt": {
+    "stories": [
+      {
+        "title": "娇杏一顾结奇缘",
+        "description": "甄家丫鬟偶然回头，被落魄书生贾雨村视为知己；日后新县官到任，一场传问又牵起这段旧缘。",
+        "source": {
+          "sectionId": "honglou-001",
+          "firstUnit": "honglou-001-020",
+          "lastUnit": "honglou-001-021",
+          "continuations": [
+            {
+              "sectionId": "honglou-001",
+              "firstUnit": "honglou-001-023",
+              "lastUnit": "honglou-001-024"
+            },
+            {
+              "sectionId": "honglou-001",
+              "firstUnit": "honglou-001-043",
+              "lastUnit": "honglou-001-044"
+            },
+            {
+              "sectionId": "honglou-002",
+              "firstUnit": "honglou-002-001",
+              "lastUnit": "honglou-002-004"
+            }
+          ]
+        }
+      }
+    ],
+    "note": "",
+    "scan": {
+      "blockComplete": false,
+      "pendingEvents": [],
+      "resolvedEventIds": [
+        "ccb761ca66ddcbb46a30273716030f2c823281e4341d5a1bbddfdaaf24329aa9",
+        "b2ed302f8968522f9be6ae46e1c32b9d23ed160677f6e30b3a210ef7d37bbc5e"
+      ]
+    }
+  }
+}

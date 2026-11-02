@@ -111,6 +111,8 @@ pnpm lint
 
 本地选题分为增量原文识别与原文主题判断。catalog不接收主题，只保存title/description/source和阅读进度，不生成summary或storyBrief；跨章pendingEvents只保留id/title/source，续读通过contextText恢复真实原文。提取仍沿用SHIQU_REASONING_SUGGEST和原文本模型。新库在共享锁内按冻结指纹读取旧摘要通用库，校验并投影保留范围/进度；旧文件不删除，不沿用旧主题游标。
 
+完成跨章pending时，服务器从明确resolved且被新故事完整覆盖的旧事件生成内部continuedFrom范围；模型自带字段不可信。交叉处全部属于双方已核对的旧证据时可共享，否则仍拒绝，同范围重复始终拒绝。接受、候选筛选和已读范围排除使用同一规则；缓存校验证据有效并属于本故事，字段不进入候选API或模型。该兼容字段不改变catalog提示词、namespace或现有进度。
+
 主题匹配第一次就读取完整原文，输入id/title/text，严格返回id/verdict(yes或no)/reason（一句，最多120字符），不生成摘要、无review复核分支。每批最多4篇，按完整prompt/schema/payload预算贪心缩批，不截原文；单篇超预算或非法/缺失/重复ID是可重试失败，不缓存no。合法整批先持久保存，再供逐个展示；取消不丢已完成回执，也不再启动下一批。Gemini/OpenAI输出上限2048 tokens。
 
 Codex/OpenAI主题匹配独立使用gpt-6-luna/low；Gemini仍用自身文本模型/low，不跨提供商或更换凭证。ProviderStatus.themeMatching报告匹配模型/档位，主题缓存按此身份及当前匹配契约隔离，匹配模型变化不影响中性提取库。Codex逐任务model覆盖、OpenAI匹配实际响应模型均校验，不静默回退。其他阶段继续现有模型和档位。

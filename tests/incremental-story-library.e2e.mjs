@@ -195,3 +195,19 @@ test('REST resumes an old summary catalog from real media without rescanning and
  assert.deepEqual((await envelope(previous+'/library')).value,state);const migrated=(await envelope(current+'/library')).value;assert.equal(migrated.cursor,1);assert.ok(migrated.stories.every(story=>!('summary' in story)));
  await restart();assert.deepEqual((await request()).stories,result.stories);assert.equal(library.calls.catalog.length,0);assert.equal(library.calls.matches.length,1);assert.equal(f.control.recommendations.length,0);
 });
+
+test('REST accepts a captured pending completion with shared old evidence and preserves it across restart',async t=>{
+ const {readFile}=await import('node:fs/promises'),{localChoices}=await import('../lib/reader-local-contract.ts');
+ const receipt=JSON.parse(await readFile(new URL('./fixtures/pending-overlap.json',import.meta.url),'utf8'));
+ const f=await productionFixture(t),books=new LocalBooks(process.cwd()),selection={bookId:receipt.bookId,theme:'爱情与错过',artStyle:'ink-pencil',length:'auto',voice:false,productionPrompt:''};
+ const book=await books.book(selection),status=await f.generation.status(),cache=new StoryDiscoveryCache(f.media),key=discoveryNamespace(book,status.provider,status.models.text,undefined,status.taskReasoningEfforts.suggest)+'/library';let catalogs=0,matches=0;
+ await cache.write(key,receipt.catalog);
+ f.generation.suggestions=async(_s,_e,input)=>{assert.equal(++catalogs,1);return localChoices(receipt.receipt,input);};
+ f.generation.matchStories=async(theme,stories)=>{matches++;return {matches:stories.map(story=>({id:story.id,verdict:theme==='everything'||story.title===receipt.receipt.stories[0].title?'yes':'no',reason:'受控核对跨章完整故事可参与主题匹配。'}))};};
+ const restart=async()=>{f.options.generation=withLocalBooks(f.generation,books,f.media);await f.restart();f.app.services.localBooks=books;};await restart();
+ const saved=await f.json('sessions','POST',{requestId:crypto.randomUUID(),intake:true,selection});await f.demand(saved.id,crypto.randomUUID());await until(async()=>(await f.read(saved.id)).intake.phase==='choosing');
+ const ready=await f.read(saved.id),candidate=ready.intake.batches[0].stories[0];assert.equal(candidate.title,receipt.receipt.stories[0].title);assert.equal(candidate.continuedFrom,undefined);assert.equal(candidate.storyBrief,undefined);assert.equal(ready.intake.search.state,'idle');assert.equal(catalogs,1);assert.equal(f.control.recommendations.length,0);assert.equal(f.control.calls.length,0);
+ await restart();assert.equal((await f.read(saved.id)).intake.batches[0].stories[0].title,candidate.title);
+ const before=matches,again=await f.json('suggestions','POST',selection);assert.equal(again.stories[0].title,candidate.title);assert.equal(matches,before);assert.equal(catalogs,1);
+ const other=await f.json('suggestions','POST',{...selection,theme:'everything',excludeSources:[candidate.source]});assert.ok(other.stories.some(story=>story.title===receipt.catalog.stories[2].title));assert.equal(catalogs,1);
+});

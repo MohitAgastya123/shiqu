@@ -1,6 +1,7 @@
 // Persist theme-neutral stories before matching; never let a reader's theme or exclusions shape extraction.
 // Expand only until new stories exist, carrying verified unfinished events across blocks and cancellation.
 // Binary theme receipts read originals; old catalog ranges resume without generating summaries.
+// Completed pending events may share only their server-verified earlier evidence with another story.
 import {z} from 'zod';
 import {localSourceSchema,localSourceKey,localReadingPrompt,localCatalogJson,legacyLocalReadingPrompt,legacyLocalScanJson,localChapterStoriesPrompt} from '../lib/reader-local-contract.ts';
 import type {LocalSourceReference,PendingEvent,WholeBookInput} from '../lib/reader-local-contract.ts';
@@ -19,7 +20,7 @@ import {sourceUnitIds,sourcesOverlap,sourceCovers,mergeSources} from './local-so
 import {matchLibraryStories} from './story-theme-matching.ts';
 import {legacySummaryCatalogPrompt,legacySummaryCatalogJson} from '../lib/reader-legacy-catalog.ts';
 
-const storySchema=suggestionBatchSchema.shape.stories.element.omit({storyBrief:true,matchReason:true}).extend({source:localSourceSchema});
+const storySchema=suggestionBatchSchema.shape.stories.element.omit({storyBrief:true,matchReason:true}).extend({source:localSourceSchema,continuedFrom:z.array(localSourceSchema).min(1).max(16).optional()});
 type Story=z.infer<typeof storySchema>;
 const pendingSchema=z.object({id:z.string().min(1).max(64),title:z.string().min(1).max(100),source:localSourceSchema});
 const stateSchema=z.object({stories:z.array(storySchema).max(50000),cursor:z.number().int().min(0),readThrough:z.number().int().min(0),pendingEvents:z.array(pendingSchema).max(16),exhausted:z.boolean(),rejected:z.boolean()});
@@ -70,23 +71,31 @@ export async function discoverLocalStories(provider:ReaderProvider,books:LocalBo
  const theme=selection.theme.normalize('NFKC').trim(),key=namespace+'/library';
  const totalChars=plan.blocks.reduce((n,block)=>n+block.chars,0),excludedKeys=new Set(excludedSources.length?[]:excluded.map(titleKey));
  const validExclusions=excludedSources.filter(source=>{try{qualified(books,book,source);return true;}catch{return false;}});
- const conflicts=(a:LocalSourceReference,b:LocalSourceReference)=>{
-  if(!sourcesOverlap(book,a,b))return false;
-  // Equal coverage is a duplicate; neither covering the other is a crossing fragment.
-  return sourceCovers(book,a,b)===sourceCovers(book,b,a);
+ const proofs=(...stories:(Story|undefined)[])=>stories.flatMap(story=>story?.continuedFrom||[]);
+ const conflicts=(a:LocalSourceReference,b:LocalSourceReference,evidence:LocalSourceReference[]=[])=>{
+  const left=new Set(sourceUnitIds(book,a)),right=new Set(sourceUnitIds(book,b)),overlap=[...right].filter(id=>left.has(id));
+  if(!overlap.length)return false;
+  const leftCovers=overlap.length===right.size,rightCovers=overlap.length===left.size;
+  if(leftCovers!==rightCovers)return false;
+  if(leftCovers)return true; // Equal coverage remains a duplicate, even for a completed pending event.
+  const shared=new Set(evidence.flatMap(source=>sourceUnitIds(book,source)));
+  return overlap.some(id=>!shared.has(id));
  };
  const visibleStories=(stories:Story[])=>{
-  const shown:Story[]=[];
+  const shown:Story[]=[],exclusions=validExclusions.map(source=>({source,known:stories.find(other=>sourceCovers(book,source,other.source)&&sourceCovers(book,other.source,source))}));
   for(const story of stories){
-   const title=titleKey(story.title);if(excludedKeys.has(title)||validExclusions.some(source=>conflicts(source,story.source)))continue;
-   if(shown.some(other=>conflicts(other.source,story.source)))continue;
+   const title=titleKey(story.title);if(excludedKeys.has(title)||exclusions.some(excluded=>conflicts(excluded.source,story.source,proofs(story,excluded.known))))continue;
+   if(shown.some(other=>conflicts(other.source,story.source,proofs(other,story))))continue;
    shown.push(story);
   }
   return shown;
  };
  const validate=(state:State)=>{
   if(state.cursor>plan.blocks.length||state.readThrough>plan.blocks.length||state.readThrough<state.cursor||state.readThrough>state.cursor+1||state.exhausted!==(state.cursor===plan.blocks.length))return false;
-  for(const story of state.stories)qualified(books,book,story.source);
+  for(const story of state.stories){
+   qualified(books,book,story.source);
+   for(const source of story.continuedFrom||[]){qualified(books,book,source);if(!sourceCovers(book,story.source,source))return false;}
+  }
   const ids=new Set<string>();for(const event of state.pendingEvents){qualified(books,book,event.source);if(ids.has(event.id))return false;ids.add(event.id);}
   return true;
  };
@@ -145,8 +154,10 @@ export async function discoverLocalStories(provider:ReaderProvider,books:LocalBo
     const accepted:Story[]=[];let rejected=false;
     for(const raw of result.stories){
      try{
-      const story=storySchema.parse(raw);qualified(books,book,story.source,visible);
-      if(current.stories.some(old=>conflicts(old.source,story.source))||accepted.some(old=>conflicts(old.source,story.source))){rejected=true;continue;}
+      const parsed=storySchema.omit({continuedFrom:true}).parse(raw);qualified(books,book,parsed.source,visible);
+      const continuedFrom=current.pendingEvents.filter(event=>result.scan!.resolvedEventIds.includes(event.id)&&sourceCovers(book,parsed.source,event.source)).map(event=>event.source);
+      const story:Story={...parsed,...(continuedFrom.length?{continuedFrom}:{})};
+      if(current.stories.some(old=>conflicts(old.source,story.source,proofs(old,story)))||accepted.some(old=>conflicts(old.source,story.source,proofs(old,story)))){rejected=true;continue;}
       accepted.push({...story,sourceLabel:books.resolve(book,story.source).title.slice(0,150)});
      }catch{rejected=true;}
     }

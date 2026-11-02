@@ -44,3 +44,6 @@
 21. 三provider的选中后摘要准备指令及归档摘要指令均要求2–3句、尽量80–150字、起因/关键行动/实际结果齐全；摘要仅准备/审核使用，旧1200字符范围记录继续读取，不按新建议长度截断或付费重写历史文本。语义与字数质量不由受控回归冒充实测。
 
 无摘要提取/原文二元批量匹配本轮最终执行：TT877/877（/tmp/shiqu-deferred-all-tests.log），ET17/17（/tmp/shiqu-deferred-e2e.log），主定向78/78（/tmp/shiqu-deferred-focused.log）及书库定向78/78（/tmp/shiqu-deferred-library-tests.log）。场景15—21由真实REST/SQLite/媒体/队列与受控provider及相应单元测试覆盖；Luna可用性探测/tmp/shiqu-luna-match-probe.json记录实际gpt-6-luna/low，约3166ms、无摘要。非稳定提速或准确率基准，未做浏览器/打包/历史成品改写。
+
+22. 预置《红楼梦》第一回4个已识别故事与2条跨章pending，第一批主题均no；在第二回使用捕获的“娇杏一顾结奇缘”定位回执，完整覆盖pending，且仅在旧pending证据内与已入库资助故事交叉。继续查找应接受、核验主题并返回候选，结清pending；API不带continuedFrom/摘要，旧故事/游标保留，重启不重复提取。同一故事被已读排除后，其他共享旧证据的完整故事仍可返回。
+23. 保持同范围改名、无完成关系的交叉、部分交集落在旧证据外、伪造continuedFrom、未知resolved ID及无效缓存证据的失败防线；不以清空缓存、跳过章节或丢弃pending来通过。单元/服务测试全部使用捕获回执和本地替身，不追加真实推理。真实任务只确认修复后服务可读，不自动点击重试触发新模型调用。
