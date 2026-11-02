@@ -3,3 +3,22 @@
 .yu-publication h3{margin:0 0 10px;font-size:14px}.yu-publication p{margin:6px 0;white-space:pre-wrap}.yu-publication small{display:block;margin-top:12px;font-size:11px;opacity:.75}
 .yu-publication-editor textarea{display:block;box-sizing:border-box;width:100%;margin-top:8px;padding:13px;border:1px solid #cdd6c4;border-radius:10px;background:#fffdf5;color:#304c37;font:inherit;font-size:14px;line-height:1.7;resize:vertical}
 .yu-publication-editor input:focus-visible,.yu-publication-editor textarea:focus-visible{outline:2px solid #648354;outline-offset:2px}
+.yu-publication-summary{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:0 16px;padding:0 0 16px;color:var(--yu-meta);font-size:12px;line-height:1.7;overflow-wrap:anywhere}
+.yu-publication-summary p{margin:0;min-width:0;flex:1 1 120px}
+.yu-publication-summary .yu-revision-open{min-height:44px;margin:0;padding:8px 0;font-size:12px}
+.yu-publication-work{margin:16px 0 8px;font-size:16px;font-weight:500;overflow-wrap:anywhere}
+.yu-publication-heading{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:0 16px;margin:12px 0 8px}
+.yu-publication-heading .yu-publication-work{flex:1;min-width:120px;margin:0}
+.yu-publication-heading button{min-height:44px;flex:none}
+.yu-watermark-size{display:grid;gap:8px;margin:18px 0;color:#526b43;font-size:13px}
+.yu-watermark-size>span{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.yu-watermark-size output{font-size:14px;font-variant-numeric:tabular-nums;color:#304c37}
+.yu-watermark-size input[type=range]{box-sizing:border-box;width:100%;height:32px;margin:0;padding:0;border:0;background:transparent;accent-color:#648354;box-shadow:none}
+.yu-watermark-size small{font-size:12px;line-height:1.7;color:var(--yu-meta)}
+.yu-export-confirmation>p{font-size:14px;line-height:1.8;overflow-wrap:anywhere}
+.yu-export-confirmation-actions{display:grid;gap:10px;margin-top:22px}
+.yu-export-unsigned{display:flex;align-items:center;justify-content:center;min-height:48px;box-sizing:border-box;padding:12px 16px;border:1px solid #cdd8c1;border-radius:10px;background:transparent;color:#526b43;font:inherit;font-size:13px;text-decoration:none;cursor:pointer}
+.yu-export-unsigned:focus-visible{outline:2px solid #648354;outline-offset:3px}
+.yu-export-unsigned:disabled,.yu-export-unsigned[aria-disabled=true]{opacity:.5;cursor:default}
+.yu-export-credit-error{grid-column:1/-1;margin:4px 0 12px;font-size:12px;line-height:1.7;color:#806d45;overflow-wrap:anywhere}
+.yu-ending .yu-export-credit-error{color:#dfceb0}

@@ -266,6 +266,8 @@ button.yu-swipe-surface{padding:0;border:0;background:transparent;cursor:default
 .yu-shelf-card-toolbar>small{flex:1 0 6em}
 .yu-shelf-grid-single .yu-shelf-card>div>small,.yu-shelf-grid-single .yu-pending-story>span:not(.yu-shelf-continue)>strong{padding-right:140px}
 .yu-setting-row .yu-revision-open{flex-shrink:0}
+.yu-story-name>div{min-width:0}
+.yu-setting-row.yu-story-name p{margin-top:8px;font-family:var(--serif);font-size:20px;font-weight:500;line-height:1.5;color:#3a563f;overflow-wrap:anywhere}
 
 /* Page stars identify the one saved reference for this book; bookmarks remain story favorites. */
 .yu-reference-star.is-selected{color:#f1cf78}.yu-reference-star:disabled{opacity:.4;cursor:default}

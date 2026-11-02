@@ -42,6 +42,14 @@ return async function readerApi(req:Request,path:string[]):Promise<Response>{
   const url=new URL(req.url);if(req.method!=='GET'){const origin=req.headers.get('origin');if(origin&&origin!==url.origin)throw new ReaderError(403,'不允许跨站请求');}
   if(!services.database)throw new ReaderError(503,'书架暂时不可用');
   const repo=new ReaderRepository(services.database);
+  if(path.join('/')==='publication-defaults'){
+   if(req.method==='GET')return json({publication:await repo.publicationDefaults(uid)});
+   if(req.method==='POST'){
+    const parsed=z.object({publication:publicationSchema,expected:publicationSchema.nullable()}).strict().safeParse(await body(req,32768));
+    if(!parsed.success)throw new ReaderError(400,parsed.error.issues[0].message);
+    return json({publication:await repo.savePublicationDefaults(uid,parsed.data.publication,parsed.data.expected)});
+   }
+  }
   if(path.join('/')==='deletions'&&req.method==='GET')return json(await repo.deletions(uid));
   if(path[0]==='library'&&path.length===2&&req.method==='DELETE'){const id=z.string().min(1).max(100).parse(path[1]);return json(await repo.remove(id,uid));}
   if(path[0]==='library'&&path.length===3&&path[2]==='restore'&&req.method==='POST'){const id=z.string().min(1).max(100).parse(path[1]);return json(await repo.restore(id,uid));}

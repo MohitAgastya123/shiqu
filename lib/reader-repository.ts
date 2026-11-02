@@ -1,4 +1,4 @@
-// Persist owner-scoped checkpoints and serialize immediate retries without duplicating paid steps.
+// Persist owner-scoped defaults/checkpoints and serialize immediate retries without duplicating paid steps.
 import {emptyDocument,ReaderError,selectionSchema,awaitingFrameCount} from './reader-model.ts';
 import type {Selection,SessionRow,Document,Step,ProductionAction} from './reader-model.ts';
 import type {OriginalSource} from './reader-source-types.ts';
@@ -42,6 +42,18 @@ export class ReaderRepository{
    .bind(JSON.stringify(publication),new Date().toISOString(),id,uid,JSON.stringify(expected)).run();
   if(!result.meta.changes)throw new ReaderError(409,'署名说明或故事版本已更新，请重新打开后再保存。');
   return this.get(id,uid);
+ }
+ async publicationDefaults(uid:string){
+  const row=await this.db.prepare('SELECT publication FROM reader_publication_defaults WHERE owner_id=?').bind(uid).first<{publication:string}>();
+  return row?JSON.parse(row.publication) as StoryPublication:null;
+ }
+ async savePublicationDefaults(uid:string,publication:StoryPublication,expected:StoryPublication|null){
+  const value=JSON.stringify(publication);
+  const result=expected===null
+   ?await this.db.prepare('INSERT INTO reader_publication_defaults(owner_id,publication) VALUES(?,?) ON CONFLICT(owner_id) DO NOTHING').bind(uid,value).run()
+   :await this.db.prepare("UPDATE reader_publication_defaults SET publication=? WHERE owner_id=? AND json_extract(publication,'$') IS json_extract(?,'$')").bind(value,uid,JSON.stringify(expected)).run();
+  if(!result.meta.changes)throw new ReaderError(409,'默认说明已由另一次操作更新，请重新打开后再保存。');
+  return publication;
  }
  // Count every newer submission, including deleted ones, so deletion never promotes history.
  async list(uid:string){return (await this.db.prepare(`SELECT * FROM reader_sessions WHERE user_id = ? AND ${visible}
@@ -105,8 +117,9 @@ export class ReaderRepository{
   if(!result.meta.changes)throw new ReaderError(409,'故事正在更新，请稍后再保存原文。');
   return this.get(row.id,row.user_id);
  }
- async create(id:string,uid:string,selection:Selection){const now=new Date().toISOString();
- await this.db.prepare(`INSERT INTO reader_sessions(id,user_id,selection,document,generation_mode,state,step_attempts,lock_until,page,saved,created_at,updated_at) VALUES(?,?,?,?,'background','idle',0,0,0,0,?,?) ON CONFLICT(id) DO NOTHING`).bind(id,uid,JSON.stringify(selection),JSON.stringify(emptyDocument()),now,now).run();
+ async create(id:string,uid:string,selection:Selection,document:Document=emptyDocument()){const now=new Date().toISOString(),saved=JSON.stringify(document);
+ // Read defaults inside the insert: retries cannot change a story's original attribution snapshot.
+ await this.db.prepare(`INSERT INTO reader_sessions(id,user_id,selection,document,generation_mode,state,step_attempts,lock_until,page,saved,created_at,updated_at) VALUES(?,?,?,COALESCE((SELECT json_set(?,'$.publication',json(publication)) FROM reader_publication_defaults WHERE owner_id=?),?),'background','idle',0,0,0,0,?,?) ON CONFLICT(id) DO NOTHING`).bind(id,uid,JSON.stringify(selection),saved,uid,saved,now,now).run();
  return this.get(id,uid);}
  async confirmFrameCount(id:string,uid:string,count:Selection['length']){
   const row=await this.get(id,uid),selection=selectionSchema.parse(JSON.parse(row.selection)),doc=JSON.parse(row.document) as Document;

@@ -1,4 +1,4 @@
-// Define persisted library content, reading checkpoints and durable production jobs/demand.
+// Define persisted library content, owner defaults, reading checkpoints and durable production jobs/demand.
 import {sql} from 'drizzle-orm';
 import { sqliteTable, text, integer, real, uniqueIndex, index, primaryKey } from 'drizzle-orm/sqlite-core';
 export const books = sqliteTable('books', { id: text('id').primaryKey(), title: text('title').notNull(), author: text('author').notNull(), era: text('era').notNull(), sourceUrl: text('source_url').notNull(), excerpt: text('excerpt').notNull(), note: text('note').notNull() });
@@ -20,3 +20,5 @@ export const productionDemand=sqliteTable('production_demand',{
 },t=>[uniqueIndex('production_viewer').on(t.sessionId,t.ownerId,t.viewerId),index('production_live_demand').on(t.runtimeId,t.expiresAt)]);
 
 export const bookImageReferences=sqliteTable('book_image_references',{ownerId:text('owner_id').notNull(),bookKey:text('book_key').notNull(),storyId:text('story_id').notNull(),page:integer('page').notNull(),token:text('token').notNull(),assetKey:text('asset_key').notNull(),updatedAt:text('updated_at').notNull()},t=>[primaryKey({columns:[t.ownerId,t.bookKey]})]);
+
+export const readerPublicationDefaults=sqliteTable('reader_publication_defaults',{ownerId:text('owner_id').primaryKey(),publication:text('publication').notNull()});

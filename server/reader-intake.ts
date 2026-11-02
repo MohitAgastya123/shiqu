@@ -21,11 +21,9 @@ export async function createIntake(repo:ReaderRepository,id:string,uid:string,in
  const choice=input.source?await directBookChoice(books!,input):null;
  const selection=selectionSchema.parse({...input,storyTitle:choice?.entry.title,source:choice?.entry.source,discoverySources:scope?.discoverySources,length:'auto',narrativeDetail:input.narrativeDetail||'balanced'});
  if(selection.bookId==='other'&&!selection.customBook?.trim())throw new ReaderError(400,'请先填写书名或 URL。');
- const creationHash=hash(selection),now=new Date().toISOString(),doc:Document={...emptyDocument(),intake:{phase:'discovering',generation:0,creationHash,batches:[],briefRequired:true,search:{round:1,state:'searching',cycleId:id}}};
+ const creationHash=hash(selection),doc:Document={...emptyDocument(),intake:{phase:'discovering',generation:0,creationHash,batches:[],briefRequired:true,search:{round:1,state:'searching',cycleId:id}}};
  if(choice){doc.original=choice.original;doc.intake!.phase='preparing';doc.intake!.search={round:0,state:'idle'};doc.intake!.selected={batch:0,index:0};doc.intake!.batches=[{stories:[{title:choice.entry.title,description:choice.entry.excerpt,source:choice.entry.source,sourceLabel:choice.original.title.slice(0,150)}],note:''}];}
- await repo.db.prepare("INSERT INTO reader_sessions(id,user_id,selection,document,generation_mode,generation_control,state,step_attempts,lock_until,page,saved,created_at,updated_at) VALUES(?,?,?,?,'background','active','idle',0,0,0,0,?,?) ON CONFLICT(id) DO NOTHING")
-  .bind(id,uid,JSON.stringify(selection),JSON.stringify(doc),now,now).run();
- const row=await repo.get(id,uid);
+ const row=await repo.create(id,uid,selection,doc);
  if((JSON.parse(row.document) as Document).intake?.creationHash!==creationHash)throw new ReaderError(409,'此创建编号已用于其他内容，请重新创建。');
  return row;
 }

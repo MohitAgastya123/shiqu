@@ -21,7 +21,7 @@ function browserImages(t){
  globalThis.document={querySelector(){return null;},body:{appendChild(){}},createElement(tag){
   if(tag==='a')return {click(){controls.downloads.push({href:this.href,download:this.download});},remove(){}};
   assert.equal(tag,'canvas');
-  const canvas={width:0,height:0,getContext(){return controls.failure==='context'?null:{save(){},restore(){},translate(){},rotate(){},measureText(text){return {width:[...text].length*20};},fillRect(){},fillText(text,x,y){(canvas.labels||=[]).push({text,x,y});},drawImage(image,x,y){assert.equal(x,0);assert.equal(y,0);canvas.image=image;}};},toBlob(callback,type,quality){
+  const canvas={width:0,height:0,getContext(){return controls.failure==='context'?null:{save(){},restore(){},translate(){},rotate(){},measureText(text){return {width:[...text].length*20};},fillRect(){},fillText(text,x,y,maxWidth){(canvas.labels||=[]).push({text,x,y,font:this.font,maxWidth});},drawImage(image,x,y){assert.equal(x,0);assert.equal(y,0);canvas.image=image;}};},toBlob(callback,type,quality){
    assert.equal(type,'image/webp');assert.equal(quality,.85);
    canvas.encodedSize=[canvas.width,canvas.height];
    callback(controls.failure==='empty'?null:new Blob([mockEncoded],{type:controls.failure==='format'?'image/png':'image/webp'}));
@@ -231,4 +231,15 @@ test('download fails explicitly before creating an incomplete archive if prompt 
  await assert.rejects(createStoryZip(story,null),/提示词记录未载入/);
  await assert.rejects(downloadStoryZip({...story,pages:[{...story.pages[0],image:''}]},()=>{}),/所有画面/);
  assert.equal(fetch.mock.callCount(),1);
+});
+
+// The same saved sizing must reach every WebP and the public archive record.
+test('ZIP applies the saved watermark size to WebP canvases and retains it in story metadata',async t=>{
+ const browser=browserImages(t);globalThis.location={origin:'http://localhost:3000'};t.after(()=>{delete globalThis.location;});
+ t.mock.method(globalThis,'fetch',async()=>new Response(new Uint8Array([1,2,3]),{headers:{'Content-Type':'image/png'}}));
+ const publication={author:'测试制作人',workUrl:'',contact:'',sourceNote:'',reuse:'',watermarkFontSize:40};
+ const story={...makeStory(2),publication},blob=await createStoryZip(story,null);
+ const files=unzipSync(new Uint8Array(await blob.arrayBuffer())),saved=JSON.parse(strFromU8(files['故事.json']));
+ assert.deepEqual(saved.publication,publication);assert.equal(browser.canvases.length,2);
+ for(const canvas of browser.canvases){assert.match(canvas.labels[0].font,/300 40px /);assert.equal(canvas.labels[0].maxWidth,941*.94);assert.deepEqual(canvas.encodedSize,[941,1672]);}
 });

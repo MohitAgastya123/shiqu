@@ -6,6 +6,7 @@ import {createHash} from 'node:crypto';
 import {withWebpXmp,webpPayloadHash,sha256Hex,publicImageXmp,xmlText,payloadHashScope} from '../lib/story-webp-metadata.ts';
 import {imageDimensions} from '../lib/reader-image-dimensions.ts';
 import {watermarkCredit,drawStoryWatermarks} from '../lib/story-watermark.ts';
+import {publicationSchema,emptyPublication,storyExportKey} from '../lib/story-publication.ts';
 import {makeStory} from './fixtures/story.mjs';
 const source=new Uint8Array(readFileSync(new URL('./fixtures/images/publication.webp',import.meta.url)));
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
@@ -33,8 +34,22 @@ test('public XMP escapes text, removes invalid XML controls and carries full bou
  assert.equal(xmlText('a\x00\ud800\uffffb'),'ab');
  assert.ok(watermarkCredit(story).includes('…'));assert.ok(!watermarkCredit(story).includes(story.publication.author));
  const labels=[],ctx={save(){},restore(){},translate(){},rotate(){},fillText(...values){labels.push({values,font:this.font,opacity:this.fillStyle});}};
- drawStoryWatermarks(ctx,941,1672,story);assert.equal(labels.length,1);assert.equal(Number(labels[0].font.match(/[\d.]+(?=px)/)[0]),12);
+ drawStoryWatermarks(ctx,941,1672,story);assert.equal(labels.length,1);assert.equal(Number(labels[0].font.match(/[\d.]+(?=px)/)[0]),24);
  assert.equal(labels[0].opacity,'rgba(255,250,239,.75)');
+});
+
+test('WebP watermark size defaults to 24px, honors saved sizes and stays within the image width',()=>{
+ const story=makeStory(1),labels=[],ctx={save(){},restore(){},fillText(...values){labels.push({values,font:this.font});}};
+ for(const size of [undefined,12,36,48]){
+  const value={...story,publication:{...emptyPublication,...(size===undefined?{}:{watermarkFontSize:size})}};
+  drawStoryWatermarks(ctx,941,1672,value);const label=labels.at(-1);
+  assert.equal(Number(label.font.match(/[\d.]+(?=px)/)[0]),size??24);
+  assert.deepEqual(label.values.slice(1),[941*.97,1672-941*.03,941*.94]);
+ }
+ const legacy={...emptyPublication};assert.deepEqual(publicationSchema.parse(legacy),legacy,'legacy CAS expectations must keep the old object shape');
+ for(const watermarkFontSize of [12,24,48])assert.equal(publicationSchema.parse({...legacy,watermarkFontSize}).watermarkFontSize,watermarkFontSize);
+ for(const watermarkFontSize of [11,49,12.5,'24',NaN,null])assert.equal(publicationSchema.safeParse({...legacy,watermarkFontSize}).success,false);
+ assert.notEqual(storyExportKey({...story,publication:{...legacy,watermarkFontSize:24}}),storyExportKey({...story,publication:{...legacy,watermarkFontSize:36}}));
 });
 
 test('invalid/truncated/animated containers fail closed',()=>{
