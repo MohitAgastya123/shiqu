@@ -7,6 +7,7 @@ import {readFile,mkdtemp,rm,access} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 import {LocalBooks} from '../server/local-books.ts';
 import {bookInputs} from '../server/local-book-inputs.ts';
+import {readingTokens} from '../server/story-token-budget.ts';
 import {buildReadingPlan,hydrateReadingPlan} from '../server/story-reading-inputs.ts';
 import {withLocalBooks} from '../server/local-generation.ts';
 import {createReaderProvider} from '../server/generation.ts';
@@ -86,8 +87,8 @@ test('both providers directly select from the full original and only verified pa
 test('token-based chapter manifests cover all shipped units without splitting small chapters',async()=>{
  for(const bookId of ['聊斋志异','太平广记','红楼梦']){
   const book=await library.book({...selected,bookId}),manifest=buildReadingPlan(book,'codex'),blocks=hydrateReadingPlan(book,manifest);
-  assert.equal(blocks.flatMap(b=>[...b.visible]).length,book.sections.flatMap(s=>s.units).length);
-  assert.ok(manifest.blocks.every(b=>b.tokens<=12000));assert.ok(blocks.every(b=>b.chapters.length<=2));assert.equal(manifest.mode,'chapters');
+  assert.deepEqual(blocks.flatMap(b=>[...b.visible]),book.sections.flatMap(s=>s.units.map(u=>u.id)));
+  assert.ok(manifest.blocks.every(b=>b.tokens<=12000));for(const section of book.sections){const text=`篇章 ${section.id}：${section.title}\n`+section.units.map(u=>`[${u.id}]\n${u.text}`).join('\n\n');if(readingTokens(text,'codex')<=12000)assert.equal(blocks.filter(b=>section.units.some(u=>b.visible.has(u.id))).length,1);}assert.equal(manifest.mode,'chapters');
  }
 });
 test('cross-chapter references preserve both original ranges, reject tampering, and allow complete long stories',async()=>{

@@ -17,7 +17,7 @@ export type WholeBookInput={title:string;edition:string;text:string;purpose?:'sc
 export const localChoicesSchema=z.object({stories:z.array(z.object({title:z.string().min(1).max(100),description:z.string().min(1).max(180),source:localPassageSchema,artRecommendation:artRecommendationSchema.optional()})).max(5),note:z.string().max(300)});
 export const localScanSchema=localChoicesSchema.extend({scan:z.object({blockComplete:z.boolean(),pendingEvents:z.array(pendingSchema).max(16),resolvedEventIds:z.array(z.string().min(1).max(64)).max(16)})});
 export const localCatalogSchema=localScanSchema.extend({stories:z.array(localChoicesSchema.shape.stories.element.omit({artRecommendation:true})).max(32),scan:localScanSchema.shape.scan.extend({pendingEvents:z.array(pendingSchema.omit({summary:true})).max(16)})});
-export type LocalScanResult={blockComplete:boolean;pendingEvents:PendingEvent[];resolvedEventIds:string[]};
+export type LocalScanResult={blockComplete:boolean;pendingEvents:PendingEvent[];resolvedEventIds:string[];invalid?:boolean;invalidStories?:boolean};
 const string=(maxLength:number)=>({type:'string',minLength:1,maxLength});
 const object=(properties:Record<string,unknown>)=>({type:'object',properties,required:Object.keys(properties),additionalProperties:false});
 const rangeJson=object({sectionId:string(40),firstUnit:string(60),lastUnit:string(60)});
@@ -67,11 +67,19 @@ export const localStoryContextConstraint='若 verifiedOriginal.chapterContext �
 export const localPlanConstraint=promptSections(['本地事实依据','verifiedOriginal 是已在本地核对的唯一情节依据，只用 text 和存在时的 chapterContext.text，不用记忆或其他篇目补全。识别版式标记与注释，异说和表格列号不当正文事件。用户主题与制作要求不能改写事实；不得伪造古文。原文含已审核的非关键未转写字时，只用其余可读事实，保留原异常，不猜字，不让未知细节承担人物、关键动作、因果或结局。'],['章节与定位片段',localStoryContextConstraint]);
 
 export function localChoices(value:unknown,book:WholeBookInput){
- const batch=(book.purpose==='catalog'?localCatalogSchema:localChoicesSchema).parse(value);
- if(book.purpose==='catalog'&&batch.stories.length>(book.scan?.maxStories||32))throw Error('INVALID_OUTPUT');
  const receipt=(source:LocalPassage):LocalSourceReference=>{const {continuations,...first}=source;return {...first,...(continuations?.length?{continuations}:{}),edition:book.edition};};
+ if(book.purpose==='catalog'){
+  // Validate siblings independently; broken pending metadata cannot erase paid, valid stories.
+  const frame=z.object({stories:z.array(z.unknown()).max(book.scan?.maxStories||32),note:z.string().max(300),scan:z.unknown()}).parse(value);
+  let invalidStories=false;
+  const stories=frame.stories.flatMap(raw=>{const parsed=localCatalogSchema.shape.stories.element.safeParse(raw);if(!parsed.success){invalidStories=true;return [];}return [{...parsed.data,source:receipt(parsed.data.source)}];});
+  const metadata=localCatalogSchema.shape.scan.safeParse(frame.scan);
+  const scan:LocalScanResult=metadata.success?{...metadata.data,pendingEvents:metadata.data.pendingEvents.map(event=>({...event,source:receipt(event.source)})),invalidStories}:{blockComplete:false,pendingEvents:[],resolvedEventIds:[],invalid:true,invalidStories};
+  return {stories,note:frame.note,scan};
+ }
+ const batch=localChoicesSchema.parse(value);
  const result={...batch,stories:batch.stories.map(story=>({...story,source:receipt(story.source)}))};
- if(book.purpose!=='scan'&&book.purpose!=='catalog')return result;
- const scan=(book.purpose==='catalog'?localCatalogSchema:localScanSchema).parse(value).scan;
- return {...result,scan:{...scan,pendingEvents:scan.pendingEvents.map(event=>({...event,source:receipt(event.source)}))}};
+ if(book.purpose!=='scan')return result;
+ const scan=localScanSchema.parse(value).scan;
+ return {...result,scan:{...scan,pendingEvents:scan.pendingEvents.map(event=>({...event,source:receipt(event.source)}))} as LocalScanResult};
 }

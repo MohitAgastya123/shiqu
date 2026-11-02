@@ -10,6 +10,8 @@ import {LocalBooks,localBookId} from './local-books.ts';
 import {hasSourceAnomaly,hasStoredSourceAnomaly} from './local-source-quality.ts';
 import {discoverLocalStories} from './local-story-discovery.ts';
 import {StoryDiscoveryCache,discoveryHash} from './story-discovery-cache.ts';
+import {measurementBusy,settleMeasurements} from './story-discovery-metrics.ts';
+import {matchingBusy,settleMatching} from './story-theme-matching.ts';
 import {localSourceKey,localSourceSchema,sourceRanges} from '../lib/reader-local-contract.ts';
 import {artRecommendationSchema,selectedArtRecommendationPrompt} from '../lib/reader-art-recommendation.ts';
 
@@ -30,6 +32,8 @@ export function withLocalBooks(provider:ReaderProvider,books:LocalBooks,media:Me
   });
  }
  return {
+  discoveryBusy:()=>cache.busy||matchingBusy(cache)||measurementBusy(cache),
+  settleDiscovery:async()=>{await settleMatching(cache);await cache.settle();await settleMeasurements(cache);await cache.settle();},
   status:()=>provider.status(),safeError:error=>provider.safeError(error),
   ...(provider.matchStories?{matchStories:provider.matchStories.bind(provider)}:{}),
   async suggestions(selection,excluded,_localBook,reading,excludedSources=[]){

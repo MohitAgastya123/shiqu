@@ -17,4 +17,6 @@ export interface ReaderProvider {
  recommendArt?(selection:Selection,original?:OriginalSource):Promise<ArtRecommendation>;
  generator():StoryGenerator;
  safeError(error:unknown):string;
+ discoveryBusy?():boolean;
+ settleDiscovery?():Promise<void>;
 }

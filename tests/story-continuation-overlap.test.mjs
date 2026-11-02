@@ -33,14 +33,14 @@ for(const mode of ['duplicate-range','unknown-resolved'])test(`continuation evid
  if(mode==='unknown-resolved')receipt.scan.resolvedEventIds.push('unknown-event');
  await f.cache.write(f.key,initial);
  f.provider.suggestions=async(_s,_e,input)=>{const result=localChoices(receipt,input);return result;};
- await assert.rejects(f.run(),/保留进度/);
+ if(mode==='unknown-resolved')assert.equal((await f.run()).stories[0].title,receipt.stories[0].title);else await assert.rejects(f.run(),/保留进度/);
  const state=[...f.store.values.values()].map(bytes=>JSON.parse(new TextDecoder().decode(bytes))).find(doc=>doc.key===f.key).value;
- assert.equal(state.stories.length,initial.stories.length);assert.deepEqual(state.pendingEvents,initial.pendingEvents);
+ assert.equal(state.stories.length,initial.stories.length+(mode==='unknown-resolved'?1:0));if(mode==='unknown-resolved'){assert.deepEqual(state.pendingEvents,initial.pendingEvents);assert.equal(state.stories.at(-1).continuedFrom,undefined);}else assert.equal(state.pendingEvents.length,0);
 });
 
 test('invalid cached continuation evidence cannot be reused as an accepted story',async()=>{
  const f=await continuationFixture(),state=structuredClone(f.fixture.catalog);state.stories[0].continuedFrom=[state.stories[1].source];await f.cache.write(f.key,state);
- f.provider.suggestions=async(_s,_e,input)=>{assert.deepEqual(input.scan.pendingEvents,[]);throw Error('invalid cache rejected');};
+ f.provider.suggestions=async(_s,_e,input)=>{assert.deepEqual(input.scan.pendingEvents,state.pendingEvents);throw Error('invalid cache rejected');};
  await assert.rejects(f.run(),/invalid cache rejected/);
 });
 

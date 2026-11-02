@@ -1,0 +1,627 @@
+{
+  "version": "draft-1",
+  "annotationStatus": "draft",
+  "author": "agent",
+  "source": "Repository edition-bound originals; annotations require user confirmation",
+  "stories": [
+    {
+      "id": "story-0",
+      "bookId": "战国策",
+      "edition": "212e2b74ae74510821b4c724528e418e9ad3a34ba46e6c263f78c806ea48921a",
+      "title": "颜率保九鼎",
+      "source": {
+        "edition": "212e2b74ae74510821b4c724528e418e9ad3a34ba46e6c263f78c806ea48921a",
+        "sectionId": "zhanguo-001",
+        "firstUnit": "zhanguo-001-001",
+        "lastUnit": "zhanguo-001-008"
+      },
+      "text": "秦興師臨周而求九鼎，周君患之，以告顏率。顏率曰：「大王勿憂，臣請東借救於齊。」\n\n顏率至齊，謂齊王曰：「夫秦之為無道也，欲興兵臨周而求九鼎，周之君臣，內自盡計，與秦，不若歸之大國。夫存危國，美名也；得九鼎，厚寶也。願大王圖之。」\n\n齊王大悅，發師五萬人，使陳臣思將以救周，而秦兵罷。\n\n齊將求九鼎，周君又患之。顏率曰：「大王勿憂，臣請東解之。」顏率至齊，謂齊王曰：「周賴大國之義，得君臣父子相保也，願獻九鼎，不識大國何塗之從而致之齊？」\n\n齊王曰：「寡人將寄徑於梁。」顏率曰：「不可。夫梁之君臣欲得九鼎，謀之暉臺之下，少海之上，其日久矣。鼎入梁，必不出。」\n\n齊王曰：「寡人將寄徑於楚。」對曰：「不可。楚之君臣欲得九鼎，謀之於葉庭之中，其日久矣。若入楚，鼎必不出。」王曰：「寡人終何塗之從而致之齊？」\n\n顏率曰：「弊邑固竊為大王患之。夫鼎者，非效醯壺醬甀耳，可懷挾提挈以至齊者；非效鳥集烏飛，兔興馬逝，灕然止於齊者。昔周之伐殷，得九鼎，凡一鼎而九萬人輓之，九九八十一萬人，士卒師徒，器械被具，所以備者稱此。\n\n今大王縱有其人，何塗之從而出？臣竊為大王私憂之。」齊王曰：「子之數來者，猶無與耳。」顏率曰：「不敢欺大國，疾定所從出，弊邑遷鼎以待命。」齊王乃止。"
+    },
+    {
+      "id": "story-1",
+      "bookId": "战国策",
+      "edition": "212e2b74ae74510821b4c724528e418e9ad3a34ba46e6c263f78c806ea48921a",
+      "title": "赵累论宜阳",
+      "source": {
+        "edition": "212e2b74ae74510821b4c724528e418e9ad3a34ba46e6c263f78c806ea48921a",
+        "sectionId": "zhanguo-002",
+        "firstUnit": "zhanguo-002-001",
+        "lastUnit": "zhanguo-002-006"
+      },
+      "text": "秦攻宜陽，周君謂趙累曰：「子以為何如？」對曰：「宜陽必拔也。」君曰：「宜陽城方八里，材士十萬，粟支數年，\n\n公仲之軍二十萬，景翠以楚之眾，臨山而救之，秦必無功。」對曰：「甘茂，羈旅也，攻宜陽而有功，則周公旦也；無功，則削迹於秦。\n\n秦王不聽群臣父兄之義而攻宜陽，宜陽不拔，秦王恥之。臣故曰拔。」君曰：「子為寡人謀，且柰何？」\n\n對曰：「君謂景翠曰：『公爵為執圭，官為柱國，戰而勝，則無加焉矣；不勝，則死。不如背秦援宜陽。\n\n公進兵，秦恐公之乘其弊也，必以寶事公；公中慕公之為己乘秦也，亦必盡其寶。』」\n\n秦拔宜陽，景翠果進兵。秦懼，遽效煮棗，韓氏果亦效重寶。景翠得城於秦，受寶於韓，而德東周。"
+    },
+    {
+      "id": "story-2",
+      "bookId": "战国策",
+      "edition": "212e2b74ae74510821b4c724528e418e9ad3a34ba46e6c263f78c806ea48921a",
+      "title": "劝韩按兵",
+      "source": {
+        "edition": "212e2b74ae74510821b4c724528e418e9ad3a34ba46e6c263f78c806ea48921a",
+        "sectionId": "zhanguo-003",
+        "firstUnit": "zhanguo-003-001",
+        "lastUnit": "zhanguo-003-001"
+      },
+      "text": "東周與西周戰，韓救西周。為東周謂韓王曰：「西周者，故天子之國也，多名器重寶。案兵而勿出，可以德東周，西周之寶可盡矣。」"
+    },
+    {
+      "id": "story-3",
+      "bookId": "战国策",
+      "edition": "212e2b74ae74510821b4c724528e418e9ad3a34ba46e6c263f78c806ea48921a",
+      "title": "齐明献计",
+      "source": {
+        "edition": "212e2b74ae74510821b4c724528e418e9ad3a34ba46e6c263f78c806ea48921a",
+        "sectionId": "zhanguo-004",
+        "firstUnit": "zhanguo-004-001",
+        "lastUnit": "zhanguo-004-002"
+      },
+      "text": "東周與西周爭，西周欲和於楚、韓。齊明謂東周君曰：「臣恐西周之與楚、韓寶，令之為己求地於東周也。不如謂楚、韓曰，西周之欲入寶，持二端。\n\n今東周之兵不急西周，西周之寶不入楚、韓。楚、韓欲得寶，即且趣我攻西周。西周寶出，是我為楚、韓取寶以德之也，西周弱矣。」"
+    },
+    {
+      "id": "story-4",
+      "bookId": "战国策",
+      "edition": "212e2b74ae74510821b4c724528e418e9ad3a34ba46e6c263f78c806ea48921a",
+      "title": "苏子劝放水",
+      "source": {
+        "edition": "212e2b74ae74510821b4c724528e418e9ad3a34ba46e6c263f78c806ea48921a",
+        "sectionId": "zhanguo-005",
+        "firstUnit": "zhanguo-005-001",
+        "lastUnit": "zhanguo-005-003"
+      },
+      "text": "東周欲為稻，西周不下水，東周患之。蘇子謂東周君曰：「臣請使西周下水可乎？」乃往見西周之君曰：「君之謀過矣！今不下水，所以富東周也。今其民皆種麥，無他種矣。\n\n君若欲害之，不若一為下水，以病其所種。下水，東周必復種稻；種稻而復奪之。若是，則東周之民可令一仰西周，而受命於君矣。」\n\n西周君曰：「善。」遂下水。蘇子亦得兩國之金也。"
+    },
+    {
+      "id": "story-5",
+      "bookId": "shishuo",
+      "edition": "f242b26f84c8fa02727b671ef5ade0105e508f16c85e46eaa5f08d15a9ce7777",
+      "title": "陈仲举礼贤",
+      "source": {
+        "edition": "f242b26f84c8fa02727b671ef5ade0105e508f16c85e46eaa5f08d15a9ce7777",
+        "sectionId": "shishuo-01",
+        "firstUnit": "shishuo-01-001",
+        "lastUnit": "shishuo-01-001"
+      },
+      "text": "陳仲舉言，為士則行為世範，登車攬轡，有澄清天下之志。為豫章太守，至便問，徐孺子所在，欲先看之。主簿白：「羣情欲府君先入廨。」陳曰：「武王式商容之閭，席不暇煗。吾之禮賢，有何不可！」"
+    },
+    {
+      "id": "story-6",
+      "bookId": "shishuo",
+      "edition": "f242b26f84c8fa02727b671ef5ade0105e508f16c85e46eaa5f08d15a9ce7777",
+      "title": "周子居评黄叔度",
+      "source": {
+        "edition": "f242b26f84c8fa02727b671ef5ade0105e508f16c85e46eaa5f08d15a9ce7777",
+        "sectionId": "shishuo-01",
+        "firstUnit": "shishuo-01-002",
+        "lastUnit": "shishuo-01-002"
+      },
+      "text": "周子居常云：「吾時月不見黃叔度，則鄙吝之心已復生矣。」"
+    },
+    {
+      "id": "story-7",
+      "bookId": "shishuo",
+      "edition": "f242b26f84c8fa02727b671ef5ade0105e508f16c85e46eaa5f08d15a9ce7777",
+      "title": "郭林宗访黄叔度",
+      "source": {
+        "edition": "f242b26f84c8fa02727b671ef5ade0105e508f16c85e46eaa5f08d15a9ce7777",
+        "sectionId": "shishuo-01",
+        "firstUnit": "shishuo-01-003",
+        "lastUnit": "shishuo-01-003"
+      },
+      "text": "郭林宗至汝南造袁奉高，車不停軌，鸞不輟軛。詣黃叔度，乃彌日信宿。人問其故，林宗曰：「叔度汪汪如萬頃之陂。澄之不清，擾之不濁，其器深廣，難測量也。」"
+    },
+    {
+      "id": "story-8",
+      "bookId": "shishuo",
+      "edition": "f242b26f84c8fa02727b671ef5ade0105e508f16c85e46eaa5f08d15a9ce7777",
+      "title": "李元礼风范",
+      "source": {
+        "edition": "f242b26f84c8fa02727b671ef5ade0105e508f16c85e46eaa5f08d15a9ce7777",
+        "sectionId": "shishuo-01",
+        "firstUnit": "shishuo-01-004",
+        "lastUnit": "shishuo-01-004"
+      },
+      "text": "李元禮風格秀整，高自標持，欲以天下名教是非為己任。後進之士，有升其堂者，皆以為登龍門。"
+    },
+    {
+      "id": "story-9",
+      "bookId": "shishuo",
+      "edition": "f242b26f84c8fa02727b671ef5ade0105e508f16c85e46eaa5f08d15a9ce7777",
+      "title": "李元礼赞荀钟",
+      "source": {
+        "edition": "f242b26f84c8fa02727b671ef5ade0105e508f16c85e46eaa5f08d15a9ce7777",
+        "sectionId": "shishuo-01",
+        "firstUnit": "shishuo-01-005",
+        "lastUnit": "shishuo-01-005"
+      },
+      "text": "李元禮嘗歎荀淑、鍾皓曰：「荀君清識難尚，鍾君至德可師。」"
+    },
+    {
+      "id": "story-10",
+      "bookId": "shishuo",
+      "edition": "f242b26f84c8fa02727b671ef5ade0105e508f16c85e46eaa5f08d15a9ce7777",
+      "title": "陈荀相访",
+      "source": {
+        "edition": "f242b26f84c8fa02727b671ef5ade0105e508f16c85e46eaa5f08d15a9ce7777",
+        "sectionId": "shishuo-01",
+        "firstUnit": "shishuo-01-006",
+        "lastUnit": "shishuo-01-006"
+      },
+      "text": "陳太丘詣荀朗陵，貧儉無僕役。乃使元方將車，季方持杖後從。長文尚小，載箸車中。既至，荀使叔慈應門，慈明行酒，餘六龍下食。文若亦小，坐箸厀前。于時太史奏：「真人東行。」"
+    },
+    {
+      "id": "story-11",
+      "bookId": "shishuo",
+      "edition": "f242b26f84c8fa02727b671ef5ade0105e508f16c85e46eaa5f08d15a9ce7777",
+      "title": "陈季方论父德",
+      "source": {
+        "edition": "f242b26f84c8fa02727b671ef5ade0105e508f16c85e46eaa5f08d15a9ce7777",
+        "sectionId": "shishuo-01",
+        "firstUnit": "shishuo-01-007",
+        "lastUnit": "shishuo-01-007"
+      },
+      "text": "客有問陳季方：「足下家君太丘，有何功德，而荷天下重名？」季方曰：「吾家君譬如桂樹生泰山之阿，上有萬仞之高，下有不測之深；上為甘露所霑，下為淵泉所潤。當斯之時，桂樹焉知泰山之高，淵泉之深，不知有功德與無也！」"
+    },
+    {
+      "id": "story-12",
+      "bookId": "shishuo",
+      "edition": "f242b26f84c8fa02727b671ef5ade0105e508f16c85e46eaa5f08d15a9ce7777",
+      "title": "元方季方难分高下",
+      "source": {
+        "edition": "f242b26f84c8fa02727b671ef5ade0105e508f16c85e46eaa5f08d15a9ce7777",
+        "sectionId": "shishuo-01",
+        "firstUnit": "shishuo-01-008",
+        "lastUnit": "shishuo-01-008"
+      },
+      "text": "陳元方子長文有英才，與季方子孝先，各論其父功德，爭之不能決，咨於太丘。太丘曰：「元方難為兄，季方難為弟。」"
+    },
+    {
+      "id": "story-13",
+      "bookId": "shishuo",
+      "edition": "f242b26f84c8fa02727b671ef5ade0105e508f16c85e46eaa5f08d15a9ce7777",
+      "title": "荀巨伯探友",
+      "source": {
+        "edition": "f242b26f84c8fa02727b671ef5ade0105e508f16c85e46eaa5f08d15a9ce7777",
+        "sectionId": "shishuo-01",
+        "firstUnit": "shishuo-01-009",
+        "lastUnit": "shishuo-01-009"
+      },
+      "text": "荀巨伯遠看友人疾，值胡賊攻郡，友人語巨伯曰：「吾今死矣，子可去！」巨伯曰：「遠來相視，子令吾去；敗義以求生，豈荀巨伯所行邪？」賊既至，謂巨伯曰：「大軍至，一郡盡空，汝何男子，而敢獨止？」巨伯曰：「友人有疾，不忍委之，寧以我身代友人命。」賊相謂曰：「我輩無義之人，而入有義之國！」遂班軍而還，一郡並獲全。"
+    },
+    {
+      "id": "story-14",
+      "bookId": "shishuo",
+      "edition": "f242b26f84c8fa02727b671ef5ade0105e508f16c85e46eaa5f08d15a9ce7777",
+      "title": "管宁割席",
+      "source": {
+        "edition": "f242b26f84c8fa02727b671ef5ade0105e508f16c85e46eaa5f08d15a9ce7777",
+        "sectionId": "shishuo-01",
+        "firstUnit": "shishuo-01-010",
+        "lastUnit": "shishuo-01-010"
+      },
+      "text": "華歆遇子弟甚整，雖閒室之內，嚴若朝典。陳元方兄弟恣柔愛之道，而二門之裏，兩不失雍熙之軌焉。管寧、華歆共園中鋤菜，見地有片金，管揮鋤與瓦石不異，華捉而擲去之。又嘗同席讀書，有乘軒冕過門者，寧讀如故，歆廢書出看。寧割席分坐曰：「子非吾友也。」"
+    },
+    {
+      "id": "story-15",
+      "bookId": "zhuangzi",
+      "edition": "534f63d1b695bb00458836d43873a19eb3e72d9ca890945ea4afcf395df5af4d",
+      "title": "庄周梦蝶",
+      "source": {
+        "edition": "534f63d1b695bb00458836d43873a19eb3e72d9ca890945ea4afcf395df5af4d",
+        "sectionId": "zhuangzi-02",
+        "firstUnit": "zhuangzi-02-070",
+        "lastUnit": "zhuangzi-02-070"
+      },
+      "text": "昔者莊周夢為胡蝶，栩栩然胡蝶也，自喻適志與！不知周也。俄然覺，則蘧蘧然周也。不知周之夢為胡蝶與，胡蝶之夢為周與？周與胡蝶，則必有分矣。此之謂物化。"
+    },
+    {
+      "id": "story-16",
+      "bookId": "zhuangzi",
+      "edition": "534f63d1b695bb00458836d43873a19eb3e72d9ca890945ea4afcf395df5af4d",
+      "title": "庖丁解牛",
+      "source": {
+        "edition": "534f63d1b695bb00458836d43873a19eb3e72d9ca890945ea4afcf395df5af4d",
+        "sectionId": "zhuangzi-03",
+        "firstUnit": "zhuangzi-03-002",
+        "lastUnit": "zhuangzi-03-008"
+      },
+      "text": "庖丁為文惠君解牛，手之所觸，肩之所倚，足之所履，膝之所踦，砉然嚮然，奏刀騞然，莫不中音。\n\n合於《桑林》之舞，乃中《經首》之會。文惠君曰：「譆，善哉！技蓋至此乎？」\n\n庖丁釋刀對曰：「臣之所好者道也，進乎技矣。始臣之解牛之時，所見无非牛者。三年之後，未嘗見全牛也。方今之時，臣以神遇而不以目視，\n\n官知止而神欲行。依乎天理，批大郤，導大窾，因其固然。技經肯綮之未嘗，而況大軱乎！\n\n良庖歲更刀，割也；族庖月更刀，折也。今臣之刀十九年矣，所解數千牛矣，而刀刃若新發於硎。彼節者有間，而刀刃者无厚；以无厚入有間，恢恢乎其於遊刃必有餘地矣，\n\n是以十九年而刀刃若新發於硎。雖然，每至於族，吾見其難為，怵然為戒，視為止，行為遲。\n\n動刀甚微，謋然已解，如土委地。提刀而立，為之四顧，為之躊躇滿志，善刀而藏之。」文惠君曰：「善哉！吾聞庖丁之言，得養生焉。」"
+    },
+    {
+      "id": "story-17",
+      "bookId": "zhuangzi",
+      "edition": "534f63d1b695bb00458836d43873a19eb3e72d9ca890945ea4afcf395df5af4d",
+      "title": "庄子辞聘",
+      "source": {
+        "edition": "534f63d1b695bb00458836d43873a19eb3e72d9ca890945ea4afcf395df5af4d",
+        "sectionId": "zhuangzi-17",
+        "firstUnit": "zhuangzi-17-061",
+        "lastUnit": "zhuangzi-17-064"
+      },
+      "text": "莊子釣於濮水，楚王使大夫二人往先焉，曰：「願以竟內累矣！」\n\n莊子持竿不顧，曰：「吾聞楚有神龜，死已三千歲矣，王巾笥而藏之廟堂之上。此龜者，寧其死為留骨而貴乎？寧其生而曳尾於塗中乎？」\n\n二大夫曰：「寧生而曳尾塗中。」\n\n莊子曰：「往矣！吾將曳尾於塗中。」"
+    },
+    {
+      "id": "story-18",
+      "bookId": "zhuangzi",
+      "edition": "534f63d1b695bb00458836d43873a19eb3e72d9ca890945ea4afcf395df5af4d",
+      "title": "惠子相梁",
+      "source": {
+        "edition": "534f63d1b695bb00458836d43873a19eb3e72d9ca890945ea4afcf395df5af4d",
+        "sectionId": "zhuangzi-17",
+        "firstUnit": "zhuangzi-17-065",
+        "lastUnit": "zhuangzi-17-067"
+      },
+      "text": "惠子相梁，莊子往見之。或謂惠子曰：「莊子來，欲代子相。」於是惠子恐，搜於國中三日三夜。\n\n莊子往見之，曰：「南方有鳥，其名鵷鶵，子知之乎？夫鵷鶵，發於南海而飛於北海，非梧桐不止，非練實不食，非醴泉不飲。\n\n於是鴟得腐鼠，鵷鶵過之，仰而視曰：『嚇！』今子欲以子之梁國而嚇我邪？」"
+    },
+    {
+      "id": "story-19",
+      "bookId": "zhuangzi",
+      "edition": "534f63d1b695bb00458836d43873a19eb3e72d9ca890945ea4afcf395df5af4d",
+      "title": "濠梁之辩",
+      "source": {
+        "edition": "534f63d1b695bb00458836d43873a19eb3e72d9ca890945ea4afcf395df5af4d",
+        "sectionId": "zhuangzi-17",
+        "firstUnit": "zhuangzi-17-068",
+        "lastUnit": "zhuangzi-17-072"
+      },
+      "text": "莊子與惠子遊於濠梁之上。莊子曰：「儵魚出游從容，是魚樂也。」\n\n惠子曰：“「子非魚，安知魚之樂？」\n\n莊子曰：「子非我，安知我不知魚之樂？」\n\n惠子曰：「我非子，固不知子矣；子固非魚也，子之不知魚之樂，全矣。」\n\n莊子曰：「請循其本，子曰『女安知魚樂』云者，既已知吾知之而問我，我知之濠上也。」"
+    }
+  ],
+  "samples": [
+    {
+      "id": "story-0-yes",
+      "storyId": "story-0",
+      "theme": "以外交说辞化解危机",
+      "label": "yes",
+      "reason": "颜率借齐退秦，又以运输难题劝齐放弃九鼎。"
+    },
+    {
+      "id": "story-0-no",
+      "storyId": "story-0",
+      "theme": "武力夺取胜利",
+      "label": "no",
+      "reason": "所选完整原文没有该主题所需的明确行动或结果。"
+    },
+    {
+      "id": "story-1-yes",
+      "storyId": "story-1",
+      "theme": "从利害分析各方行动",
+      "label": "yes",
+      "reason": "赵累据甘茂和秦王处境预测战果，并建议景翠取利。"
+    },
+    {
+      "id": "story-1-no",
+      "storyId": "story-1",
+      "theme": "知恩图报",
+      "label": "no",
+      "reason": "所选完整原文没有该主题所需的明确行动或结果。"
+    },
+    {
+      "id": "story-2-yes",
+      "storyId": "story-2",
+      "theme": "利用双方争端谋利",
+      "label": "yes",
+      "reason": "说客劝韩按兵而同时取东周之德与西周之宝。"
+    },
+    {
+      "id": "story-2-no",
+      "storyId": "story-2",
+      "theme": "舍身救友",
+      "label": "no",
+      "reason": "所选完整原文没有该主题所需的明确行动或结果。"
+    },
+    {
+      "id": "story-3-yes",
+      "storyId": "story-3",
+      "theme": "以利益影响他国选择",
+      "label": "yes",
+      "reason": "齐明分析楚韩求宝的动机，提出攻西周以取利。"
+    },
+    {
+      "id": "story-3-no",
+      "storyId": "story-3",
+      "theme": "永久和解",
+      "label": "no",
+      "reason": "所选完整原文没有该主题所需的明确行动或结果。"
+    },
+    {
+      "id": "story-4-yes",
+      "storyId": "story-4",
+      "theme": "借对手利益实现目标",
+      "label": "yes",
+      "reason": "苏子借西周制水的利益说服其放水，得到两国报酬。"
+    },
+    {
+      "id": "story-4-no",
+      "storyId": "story-4",
+      "theme": "为朋友牺牲自己",
+      "label": "no",
+      "reason": "所选完整原文没有该主题所需的明确行动或结果。"
+    },
+    {
+      "id": "story-5-yes",
+      "storyId": "story-5",
+      "theme": "礼贤下士",
+      "label": "yes",
+      "reason": "依据该则原文的言行与实际结果提出主题草稿，待用户复核。"
+    },
+    {
+      "id": "story-5-no",
+      "storyId": "story-5",
+      "theme": "战场取胜",
+      "label": "no",
+      "reason": "所选完整原文没有该主题所需的明确行动或结果。"
+    },
+    {
+      "id": "story-6-yes",
+      "storyId": "story-6",
+      "theme": "敬重品德修养",
+      "label": "yes",
+      "reason": "依据该则原文的言行与实际结果提出主题草稿，待用户复核。"
+    },
+    {
+      "id": "story-6-no",
+      "storyId": "story-6",
+      "theme": "用计夺权",
+      "label": "no",
+      "reason": "所选完整原文没有该主题所需的明确行动或结果。"
+    },
+    {
+      "id": "story-7-yes",
+      "storyId": "story-7",
+      "theme": "识人敬贤",
+      "label": "yes",
+      "reason": "依据该则原文的言行与实际结果提出主题草稿，待用户复核。"
+    },
+    {
+      "id": "story-7-no",
+      "storyId": "story-7",
+      "theme": "报复仇敌",
+      "label": "no",
+      "reason": "所选完整原文没有该主题所需的明确行动或结果。"
+    },
+    {
+      "id": "story-8-yes",
+      "storyId": "story-8",
+      "theme": "士人声望",
+      "label": "yes",
+      "reason": "依据该则原文的言行与实际结果提出主题草稿，待用户复核。"
+    },
+    {
+      "id": "story-8-no",
+      "storyId": "story-8",
+      "theme": "牺牲救友",
+      "label": "no",
+      "reason": "所选完整原文没有该主题所需的明确行动或结果。"
+    },
+    {
+      "id": "story-9-yes",
+      "storyId": "story-9",
+      "theme": "推崇德行",
+      "label": "yes",
+      "reason": "依据该则原文的言行与实际结果提出主题草稿，待用户复核。"
+    },
+    {
+      "id": "story-9-no",
+      "storyId": "story-9",
+      "theme": "计谋败敌",
+      "label": "no",
+      "reason": "所选完整原文没有该主题所需的明确行动或结果。"
+    },
+    {
+      "id": "story-10-yes",
+      "storyId": "story-10",
+      "theme": "俭朴家风",
+      "label": "yes",
+      "reason": "依据该则原文的言行与实际结果提出主题草稿，待用户复核。"
+    },
+    {
+      "id": "story-10-no",
+      "storyId": "story-10",
+      "theme": "夺取财宝",
+      "label": "no",
+      "reason": "所选完整原文没有该主题所需的明确行动或结果。"
+    },
+    {
+      "id": "story-11-yes",
+      "storyId": "story-11",
+      "theme": "以比喻说明品德",
+      "label": "yes",
+      "reason": "依据该则原文的言行与实际结果提出主题草稿，待用户复核。"
+    },
+    {
+      "id": "story-11-no",
+      "storyId": "story-11",
+      "theme": "武力取胜",
+      "label": "no",
+      "reason": "所选完整原文没有该主题所需的明确行动或结果。"
+    },
+    {
+      "id": "story-12-yes",
+      "storyId": "story-12",
+      "theme": "欣赏各有所长",
+      "label": "yes",
+      "reason": "依据该则原文的言行与实际结果提出主题草稿，待用户复核。"
+    },
+    {
+      "id": "story-12-no",
+      "storyId": "story-12",
+      "theme": "亲人永久决裂",
+      "label": "no",
+      "reason": "所选完整原文没有该主题所需的明确行动或结果。"
+    },
+    {
+      "id": "story-13-yes",
+      "storyId": "story-13",
+      "theme": "舍身守义",
+      "label": "yes",
+      "reason": "依据该则原文的言行与实际结果提出主题草稿，待用户复核。"
+    },
+    {
+      "id": "story-13-no",
+      "storyId": "story-13",
+      "theme": "贪生弃友",
+      "label": "no",
+      "reason": "所选完整原文没有该主题所需的明确行动或结果。"
+    },
+    {
+      "id": "story-14-yes",
+      "storyId": "story-14",
+      "theme": "价值不同而绝交",
+      "label": "yes",
+      "reason": "依据该则原文的言行与实际结果提出主题草稿，待用户复核。"
+    },
+    {
+      "id": "story-14-no",
+      "storyId": "story-14",
+      "theme": "知恩图报",
+      "label": "no",
+      "reason": "所选完整原文没有该主题所需的明确行动或结果。"
+    },
+    {
+      "id": "story-15-yes",
+      "storyId": "story-15",
+      "theme": "梦与自我认知",
+      "label": "yes",
+      "reason": "原文中的完整寓言/对话支持主题，否定主题缺乏文本行动依据。"
+    },
+    {
+      "id": "story-15-no",
+      "storyId": "story-15",
+      "theme": "权力争夺",
+      "label": "no",
+      "reason": "所选完整原文没有该主题所需的明确行动或结果。"
+    },
+    {
+      "id": "story-16-yes",
+      "storyId": "story-16",
+      "theme": "顺应规律与技艺",
+      "label": "yes",
+      "reason": "原文中的完整寓言/对话支持主题，否定主题缺乏文本行动依据。"
+    },
+    {
+      "id": "story-16-no",
+      "storyId": "story-16",
+      "theme": "鲁莽冒险取胜",
+      "label": "no",
+      "reason": "所选完整原文没有该主题所需的明确行动或结果。"
+    },
+    {
+      "id": "story-17-yes",
+      "storyId": "story-17",
+      "theme": "自由胜于显贵",
+      "label": "yes",
+      "reason": "原文中的完整寓言/对话支持主题，否定主题缺乏文本行动依据。"
+    },
+    {
+      "id": "story-17-no",
+      "storyId": "story-17",
+      "theme": "为官求禄",
+      "label": "no",
+      "reason": "所选完整原文没有该主题所需的明确行动或结果。"
+    },
+    {
+      "id": "story-18-yes",
+      "storyId": "story-18",
+      "theme": "以己之欲误解他人",
+      "label": "yes",
+      "reason": "原文中的完整寓言/对话支持主题，否定主题缺乏文本行动依据。"
+    },
+    {
+      "id": "story-18-no",
+      "storyId": "story-18",
+      "theme": "争夺相位成功",
+      "label": "no",
+      "reason": "所选完整原文没有该主题所需的明确行动或结果。"
+    },
+    {
+      "id": "story-19-yes",
+      "storyId": "story-19",
+      "theme": "理解他者的争论",
+      "label": "yes",
+      "reason": "原文中的完整寓言/对话支持主题，否定主题缺乏文本行动依据。"
+    },
+    {
+      "id": "story-19-no",
+      "storyId": "story-19",
+      "theme": "武力解决争端",
+      "label": "no",
+      "reason": "所选完整原文没有该主题所需的明确行动或结果。"
+    }
+  ],
+  "boundaries": [
+    {
+      "id": "zhanguo-001",
+      "bookId": "战国策",
+      "edition": "212e2b74ae74510821b4c724528e418e9ad3a34ba46e6c263f78c806ea48921a",
+      "unitIds": [
+        "zhanguo-001-001",
+        "zhanguo-001-002",
+        "zhanguo-001-003",
+        "zhanguo-001-004",
+        "zhanguo-001-005",
+        "zhanguo-001-006",
+        "zhanguo-001-007",
+        "zhanguo-001-008"
+      ],
+      "expected": [
+        {
+          "id": "story-0",
+          "units": [
+            "zhanguo-001-001",
+            "zhanguo-001-002",
+            "zhanguo-001-003",
+            "zhanguo-001-004",
+            "zhanguo-001-005",
+            "zhanguo-001-006",
+            "zhanguo-001-007",
+            "zhanguo-001-008"
+          ]
+        }
+      ],
+      "annotationNote": "草稿按本章主事件给完整定位；第1章的借齐退秦与保鼎两阶段共享主线，可由用户复核是否另标子事件。"
+    },
+    {
+      "id": "zhanguo-002",
+      "bookId": "战国策",
+      "edition": "212e2b74ae74510821b4c724528e418e9ad3a34ba46e6c263f78c806ea48921a",
+      "unitIds": [
+        "zhanguo-002-001",
+        "zhanguo-002-002",
+        "zhanguo-002-003",
+        "zhanguo-002-004",
+        "zhanguo-002-005",
+        "zhanguo-002-006"
+      ],
+      "expected": [
+        {
+          "id": "story-1",
+          "units": [
+            "zhanguo-002-001",
+            "zhanguo-002-002",
+            "zhanguo-002-003",
+            "zhanguo-002-004",
+            "zhanguo-002-005",
+            "zhanguo-002-006"
+          ]
+        }
+      ],
+      "annotationNote": "草稿按本章主事件给完整定位；第1章的借齐退秦与保鼎两阶段共享主线，可由用户复核是否另标子事件。"
+    },
+    {
+      "id": "zhanguo-003",
+      "bookId": "战国策",
+      "edition": "212e2b74ae74510821b4c724528e418e9ad3a34ba46e6c263f78c806ea48921a",
+      "unitIds": [
+        "zhanguo-003-001"
+      ],
+      "expected": [
+        {
+          "id": "story-2",
+          "units": [
+            "zhanguo-003-001"
+          ]
+        }
+      ],
+      "annotationNote": "草稿按本章主事件给完整定位；第1章的借齐退秦与保鼎两阶段共享主线，可由用户复核是否另标子事件。"
+    }
+  ]
+}

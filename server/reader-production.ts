@@ -582,7 +582,7 @@ export class ReaderProductionCoordinator implements ReaderProduction{
   }
  }
  stop(){this.stopping=true;this.queue.stop();clearInterval(this.timer);for(const search of this.searches.values())search.controller.abort();}
- get busy(){return !!this.ticking||this.queue.busy||this.leases.size>0;}
+ get busy(){return !!this.ticking||this.queue.busy||this.leases.size>0||!!this.provider.discoveryBusy?.();}
  async close(){
   this.stop();
   if(this.scheduled){clearImmediate(this.scheduled);this.scheduled=undefined;}
@@ -591,6 +591,7 @@ export class ReaderProductionCoordinator implements ReaderProduction{
   const attempt=(work:Promise<void>)=>work.catch(error=>this.tickFailed(error));
   if(this.ticking)await attempt(this.ticking);
   do{await attempt(this.tick());await this.queue.settle();await attempt(this.tick());}while(this.queue.busy);
+  await this.provider.settleDiscovery?.();
   this.closed=true;
  }
 }

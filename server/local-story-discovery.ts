@@ -149,11 +149,10 @@ export async function discoverLocalStories(provider:ReaderProvider,books:LocalBo
  if(!await cache.read(key,stateEnvelope,validate))await cache.shared(key,observer,async()=>{
   if(await cache.read(key,stateEnvelope,validate))return;
   const manifest=await cache.read(previousReadingPlanKey(book,status.provider,limits)+'/blocks',manifestSchema,value=>{hydrateReadingPlan(book,value);return true;});
-  if(!manifest)return;
-  const oldBlocks=hydrateReadingPlan(book,manifest);
+  const oldBlocks=manifest?hydrateReadingPlan(book,manifest):[];
   for(const oldKey of [oldNamespace,legacyNamespace]){
-   const previous=await cache.read(oldKey+'/library',stateEnvelope,value=>validFor(value,oldBlocks.length));if(!previous)continue;
-   const completed=new Set(oldBlocks.slice(0,previous.cursor).flatMap(block=>[...block.visible]));
+   const previous=await cache.read(oldKey+'/library',stateEnvelope,value=>!manifest||validFor(value,oldBlocks.length));if(!previous)continue;
+   const completed=new Set(oldBlocks.slice(0,manifest?previous.cursor:0).flatMap(block=>[...block.visible]));
    let cursor=0;while(cursor<plan.blocks.length&&[...plan.blocks[cursor].visible].every(id=>completed.has(id)))cursor++;
    await cache.write(key,{...restore(previous),cursor,readThrough:cursor,exhausted:cursor===plan.blocks.length});break;
   }
@@ -187,7 +186,7 @@ export async function discoverLocalStories(provider:ReaderProvider,books:LocalBo
     progress(current,'checking',reading);
     if(result.stories.length>input.scan!.maxStories)throw failed();
     if(!result.scan||!Array.isArray(result.scan.pendingEvents)||!Array.isArray(result.scan.resolvedEventIds))throw failed();
-    const overlapDiagnostics:NonNullable<State['overlapDiagnostics']>=[],accepted:Story[]=[],rejections:Rejection[]=[],initialCovered=new Set(current.stories.flatMap(story=>sourceUnitIds(book,story.source))),covered=new Set(initialCovered);
+    const overlapDiagnostics:NonNullable<State['overlapDiagnostics']>=[],accepted:Story[]=[],rejections:Rejection[]=result.scan.invalidStories?[{code:'invalid-source'}]:[],initialCovered=new Set(current.stories.flatMap(story=>sourceUnitIds(book,story.source))),covered=new Set(initialCovered);
     for(const raw of result.stories){
      try{
       const parsed=storySchema.omit({continuedFrom:true}).parse(raw);qualified(books,book,parsed.source,visible);
@@ -202,7 +201,7 @@ export async function discoverLocalStories(provider:ReaderProvider,books:LocalBo
      }catch{rejections.push(rejectedStory('invalid-source',raw));}
     }
     let pending:PendingEvent[];
-    try{pending=mergePending(books,book,current.pendingEvents,result.scan.pendingEvents,result.scan.resolvedEventIds,[...current.stories,...accepted],visible);}
+    try{if(result.scan.invalid)throw failed();pending=mergePending(books,book,current.pendingEvents,result.scan.pendingEvents,result.scan.resolvedEventIds,[...current.stories,...accepted],visible);}
     catch{
      const independent=accepted.filter(story=>!story.continuedFrom?.length||sourceUnitIds(book,story.source).some(id=>!initialCovered.has(id)));
      const lastRejection={code:'pending-resolution' as const};

@@ -70,14 +70,14 @@ catalog路径也重排`localSuggestionPayload`：book/edition及稳定的本块t
 
 ## 执行任务（SS按顺序）
 
-- [ ] **先做有界离线可行性探测。** 在临时目录、假transport/runner中保存当前旧分块/catalog/原文匹配prompt与schema、全部旧键序列化/旧故事ID算法及manifest/缓存fixture，验证任意非硬编码主题的旧判断键能恢复；记录5本书的块数/中位估算及冷1/续4调用基线。不读取用户实际媒体库、不调用CLI或网络。按真实同版世说新语建立1129条预期定位清单，逐条验证现有原文防线并显式记录57条拒绝；用计划的上限32、输出预算和分块模拟，验证9篇≤2调用、1129条≤60、1072篇恰好入库一次且57条拒绝可核算、块数阈值、完整请求预算及三适配器schema/解析容量一致。Codex仅探测捕获协议/替身的有限schema和既有期限，不宣称真实容量已验证。任一目标不能在保留原文/输出防线下达到，或旧键不能精确恢复，停止依赖任务、更新REQ/AP并重新AR；不得隐藏任何预期条目或造回执跳过失败。
-- [ ] **先修缓存保留。** `server/story-discovery-cache.ts`增加串行update；`server/local-story-discovery.ts`按项恢复有效记录、拆开accepted/pending/位置提交，保存诊断并处理仅重复可推进，允许后续合法回执引用已存完成证据结清旧pending且不重复入库；`server/local-source-ranges.ts`复用单位集合做重叠诊断。扩充`tests/story-discovery-cache.test.mjs`和`tests/story-continuation-overlap.test.mjs`，覆盖单条坏数据、写失败、部分保存后合法收束/推进、未知resolved及高重叠合法事件。
-- [ ] **统一三提供商匹配回执与故障/用量。** 修改`lib/reader-theme-match.ts`、`lib/reader-provider.ts`、`lib/reader-gemini.ts`、`server/generation.ts`、`server/openai-provider.ts`，让短编号批次经逐项解析返回稳定内部判断；增加只用于发现的可选安全测量上下文/错误分类。`server/codex-runner.ts`仅补充已知状态/usage的安全传递，不改认证、工具隔离、模型路由或启动方式。三提供商fixture验证单个非法/重复/遗漏不丢合法项，reason在verdict之前，无摘要，失败/用量缺失不泄露原始正文。
-- [ ] **拆出可移植判断身份。** `server/story-theme-matching.ts`使用原典与故事内容指纹替代提取namespace，正常判断/unknown分开存储，用update合并；调用首任务冻结的旧匹配键与旧ID映射，支持当前任意请求主题的可信旧原文回执惰性迁移。扩充`tests/incremental-story-library.test.mjs`、`tests/selected-chapter-extraction.test.mjs`、`tests/story-matching-models.test.mjs`，证明全书/重叠章节/提取配置变化复用，匹配配置或原文变化失效，同名不同范围不混用，旧摘要不导入；用非硬编码主题的固定旧fixture证明旧付费判断可定位且不重判。
-- [ ] **加周期与有界调度。** `lib/reader-intake.ts`、`server/reader-intake.ts`、`server/reader-production.ts`保存/传递cycleId；`server/local-generation.ts`及reading observer转发。`server/story-theme-matching.ts`实现进程共享3槽、在途身份、8次持久预留、单篇隔离及unknown重试资格，`server/local-story-discovery.ts`在unknown后仍继续原文并给不完整说明。使用可控promise与计数，不用真实计费时序；验证跨自动round/重开/重启不重置、多个读者共享收费去重、cache hit立即返回、yes早返后保存在途结果、服务故障停止派发、取消不超发且其他读者继续。
-- [ ] **再扩批、合块及迁移。** `lib/reader-local-contract.ts`解除catalog固定5上限并绑定本次有限容量，重排catalog payload使本块稳定原文先于排除项、pending及上下文；三适配器绑定同一容量函数并捕获实际请求验证字段顺序。`server/story-token-budget.ts`、`server/story-reading-inputs.ts`实现新分块和估算；`server/local-story-discovery.ts`采用新旧manifest前沿迁移，旧序列化按首任务固定fixture保存到明确的legacy helper，不能重定义旧导出改变历史键。更新`lib/reader-suggestions.ts`和`client/ui/StoryReadingState.tsx`、`client/ui/StoryCreationSetup.tsx`多章进度。相应书库/首篇/范围/连续查找测试去掉旧“两章/续4”断言，替换为完整覆盖、有限容量和当前REQ阈值；测试已读完、跨前沿及迁移失败重启。
-- [ ] **完成测量聚合与离线评测。** 增加`server/story-discovery-metrics.ts`受限事件与周期聚合（适配器边界接入前项），新增上述eval数据、脚本及`tests/story-discovery-eval.test.mjs`、`tests/story-discovery-metrics.test.mjs`；仅package scripts变动，无依赖/锁文件变动。用手算小样本覆盖TP/FP/FN/unknown、空分母、不可比身份、缺失/冲突回执、边界一对一和失败覆盖。新增调用预算/块数专项回归`tests/story-discovery-speed-accuracy.test.mjs`；文档说明受控回放与真实质量的边界。
-- [ ] **补足服务与现有界面验收。** 按[E2E规范](../../../../tests/test-story-discovery-speed-accuracy.md)新增`tests/story-discovery-speed-accuracy.e2e.mjs`，复用productionFixture的真实REST/SQLite/FileMedia、隔离数据和假模型；所有自动round/重启/迟到写围栏走真实服务入口。复用既有原文准备与选中防线，不调用分镜/图片。新增测试专用`tests/fixtures/story-discovery-preview.mjs`：临时书库中将productionFixture的`app.handle`绑定到loopback HTTP服务，假provider拒绝外部网络，使用`developmentServerOptions`程序化启动代理至该服务的reader Vite；不运行会加载.env并启动真实后端的`pnpm dev`。桌面preview只提供shell，设置同一临时`SHIQU_DATA_DIR`和`VITE_DESKTOP_READER_URL`再运行`pnpm desktop:preview`。复用相关现有in-app browser标签，从桌面阅读入口进入该受控reader，检查多章进度压缩、不完整提示、选中后停止。该harness只作测试，不增加产品开关；若本机IAB不可用，记录具体缺口，不换浏览器冒充当前页验证。
+- [x] **先做有界离线可行性探测。** 在临时目录、假transport/runner中保存当前旧分块/catalog/原文匹配prompt与schema、全部旧键序列化/旧故事ID算法及manifest/缓存fixture，验证任意非硬编码主题的旧判断键能恢复；记录5本书的块数/中位估算及冷1/续4调用基线。不读取用户实际媒体库、不调用CLI或网络。按真实同版世说新语建立1129条预期定位清单，逐条验证现有原文防线并显式记录57条拒绝；用计划的上限32、输出预算和分块模拟，验证9篇≤2调用、1129条≤60、1072篇恰好入库一次且57条拒绝可核算、块数阈值、完整请求预算及三适配器schema/解析容量一致。Codex仅探测捕获协议/替身的有限schema和既有期限，不宣称真实容量已验证。任一目标不能在保留原文/输出防线下达到，或旧键不能精确恢复，停止依赖任务、更新REQ/AP并重新AR；不得隐藏任何预期条目或造回执跳过失败。
+- [x] **先修缓存保留。** `server/story-discovery-cache.ts`增加串行update；`server/local-story-discovery.ts`按项恢复有效记录、拆开accepted/pending/位置提交，保存诊断并处理仅重复可推进，允许后续合法回执引用已存完成证据结清旧pending且不重复入库；`server/local-source-ranges.ts`复用单位集合做重叠诊断。扩充`tests/story-discovery-cache.test.mjs`和`tests/story-continuation-overlap.test.mjs`，覆盖单条坏数据、写失败、部分保存后合法收束/推进、未知resolved及高重叠合法事件。
+- [x] **统一三提供商匹配回执与故障/用量。** 修改`lib/reader-theme-match.ts`、`lib/reader-provider.ts`、`lib/reader-gemini.ts`、`server/generation.ts`、`server/openai-provider.ts`，让短编号批次经逐项解析返回稳定内部判断；增加只用于发现的可选安全测量上下文/错误分类。`server/codex-runner.ts`仅补充已知状态/usage的安全传递，不改认证、工具隔离、模型路由或启动方式。三提供商fixture验证单个非法/重复/遗漏不丢合法项，reason在verdict之前，无摘要，失败/用量缺失不泄露原始正文。
+- [x] **拆出可移植判断身份。** `server/story-theme-matching.ts`使用原典与故事内容指纹替代提取namespace，正常判断/unknown分开存储，用update合并；调用首任务冻结的旧匹配键与旧ID映射，支持当前任意请求主题的可信旧原文回执惰性迁移。扩充`tests/incremental-story-library.test.mjs`、`tests/selected-chapter-extraction.test.mjs`、`tests/story-matching-models.test.mjs`，证明全书/重叠章节/提取配置变化复用，匹配配置或原文变化失效，同名不同范围不混用，旧摘要不导入；用非硬编码主题的固定旧fixture证明旧付费判断可定位且不重判。
+- [x] **加周期与有界调度。** `lib/reader-intake.ts`、`server/reader-intake.ts`、`server/reader-production.ts`保存/传递cycleId；`server/local-generation.ts`及reading observer转发。`server/story-theme-matching.ts`实现进程共享3槽、在途身份、8次持久预留、单篇隔离及unknown重试资格，`server/local-story-discovery.ts`在unknown后仍继续原文并给不完整说明。使用可控promise与计数，不用真实计费时序；验证跨自动round/重开/重启不重置、多个读者共享收费去重、cache hit立即返回、yes早返后保存在途结果、服务故障停止派发、取消不超发且其他读者继续。
+- [x] **再扩批、合块及迁移。** `lib/reader-local-contract.ts`解除catalog固定5上限并绑定本次有限容量，重排catalog payload使本块稳定原文先于排除项、pending及上下文；三适配器绑定同一容量函数并捕获实际请求验证字段顺序。`server/story-token-budget.ts`、`server/story-reading-inputs.ts`实现新分块和估算；`server/local-story-discovery.ts`采用新旧manifest前沿迁移，旧序列化按首任务固定fixture保存到明确的legacy helper，不能重定义旧导出改变历史键。更新`lib/reader-suggestions.ts`和`client/ui/StoryReadingState.tsx`、`client/ui/StoryCreationSetup.tsx`多章进度。相应书库/首篇/范围/连续查找测试去掉旧“两章/续4”断言，替换为完整覆盖、有限容量和当前REQ阈值；测试已读完、跨前沿及迁移失败重启。
+- [x] **完成测量聚合与离线评测。** 增加`server/story-discovery-metrics.ts`受限事件与周期聚合（适配器边界接入前项），新增上述eval数据、脚本及`tests/story-discovery-eval.test.mjs`、`tests/story-discovery-metrics.test.mjs`；仅package scripts变动，无依赖/锁文件变动。用手算小样本覆盖TP/FP/FN/unknown、空分母、不可比身份、缺失/冲突回执、边界一对一和失败覆盖。新增调用预算/块数专项回归`tests/story-discovery-speed-accuracy.test.mjs`；文档说明受控回放与真实质量的边界。
+- [x] **补足服务与现有界面验收。** 按[E2E规范](../../../../tests/test-story-discovery-speed-accuracy.md)新增`tests/story-discovery-speed-accuracy.e2e.mjs`，复用productionFixture的真实REST/SQLite/FileMedia、隔离数据和假模型；所有自动round/重启/迟到写围栏走真实服务入口。复用既有原文准备与选中防线，不调用分镜/图片。新增测试专用`tests/fixtures/story-discovery-preview.mjs`：临时书库中将productionFixture的`app.handle`绑定到loopback HTTP服务，假provider拒绝外部网络，使用`developmentServerOptions`程序化启动代理至该服务的reader Vite；不运行会加载.env并启动真实后端的`pnpm dev`。桌面preview只提供shell，设置同一临时`SHIQU_DATA_DIR`和`VITE_DESKTOP_READER_URL`再运行`pnpm desktop:preview`。复用相关现有in-app browser标签，从桌面阅读入口进入该受控reader，检查多章进度压缩、不完整提示、选中后停止。该harness只作测试，不增加产品开关；若本机IAB不可用，记录具体缺口，不换浏览器冒充当前页验证。
 - [ ] **验证。** Node24.22.1、pnpm11.25.0；有需要才`pnpm install --frozen-lockfile`。先运行受影响定向测试；TT执行`pnpm typecheck`、`pnpm lint`、`pnpm test`。ET执行`pnpm exec node --experimental-strip-types --test tests/story-discovery-speed-accuracy.e2e.mjs tests/incremental-story-library.e2e.mjs`。执行`pnpm eval:discovery`确认默认离线、草稿状态和不可比较输出。不得运行Docker/桌面prepare/build、真实评测或改实际用户库。
 
 ## 风险与证据边界
@@ -126,3 +126,25 @@ AR review round: 3; reviewer: reused
 AR passed: no blocking architecture flaws
 
 SS里程碑：`fe2d25c`保留有效缓存/跨章部分结果；新增3项针对性用例通过。后续核心调度/回执/分块/评测实现的typecheck与23项新/适配器定向用例通过（`/tmp/shiqu-discovery-milestone.log`）。旧整批失败、续4和两章断言仍待按新REQ更新并执行完整回归，不作为已通过。未调用真实模型、未打包、未改用户库。
+
+
+## SS执行证据
+
+- 里程碑 `3c461b4`：有界匹配调度、短编号回执、v4合块/前沿迁移、发现测量及离线评测核心。后续补齐真实REST/SQLite/FileMedia假模型E2E、兼容回归断言和受控预览。
+- `tests/story-discovery-speed-accuracy.test.mjs`实际调用协调层扫描世说新语全部1129条，保存1072个唯一有效故事，显式逐定位核算56条短文及`shishuo-10-026`异常；提取≤60次。九篇实际提取2次，容量满额不推进；固定五书块数/完整有序覆盖、任意旧主题回执及跨前沿迁移通过。
+- 三适配器实际序列化替身覆盖32篇容量、原文前置、reason先于verdict、逐项匹配解析、用量缺失和日志隐私。新增catalog逐项恢复，非法pending外壳不丢有效故事且不推进旧位置。
+- CR发现并修复：HTTP传输超时和响应外壳解析错误保守归类服务故障；服务故障同步关闭同匹配服务的活跃查找，派发前再次确认；隔离额度绑定判断身份及原文指纹；生命周期等待在途匹配与全部排队测量落盘。各项均有确定性回归。
+- IAB沿桌面`pnpm desktop:preview`入口进入临时假模型reader，已检查四章压缩进度、存在候选与零候选时的不完整说明，以及选择故事后到制作确认。未点击开始制作，未生成分镜/图片。截图：`/tmp/shiqu-discovery-progress.jpg`、`/tmp/shiqu-discovery-incomplete.jpg`、`/tmp/shiqu-discovery-no-match.jpg`、`/tmp/shiqu-discovery-selection.jpg`。
+- ET两文件26/26通过（`/tmp/shiqu-discovery-et-final.log`）；最新派发防线修改后再次执行。默认`pnpm eval:discovery`离线40组草稿受控回放通过，明确不代表真实模型准确度/速度。静态检查通过后续改动正在复核。
+- 完整TT首次在沙箱内因startup PTY测试无法绑定loopback而失败；允许本地socket后924项中921通过，3项仍为旧续4/两章断言，已替换为32篇容量及完整有序覆盖/短章不拆分，针对3项均通过。完整TT最终重跑中。
+
+## CR
+
+CR risk: non-low — 涉及付费调度、持久缓存、并发及迁移。
+CR review round: 2; reviewer: reused
+
+独立只读审查覆盖Git base以来的全部代码、配置、数据和测试。已修复传输故障分类、catalog部分回执保留、同步停止派发、隔离费用身份、取消/共享调用费用归属及迟到落盘；补充初始未展示yes禁止自动重试旧unknown、只有预留成功的读者才归属隔离费用、旧manifest缺失时保留有效故事/pending但覆盖归零。新增确定性回归均通过。未发现外部集成、隐私泄漏、破坏迁移或无关生产范围。
+
+CR fixed: 调用隔离、部分结果保留、费用归属及迁移边界已修复；rerun result passed
+
+CR passed: no major findings

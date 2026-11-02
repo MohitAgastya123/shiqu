@@ -97,7 +97,9 @@ function client(key:string,transport:typeof fetch){
    console.error('gemini_request_rejected',JSON.stringify({httpStatus:response.status,model,status:status&&/^[A-Z_]{1,50}$/.test(status)?status:undefined,unknownFields}));
    throw new GeminiError('PROVIDER_ERROR',response.status);
   }
-  const result=await response.json() as Result,candidate=result.candidates?.[0];
+  let result:Result;try{result=await response.json() as Result;}catch{throw new GeminiError('PROVIDER_ERROR',502);}
+  if(!result||typeof result!=='object')throw new GeminiError('PROVIDER_ERROR',502);
+  const candidate=result.candidates?.[0];
   const fail=(code:string)=>Object.assign(new GeminiError(code),{usage:result.usageMetadata,model:result.modelVersion||model});
   if(result.promptFeedback?.blockReason||candidate?.finishReason&&['SAFETY','IMAGE_SAFETY','PROHIBITED_CONTENT','BLOCKLIST','RECITATION'].includes(candidate.finishReason))throw fail('CONTENT_BLOCKED');
   if(!candidate||candidate.finishReason&&candidate.finishReason!=='STOP')throw fail('INCOMPLETE_RESPONSE');

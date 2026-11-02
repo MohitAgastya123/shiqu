@@ -8,8 +8,9 @@ import type {DiscoveryContext} from '../lib/reader-discovery-call.ts';
 import type {SuggestionProgress} from '../lib/reader-suggestions.ts';
 import {ReaderError} from '../lib/reader-model.ts';
 
-export type ReadingObserver={signal:AbortSignal;onProgress:(progress:SuggestionProgress)=>void;drain?:boolean;maxStories?:1;cycleId?:string;onCall?:DiscoveryContext['onCall']};
-type Flight={controller:AbortController;promise:Promise<unknown>;listeners:Set<ReadingObserver|undefined>;progress?:SuggestionProgress;settled:boolean};
+export type ReadingObserver={signal:AbortSignal;onProgress:(progress:SuggestionProgress)=>void;drain?:boolean;maxStories?:1;cycleId?:string;onCall?:DiscoveryContext['onCall'];onCallStart?:DiscoveryContext['onCallStart']};
+type Flight={controller:AbortController;promise:Promise<unknown>;listeners:Set<ReadingObserver|undefined>;callListeners?:Set<ReadingObserver|undefined>;progress?:SuggestionProgress;settled:boolean};
+const flightsByStore=new WeakMap<object,Map<string,Flight>>();
 const writesByStore=new WeakMap<object,Map<string,Promise<unknown>>>();
 const envelope=z.object({version:z.literal(1),key:z.string(),value:z.unknown()});
 export function discoveryHash(value:unknown){return createHash('sha256').update(JSON.stringify(value)).digest('hex');}
@@ -29,7 +30,7 @@ export class StoryDiscoveryCache{
  private updates=new Map<string,Promise<unknown>>();
  readonly identity:object;
  private store:MediaStore;
- constructor(store:MediaStore){this.store=store;this.identity=store;let updates=writesByStore.get(store);if(!updates){updates=new Map();writesByStore.set(store,updates);}this.updates=updates;}
+ constructor(store:MediaStore){this.store=store;this.identity=store;let flights=flightsByStore.get(store);if(!flights){flights=new Map();flightsByStore.set(store,flights);}this.flights=flights;let updates=writesByStore.get(store);if(!updates){updates=new Map();writesByStore.set(store,updates);}this.updates=updates;}
  async read<T>(key:string,schema:z.ZodType<T>,valid:(value:T)=>boolean=()=>true):Promise<T|null>{
   let object;
   try{object=await this.store.get(`reader-cache/${discoveryHash(key)}.json`);}
@@ -56,13 +57,21 @@ export class StoryDiscoveryCache{
   this.updates.set(key,pending);
   try{return await pending;}finally{if(this.updates.get(key)===pending)this.updates.delete(key);}
  }
+ get busy(){return this.flights.size>0||this.updates.size>0;}
+ async settle(){
+  while(this.busy)await Promise.allSettled([...this.updates.values(),...[...this.flights.values()].map(flight=>flight.promise)]);
+ }
  async shared<T>(key:string,observer:ReadingObserver|undefined,work:(reading:ReadingObserver)=>Promise<T>):Promise<T>{
   observer?.signal.throwIfAborted();
   let flight=this.flights.get(key);
   if(flight?.controller.signal.aborted){await wait(flight.promise.catch(()=>{}),observer?.signal);return this.shared(key,observer,work);}
   if(!flight){
    const current:Flight={controller:new AbortController(),listeners:new Set(),settled:false,promise:Promise.resolve()};
-   current.promise=Promise.resolve().then(()=>work({signal:current.controller.signal,cycleId:observer?.cycleId,onCall:event=>{for(const listener of current.listeners)listener?.onCall?.(event);},onProgress:progress=>{
+   current.promise=Promise.resolve().then(()=>work({signal:current.controller.signal,cycleId:observer?.cycleId,onCallStart:()=>{
+    // Cost attribution survives departure, but future calls capture only their own live demand.
+    const recipients=new Set(current.listeners);current.callListeners=recipients;
+    return event=>{for(const listener of recipients)listener?.onCall?.(event);if(current.callListeners===recipients)delete current.callListeners;};
+   },onCall:event=>{for(const listener of current.listeners)listener?.onCall?.(event);},onProgress:progress=>{
     current.progress=progress;
     for(const listener of current.listeners)if(!listener?.signal.aborted)listener?.onProgress(progress);
    }}));
@@ -71,7 +80,7 @@ export class StoryDiscoveryCache{
   }
   // Give callers without a stream their own lifetime too; undefined is not a unique subscriber.
   const listener=observer||{signal:new AbortController().signal,onProgress:()=>{}};
-  flight.listeners.add(listener);
+  flight.listeners.add(listener);flight.callListeners?.add(listener);
   if(flight.progress)listener.onProgress(flight.progress);
   const current=flight;
   const leave=async()=>{

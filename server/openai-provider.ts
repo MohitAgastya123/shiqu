@@ -63,7 +63,9 @@ export function createOpenAIProvider(variables:Record<string,string|undefined>,m
   const multipart=body instanceof FormData;
   const response=await transport(base+route,{method:'POST',headers:{Authorization:'Bearer '+key,...(!multipart?{'Content-Type':'application/json'}:{})},body:multipart?body:JSON.stringify(body),signal:AbortSignal.timeout(timeout),redirect:'error'});
   if(!response.ok){await response.body?.cancel();throw new OpenAIError('PROVIDER_ERROR',response.status);}
-  return {value:await response.json() as any,requestId:response.headers.get('x-request-id')};
+  let value:any;try{value=await response.json();}catch{throw new OpenAIError('PROVIDER_ERROR',502);}
+  if(!value||typeof value!=='object')throw new OpenAIError('PROVIDER_ERROR',502);
+  return {value,requestId:response.headers.get('x-request-id')};
  }
  async function text(instructions:string,payload:unknown,schema:unknown,effort:ReasoningEffort,maxOutputTokens=8192,requestedModel=models.text){
   const {value,requestId}=await request('/responses',{model:requestedModel,instructions,input:[{role:'user',content:JSON.stringify(payload)}],reasoning:{effort},text:{format:{type:'json_schema',name:'story_result',strict:true,schema:strictOpenAISchema(schema)}},max_output_tokens:maxOutputTokens,store:false});

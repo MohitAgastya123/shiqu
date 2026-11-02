@@ -1,0 +1,260 @@
+{
+  "source": "controlled",
+  "identity": {
+    "provider": "controlled",
+    "model": "fixture",
+    "effort": "none",
+    "contract": "original-binary-v1"
+  },
+  "datasetHash": "2c891e4c06eacc411fd1b50871e2af99f7b172e22082103a931d327f89933e57",
+  "annotationVersion": "draft-1",
+  "matches": [
+    {
+      "sampleId": "story-0-yes",
+      "verdict": "yes",
+      "status": "success"
+    },
+    {
+      "sampleId": "story-0-no",
+      "verdict": "no",
+      "status": "success"
+    },
+    {
+      "sampleId": "story-1-yes",
+      "verdict": "yes",
+      "status": "success"
+    },
+    {
+      "sampleId": "story-1-no",
+      "verdict": "no",
+      "status": "success"
+    },
+    {
+      "sampleId": "story-2-yes",
+      "verdict": "yes",
+      "status": "success"
+    },
+    {
+      "sampleId": "story-2-no",
+      "verdict": "no",
+      "status": "success"
+    },
+    {
+      "sampleId": "story-3-yes",
+      "verdict": "yes",
+      "status": "success"
+    },
+    {
+      "sampleId": "story-3-no",
+      "verdict": "no",
+      "status": "success"
+    },
+    {
+      "sampleId": "story-4-yes",
+      "verdict": "yes",
+      "status": "success"
+    },
+    {
+      "sampleId": "story-4-no",
+      "verdict": "no",
+      "status": "success"
+    },
+    {
+      "sampleId": "story-5-yes",
+      "verdict": "yes",
+      "status": "success"
+    },
+    {
+      "sampleId": "story-5-no",
+      "verdict": "no",
+      "status": "success"
+    },
+    {
+      "sampleId": "story-6-yes",
+      "verdict": "yes",
+      "status": "success"
+    },
+    {
+      "sampleId": "story-6-no",
+      "verdict": "no",
+      "status": "success"
+    },
+    {
+      "sampleId": "story-7-yes",
+      "verdict": "yes",
+      "status": "success"
+    },
+    {
+      "sampleId": "story-7-no",
+      "verdict": "no",
+      "status": "success"
+    },
+    {
+      "sampleId": "story-8-yes",
+      "verdict": "yes",
+      "status": "success"
+    },
+    {
+      "sampleId": "story-8-no",
+      "verdict": "no",
+      "status": "success"
+    },
+    {
+      "sampleId": "story-9-yes",
+      "verdict": "yes",
+      "status": "success"
+    },
+    {
+      "sampleId": "story-9-no",
+      "verdict": "no",
+      "status": "success"
+    },
+    {
+      "sampleId": "story-10-yes",
+      "verdict": "yes",
+      "status": "success"
+    },
+    {
+      "sampleId": "story-10-no",
+      "verdict": "no",
+      "status": "success"
+    },
+    {
+      "sampleId": "story-11-yes",
+      "verdict": "yes",
+      "status": "success"
+    },
+    {
+      "sampleId": "story-11-no",
+      "verdict": "no",
+      "status": "success"
+    },
+    {
+      "sampleId": "story-12-yes",
+      "verdict": "yes",
+      "status": "success"
+    },
+    {
+      "sampleId": "story-12-no",
+      "verdict": "no",
+      "status": "success"
+    },
+    {
+      "sampleId": "story-13-yes",
+      "verdict": "yes",
+      "status": "success"
+    },
+    {
+      "sampleId": "story-13-no",
+      "verdict": "no",
+      "status": "success"
+    },
+    {
+      "sampleId": "story-14-yes",
+      "verdict": "yes",
+      "status": "success"
+    },
+    {
+      "sampleId": "story-14-no",
+      "verdict": "no",
+      "status": "success"
+    },
+    {
+      "sampleId": "story-15-yes",
+      "verdict": "yes",
+      "status": "success"
+    },
+    {
+      "sampleId": "story-15-no",
+      "verdict": "no",
+      "status": "success"
+    },
+    {
+      "sampleId": "story-16-yes",
+      "verdict": "yes",
+      "status": "success"
+    },
+    {
+      "sampleId": "story-16-no",
+      "verdict": "no",
+      "status": "success"
+    },
+    {
+      "sampleId": "story-17-yes",
+      "verdict": "yes",
+      "status": "success"
+    },
+    {
+      "sampleId": "story-17-no",
+      "verdict": "no",
+      "status": "success"
+    },
+    {
+      "sampleId": "story-18-yes",
+      "verdict": "yes",
+      "status": "success"
+    },
+    {
+      "sampleId": "story-18-no",
+      "verdict": "no",
+      "status": "success"
+    },
+    {
+      "sampleId": "story-19-yes",
+      "verdict": "yes",
+      "status": "success"
+    },
+    {
+      "sampleId": "story-19-no",
+      "verdict": "no",
+      "status": "success"
+    }
+  ],
+  "boundaries": [
+    {
+      "id": "zhanguo-001",
+      "predicted": [
+        {
+          "id": "story-0",
+          "units": [
+            "zhanguo-001-001",
+            "zhanguo-001-002",
+            "zhanguo-001-003",
+            "zhanguo-001-004",
+            "zhanguo-001-005",
+            "zhanguo-001-006",
+            "zhanguo-001-007",
+            "zhanguo-001-008"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "zhanguo-002",
+      "predicted": [
+        {
+          "id": "story-1",
+          "units": [
+            "zhanguo-002-001",
+            "zhanguo-002-002",
+            "zhanguo-002-003",
+            "zhanguo-002-004",
+            "zhanguo-002-005",
+            "zhanguo-002-006"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "zhanguo-003",
+      "predicted": [
+        {
+          "id": "story-2",
+          "units": [
+            "zhanguo-003-001"
+          ]
+        }
+      ]
+    }
+  ]
+}

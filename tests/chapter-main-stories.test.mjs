@@ -47,7 +47,7 @@ for(const name of ['codex','gemini'])test(`${name}: chapter thirty offers Guandu
  assert.deepEqual((await wrapped.suggestions(selected,[])).stories,first.stories);assert.equal(jobs.length,mainCalls);
  const next=await wrapped.suggestions(selected,[main.title],undefined,undefined,[main.source]);
  assert.deepEqual(next.stories.map(s=>s.title),episodes.map(s=>s.title));assert.equal(jobs.length,mainCalls+1);
- assert.equal(jobs.at(-1).localBook.scan.chapterStoryLevel,'episodes');assert.equal(jobs.at(-1).localBook.scan.maxStories,4);
+ assert.equal(jobs.at(-1).localBook.scan.chapterStoryLevel,'episodes');assert.equal(jobs.at(-1).localBook.scan.maxStories,32);
  assert.deepEqual(jobs.at(-1).localBook.scan.excludedSources,[main.source]);assert.deepEqual(jobs.at(-1).excludeTitles,[main.title]);
  const both=await withLocalBooks(base,library,store).suggestions(selected,[]);
  assert.deepEqual(both.stories.map(s=>s.title),[main.title,...episodes.map(s=>s.title)]);assert.equal(jobs.length,mainCalls+1);

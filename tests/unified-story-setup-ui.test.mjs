@@ -27,6 +27,8 @@ test('discovery stays in the picker and selection opens one continuous story flo
   assert.match(opening,/正在寻找更多故事/);assert.doesNotMatch(opening,/data-stage=|生成进展|制作故事|故事流程|yu-generation-stage/);
  }
  for(const phase of ['preparing','confirming','confirmed'])assert.equal(storyCreationTitle({...session,intake:{...session.intake,phase}}),'故事流程');
+ const incomplete=renderToStaticMarkup(createElement(Setup,{...props,session:{...choosing,intake:{...choosing.intake,batches:[{stories:[],note:'原文已读完，但有未能判断的故事，主题检查尚不完整。'}]}}}));
+ assert.match(incomplete,/未能判断的故事/);assert.doesNotMatch(incomplete,/还没有找到符合主题/);
  const candidates=renderToStaticMarkup(createElement(Setup,{...props,session:choosing}));
  assert.match(candidates,/已找到 1 篇故事/);assert.doesNotMatch(candidates,/完整审片流程|开始制作|<textarea|叙事详略|<select|候选批次/);
  // The review tools stay reachable once a reused first image exists; a clean story has no need of them.

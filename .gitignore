@@ -51,6 +51,9 @@ yarn-error.log*
 /data/*
 !/data/README.md
 !/data/library/
+!/data/evals/
+/data/evals/*
+!/data/evals/story-discovery/
 /.pnpm-store/
 
 # Desktop build products and staged runtime resources (never source or personal configuration).

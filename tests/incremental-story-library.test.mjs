@@ -4,11 +4,13 @@ import assert from 'node:assert/strict';
 import {libraryFixture,selection} from './fixtures/story-library.mjs';
 import {StoryDiscoveryCache} from '../server/story-discovery-cache.ts';
 import {discoverLocalStories,discoveryNamespace,legacySummaryDiscoveryNamespace} from '../server/local-story-discovery.ts';
-import {matchLibraryStories,themeStoryId,themeDecisionKey} from '../server/story-theme-matching.ts';
+import {matchLibraryStories,themeStoryId} from '../server/story-theme-matching.ts';
 import {localSuggestionPayload} from '../lib/reader-local-contract.ts';
 import {themeMatchPrompt,themeMatchJson,themeMatchPayload} from '../lib/reader-theme-match.ts';
 import {readingTokens} from '../server/story-token-budget.ts';
+import {previousReadingPlanKey} from '../server/story-discovery-legacy.ts';
 import {until} from './fixtures/production.mjs';
+const seedManifest=async f=>f.cache.write(previousReadingPlanKey(f.book,'codex')+'/blocks',{mode:'whole',blocks:[{ranges:f.book.sections.map(s=>({sectionId:s.id,firstUnit:s.units[0].id,lastUnit:s.units.at(-1).id})),tokens:100}]});
 const observer=controller=>({signal:controller.signal,maxStories:1,drain:true,onProgress:()=>{}});
 const documents=f=>[...f.store.values.values()].map(bytes=>JSON.parse(new TextDecoder().decode(bytes)));
 const library=f=>documents(f).find(doc=>doc.key===discoveryNamespace(f.book,'codex',f.control.model,undefined,f.control.effort)+'/library').value;
@@ -41,11 +43,12 @@ test('every matching request reads the exact original on its first and only pass
  assert.equal(result.stories[0].storyBrief,undefined);assert.ok(result.stories[0].matchReason);await f.run('原文判断');assert.equal(f.calls.matches.length,1);
 });
 
-test('obsolete review is an invalid receipt, never cached as a negative and retried against the original',async()=>{
- const f=libraryFixture();f.control.decide=()=> 'review';await assert.rejects(f.run('不确定'));
- assert.equal(library(f).stories.length,1);assert.equal(f.calls.matches.length,1);assert.ok(!documents(f).some(doc=>doc.key.includes('/themes/')));
- f.control.decide=(_theme,story)=>{assert.ok(story.text);return 'yes';};
- assert.equal((await f.run('不确定')).stories[0].title,'乌龟报恩');assert.equal(f.calls.matches.length,2);assert.equal(f.calls.catalog.length,1);
+test('obsolete review remains unknown, permits later originals, and can be retried manually after exhaustion',async()=>{
+ const f=libraryFixture();f.control.decide=()=> 'review';const result=await f.run('不确定');
+ assert.deepEqual(result.stories,[]);assert.match(result.note,/未能判断/);assert.equal(library(f).stories.length,2);
+ const judgments=documents(f).filter(doc=>doc.value.decisions);assert.ok(judgments.every(doc=>Object.keys(doc.value.decisions).length===0));
+ const before=f.calls.matches.length;f.control.decide=(_theme,story)=>{assert.ok(story.text);return 'yes';};
+ assert.equal((await f.run('不确定')).stories[0].title,'乌龟报恩');assert.ok(f.calls.matches.length>before);assert.equal(f.calls.catalog.length,2);
 });
 
 test('a later provider failure preserves completed positive and negative receipts',async()=>{
@@ -56,11 +59,11 @@ test('a later provider failure preserves completed positive and negative receipt
  const before=f.calls.matches.length;assert.equal((await run([f.stories[0]])).length,1);assert.equal(f.calls.matches.length,before);
 });
 
-for(const kind of ['unknown','duplicate','missing'])test(`invalid ${kind} matching IDs cannot commit decisions or destroy the catalog`,async()=>{
+for(const kind of ['unknown','duplicate','missing'])test(`invalid ${kind} matching IDs preserve legal decisions and the catalog`,async()=>{
  const f=libraryFixture();await f.run('收录');await f.run('收录',[f.stories[0].source]);
- f.provider.matchStories=async(_theme,stories)=>({matches:kind==='unknown'?stories.map(story=>({id:'b'.repeat(64),verdict:'yes',reason:'符合'})):kind==='duplicate'?stories.map(()=>({id:stories[0].id,verdict:'yes',reason:'符合'})):[{id:stories[0].id,verdict:'yes',reason:'符合'}]});
- await assert.rejects(f.run('坏结果'),/逐篇核对/);assert.equal(library(f).stories.length,2);
- assert.ok(!documents(f).some(doc=>doc.key===themeDecisionKey(discoveryNamespace(f.book,'codex','mock',undefined,'medium'),'坏结果',{model:'mock-match',reasoningEffort:'low'})));
+ f.provider.matchStories=async(_theme,stories)=>({matches:kind==='unknown'?stories.map(story=>({id:'b'.repeat(64),verdict:'yes',reason:'符合'})):kind==='duplicate'?stories.flatMap(story=>[{id:story.id,verdict:'yes',reason:'符合'},{id:story.id,verdict:'no',reason:'冲突'}]):[{id:stories[0].id,verdict:'yes',reason:'符合'}]});
+ const result=await f.run('坏结果');assert.equal(library(f).stories.length,2);
+ if(kind==='missing')assert.equal(result.stories.length,1);else {assert.deepEqual(result.stories,[]);assert.match(result.note,/未能判断/);}
 });
 
 test('catalog and candidates contain no synopsis or production brief',async()=>{
@@ -102,13 +105,13 @@ test('one departing matching reader leaves another active and neither repeats th
 
 test('matching budget rejects paid work before dispatch and leaves already catalogued stories intact',async()=>{
  const f=libraryFixture();await f.run('先收录');const before=f.calls.matches.length;
- await assert.rejects(matchLibraryStories(f.provider,f.cache,'small-budget','主题',f.stories,story=>f.books.resolve(f.book,story.source).text,1,'codex'),/超过主题匹配输入预算/);
+ assert.deepEqual(await matchLibraryStories(f.provider,f.cache,'small-budget','主题',f.stories,story=>f.books.resolve(f.book,story.source).text,1,'codex'),[]);
  assert.equal(f.calls.matches.length,before);assert.equal(library(f).stories.length,1);
 });
 
 test('a single oversized original fails before inference and never truncates or writes no',async()=>{
- const f=libraryFixture();await assert.rejects(matchLibraryStories(f.provider,f.cache,'raw-budget','主题',[f.stories[0]],()=> '字'.repeat(16000),10000,'codex'),/超过主题匹配输入预算/);
- assert.equal(f.calls.matches.length,0);assert.ok(!documents(f).some(doc=>doc.value.decisions));
+ const f=libraryFixture();assert.deepEqual(await matchLibraryStories(f.provider,f.cache,'raw-budget','主题',[f.stories[0]],()=> '字'.repeat(16000),10000,'codex'),[]);
+ assert.equal(f.calls.matches.length,0);assert.ok(documents(f).filter(doc=>doc.value.decisions).every(doc=>Object.keys(doc.value.decisions).length===0));
 });
 
 test('input budget shrinks a batch while preserving every full original',async()=>{
@@ -149,7 +152,7 @@ test('a changed extraction model or effort starts an isolated library while them
 
 test('old summary catalog resumes ranges and coverage without extraction or old theme verdicts',async()=>{
  const f=libraryFixture(),old=legacySummaryDiscoveryNamespace(f.book,'codex','mock',undefined,'medium');
- const state={stories:f.stories,cursor:1,readThrough:1,pendingEvents:[],exhausted:true,rejected:false};await f.cache.write(old+'/library',state);
+ const state={stories:f.stories,cursor:1,readThrough:1,pendingEvents:[],exhausted:true,rejected:false};await seedManifest(f);await f.cache.write(old+'/library',state);
  const result=await f.run('勇气');assert.equal(result.stories[0].title,'勇士护民');assert.equal(f.calls.catalog.length,0);assert.equal(f.calls.matches.length,1);assert.equal(f.calls.matches[0].stories.length,2);
  assert.equal(library(f).cursor,1);assert.equal(library(f).exhausted,true);assert.ok(library(f).stories.every(story=>!('summary' in story)));
  const oldDocument=documents(f).find(doc=>doc.key===old+'/library');assert.deepEqual(oldDocument.value,state);
@@ -172,18 +175,18 @@ test('six originals are matched in bounded batches with reordered IDs and durabl
 test('legacy pending ranges lose synopsis metadata and a failed upgrade write remains retryable',async()=>{
  const f=libraryFixture(),key=legacySummaryDiscoveryNamespace(f.book,'codex','mock',undefined,'medium')+'/library';
  const old={stories:[f.stories[0]],cursor:0,readThrough:0,pendingEvents:[{id:'pending',title:f.stories[1].title,summary:'尚未完结的旧摘要',source:f.stories[1].source}],exhausted:false,rejected:false};
- await f.cache.write(key,old);const write=f.cache.write.bind(f.cache);let fail=true;
+ await seedManifest(f);await f.cache.write(key,old);const write=f.cache.write.bind(f.cache);let fail=true;
  f.cache.write=async(next,value)=>{if(next.endsWith('/library')&&next!==key&&fail)throw Error('controlled upgrade write');return write(next,value);};
  await assert.rejects(f.run('主题'),/controlled upgrade write/);assert.equal(f.calls.catalog.length,0);assert.equal(f.calls.matches.length,0);
  assert.deepEqual(documents(f).find(doc=>doc.key===key).value,old);fail=false;await f.run('主题');assert.equal(f.calls.catalog.length,0);
  assert.deepEqual(library(f).pendingEvents,[{id:'pending',title:f.stories[1].title,source:f.stories[1].source}]);
 });
 
-test('one-at-a-time presentation extracts four after a cold miss and consumes the batch without re-reading',async()=>{
+test('one-at-a-time presentation extracts a bounded larger batch after a cold miss and consumes the batch without re-reading',async()=>{
  const f=libraryFixture();
  for(let i=3;i<=5;i++){const unit={id:'u'+i,text:'勇士'+i+'面对猛虎仍然向前，保护村民并驱走猛虎，最后平安归来。',narrative:true};f.book.sections[0].units.push(unit);f.stories.push({title:'护民故事'+i,description:'人物面对危险作出选择。',source:{...f.stories[1].source,firstUnit:unit.id,lastUnit:unit.id}});}
  f.book.input.text='篇章 s1：第一章\n'+f.book.sections[0].units.map(unit=>'['+unit.id+']\n'+unit.text).join('\n\n');
- const control=new AbortController(),first=await f.run('勇气',[],observer(control));assert.equal(first.stories.length,1);assert.deepEqual(f.calls.catalog.map(call=>call.input.scan.maxStories),[1,4]);assert.deepEqual(f.calls.matches.map(call=>call.stories.length),[1,4]);
+ const control=new AbortController(),first=await f.run('勇气',[],observer(control));assert.equal(first.stories.length,1);assert.deepEqual(f.calls.catalog.map(call=>call.input.scan.maxStories),[1,32]);assert.deepEqual(f.calls.matches.map(call=>call.stories.length),[1,4]);
  const seen=[first.stories[0].source];for(let i=0;i<3;i++){const next=await f.run('勇气',seen,observer(control));assert.equal(next.stories.length,1);seen.push(next.stories[0].source);}
  assert.equal(f.calls.catalog.length,2);assert.equal(f.calls.matches.length,2);assert.equal(new Set(seen.map(source=>source.firstUnit)).size,4);
 });
