@@ -10,3 +10,5 @@
 6. 三provider捕获实际图片附件：page0支持参考、后续支持参考，且无星时旧契约保持；复制到目标namespace，原跨story引用校验仍拒绝。legacy生成也通过同一helper；有效星标且本篇首图文件丢失时仍使用星标，无星时维持原有lost-image错误。
 7. UI星标有正确aria-label/pressed/disabled，只有实际画幅按钮、结语不显示。状态加载/保存错误不假亮；翻页/换故事和请求乱序不串状态。浏览器不可用时仅确认静态/逻辑契约，未视觉验收。
 8. 旧库升级新增空表，不自动设星，不改变故事、图片作业和回执；重启幂等，旧库不要求具备0010，由导入后openDatabase创建空表；已有导入/队列/版本测试继续通过。
+
+最终执行：TT867/867（`/tmp/shiqu-star-all-tests.log`），ET6/6（`/tmp/shiqu-star-e2e-final.log`），typecheck/lint通过；最新UI取消反馈10/10（`/tmp/shiqu-star-cancel-ui.log`），相关恢复/提示词组合55项及最终导入/新功能26项通过。三provider实际附件、API唯一性/token/CAS/所有权/坏快照与hook乱序由新增单元/集成覆盖。真实SQLite/FileMedia/REST和受控模型，无付费生图或浏览器视觉结论。实际空表/触发器升级记录`/tmp/shiqu-star-live-upgrade.json`，74任务/2118作业/0星保持；没有替用户自动选图。

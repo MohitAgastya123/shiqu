@@ -18,7 +18,7 @@ Reader顶部收藏旁加入独立星标控件，与整篇收藏分开。独立�
 - [x] 新增迁移及schema、book引用存储/媒体校验、严格API和删除源清理，保证唯一、所有权、CAS和无图/坏图防线。
 - [x] coordinator/legacy统一参考解析与三adapter、共享图像提示词接线；保留同篇首图fallback与任务身份/付费回执，覆盖第一幅及后续、legacy路径。
 - [x] Reader每页星标按钮及服务状态处理，更新README/使用与开发文档。
-- [ ] 增加服务及provider/迁移/UI回归，执行typecheck、lint、完整TT与匹配ET。无新依赖或打包。
+- [x] 增加服务及provider/迁移/UI回归，执行typecheck、lint、完整TT与匹配ET。无新依赖或打包。
 
 验证重点是实际图片字节是否进入新书故事第一幅/后续请求，替换后只改新调用、取消恢复本篇首图，跨owner/book隔离、无状态串页、可复用成功回执不重复付费。真实模型脸部一致性不由受控测试证明。
 
@@ -47,3 +47,23 @@ CR risk: non-low — persistent ownership, concurrent selection changes, media a
 CR review round: 1; reviewer: reused
 
 CR1完整覆盖base至a82ea25，主要边界无重大问题。随后自查UI旧token取消响应：服务端保留新星时不能提示“已取消”；窄修提示为已更换并同步，添加同页迟到取消响应测试，返回CR2影响复核。
+
+SS follow-up milestone: `f362b18` (`fix: clarify stale reference cancellation feedback`)。仅取消提示及回归，10/10定向通过（`/tmp/shiqu-star-cancel-ui.log`）。
+
+CR passed: no major findings
+CR risk: non-low — inherited persistence and paid-dispatch boundaries; this followup only corrects cancellation feedback and its regression coverage.
+CR review round: 2; reviewer: reused
+
+独立CR2复核a82ea25至f362b18，复用CR1其余结论；此后无源代码变动。完整TT及最终ET执行中。
+
+TT最终：`pnpm test` 867/867通过，约45.3秒（`/tmp/shiqu-star-all-tests.log`）。ET最终：`pnpm exec node --experimental-strip-types --test tests/book-reference-star.e2e.mjs` 6/6通过（`/tmp/shiqu-star-e2e-final.log`）。最新typecheck、lint通过（`/tmp/shiqu-star-typecheck.log`、`/tmp/shiqu-star-lint.log`），diff检查通过。无额外付费生图、打包或浏览器视觉验证。
+
+VR passed: all acceptance criteria complete
+
+独立VR1确认六项标准全部complete，REQ已勾选，完整终验原文保存在DD。完成到DD，保留本地SS里程碑a82ea25、f362b18；未执行最终GC或push。
+
+VR risk: non-low — persistent ownership, concurrent selection changes, media authorization, legacy import and paid-generation dispatch.
+VR review round: 1; reviewer: reused
+
+
+用户“DD GC”收尾：源码与已验证的f362b18保持一致，沿用867/867完整TT、6/6服务E2E及typecheck/lint、CR1/CR2和VR1证据。DD已保留完整最终VR。本次GC只提交本故事四份收尾文档，保留a82ea25及f362b18，不push或打包。
