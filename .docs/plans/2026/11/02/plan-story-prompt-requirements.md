@@ -59,3 +59,28 @@ AR risk: low — localized, reversible action hierarchy/navigation changes.
 AR review round: 2; reviewer: reused (requirements_review). This extension changes UI presentation/navigation only, not generation/persistence contracts.
 
 User-correction verification: typecheck/lint passed; 10 existing shared-UI/revision checks and 17 UI/navigation checks passed. IAB verified paused pre-plan and paused reading-settings branches: resume has yu-primary, shelf exit has secondary yu-generation-back; both navigate to the actual shelf with URL / and no active dialog. The reading branch was missing this exit before. Screenshots flow-actions-paused.jpg and flow-actions-reading.jpg saved under .docs/tests/evidence/story-prompt-requirements/. Shared render tests cover discovery/choosing/confirming and idle/failed/running paused controls without auto-resume. No provider/data behavior changed; existing full981 plus focused16/13 results retained.
+
+SS milestones: 5033753 — blocked acceptance status and historical usage guard; 1aa7888 — primary resume and consistent secondary shelf exits. Final typecheck/lint passed after source stabilized.
+
+CR passed: no major findings
+CR risk: low — final flow presentation/navigation and historical missing-usage guard.
+CR review round: 3; reviewer: reused (requirements_review).
+
+VR passed: all acceptance criteria complete
+
+VR risk: non-low — the complete story changes persisted requirements, provider requests, review gates and version provenance.
+VR review round: 1; reviewer: reused
+
+| Criterion | Verdict and evidence |
+|---|---|
+| Two sibling requirement entries | Complete. Creation, paused and reading flows use the two shared editors; primary IAB evidence and shared UI tests cover their presence. |
+| Independent per-story persistence | Complete. Optional schema preserves legacy records; intake draft/restart/confirmation and revision tests establish separate saved values and inheritance. |
+| Inspectable actual prompts | Complete. Three-provider request/capture equality tests cover instructions, input and output contract. Owner-scoped retrieval preserves origin and reference links. IAB copy/paste and historical no-record evidence recorded. |
+| Criteria govern review and repair | Complete. Strict validation rejects missing/duplicate/invalid results. Failed criteria enter repair and fresh audit; unknown criteria stop repair/drawing with evidence and an edit route. |
+| Acceptance-only version reuse | Complete. Revision logic preserves scripts/images and resets review. Integration and IAB evidence show three reused, zero redraw, new review capture and unchanged original. |
+| Results, legacy state and preserved behavior | Complete. Shared UI displays criterion evidence and missing history. Legacy missing-usage regression, provider contracts, queue/revision suites and shared timeline parity cover compatibility. |
+| Primary resume and secondary shelf return | Complete. Shared controls cover all four rendering branches. Navigation tests and IAB evidence verify actual shelf navigation. Independently inspected both saved flow screenshots: green resume and outlined shelf exit are visible. |
+
+Validation evidence: full suite passed **981/981** with concurrency 2; the default-concurrency 80-frame timeout and successful isolated/bounded reruns remain disclosed. Typecheck, lint and subsequent focused checks passed. No test assertions or timeout limits were weakened.
+
+No remaining acceptance gaps. Browser interaction evidence is reused from the primary agent; screenshots and implementation were independently inspected. No tests were rerun during this review.
