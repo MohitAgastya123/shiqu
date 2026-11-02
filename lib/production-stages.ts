@@ -8,21 +8,22 @@ export function productionStages(input:Input):ProductionStage[]{
  const {planReady,reviewStatus,reviewRound=0,repairCompleted=0,repairTotal=0,total,ready,activeState='current'}=input;
  const phase=input.phase||(!planReady?'plan':reviewStatus==='repair'?'repair':reviewStatus==='pending'||reviewStatus==='blocked'?'review':'image');
  const legacy=planReady&&!reviewStatus,passed=reviewStatus==='passed',blocked=reviewStatus==='blocked';
- const needsReplan=blocked&&input.reviewStopReason==='replan';
+ const needsReplan=blocked&&input.reviewStopReason==='replan',requirementsBlocked=blocked&&input.reviewStopReason==='requirements';
+ const stoppedBeforeRepair=needsReplan||requirementsBlocked;
  const rechecking=!needsReplan&&phase==='review'&&reviewRound>0;
  const repaired=reviewStatus==='repair'||blocked||rechecking||passed&&reviewRound>1||!!input.reviewOverridden;
  const active=(at:boolean):ProductionStageState=>at?activeState:'pending';
- const reviewState:ProductionStageState=needsReplan?'failed':legacy?'unavailable':passed||repaired?'done':active(phase==='review');
- const repairState:ProductionStageState=needsReplan?'skipped':blocked&&input.reviewStopReason==='unchanged'?'failed':legacy?'unavailable':passed&&!repaired?'skipped':blocked||rechecking||passed&&repaired?'done':active(phase==='repair');
- const recheckState:ProductionStageState=needsReplan?'pending':blocked&&input.reviewStopReason==='unchanged'?'pending':legacy?'unavailable':passed?(repaired?'done':'skipped'):blocked?'failed':active(rechecking);
+ const reviewState:ProductionStageState=stoppedBeforeRepair?'failed':legacy?'unavailable':passed||repaired?'done':active(phase==='review');
+ const repairState:ProductionStageState=stoppedBeforeRepair?'skipped':blocked&&input.reviewStopReason==='unchanged'?'failed':legacy?'unavailable':passed&&!repaired?'skipped':blocked||rechecking||passed&&repaired?'done':active(phase==='repair');
+ const recheckState:ProductionStageState=stoppedBeforeRepair?'pending':blocked&&input.reviewStopReason==='unchanged'?'pending':legacy?'unavailable':passed?(repaired?'done':'skipped'):blocked?'failed':active(rechecking);
  const count=total===null?'':` / ${total}`;
  const batch=input.storyboardBatch||(!planReady&&input.storyboardFrames!=null&&total!==null&&input.storyboardFrames<total?{first:input.storyboardFrames+1,last:Math.min(input.storyboardFrames+readerStoryboardBatchSize,total)}:null);
  return [
   {id:'plan',label:'分批分镜',state:planReady?'done':active(phase==='plan'||phase==='reflection'),detail:phase==='reflection'?'完整分镜已保存，正在撰写结语':planReady?`${total===null?'全篇':total+' 幅'}分镜已保存`:batch?`已保存 ${input.storyboardFrames||0}${count} 幅分镜 · 当前第 ${batch.first}–${batch.last} 幅`:input.storyboardFrames!=null?`已保存 ${input.storyboardFrames}${count} 幅分镜`:'等待完整分镜返回'},
-  {id:'review',label:'全篇审片',state:reviewState,detail:needsReplan?'主事件未完整收束，需要重新编排':legacy?'旧故事未启用审片':reviewState==='done'?(passed&&!repaired?'初审通过':'全篇审片已完成'):phase==='review'&&!rechecking?'检查分镜、跨批衔接与结语':'等待分镜与结语完成'},
-  {id:'repair',label:'定向修订',state:repairState,detail:needsReplan?'整篇结构需重编，未执行局部修补':legacy?'旧故事未启用审片':repairState==='skipped'?'初审通过，无需修订':phase==='repair'?`第 ${(input.repairPasses||0)+1} 轮 · 已修订 ${repairCompleted} / ${repairTotal} 项`:repairState==='done'?typeof input.repairBatches==='number'?`已完成 ${input.repairBatches} 批定向修订`:'问题幅号已定向修订':'仅在审片发现问题时执行'},
-  {id:'recheck',label:'复核',state:recheckState,detail:needsReplan?'重新编排后再审核':legacy?'旧故事未启用审片':blocked?`仍有 ${repairTotal} 项待修订，绘图已阻止`:input.reviewOverridden?'未解决的问题由你确认放行':recheckState==='skipped'?'初审通过，无需复核':passed?`复核通过 · 已审核 ${input.reviewAudits??reviewRound} 次`:rechecking?`正在第 ${(input.reviewAudits??reviewRound)+1} 次全篇审核`:'修订后重新审片'},
-  {id:'image',label:'绘图',state:planReady&&(legacy||passed)&&total!==null&&total>0&&ready>=total?'done':active(phase==='image'&&planReady&&(legacy||passed)),detail:needsReplan?'等待重新编排，绘图已阻止':blocked?'待继续修订，绘图已阻止':reviewStatus&&!passed?'等待审片通过':total===null?`已保存 ${ready} 幅`:`${ready} / ${total} 幅画面已保存`},
+  {id:'review',label:'全篇审片',state:reviewState,detail:requirementsBlocked?'验收要求存在冲突或无法判断':needsReplan?'主事件未完整收束，需要重新编排':legacy?'旧故事未启用审片':reviewState==='done'?(passed&&!repaired?'初审通过':'全篇审片已完成'):phase==='review'&&!rechecking?'检查分镜、跨批衔接与结语':'等待分镜与结语完成'},
+  {id:'repair',label:'定向修订',state:repairState,detail:requirementsBlocked?'等待调整验收要求，未执行自动修订':needsReplan?'整篇结构需重编，未执行局部修补':legacy?'旧故事未启用审片':repairState==='skipped'?'初审通过，无需修订':phase==='repair'?`第 ${(input.repairPasses||0)+1} 轮 · 已修订 ${repairCompleted} / ${repairTotal} 项`:repairState==='done'?typeof input.repairBatches==='number'?`已完成 ${input.repairBatches} 批定向修订`:'问题幅号已定向修订':'仅在审片发现问题时执行'},
+  {id:'recheck',label:'复核',state:recheckState,detail:requirementsBlocked?'调整验收要求后重新审核':needsReplan?'重新编排后再审核':legacy?'旧故事未启用审片':blocked?`仍有 ${repairTotal} 项待修订，绘图已阻止`:input.reviewOverridden?'未解决的问题由你确认放行':recheckState==='skipped'?'初审通过，无需复核':passed?`复核通过 · 已审核 ${input.reviewAudits??reviewRound} 次`:rechecking?`正在第 ${(input.reviewAudits??reviewRound)+1} 次全篇审核`:'修订后重新审片'},
+  {id:'image',label:'绘图',state:planReady&&(legacy||passed)&&total!==null&&total>0&&ready>=total?'done':active(phase==='image'&&planReady&&(legacy||passed)),detail:requirementsBlocked?'等待调整验收要求，绘图已阻止':needsReplan?'等待重新编排，绘图已阻止':blocked?'待继续修订，绘图已阻止':reviewStatus&&!passed?'等待审片通过':total===null?`已保存 ${ready} 幅`:`${ready} / ${total} 幅画面已保存`},
  ];
 }
 

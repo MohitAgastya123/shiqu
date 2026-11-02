@@ -16,8 +16,8 @@ Risk: non-low — persisted selection/document additions, three providers, revie
 - [x] Capture actual prompts for Codex/OpenAI/Gemini and engine/queued image persistence; add on-demand prompt and result read endpoint and preview.
 - [x] Add sibling links and shared editable acceptance UI with expandable/copyable previews, captured records and evaluation results.
 - [x] Add meaningful provider-contract, review-gate, revision persistence and UI regression coverage.
-- [ ] Run Node 24.22.1 / pnpm 11.25.0 typecheck, lint and all applicable test suites; no build/package.
-- [ ] Execute .docs/tests/test-story-prompt-requirements.md in the in-app browser using an isolated fixture. Desktop shell preview via pnpm desktop:preview if relevant; story UI runs in its existing reader/Vite session.
+- [x] Run Node 24.22.1 / pnpm 11.25.0 typecheck, lint and all applicable test suites; no build/package.
+- [x] Execute .docs/tests/test-story-prompt-requirements.md in the in-app browser using an isolated fixture. Desktop shell preview via pnpm desktop:preview if relevant; story UI runs in its existing reader/Vite session.
 
 ## Risks
 Full textual snapshots add storage; use existing per-call retention without introducing global tracing, keep snapshots out of summaries. Strict criterion validation can reject malformed model replies, preserving the script and preventing drawing. Older records have no prompt captures and must say so.
@@ -29,3 +29,19 @@ AR review round: 1; reviewer: new (requirements_review).
 Review decision incorporated: unknown/conflicting criteria block immediately via requirements stop reason.
 
 SS evidence: typecheck/lint passed on pinned Node/pnpm; 48 existing targeted checks, 13 provider/criteria checks and 11 focused UI/persistence checks passed. In-app browser confirmed sibling links, actual review capture, saved per-criterion outcomes, and acceptance-only revision showing 3 reused / 0 redraw. Remaining full TT and E2E are tracked above.
+
+SS milestone: 3c0ce39 — implementation and focused checks passed; full TT/ET pending.
+
+CR passed: no major findings
+CR risk: non-low — persisted criteria/captures, review gating and image reuse.
+CR review round: 1; reviewer: reused (requirements_review).
+
+CR passed: no major findings
+CR risk: non-low — shared blocked-review presentation and model boundary instructions.
+CR review round: 2; reviewer: reused (requirements_review).
+
+TT: pinned Node 24.22.1 / pnpm 11.25.0, typecheck and lint passed. Full `pnpm test` had 980 passes and one 80-frame completion timeout under default parallel load; the same test passed alone in 10.7s without changing its 15s bound. Full equivalent suite `pnpm exec node --experimental-strip-types --test --test-concurrency=2 tests/*.test.mjs` passed all 981 tests in 148.2s (80-frame case 13.6s). After the shared-stage/instruction correction, 16 focused checks passed. Final legacy missing-usage guard and stage/UI/persistence checks: 13 passed. No assertions/timeouts weakened.
+
+ET: .docs/tests/test-story-prompt-requirements.md executed with tests/fixtures/story-requirements-preview.mjs in IAB at 127.0.0.1:3140. Two sibling links confirmed in creation, completed reading and paused pre-plan flows. Both creation drafts survived reload. Actual review call showed instructions/input/schema; copy succeeded and was verified by pasting the complete prompt into a temporary draft, then discarding it. Historical no-record display verified. Acceptance-only child submission showed 3 reusable / 0 redraw, completed audit and saved its own changed requirements/results/receipt. Failed→repair→passed and unknown→immediate stop are covered by real REST/SQLite/queue tests; status/result presentation is covered by shared UI rendering and stage parity tests. Screenshot: .docs/tests/evidence/story-prompt-requirements/acceptance.jpg. All data/providers were disposable and controlled; no live inference or user stories were changed.
+
+Additional compatibility repair: prompt inspection treats legacy documents without a usage array as having no captures, matching existing story rendering; regression added.

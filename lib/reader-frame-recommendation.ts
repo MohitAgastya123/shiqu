@@ -32,6 +32,6 @@ export const frameRecommendationPrompt=promptSections(
  ['估算标准',`先辨认关键事件、因果、转折、动作、人物反应与有价值的停顿，再决定 ${readerMinFrames} 至 ${readerMaxFrames} 的整数。不预设常见数量区间，不按字数线性折算；短故事可很少，复杂故事给足关键戏，不省略转折，也不为拉长重复画面。`],
  ['来源边界','只依据已核原文；识别注释与版式标记，不将其当正文，不猜补缺文或未知字。'+localStoryContextConstraint],
  ['输出','按给定schema返回 count 及一句不剧透的简体中文 reason，说明为什么适合本篇和所选详略，最多180字；有 storyBrief 时还必须返回核对后的 storySummary 和 storyMatchReason。'],
- ['输入边界',inputBoundaryDirection]);
+ ['本篇验收要求',acceptanceDirection],['输入边界',inputBoundaryDirection]);
 
 export function frameRecommendationPayload(selection:Selection,original:OriginalSource){return {chosenStory:selection.storyTitle,editorialContext:storyEditorialContext(selection.theme),...storyBriefPayload(original,true),narrativeDetail:selection.narrativeDetail||'balanced',...acceptanceInput(selection),productionPrompt:normalizeProductionPrompt(selection.productionPrompt||'',selection.theme),verifiedOriginal:verifiedOriginalPayload(original)};}

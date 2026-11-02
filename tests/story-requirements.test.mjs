@@ -59,6 +59,7 @@ test('unknown/conflicting criteria stop immediately with evidence, no fabricated
 });
 test('historical rows have no invented capture history, and previews do not commission inference',async t=>{
  const f=await productionFixture(t),id=await f.createLegacyReader(3);f.app.stopGeneration();
+ await f.app.services.database.prepare("UPDATE reader_sessions SET document=json_remove(document,'$.usage') WHERE id=?").bind(id).run();
  const initial=await f.json(`sessions/${id}/prompts`);assert.deepEqual(initial.records,[]);assert.deepEqual(initial.results,[]);assert.ok(initial.previews.production.instructions.includes('本篇验收要求'));assert.equal(f.control.plans.length,0);
 });
 
