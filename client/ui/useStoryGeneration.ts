@@ -1,6 +1,7 @@
 'use client';
 // Separate status inspection from viewer demand and publish saved artwork as it arrives.
 // An open story reports its page so that page is drawn first; that never starts or retries work.
+import type {StoryPublication} from '@/lib/story-publication';
 import {useEffect,useRef,useState} from 'react';
 import {randomId,request} from './shared';
 import {observeOnlyGeneration,observeStoryGeneration,runQueuedStoryGeneration} from '@/lib/reader-production-client';
@@ -62,6 +63,18 @@ export function useStoryGeneration(page:number,callbacks:Callbacks,watchShelf=fa
   const s:SessionView=await request(`reader/sessions/${sessionId}/title`,'POST',{title});
   collect(s);
   if(id.current===sessionId){setActive(s);if(s.story)cb.current.onStory(s.story);}
+ }
+ async function savePublication(sessionId:string,publication:StoryPublication,expected:StoryPublication|null){
+  try{
+   const s:SessionView=await request(`reader/sessions/${sessionId}/publication`,'POST',{publication,expected});
+   collect(s);if(id.current===sessionId){setActive(s);if(s.story)cb.current.onStory(s.story);}
+  }catch(error){
+   if((error as {status?:number}).status===409){
+    const s:SessionView=await request(`reader/sessions/${sessionId}`);
+    collect(s);if(id.current===sessionId){setActive(s);if(s.story)cb.current.onStory(s.story);}
+   }
+   throw error;
+  }
  }
  async function confirmFrameCount(count:number|'auto'){
   if(busy||pending.current||!active?.awaitingFrameCount)return;
@@ -158,5 +171,5 @@ export function useStoryGeneration(page:number,callbacks:Callbacks,watchShelf=fa
   }
   run();return()=>{cancelled=true;};
  },[active?.id,wake]);
- return {setup,setupBusy,sessions,active,busy,error,connected,libraryLoading,libraryRefreshing,libraryError,start,resume,retrySession,renameTitle,leave,remove,refreshLibrary,retryStep,confirmFrameCount,control,drawAnyway,controlBusy,controlError};
+ return {setup,setupBusy,sessions,active,busy,error,connected,libraryLoading,libraryRefreshing,libraryError,start,resume,retrySession,renameTitle,savePublication,leave,remove,refreshLibrary,retryStep,confirmFrameCount,control,drawAnyway,controlBusy,controlError};
 }

@@ -1,6 +1,6 @@
 // Export saved stories with their original source labels, including historical ordinary records.
 import type {Story} from './content';
-import type {GeneratedStory} from './reader-model';
+import {publicationCredit,publicationText} from './story-publication.ts';
 
 const W=900,H=1350,M=72;
 const serif='"Noto Serif SC", "Songti SC", "STSong", serif';
@@ -31,7 +31,7 @@ export async function createStoryPdf(story:Story,onProgress:(text:string)=>void=
  assertPdfReady(story);
  const {PDFDocument}=await import('pdf-lib');
  await document.fonts.ready;
- const pdf=await PDFDocument.create();pdf.setTitle(story.title);pdf.setAuthor('拾趣');pdf.setSubject(story.theme);pdf.setCreator('拾趣故事阅读器');
+ const pdf=await PDFDocument.create();pdf.setTitle(story.title);pdf.setAuthor(story.publication?.author||'未署名');pdf.setSubject(story.theme);pdf.setCreator('拾趣故事阅读器');
  const canvas=document.createElement('canvas');canvas.width=W;canvas.height=H;
  const context=canvas.getContext('2d');if(!context)throw Error('当前浏览器暂不支持 PDF 导出，请换个浏览器试试。');
  const ctx:CanvasRenderingContext2D=context;
@@ -61,7 +61,7 @@ export async function createStoryPdf(story:Story,onProgress:(text:string)=>void=
    font(42);const caption=lines(scene.caption),captionTop=H-140-caption.length*65;
    const shade=ctx.createLinearGradient(0,Math.max(300,captionTop-200),0,H);shade.addColorStop(0,'rgba(14,34,25,0)');shade.addColorStop(.5,'rgba(14,34,25,.8)');shade.addColorStop(1,'rgba(14,34,25,.96)');ctx.fillStyle=shade;ctx.fillRect(0,Math.max(300,captionTop-200),W,H);
    ctx.fillStyle='#fff9e9';caption.forEach((line,j)=>ctx.fillText(line,M,captionTop+j*65));
-   font(21,sans);ctx.fillStyle='#c7d1bc';ctx.fillText('拾趣  /  片刻入戏，久久回味',M,H-65);
+   font(21,sans);ctx.fillStyle='#c7d1bc';ctx.fillText(publicationCredit(story),M,H-65,W-2*M);
    await addCanvas();
   }
   onProgress('正在整理余味与出处');
@@ -76,11 +76,10 @@ export async function createStoryPdf(story:Story,onProgress:(text:string)=>void=
    for(const line of content){if(y>H-110){await addCanvas();paper();font(size);}ctx.fillStyle='#2a493b';ctx.fillText(line,M,y);y+=size*1.75;}
    y+=40;
   }
-  const generated='generated'in story&&story.generated===true?story as GeneratedStory:null;
   await block('留一点余味',story.reflection,40);
   await block('原典线索',storySourceReference(story));
   await block('关于这次改编',story.adaptationNote.replace('；当前可使用设备朗读试听。','。'));
-  if(generated)await block('制作要求',generated.productionPrompt||'这篇故事未保存自定义制作要求。');
+  await block('署名与转载',publicationText(story),25);
   if(story.sourceUrl)await block('出处链接',story.sourceUrl,23);
   await addCanvas();onProgress('正在保存 PDF');
   return await pdf.save();

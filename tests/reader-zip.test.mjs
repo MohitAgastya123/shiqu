@@ -1,9 +1,13 @@
-// Verify complete WebP ZIP exports, preserved dimensions and fail-closed retrieval/encoding.
+// Verify prompt-free ZIPs, pixel attribution and fail-closed image decoding/encoding.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {unzipSync,strFromU8} from 'fflate';
 import {makeStory} from './fixtures/story.mjs';
 import {assertZipReady,createStoryZip,zipFilename} from '../lib/reader-zip.ts';
+import {readFileSync} from 'node:fs';
+import {createHash} from 'node:crypto';
+import {webpPayloadHash} from '../lib/story-webp-metadata.ts';
+const mockEncoded=readFileSync(new URL('./fixtures/images/publication.webp',import.meta.url));
 import {view} from '../lib/reader-model.ts';
 
 function browserImages(t){
@@ -15,10 +19,10 @@ function browserImages(t){
  };
  globalThis.document={createElement(tag){
   assert.equal(tag,'canvas');
-  const canvas={width:0,height:0,getContext(){return controls.failure==='context'?null:{drawImage(image,x,y){assert.equal(x,0);assert.equal(y,0);canvas.image=image;}};},toBlob(callback,type,quality){
+  const canvas={width:0,height:0,getContext(){return controls.failure==='context'?null:{save(){},restore(){},translate(){},rotate(){},measureText(text){return {width:[...text].length*20};},fillRect(){},fillText(text,x,y){(canvas.labels||=[]).push({text,x,y});},drawImage(image,x,y){assert.equal(x,0);assert.equal(y,0);canvas.image=image;}};},toBlob(callback,type,quality){
    assert.equal(type,'image/webp');assert.equal(quality,.85);
    canvas.encodedSize=[canvas.width,canvas.height];
-   callback(controls.failure==='empty'?null:new Blob([Uint8Array.of(99,...canvas.image.bytes)],{type:controls.failure==='format'?'image/png':'image/webp'}));
+   callback(controls.failure==='empty'?null:new Blob([mockEncoded],{type:controls.failure==='format'?'image/png':'image/webp'}));
   }};
   canvases.push(canvas);return canvas;
  }};
@@ -35,7 +39,7 @@ test('ZIP requires every image and sanitizes the archive filename',()=>{
  assert.equal(zipFilename('故事/名字?'),'故事名字.zip');
 });
 
-test('ZIP converts PNG/JPEG at original dimensions, preserves WebP and matches scene metadata',async t=>{
+test('ZIP labels every PNG/JPEG/WebP without cropping or adding a footer and exports only public metadata',async t=>{
  const browser=browserImages(t);
  globalThis.location={origin:'http://localhost:3000'};
  t.after(()=>{delete globalThis.location;});
@@ -51,29 +55,33 @@ test('ZIP converts PNG/JPEG at original dimensions, preserves WebP and matches s
  const progress=[],blob=await createStoryZip(story,value=>progress.push(value));
  assert.equal(blob.type,'application/zip');
  const files=unzipSync(new Uint8Array(await blob.arrayBuffer()));
- assert.equal(Object.keys(files).length,14);
+ assert.equal(Object.keys(files).length,15);
  const script=strFromU8(files['分镜.md']);
  const json=JSON.parse(strFromU8(files['故事.json']));
  assert.deepEqual(json.generationModels,[{step:'plan',model:'test-text'},{step:'image:0',model:'test-image'}]);
  assert.ok(!strFromU8(files['故事.json']).includes('private'));
- for(const key of ['title','summary','bookId','theme','sourceText','sourceUrl','reflection','adaptationNote','revision','createdAt','updatedAt','artStyleLabel','productionPrompt'])assert.deepEqual(json[key],story[key]);
+ assert.equal(json.productionPrompt,undefined);assert.equal(json.aiGenerated,true);assert.ok(!script.includes(story.productionPrompt));assert.ok(script.includes(story.sourceText));
+ for(const key of ['title','summary','bookId','theme','sourceText','sourceUrl','reflection','adaptationNote','revision','createdAt','updatedAt','artStyleLabel'])assert.deepEqual(json[key],story[key]);
  assert.equal(json.sourceReference,story.sourceReference);
  assert.equal(json.pages.length,12);
  for(let i=0;i<12;i++){
   const filename=`图片/${String(i+1).padStart(2,'0')}.webp`;
-  assert.deepEqual(files[filename],i%3===2?bodies[i]:Uint8Array.of(99,...bodies[i]));
-  assert.deepEqual(json.pages[i],{caption:story.pages[i].caption,prompt:story.pages[i].prompt,image:filename});
+  assert.equal(webpPayloadHash(files[filename]),webpPayloadHash(mockEncoded));
+  assert.equal(json.pages[i].sha256,createHash('sha256').update(files[filename]).digest('hex'));
+  assert.equal(json.pages[i].originalSha256,createHash('sha256').update(bodies[i]).digest('hex'));
+  assert.equal(json.pages[i].imagePayloadSha256,webpPayloadHash(files[filename]));
+  assert.equal(json.pages[i].caption,story.pages[i].caption);assert.equal(json.pages[i].image,filename);assert.equal(json.pages[i].prompt,undefined);
   assert.ok(script.includes(`图片：${filename}`));
   assert.ok(script.includes(story.pages[i].caption));
-  assert.ok(script.includes(story.pages[i].prompt));
+  assert.ok(!script.includes(story.pages[i].prompt));
   assert.equal(fetched[i],`http://localhost:3000${story.pages[i].image}`);
  }
  assert.ok(script.indexOf('## 第 2 幅')<script.indexOf('## 第 10 幅'));
- for(const text of [story.title,story.summary,story.reflection,story.adaptationNote,story.sourceReference,story.productionPrompt,story.artStyleLabel])assert.ok(script.includes(text));
+ for(const text of [story.title,story.summary,story.reflection,story.adaptationNote,story.sourceReference,story.artStyleLabel])assert.ok(script.includes(text));
  assert.ok(progress.includes('正在打包第 12 / 12 幅'));
- assert.equal(browser.canvases.length,8);
- assert.equal(browser.revoked.length,8);
- for(const canvas of browser.canvases){assert.deepEqual(canvas.encodedSize,[941,1672]);assert.equal(canvas.width,0);assert.equal(canvas.height,0);}
+ assert.equal(browser.canvases.length,12);
+ assert.equal(browser.revoked.length,12);
+ for(const canvas of browser.canvases){assert.equal(canvas.encodedSize[0],941);assert.equal(canvas.encodedSize[1],1672);assert.equal(canvas.labels.length,1);assert.ok(canvas.labels.some(label=>label.text.includes('AI 生成')));assert.equal(canvas.width,0);assert.equal(canvas.height,0);}
 });
 
 test('ZIP exports stories without generation metadata with an empty model list',async t=>{
@@ -102,6 +110,7 @@ test('ZIP rejects failed decoding, missing canvas, empty encoding and PNG fallba
 });
 
 test('ZIP rejects incomplete, foreign, failed, empty and non-image responses',async t=>{
+ browserImages(t);
  globalThis.location={origin:'http://localhost:3000'};
  t.after(()=>{delete globalThis.location;});
  const story=makeStory(2);
@@ -115,4 +124,19 @@ test('ZIP rejects incomplete, foreign, failed, empty and non-image responses',as
  }
  fetch.mock.mockImplementation(async()=>{throw Error('network offline');});
  await assert.rejects(createStoryZip(story),/network offline/);
+});
+
+
+test('ZIP credits and reuse notices agree in JSON, Markdown and rights file without publishing internal records',async t=>{
+ browserImages(t);globalThis.location={origin:'http://localhost:3000'};t.after(()=>{delete globalThis.location;});
+ t.mock.method(globalThis,'fetch',async()=>new Response('image',{headers:{'Content-Type':'image/webp'}}));
+ const publication={author:'公开制作人',workUrl:'https://example.org/work',contact:'公开联系',sourceNote:'原文转录遵循 CC BY-SA 4.0。',reuse:'本次受保护贡献的商业使用请联系制作人。'};
+ const story={...makeStory(1),generated:true,publication,productionPrompt:'PRIVATE_PRODUCTION_SENTINEL',pages:[{...makeStory(1).pages[0],prompt:'PRIVATE_IMAGE_SENTINEL'}]};
+ const files=unzipSync(new Uint8Array(await (await createStoryZip(story)).arrayBuffer())),json=JSON.parse(strFromU8(files['故事.json']));
+ assert.deepEqual(json.publication,publication);assert.equal(json.author,publication.author);assert.equal(json.aiGenerated,true);
+ for(const file of ['故事.json','分镜.md','署名与转载.txt']){
+  const text=strFromU8(files[file]);assert.ok(!text.includes('PRIVATE_'));
+  for(const value of Object.values(publication))assert.ok(text.includes(value));
+ }
+ assert.ok(strFromU8(files['署名与转载.txt']).includes('不能收紧公版材料'));
 });

@@ -4,6 +4,7 @@ import type {GeneratedStory} from './reader-model';
 import {readerBooks} from './reader-books.ts';
 import {historicalBookTitle} from './story-book.ts';
 import {pdfFilename,wrapPdfText} from './reader-pdf.ts';
+import {publicationCredit} from './story-publication.ts';
 
 const M=36,GAP=24,CARD=420,ART=630,LINE=42;
 const family='"Noto Serif SC", "Songti SC", "STSong", "SimSun", serif';
@@ -29,8 +30,9 @@ export function layoutStoryPng(story:Story,measure:(text:string,size:number)=>nu
   y+=ART+58+Math.max(...row.map(cell=>cell.caption.length))*LINE+GAP;
  }
  const footerY=y+6,reflection=wrap(story.reflection?`余味：${story.reflection}`:'故事到这里，余味留给你。',36,width-2*M);
- const height=footerY+32+reflection.length*56+80;
- return {width,height,columns,title,subtitle,subtitleY,cells,footerY,reflection};
+ const credit=wrap(publicationCredit(story),22,width-2*M);
+ const height=footerY+32+reflection.length*56+30+credit.length*32+24;
+ return {width,height,columns,title,subtitle,subtitleY,cells,footerY,reflection,credit};
 }
 
 export async function createStoryPng(story:Story,onProgress:(text:string)=>void=()=>{}){
@@ -68,7 +70,7 @@ export async function createStoryPng(story:Story,onProgress:(text:string)=>void=
   }
   ctx.strokeStyle='#c9cbbb';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(M,layout.footerY);ctx.lineTo(layout.width-M,layout.footerY);ctx.stroke();
   text(layout.reflection,M,layout.footerY+32,36,56,'#263a2e');
-  text(['拾趣 / 片刻入戏，久久回味'],M,layout.height-42,22,30,'#6b7465');
+  text(layout.credit,M,layout.height-24-layout.credit.length*32,22,32,'#6b7465');
   onProgress('正在保存一页 PNG');
   return await new Promise<Blob>((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(Error('PNG 排版失败，请重试。')),'image/png'));
  }finally{canvas.width=0;canvas.height=0;}

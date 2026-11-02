@@ -59,18 +59,18 @@ export async function forkRevision(repo:ReaderRepository,media:MediaStore,ownerI
   }
  }
  const base={...original,images};
- const document:Document={plan,original:doc.original,frameRecommendation:doc.frameRecommendation,frameCountConfirmed:true,visualReview:newReview(),images:[],audio:[],usage:(doc.usage||[]).map(item=>({...item,originId:item.originId||parentId})),revision:{parentId,rootId,number:epoch+1,baseToken:token,requestHash,base,...(impact.replan?{}:{previewedRedraw:impact.redraw}),...(lostPages.length?{lostPages}:{})}};
+ const document:Document={publication:doc.publication,plan,original:doc.original,frameRecommendation:doc.frameRecommendation,frameCountConfirmed:true,visualReview:newReview(),images:[],audio:[],usage:(doc.usage||[]).map(item=>({...item,originId:item.originId||parentId})),revision:{parentId,rootId,number:epoch+1,baseToken:token,requestHash,base,...(impact.replan?{}:{previewedRedraw:impact.redraw}),...(lostPages.length?{lostPages}:{})}};
  if(plan)document.images=reusableRevisionImages(base,selection,plan);
  if(impact.preserveScript){document.storyboard=doc.storyboard;document.draft=doc.draft;}
  const now=new Date().toISOString();
  const inserted=await repo.db.prepare(`INSERT INTO reader_sessions(id,user_id,selection,document,generation_mode,generation_control,state,step_attempts,lock_until,page,saved,last_read_at,created_at,updated_at)
   SELECT ?,?,?,?,'background',?,'idle',0,0,MIN(p.page,?),p.saved,p.last_read_at,?,? FROM reader_sessions p
-  WHERE p.id=? AND p.user_id=? AND json_extract(p.document,'$.plan') IS json_extract(?,'$.plan') AND p.selection=?
+  WHERE p.id=? AND p.user_id=? AND json_extract(p.document,'$.plan') IS json_extract(?,'$.plan') AND p.selection=? AND json_extract(p.document,'$.publication') IS json_extract(?,'$.publication')
   AND (json_extract(p.document,'$.plan') IS NOT NULL OR p.generation_control IN ('paused','stopped') OR ${supersededSql('p')})
   AND NOT EXISTS(SELECT 1 FROM library_deletions WHERE story_id=p.id AND user_id=p.user_id)
   AND (${familyEpoch.replace(' AS epoch','')})=?
   ON CONFLICT(id) DO NOTHING`)
-  .bind(requestId,ownerId,JSON.stringify(selection),JSON.stringify(document),paused?'paused':'active',impact.total-1,now,now,parentId,ownerId,row.document,row.selection,ownerId,rootId,rootId,epoch).run();
+  .bind(requestId,ownerId,JSON.stringify(selection),JSON.stringify(document),paused?'paused':'active',impact.total-1,now,now,parentId,ownerId,row.document,row.selection,row.document,ownerId,rootId,rootId,epoch).run();
  if(!inserted.meta.changes){const raced=await replay();if(raced)return raced;throw new ReaderError(409,'故事或版本已更新，请重新载入后再修改。');}
  return repo.get(requestId,ownerId);
 }

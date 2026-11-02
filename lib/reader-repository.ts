@@ -2,6 +2,7 @@
 import {emptyDocument,ReaderError,selectionSchema,awaitingFrameCount} from './reader-model.ts';
 import type {Selection,SessionRow,Document,Step,ProductionAction} from './reader-model.ts';
 import type {OriginalSource} from './reader-source-types.ts';
+import type {StoryPublication} from './story-publication';
 import type {ArtRecommendation} from './reader-art-recommendation.ts';
 // The interface keeps the same SQL testable against SQLite without a Worker runtime.
 export interface Database{prepare(query:string):Statement}
@@ -16,7 +17,9 @@ export const persistenceError=(error:unknown)=>(error as {code?:string}|null)?.c
 // Full checkpoints own only the intake phase; art results merge through a targeted write.
 // Candidates, search and drafts change beside a running step,
 // and the generation fence on every write below rejects a worker whose selection was replaced.
-const workerDocument="CASE WHEN json_type(document,'$.intake')='object' THEN json_set(?,'$.intake',json(json_set(json_extract(document,'$.intake'),'$.phase',json_extract(?,'$.intake.phase')))) ELSE ? END";
+// Keep public metadata written during inference out of stale full-worker snapshots.
+const checkpoint="json_patch(?,CASE WHEN json_type(document,'$.publication')='object' THEN json_object('publication',json_extract(document,'$.publication')) ELSE '{}' END)";
+const workerDocument=`CASE WHEN json_type(document,'$.intake')='object' THEN json_set(${checkpoint},'$.intake',json(json_set(json_extract(document,'$.intake'),'$.phase',json_extract(?,'$.intake.phase')))) ELSE ${checkpoint} END`;
 export class ReaderRepository{
  db:Database;
  constructor(db:Database){this.db=db;}
@@ -28,6 +31,16 @@ export class ReaderRepository{
   const result=await this.db.prepare(`UPDATE reader_sessions SET selection=json_set(selection,'$.displayTitle',?),updated_at=? WHERE id=? AND user_id=? AND json_type(document,'$.plan')='object' AND ${visible}`)
    .bind(title,new Date().toISOString(),id,uid).run();
   if(!result.meta.changes)throw new ReaderError(409,'分镜保存后才能修改故事名。');
+  return this.get(id,uid);
+ }
+ // Compare only publication metadata; independent image/progress saves must not conflict.
+ async savePublication(id:string,uid:string,publication:StoryPublication,expected:StoryPublication|null){
+  await this.get(id,uid);
+  const result=await this.db.prepare(`UPDATE reader_sessions SET document=json_set(document,'$.publication',json(?)),updated_at=?
+   WHERE id=? AND user_id=? AND json_type(document,'$.plan')='object' AND ${visible} AND NOT ${supersededSql()}
+   AND json_extract(document,'$.publication') IS json_extract(?,'$')`)
+   .bind(JSON.stringify(publication),new Date().toISOString(),id,uid,JSON.stringify(expected)).run();
+  if(!result.meta.changes)throw new ReaderError(409,'署名说明或故事版本已更新，请重新打开后再保存。');
   return this.get(id,uid);
  }
  // Count every newer submission, including deleted ones, so deletion never promotes history.
