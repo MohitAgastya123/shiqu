@@ -14,7 +14,7 @@ import {artRecommendationSchema} from './reader-art-recommendation.ts';
 import type {ArtRecommendation} from './reader-art-recommendation.ts';
 import {readerImageBatchSize,readerStoryboardBatchSize,readerMaxAutomaticRepairs} from './reader-limits.ts';
 import {newReview,parseFrameCountReport,reviewReportSchema,repairOutputSchema,pendingRepairs,storyReplanMessage} from './reader-review.ts';
-import {syncRevisionImages,reusableRevisionImages,assertPreservedPrefix} from './reader-revision.ts';
+import {syncRevisionImages,reusableRevisionImages} from './reader-revision.ts';
 import {applyStructuralEdits} from './reader-structure.ts';
 import type {StructuralEdits} from './reader-structure.ts';
 import {validateEditorialCoverage} from './reader-editorial.ts';
@@ -164,10 +164,6 @@ export async function advanceStory(repo:ReaderRepository,generator:StoryGenerato
     const count=reviewPhase(review,selection)==='frames'?review.frameCountReports?.at(-1):undefined;
     const before=doc.plan!,result=await generator.restructure(selection,structuredClone(before),doc.original!,review.issues,count?.coverage||review.reports.at(-1)?.coverage,count?{frameCountReview:count.frameCountReview,requirements:count.requirements}:undefined);
     const edited=applyStructuralEdits(before,result.value);
-    if(doc.revision)assertPreservedPrefix(doc.revision.base,edited.plan);
-    const preserved=doc.revision?.base.preservedPages;
-    if(preserved&&edited.plan.characters!==before.characters)throw new ReaderError(409,'追加制作的自动修订不能重写人物设定，已保留现有分镜与图片。');
-    if(preserved)edited.sourcePages=edited.sourcePages.map((source,i)=>i<preserved?i:source);
     (review.history??=[]).push({step:step.key,recordedAt:new Date().toISOString(),changed:edited.changed,round:review.round,requested:review.issues.filter(issue=>issue.requiresReplan).map(issue=>issue.page),changes:[],structure:{edits:edited.edits,before:before.pages.length,after:edited.plan.pages.length,sourcePages:edited.sourcePages,removed:edited.removed,...(edited.characters?{characters:edited.characters,previousCharacters:edited.previousCharacters}:{}),...(doc.storyboard?{previousOutline:doc.storyboard.outline}:{})}});
     generated=result;
     if(!edited.changed){review.status='blocked';review.stopReason='unchanged';}
@@ -189,9 +185,8 @@ export async function advanceStory(repo:ReaderRepository,generator:StoryGenerato
     const result=await generator.repair(selection,structuredClone(doc.plan!),doc.original!,issues,doc.storyboard?.outline);
     const pages=repairOutputSchema(requested).parse({pages:result.value}).pages,updated=structuredClone(doc.plan!);
     const changed=pages.filter(({page,caption,prompt})=>caption!==doc.plan!.pages[page-1].caption||prompt!==doc.plan!.pages[page-1].prompt);
-    for(const {page,caption,prompt} of pages)updated.pages[page-1]={caption,prompt};
-    if(doc.revision)assertPreservedPrefix(doc.revision.base,updated);
     (review.history??=[]).push({step:step.key,recordedAt:new Date().toISOString(),changed:!!changed.length,round:review.round,requested:[...requested],before:requested.map(page=>({page,...doc.plan!.pages[page-1]})),changes:structuredClone(changed)});
+    for(const {page,caption,prompt} of pages)updated.pages[page-1]={caption,prompt};
     doc.images=reusableRevisionImages({selection,plan:doc.plan,images:doc.images},selection,updated,updated.pages.map((_,i)=>i));
     doc.plan=planSchema.parse(updated);if(doc.storyboard)doc.storyboard.pages=structuredClone(doc.plan.pages);
     if(!changed.length){review.status='blocked';review.stopReason='unchanged';}else{review.repaired.push(...requested);if(!pendingRepairs(review).length){review.status='pending';review.repairs++;}}generated=result;

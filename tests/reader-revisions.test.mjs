@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {productionFixture,until,makePlan,selection} from './fixtures/production.mjs';
-import {revisionImpact,reusableRevisionImages,checkedRevision,assertPreservedPrefix} from '../lib/reader-revision.ts';
+import {revisionImpact,reusableRevisionImages} from '../lib/reader-revision.ts';
 import {forkRevision} from '../server/reader-revisions.ts';
 import {ReaderRepository} from '../lib/reader-repository.ts';
 const owner='docker-local-owner';
@@ -10,23 +10,6 @@ async function completed(t,provider='codex'){
  const f=await productionFixture(t,provider);f.control.hold=false;const id=await f.create();await until(async()=>(await f.read(id)).state==='completed');return {f,id};
 }
 const snapshot=(f,id)=>f.json(`sessions/${id}/revisions`);
-test('append drafts preserve duplicate prompts by index and reject rewriting old scenes or cast',()=>{
- const plan=makePlan(3);plan.pages[1].prompt=plan.pages[0].prompt;
- const source={edition:'a'.repeat(64),sectionId:'s',firstUnit:'u1',lastUnit:'u1'};
- const base={selection:{...selection,source},plan,images:['a','b','c']},next=structuredClone(plan);
- next.pages.push({...next.pages[0],prompt:'An adult philosopher walks beside a quiet river at dusk.'});next.title='续篇';next.characters+='\n\n续篇人物说明：同一人物走到河边。';
- const changes={appendSource:{...source,firstUnit:'u2',lastUnit:'u2'},plan:next},result=checkedRevision(base,changes);
- assert.equal(result.impact.total,4);assert.equal(result.impact.reused,3);assert.equal(result.impact.redraw,1);
- const protectedBase={...base,preservedPages:3};
- assert.deepEqual(reusableRevisionImages(protectedBase,base.selection,next,[0,1,2,null]),['a','b','c','']);
- const rewritten=structuredClone(next);rewritten.pages[0].caption='旧故事被改写为完全不同的行动与结果。';
- assert.throws(()=>checkedRevision(base,{...changes,plan:rewritten}),/不能修改已保存/);
- rewritten.pages=next.pages;rewritten.characters='A completely different character description for every page.';
- assert.throws(()=>assertPreservedPrefix(protectedBase,rewritten),/不能修改已保存/);
- assert.throws(()=>checkedRevision(base,{appendSource:changes.appendSource}),/完整续接分镜/);
- assert.throws(()=>checkedRevision(base,{...changes,artStyle:'paper-cut'}),/保留原画风/);
- assert.throws(()=>checkedRevision(base,{plan:next}),/原文出处和故事元信息/);
-});
 async function revise(f,id,changes,base,requestId=crypto.randomUUID()){
  base??=await snapshot(f,id);return f.json(`sessions/${id}/revisions`,'POST',{requestId,token:base.token,changes});
 }

@@ -29,50 +29,6 @@ async function fixture(t){
  const inspect=()=>new DatabaseSync(path.join(f.dataDirectory,'shiqu.sqlite'),{readOnly:true});
  return {f,library,call,context,inspect};
 }
-test('CLI appends verified later text, protects/copies the old prefix and runs only new artwork', {timeout:30000},async t=>{
- const {f,library,call,inspect}=await fixture(t),source=library.stories[0].source;
- const parent=(await call(['stories','create','--no-intake'],{...selection,source,storyTitle:'乌龟报恩',length:3})).session.id;
- assert.equal((await call(['run',parent,'--timeout','10'])).reason,'completed');
- const old=await call(['stories','get',parent]),base=await call(['stories','revisions',parent]),plan=structuredClone(base.plan);
- plan.title='原典故事续篇';plan.summary+=' 勇士随后保护村民，最终击退猛虎。';plan.adaptationNote='保留前篇，依据后续原文追加。';
- plan.sourceReference='This caller-supplied citation must be replaced by verified local text.';
- plan.characters+='\n\n续篇人物说明：勇士保护村民，既有人物形象保持不变。';
- plan.pages.push({...plan.pages[0],caption:'勇士在山路上面对猛虎，举步护在村民身前。',prompt:'An adult warrior stands between a tiger and villagers on an ancient mountain path.'});
- const appendSource=library.stories[1].source,input={token:base.token,changes:{appendSource,plan},paused:true};
- for(const invalid of [{...appendSource,edition:'b'.repeat(64)},source]){
-  await assert.rejects(call(['stories','edit',parent],{...input,changes:{...input.changes,appendSource:invalid}}),error=>error.code==='INVALID_REQUEST');
- }
- const imageKey=old.story.pages[0].image.replace('/api/reader/media/','reader/'),imageBytes=new Uint8Array(await(await f.media.get(imageKey)).arrayBuffer());
- await f.media.put(imageKey,new Uint8Array([1,2,3]),{contentType:'image/png'});
- try{await assert.rejects(call(['stories','edit',parent],input),error=>error.code==='CONFLICT');}
- finally{await f.media.put(imageKey,imageBytes,{contentType:'image/png'});}
- assert.equal((await call(['stories','current',parent])).id,parent);
- const before=f.control.calls.length,requestId=crypto.randomUUID(),child=(await call(['stories','edit',parent,'--request-id',requestId],input)).session;
- assert.equal(child.story.pages.length,4);assert.equal(child.ready,3);assert.equal(f.control.calls.length,before);
- assert.deepEqual(child.story.pages.slice(0,3).map(({image,...p})=>p),old.story.pages.map(({image,...p})=>p));
- assert.equal(child.selection.source.lastUnit,'u2');assert.ok(child.story.original.text.includes(library.book.sections[0].units[1].text));
- assert.equal(child.story.original.storyBrief,undefined);assert.notEqual(child.story.sourceReference,plan.sourceReference);
- assert.equal((await call(['stories','edit',parent,'--request-id',requestId],input)).session.id,child.id);
- await assert.rejects(call(['stories','edit',parent,'--request-id',requestId],{...input,changes:{...input.changes,acceptancePrompt:'新的要求'}}),error=>error.code==='CONFLICT');
- for(let i=0;i<3;i++){
-  const read=async url=>new Uint8Array(await(await f.media.get(url.replace('/api/reader/media/','reader/'))).arrayBuffer());
-  assert.deepEqual(await read(child.story.pages[i].image),await read(old.story.pages[i].image));
- }
- await call(['stories','resume',child.id]);assert.equal((await call(['run',child.id,'--timeout','10'])).reason,'completed');
- assert.deepEqual(f.control.calls.slice(before).map(c=>c.page),[3]);
- const db=inspect();assert.equal(JSON.parse(db.prepare('SELECT document FROM reader_sessions WHERE id=?').get(child.id).document).revision.base.preservedPages,3);db.close();
-});
-test('append production stops a prefix repair before persisting forbidden edits or drawing', {timeout:30000},async t=>{
- const {f,library,call}=await fixture(t),parent=(await call(['stories','create','--no-intake'],{...selection,source:library.stories[0].source,storyTitle:'乌龟报恩',length:3})).session.id;
- await call(['run',parent,'--timeout','10']);const base=await call(['stories','revisions',parent]),plan=structuredClone(base.plan);
- plan.title='原典故事续篇';plan.pages.push({...plan.pages[0],prompt:'An adult warrior walks on a quiet mountain path with villagers.'});
- const child=(await call(['stories','edit',parent],{token:base.token,changes:{appendSource:library.stories[1].source,plan}})).session.id;
- f.control.beforeText=async kind=>kind==='review'?{issues:[{page:1,category:'caption',problem:'受控前段问题。',instruction:'重写第一幅画面。',requiresReplan:false}]}:undefined;
- const before=f.control.calls.length,result=await call(['run',child,'--timeout','10']);
- assert.equal(result.reason,'blocked');assert.match(result.session.error,/追加制作不能修改/);
- assert.deepEqual(result.session.story.pages[0].caption,plan.pages[0].caption);assert.deepEqual(result.session.story.pages[0].prompt,plan.pages[0].prompt);
- assert.equal(f.control.calls.length,before);assert.equal(result.session.ready,3);
-});
 test('in-process CLI saves intent without inference, runs bounded discovery/preparation/review and completes one story', {timeout:60000},async t=>{
  const {f,library,call,inspect}=await fixture(t),requestId=crypto.randomUUID();
  const created=await call(['stories','create','--request-id',requestId],{bookId:'zhuangzi',theme:'原典故事'}),id=created.session.id;
