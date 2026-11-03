@@ -31,7 +31,7 @@ Turn Chinese classics into your own illustrated storybooks. Read in your browser
 
 ## Use Shiqu through Codex
 
-Install the bundled skill once, then ask Codex to perform Shiqu tasks in natural language:
+Install the bundled skill once, then ask Codex to perform Shiqu tasks in natural language. The skill defines data contracts, business rules, and acceptance criteria. Codex can write task-specific programs for filtering, comparison, reports, and batch orchestration; saved-state changes, generation, review, and exports use Shiqu's existing production implementation.
 
 See the [prompt-only Use as SKILL guide](https://github.com/yysun/shiqu/blob/main/.docs/use-as-skill.md) for copyable requests covering setup, provider/model configuration, creation and editing, exports, batch tasks, recovery, and diagnostics.
 
@@ -49,7 +49,7 @@ Use Chinese ink painting and balanced narrative detail. Show candidates and a pr
 wait for my confirmation before generating illustrations, then export an offline preview and public ZIP.
 ```
 
-Specify the library, output directory, and author credit in your request. Codex follows the skill and queries the installed CLI's current help; Shiqu uses its saved generation provider and credentials. Library commands automatically create the directory and initialize the database on first access using the same startup/migration path as desktop and server; no separate init step is required. Configure a provider first if needed. Stop any service using the same library before running headless commands. Only explicit run performs inference; edits, inspection, preview and export do not start background generation.
+Specify the library, output directory, and author credit in your request. Codex queries the selected CLI version's help and chooses operations from saved state. Simple tasks can call the CLI directly; generated programs use argument arrays and JSON input without modifying SQLite or reimplementing generation or exports. Shiqu uses its saved generation provider and credentials. Library commands automatically create the directory and initialize the database on first access using the same startup/migration path as desktop and server; no separate init step is required. Configure a provider first if needed. Stop any service using the same library before running headless commands. Only explicit run performs inference; edits, inspection, preview and export do not start background generation.
 
 `skill show` prints the instructions without installing them. If a new skill does not appear in Codex, restart Codex. The copied skill does not pin the CLI runtime: use `npx @apprun/shiqu@VERSION` when a fixed version is required. Use `skill check` to report npm release updates (cached for 24 hours), `skill check --auto-update on|off` to save your preference, and a fixed-version `skill update --scope global|project` to copy that CLI package’s bundled skill. Automatic updates are off by default: Codex applies the returned pinned command only after opt-in, without overriding explicit or project-pinned versions. Installation state records version and content hash; local edits, unknown copies, unsupported state and downgrades are refused. Legacy copies can be registered by reinstalling their matching package only when their contents match. Offline checks retain the existing version. No background updater is installed.
 
