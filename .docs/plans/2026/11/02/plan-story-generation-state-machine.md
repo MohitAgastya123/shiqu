@@ -85,3 +85,17 @@ CR review round: 2; reviewer: reused
 独立全量复核已覆盖首轮及追加条件：旧显示名发布回执复用、替换编号登记、跨表编号竞争、改名发布CAS、reader恢复需求、无需求完成收束。正式API/队列/引擎共用实现；CR不替代最终TT与IAB视觉验收。最终typecheck、lint均已通过。
 
 最终TT：`pnpm test` 1083/1083通过，0失败/0跳过，129.2秒；`pnpm typecheck`、`pnpm lint`通过。真实HTTP ET 1/1通过。实现与复审修复稳定，进入独立VR；IAB/390px实测仍因Work设置禁用而未执行，ET任务保持未勾选。第二SS里程碑为`8dea1af`，第三SS里程碑覆盖复审修复与上述验证，后续记录hash。
+
+VR第1轮（只读独立复核）结论为incomplete：AC1–AC8、AC12有代码与自动化证据；AC9、AC10缺真实UI可见性／操作证据，AC11被IAB禁用阻断，ET未完成。没有放宽验收。
+
+随后按AR的“读取／初始化异常不能推断健康”约束补最后一处参考预检：去掉image路径的catch(false)，503停止在付费调用前；独立MediaStore夹具证明不被provider自己的可读句柄掩盖。flow+queue-image定向45/45通过。该窄改重新CR并更新最终TT证据，先前VR不冒充覆盖新行为。
+
+CR passed: no major findings
+
+CR risk: non-low — 涉及付费调用前的参考图依赖核对与故障分类。
+
+CR review round: 3; reviewer: reused
+
+80787e0后一行预检修复及其回归已独立复核：参考图读取／解码异常以503阻止付费，不标丢失；其余全量CR结论沿用。最终typecheck、lint通过；新全量结果等待完成，VR第2轮随后只更新受影响证据与既有IAB缺口。
+
+最终新TT：1084/1084通过、0失败／0跳过（127.6秒），typecheck和lint均通过。第三SS里程碑`80787e0`包含复审主体修复；最后参考预检窄修与证据作为下一独立SS里程碑提交。当前源码无待修问题，独立VR第2轮核对后保留IAB未验收状态，不把缺失证据勾选完成。

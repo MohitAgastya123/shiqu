@@ -632,7 +632,7 @@ export class ReaderProductionCoordinator implements ReaderProduction{
   // Check before paying. A key that can't resolve keeps the provider's existing error.
   const selectedReference=await new BookImageReferences(this.database,this.media,row.user_id).resolve(row.id,page>0?doc.images[0]:'');
   const reference=selectedReference?referenceImageKey(row.id,selectedReference):null;
-  if(reference&&await this.fileLost(reference).catch(()=>false))throw new ReaderError(409,lostImageMessage);
+  if(reference&&await this.fileLost(reference).catch(()=>{throw new ReaderError(503,'参考图片暂时无法核对，请稍后重试；尚未开始绘图。');}))throw new ReaderError(409,lostImageMessage);
   if(!this.currentJob(await this.raw(job.session_id,job.owner_id),job))return {obsolete:true};
   if(await this.repository.superseded(row.id,row.user_id))throw new JobYield();
   return this.provider.generator().image(doc.plan!,page,row.id,selectedReference,selection.artStyle,selection.productionPrompt,inputVersion([job.id,job.lease_token]));

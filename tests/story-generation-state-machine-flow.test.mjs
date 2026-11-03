@@ -151,3 +151,10 @@ test('an old-name failed publication keeps and republishes its paid receipt afte
  await f.restart();let saved=await f.read(id);assert.equal(saved.faults[0].stage,'publication');await f.app.services.production.tick();assert.equal(f.control.calls.length,2);
  await f.json(`sessions/${id}/production-control`,'POST',{action:'resume'});await recover(f,id,saved.faults[0]);await until(async()=>(await f.read(id)).state==='completed');saved=await f.read(id);assert.equal(saved.story.title,'B');assert.equal(saved.ready,2);assert.equal(f.control.calls.length,2);assert.equal(saved.faults,undefined);
 });
+
+test('an uncertain reference read cannot reach a provider that has a separately readable media handle',async t=>{
+ const f=await productionFixture(t,'codex',{SHIQU_IMAGE_WORKERS:'1'}),id=await f.create(4);await until(()=>f.control.calls.length===1);f.control.calls[0].resolve();await until(()=>f.control.calls.length===2);
+ const image=(await f.read(id)).story.pages[0].image,key=`reader/${id}/${image.split(`/media/${id}/`)[1]}`,get=f.app.services.media.get.bind(f.app.services.media);f.app.services.media.get=async value=>{if(value===key)throw Error('temporarily cannot verify reference');return get(value);};
+ f.control.calls[1].resolve();await until(async()=>(await f.read(id)).state==='failed');const s=await f.read(id);assert.equal(s.retryStage,'generation');assert.equal(f.control.calls.length,2,'Unknown upstream readability must stop before inference');
+ f.app.services.media.get=get;f.control.hold=false;await recover(f,id,s.faults[0]);await until(async()=>(await f.read(id)).state==='completed');assert.equal(f.control.calls.length,4);
+});
