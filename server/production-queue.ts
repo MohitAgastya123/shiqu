@@ -8,7 +8,7 @@ import {persistenceError} from '../lib/reader-repository.ts';
 import type {Database} from '../lib/reader-repository.ts';
 
 export type JobSpec={id:string;sessionId:string;ownerId:string;kind:string;pool:string;version:string;dependencies:string[];payload:unknown;priority:number};
-export type ProductionJob={id:string;session_id:string;owner_id:string;kind:string;pool:string;version:string;dependencies:string;payload:string;result:string|null;state:'queued'|'running'|'succeeded'|'failed';priority:number;attempts:number;lease_token:string|null;lease_until:number;error:string|null;interrupted:number;created_at:number;updated_at:number};
+export type ProductionJob={id:string;session_id:string;owner_id:string;kind:string;pool:string;version:string;dependencies:string;payload:string;result:string|null;state:'queued'|'running'|'succeeded'|'failed';priority:number;attempts:number;lease_token:string|null;lease_until:number;error:string|null;interrupted:number;failure_id?:string|null;recovery_id?:string|null;created_at:number;updated_at:number};
 export type JobContext={outputs:Record<string,unknown>;isCurrent:()=>Promise<boolean>};
 export type JobHandler={pool:string;drain?:boolean;run:(job:ProductionJob,context:JobContext)=>Promise<unknown>};
 type Options={limits:Record<string,number>;handlers:Record<string,JobHandler>;candidateFilter?:string;skipCandidate?:(job:ProductionJob)=>boolean;canRun?:(job:ProductionJob)=>Promise<boolean>;onSettled?:()=>void;resumeInterrupted?:(job:ProductionJob)=>Promise<boolean>;safeError?:(error:unknown,job:ProductionJob)=>string;terminal?:(error:unknown,job:ProductionJob)=>boolean;now?:()=>number;leaseMs?:number};
@@ -128,8 +128,8 @@ export class ProductionQueue{
    const interrupted=this.stopping&&!handler.drain&&!this.options.terminal?.(error,job);
    // Only safe application messages are persisted; provider responses may contain private data.
    const message=interrupted?interruptedMessage:this.options.safeError?.(error,job)||'制作暂时未完成，已保存的结果会保留。';
-   try{await this.database.prepare("UPDATE production_jobs SET state='failed',error=?,interrupted=?,lease_token=NULL,lease_until=0,updated_at=? WHERE id=? AND state='running' AND lease_token=?")
-    .bind(message,interrupted?1:0,this.clock(),job.id,job.lease_token).run();}
+   try{await this.database.prepare("UPDATE production_jobs SET state='failed',error=?,interrupted=?,failure_id=?,lease_token=NULL,lease_until=0,updated_at=? WHERE id=? AND state='running' AND lease_token=?")
+    .bind(message,interrupted?1:0,interrupted&&job.failure_id?job.failure_id:randomUUID(),this.clock(),job.id,job.lease_token).run();}
    catch(writeError){unsaved(writeError);}
    return;
   }
