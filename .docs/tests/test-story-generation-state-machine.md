@@ -36,7 +36,7 @@
 | reader首图失败后前端恢复需求 | `story-generation-state-machine-client`（真实hook/REST/SQLite/queue） |
 | 按钮名称与只读/编辑/提交边界 | `unified-story-setup-ui`、`storyboard-ui`、`reader-production-client`、`story-revision-flow` |
 
-**尚未执行：第8项真实浏览器操作与390px视觉验收。** `cua.getState()`和后续`cua.listBrowsers()`均返回`Local browser use is disabled in Work settings`，没有可用应用内浏览器。已向用户请求开启；不以静态组件渲染或hook测试替代真实视觉证据，也未切换到其他浏览器绕过设置。布局、真实按钮连点／窗口操作／网络错误的UI验收保留未完成，不能据此宣布完整RPD或VR通过。
+**尚未执行：第8项真实浏览器操作与390px视觉验收。** `cua.getState()`和后续`cua.listBrowsers()`均返回`Local browser use is disabled in Work settings`，没有可用应用内浏览器。该报错仅证明当前工具拒绝访问，用户已明确没有禁用，实际设置／连接原因未明；不以静态组件渲染或hook测试替代真实视觉证据，也未切换到其他浏览器绕过设置。布局、真实按钮连点／窗口操作／网络错误的UI验收保留未完成，不能据此宣布完整RPD或VR通过。
 
 最终TT：`pnpm test` **1083/1083**，0失败、0跳过（129.2秒）；类型检查、lint通过。真实HTTP ET最终再跑1/1通过。代码审查round2独立通过。第8项IAB与390px视觉操作仍未执行，保持验收缺口。
 

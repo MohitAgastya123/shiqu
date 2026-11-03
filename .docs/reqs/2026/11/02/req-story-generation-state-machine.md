@@ -27,4 +27,4 @@
 
 独立VR第2轮为incomplete：AC1–AC8及AC12完成；AC9、AC10缺真实UI操作证据，AC11被应用内浏览器禁用阻断。最终1084/1084单元／集成、类型、lint及真实HTTPET已通过，不能代替390px视觉与真实窗口操作。完整独立结论原文及本地里程碑见[计划记录](../../../../plans/2026/11/02/plan-story-generation-state-machine.md)，具体证据见[验收记录](../../../../tests/test-story-generation-state-machine.md)。
 
-Work设置返回`Local browser use is disabled in Work settings`；开启后继续ET、复核AC9–AC11，再执行DD和最终GC。未放宽验收，未声明完整RPD已完成。
+浏览器工具返回`Local browser use is disabled in Work settings`；实际拒绝原因尚未确认，用户明确表示没有禁用。工具连接可用后继续ET、复核AC9–AC11，再执行DD和最终GC。未放宽验收，未声明完整RPD已完成。
