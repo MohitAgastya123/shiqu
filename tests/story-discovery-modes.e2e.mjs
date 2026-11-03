@@ -86,10 +86,12 @@ test('title, theme and original scope are independently optional in the creation
   const contextPosition=await context.boundingBox(),modePosition=await extraction.getByRole('group',{name:'标题方式'}).boundingBox();
   assert.ok(contextPosition.y<modePosition.y,'Selected originals and theme should precede title mode');
   assert.equal((await f.app.services.production.queue.jobs(saved.id,'docker-local-owner')).filter(job=>job.kind==='discover').length,0);
-  assert.ok((await extraction.textContent()).includes('点击按钮后开始提取'));
+  assert.equal(await extraction.locator('.yu-extraction-help').count(),1);
+  assert.equal(await extraction.locator('.yu-extraction-help').textContent(),'按所选原文和主题寻找故事，并自动拟题。');
   if(flags===0)assert.equal(library.calls.catalog.length,0);
   if(title){
    await extraction.getByRole('button',{name:'输入标题',exact:true}).click();
+   assert.equal(await extraction.locator('.yu-extraction-help').textContent(),'按标题寻找完整故事，主题用于讲述重点。');
    assert.equal(await extraction.getByRole('button',{name:'按标题提取',exact:true}).isDisabled(),true);
    await extraction.getByLabel('故事标题',{exact:true}).fill('乌龟报恩');
    const search=page.waitForResponse(response=>response.url().endsWith(`/api/reader/sessions/${saved.id}/setup`)&&response.request().method()==='POST'&&response.request().postDataJSON().action==='search');
@@ -103,6 +105,7 @@ test('title, theme and original scope are independently optional in the creation
    const started=await search;assert.equal(started.status(),200);assert.deepEqual((await started.json()).selection.discovery,{mode:'auto'});
   }
   await extraction.getByRole('button').filter({has:page.getByText('乌龟报恩',{exact:true})}).waitFor();
+  assert.equal(await extraction.locator('.yu-extraction-help').textContent(),'重新提取会替换当前候选。');
   if(flags===6){
    await page.setViewportSize({width:390,height:844});
    await extraction.getByRole('region',{name:'已选原文与主题'}).scrollIntoViewIfNeeded();
@@ -194,7 +197,7 @@ test('title, theme and original scope are independently optional in the creation
  await page.getByRole('button',{name:'替换选题',exact:true}).click();
  const replacement=page.getByRole('dialog',{name:'替换选题',exact:true});
  await replacement.getByRole('button',{name:'开始提取',exact:true}).waitFor();
- assert.ok((await replacement.textContent()).includes('点击按钮后开始提取'));
+ assert.equal(await replacement.locator('.yu-extraction-help').textContent(),'按所选原文和主题寻找故事，并自动拟题。');
  await replacement.getByRole('button',{name:'输入标题',exact:true}).click();
  await replacement.getByLabel('故事标题',{exact:true}).fill('庄子的大葫芦');
  const query=page.waitForResponse(response=>/\/api\/reader\/sessions\/[^/]+\/setup$/.test(new URL(response.url()).pathname)&&response.request().method()==='POST'&&response.request().postDataJSON().action==='search');

@@ -1,6 +1,10 @@
 /* Separate discovery actions from source controls and keep the editable query beside its results. */
 .yu-discovery-submit{margin-top:24px}
 .yu-extraction-query{margin:20px 0 26px}
+.yu-extraction-help{margin:12px 0 0;color:#718260;font-size:12px;line-height:1.7;text-align:left}
+.yu-extraction-status{margin:0 0 18px;color:#45643b;font-size:13px;line-height:1.7;overflow-wrap:anywhere}
+.yu-extraction-status p{margin:0}
+.yu-extraction-status .yu-extraction-status-detail{margin-top:6px;color:#718260;font-size:12px}
 .yu-scope-selection{margin-top:12px;padding:12px;border:1px solid #dce1d2;border-radius:10px;overflow-wrap:anywhere}
 .yu-scope-selection>summary{cursor:pointer;font-size:12px;line-height:1.8}
 .yu-scope-selection>summary>span{margin-left:8px;font-size:11px;color:#718260}
