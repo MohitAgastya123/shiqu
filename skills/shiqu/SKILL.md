@@ -52,6 +52,7 @@ description: 根据拾趣的数据契约与业务规则，自主编写任务程�
 | 执行生产 | `run <id> --until candidates\|prepared\|reviewed\|completed`。candidates 后按用户目标选择或等待；prepared 后检查原文、摘要和方案并确认；reviewed 在审核通过且生图前停止；默认 completed。每次检查返回 reason 和 session，不假定达到了请求边界。 |
 | 解释停止原因 | `choice` 需选题；`frame_count_required` 是旧故事等待幅数确认，按 help 的 frameCount 输入处理；`already_prepared/already_selected` 表示已越过该边界，改用下一步；`paused` 保持暂停，`blocked` 检查故障，`superseded` 查当前版本。不能在同一停止边界空转。 |
 | 修改与控制 | `stories edit` 使用 token/changes 创建新版；rename 仅改显示名。pause/resume/stop 控制制作；retry/override 针对当前故障。reselect/replace/cancel-reselection 按现有草稿协议处理。 |
+| 追加后续原文 | 已完成的本地故事可用 `stories edit` 提交 `changes.appendSource`（同版本且严格位于旧范围之后的真实引用）及完整 `changes.plan`。保留全部旧 pages，再追加新分镜；可更新标题、摘要、改编说明和结语，出处由服务端核定。characters 保持原文或在两个换行后追加续篇阶段说明，不重写旧设定；画风和制作设置保持不变。旧图须全部可读，自动修订不能改动受保护前段。随后 `run` 使用正常审核和绘图。普通编辑仍不能直接增删分镜。 |
 | 预览与交付 | preview 输出独立离线 HTML；export 支持 zip/pdf/png/json/md，使用共享序列化、图片编码、水印和元数据规则。自主程序可组织导出清单，不能自己重建作品包。 |
 | 维护 | backup 创建完整私有快照，verify-backup 验证；restore 仅恢复到新的 data-dir，不覆盖原库或自动切换默认位置。diagnostics 输出脱敏诊断；它与私有完整备份用途不同。 |
 
