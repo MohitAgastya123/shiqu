@@ -43,7 +43,9 @@ pnpm run npm:check
 
 This runs typecheck, lint, the startup/database matrix, real PTY flows and release-gate regression tests. There is no hosted startup workflow. Local results establish behavior on the current OS; Windows/Linux native verification and live provider permissions/quota remain separate.
 
-Both `npm:check` and `release:check` run `test:e2e`: production-backed browser lifecycle flows plus headless CLI, skill installation, backup/restore, diagnostics, system settings and settings-fault suites. C007 launches the real dev command in its own copied source root, excluding `.env` and personal libraries, so local release checks cannot migrate the developer's `.data/dev-local`. CLI/configuration/maintenance tests use disposable libraries and homes. No live inference or real provider keys are required.
+Both gates use the shared `test:e2e` runner to execute each selected test file once: `release:check` passes `--gate=release` to combine all `tests/*.test.mjs` with user flows; `npm:check` passes `--gate=npm` to combine startup/database, PTY and npm publication regressions with those flows. Plain `pnpm test:e2e`, `pnpm test`, `test:startup` and `test:pty` retain their existing scopes.
+
+User flows cover production-backed browser lifecycle, headless CLI, skill installation, backup/restore, diagnostics, system settings and settings faults. C007 launches the real dev command in its own copied source root, excluding `.env` and personal libraries, so local release checks cannot migrate the developer's `.data/dev-local`. CLI/configuration/maintenance tests use disposable libraries and homes. No live inference or real provider keys are required.
 
 The installed pre-push hook invokes release:check in an isolated checkout of each distinct commit targeted by a pushed `v*` tag. A failed critical flow rejects the tag push and cleans up the worktree. Ordinary branches, non-v tags and tag deletions bypass the checks. Run `pnpm hooks:install` when setting up a new checkout; nothing is published or packaged by the hook.
 

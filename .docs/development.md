@@ -104,7 +104,7 @@ pnpm lint
 
 `pre-push` 只对推送的 `refs/tags/v*` 执行发布检查：解析标签目标提交，在隔离 checkout 中验证 Node/pnpm 固定版本，安装锁定依赖，再运行 `pnpm release:check`。同一提交的多个发布标签只检查一次；普通分支、非 v 标签和删除标签不触发。可通过 `pnpm hooks:install` 为新 checkout 启用 hook。
 
-`release:check` 在类型、lint、单元/集成检查后执行 `pnpm test:e2e`，覆盖浏览器故事生命周期、无服务 CLI 制作/编辑/导出、技能安装、备份恢复、脱敏诊断与提供方配置。任一流程失败即阻止标签推送；门禁只检查，不构建桌面/Docker或发布作品。`npm:check` 沿用同一流程入口，平台 CI 保留安装包构建职责。C007 在一次性源码根目录启动真正的 `pnpm dev local`，不打开人工开发书库。
+`release:check` 在类型、lint 检查后执行 `pnpm test:e2e --gate=release`，将全部单元/集成测试与用户流程合并去重，每个测试文件只运行一次；`npm:check` 使用 `--gate=npm`，合并启动、PTY、npm 发布回归与用户流程。用户流程覆盖浏览器故事生命周期、无服务 CLI 制作/编辑/导出、技能安装、备份恢复、脱敏诊断与提供方配置。任一流程失败即阻止标签推送；门禁只检查，不构建桌面/Docker或发布作品，平台 CI 保留安装包构建职责。C007 在一次性源码根目录启动真正的 `pnpm dev local`，不打开人工开发书库。
 
 维护命令无需打包：`pnpm library:maintain --help`。备份/恢复/诊断入口复用正式 CLI 与服务实现；运行锁覆盖开发、CLI 和桌面。备份是私有数据，不能放入 `public`、`dist/client` 或公开作品集，详见[维护说明](user-guide.md#书库维护命令)。
 

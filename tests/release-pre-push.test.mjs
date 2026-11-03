@@ -2,16 +2,33 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
-import {mkdtemp,mkdir,writeFile,copyFile,chmod,readFile,rm} from 'node:fs/promises';
+import {mkdtemp,mkdir,writeFile,copyFile,chmod,readFile,readdir,rm} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import {userFlowTests} from '../scripts/test-story-e2e.mjs';
+import {userFlowTests,selectTests} from '../scripts/test-story-e2e.mjs';
 
 test('both local publication gates require the production-backed lifecycle E2E',async()=>{
  const manifest=JSON.parse(await readFile(new URL('../package.json',import.meta.url),'utf8'));
- for(const name of ['release:check','npm:check'])assert.match(manifest.scripts[name],/&& pnpm test:e2e(?: &&|$)/);
+ for(const [name,gate] of [['release:check','release'],['npm:check','npm']]){
+  assert.ok(manifest.scripts[name].includes(`&& pnpm test:e2e --gate=${gate}`));
+  assert.equal((manifest.scripts[name].match(/pnpm (?:run )?test\b/g)||[]).length,1,'one combined test invocation per gate');
+ }
  assert.match(manifest.scripts['test:e2e'],/scripts\/test-story-e2e\.mjs/);
  for(const filename of ['tests/story-lifecycle.playwright.e2e.mjs','tests/headless-cli.test.mjs','tests/cli-skill.test.mjs','tests/library-maintenance.test.mjs','tests/diagnostics.test.mjs','tests/system-settings.test.mjs','tests/settings-faults.test.mjs'])assert.ok(userFlowTests.includes(filename),filename+' must gate release tags');
+});
+
+test('release test selections preserve each gate coverage and execute every file once',async()=>{
+ const manifest=JSON.parse(await readFile(new URL('../package.json',import.meta.url),'utf8'));
+ const unitTests=(await readdir(new URL('./',import.meta.url))).filter(name=>name.endsWith('.test.mjs')).map(name=>'tests/'+name);
+ const npmTests=[...manifest.scripts['test:startup'].matchAll(/tests\/[^ ]+\.test\.mjs/g),...manifest.scripts['test:pty'].matchAll(/tests\/[^ ]+\.test\.mjs/g)].map(match=>match[0]);
+ npmTests.push('tests/npm-publish.test.mjs');
+ for(const [gate,previousTests] of [['release',unitTests],['npm',npmTests]]){
+  const selected=await selectTests(gate);
+  assert.equal(selected.length,new Set(selected).size);
+  assert.deepEqual(new Set(selected),new Set([...previousTests,...userFlowTests]));
+ }
+ assert.deepEqual(await selectTests(),userFlowTests,'standalone E2E keeps its existing scope');
+ await assert.rejects(selectTests('typo'),/Usage:/);
 });
 
 async function fixture(t,{failedFlow}={}){

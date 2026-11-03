@@ -1,9 +1,10 @@
 // Gate release tags with production-backed browser, CLI, skill, configuration and recovery flows.
-// This runner selects tests and records provenance; generation remains entirely in the production workflow.
+// Release gates combine their regression suites with user flows, executing each file once and recording provenance.
+// Generation remains entirely in the production workflow; plain test:e2e still runs only user flows.
 import path from 'node:path';
 import {randomUUID,createHash} from 'node:crypto';
 import {spawn,execFileSync} from 'node:child_process';
-import {mkdir,writeFile,readFile} from 'node:fs/promises';
+import {mkdir,writeFile,readFile,readdir} from 'node:fs/promises';
 import {createWriteStream,realpathSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 
@@ -15,10 +16,21 @@ export const userFlowTests=[
  'tests/system-settings.test.mjs','tests/settings-faults.test.mjs',
 ];
 
-async function runUserFlows(){
+export async function selectTests(gate,root=process.cwd()){
+ let regressionTests=[];
+ if(gate==='release')regressionTests=(await readdir(path.join(root,'tests'))).filter(name=>name.endsWith('.test.mjs')).sort().map(name=>'tests/'+name);
+ else if(gate==='npm')regressionTests=[
+  'tests/npm-cli.test.mjs','tests/cli-library.test.mjs','tests/system-settings.test.mjs',
+  'tests/startup-matrix.test.mjs','tests/settings-faults.test.mjs','tests/startup-pty.test.mjs','tests/npm-publish.test.mjs',
+ ];
+ else if(gate!==undefined)throw Error('Usage: pnpm test:e2e [--gate=release|--gate=npm]');
+ return [...new Set([...regressionTests,...userFlowTests])];
+}
+
+async function runUserFlows(gate){
+ const tests=await selectTests(gate);
  const runId=new Date().toISOString().replace(/[:.]/g,'-')+'-'+randomUUID().slice(0,8),directory=path.resolve('.data/e2e',runId);
  await mkdir(directory,{recursive:true});
- const tests=userFlowTests;
  const commit=execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),fingerprint=createHash('sha256');
  fingerprint.update(execFileSync('git',['diff','HEAD','--','client','lib','server','scripts','tests','package.json']));
  const untracked=execFileSync('git',['ls-files','--others','--exclude-standard','-z','client','lib','server','scripts','tests'],{encoding:'utf8'}).split('\0').filter(Boolean);
@@ -37,4 +49,8 @@ async function runUserFlows(){
  console.log(`Story E2E ${exitCode===0?'PASS':'FAIL'} — ${directory}`);process.exitCode=exitCode;
 }
 
-if(process.argv[1]&&realpathSync(process.argv[1])===realpathSync(fileURLToPath(import.meta.url)))await runUserFlows();
+if(process.argv[1]&&realpathSync(process.argv[1])===realpathSync(fileURLToPath(import.meta.url))){
+ const args=process.argv.slice(2);
+ if(args.length>1||(args.length&&!['--gate=release','--gate=npm'].includes(args[0])))throw Error('Usage: pnpm test:e2e [--gate=release|--gate=npm]');
+ await runUserFlows(args[0]?.slice('--gate='.length));
+}
