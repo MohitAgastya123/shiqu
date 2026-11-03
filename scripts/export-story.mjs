@@ -1,17 +1,15 @@
-// Download named stories through the app UI, then export the public collection format without re-encoding artwork.
-// Public fields are allowlisted; complete frames and saved hashes are checked before replacement.
+// Export named stories with the production Node renderer and the running app's read-only API.
+// Preserve signed artwork in ZIP inputs; validate current revisions and public archives before replacement.
 import assert from 'node:assert/strict';
 import {copyFile,lstat,mkdir,mkdtemp,readFile,readdir,rename,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {parseArgs} from 'node:util';
-import {unzipSync,zipSync,strFromU8} from 'fflate';
-import {sha256Hex as digest,assertStoryWebp} from '../lib/story-webp-metadata.ts';
-import {zipFilename,zipImageFilename,publicStoryZipData,zipMetadataStory,storyZipFiles} from '../lib/reader-zip-content.ts';
+import {sha256Hex as digest} from '../lib/story-webp-metadata.ts';
+import {zipFilename} from '../lib/reader-zip-content.ts';
 import {savedJSON,publicStoryZip} from '../lib/public-story-zip.mjs';
 export {publicStoryZip} from '../lib/public-story-zip.mjs';
-import {hasPublicationAuthor,publicationSchema,withPublicationDefaults} from '../lib/story-publication.ts';
 
 const project=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const collection=path.resolve(project,'../awesome-shiqu');
@@ -75,35 +73,27 @@ export function selectExportSession(sessions,name){
 
 export async function exportNamedStory(name,{appUrl='http://localhost:3000',onProgress=()=>{},...options}={}){
  const base=new URL(appUrl);assert(['http:','https:'].includes(base.protocol),'应用地址必须使用 http 或 https。');
- const {chromium}=await import('playwright');
- let browser;
- try{browser=await chromium.launch({headless:true});}
- catch(error){if(error.message.includes("Executable doesn't exist"))throw Error('请先安装导出浏览器：pnpm exec playwright install chromium --only-shell');throw error;}
+ const app={handle:request=>{const url=new URL(request.url);return fetch(new URL(url.pathname+url.search,base),{redirect:'error',signal:AbortSignal.timeout(30000)});}};
+ async function api(route,optional=false){
+  const response=await app.handle(new Request('http://shiqu.local/api/reader/'+route));
+  if(optional&&response.status===404)return null;
+  assert(response.ok,`无法读取拾趣 ${route}：HTTP ${response.status}。请确认应用地址及访问权限。`);
+  return response.json();
+ }
+ const selected=selectExportSession(await api('sessions'),name);
+ // Shelf summaries omit saved original text; the production exporter needs the complete current story.
+ const session=selectExportSession([await api(`sessions/${selected.id}`)],selected.id);
+ assert((await api(`sessions/${session.id}/current`)).id===session.id,'书架已切换到新版，请重新导出。');
+ onProgress(`已选择：${session.story.title} · 版本 ${session.revision?.number||1} · ${session.story.pages.length} 幅`);
+ const temporary=await mkdtemp(path.join(tmpdir(),'shiqu-native-export-'));
  try{
-  const page=await browser.newPage({acceptDownloads:true});page.setDefaultTimeout(30000);
-  async function api(route,optional=false){
-   const response=await page.request.get(new URL('/api/reader/'+route,base).href);
-   if(optional&&response.status()===404)return null;
-   assert(response.ok(),`无法读取拾趣 ${route}：HTTP ${response.status()}。请确认应用地址及访问权限。`);
-   return response.json();
-  }
-  const session=selectExportSession(await api('sessions'),name);
-  const defaults=await api('publication-defaults');
-  const credited=withPublicationDefaults(session.story,defaults.publication===null?null:publicationSchema.parse(defaults.publication));
-  assert(hasPublicationAuthor(credited.publication),'这篇故事未署名，请在拾趣中填写署名后重试；需要未署名导出时，请在应用内确认并用 ZIP 输入模式。');
-  onProgress(`已选择：${session.story.title} · 版本 ${session.revision?.number||1} · ${session.story.pages.length} 幅`);
-  await page.goto(new URL('/read?id='+encodeURIComponent(session.id),base).href);
-  await page.getByRole('button',{name:'故事设置',exact:true}).click();
-  const settings=page.getByRole('dialog',{name:'故事设置',exact:true});
-  onProgress('正在通过拾趣下载 ZIP…');
-  const [download]=await Promise.all([
-   page.waitForEvent('download',{timeout:300000}),
-   settings.getByRole('button',{name:/^下载 ZIP/}).click(),
-  ]);
-  const input=await download.path(),failure=await download.failure();assert(!failure,`应用下载失败：${failure}`);
+  const {exportLocalStory}=await import('../server/story-export.ts');
+  const input=path.join(temporary,'story.zip');
+  onProgress('正在通过 Node 生成公开 ZIP…');
+  await exportLocalStory(project,app,session,{format:'zip',output:input});
   const data=savedJSON(new Uint8Array(await readFile(input)));
-  assert(data.id===session.id&&data.revision===(session.revision?.number||1),'下载文件不是所选的当前版本。');
-  assert((await api(`sessions/${session.id}/current`)).id===session.id,'下载期间书架已切换到新版，请重新导出。');
+  assert(data.id===session.id&&data.revision===(session.revision?.number||1),'导出文件不是所选的当前版本。');
+  assert((await api(`sessions/${session.id}/current`)).id===session.id,'导出期间书架已切换到新版，请重新导出。');
   const currentIds=new Map();
   async function resolveCurrentId(id){
    if(!currentIds.has(id)){
@@ -112,15 +102,15 @@ export async function exportNamedStory(name,{appUrl='http://localhost:3000',onPr
    }
    return currentIds.get(id);
   }
-  onProgress('正在移除提示词并验证公开 ZIP…');
+  onProgress('正在验证并保存公开 ZIP…');
   return await exportStory(input,{...options,resolveCurrentId});
- }finally{await browser.close();} // Closing the context also removes Playwright's temporary full ZIP.
+ }finally{await rm(temporary,{recursive:true,force:true});}
 }
 
 async function main(){
  const {values,positionals}=parseArgs({options:{output:{type:'string'},url:{type:'string',default:'http://localhost:3000'},help:{type:'boolean',short:'h'}},allowPositionals:true});
  if(values.help){
-  console.log('用法：pnpm export:story <故事名、作品ID或已下载的.zip> [--url http://localhost:3000] [--output 输出.zip]\n故事名/ID：启动无头浏览器，点击应用的下载 ZIP，再移除提示词。应用需已启动；首次运行先执行 pnpm exec playwright install chromium --only-shell。\nZIP 文件：直接转换现有下载。默认保存到 ../awesome-shiqu/works/yysun，并沿用同作品的已有文件名。');return;
+  console.log('用法：pnpm export:story <故事名、作品ID或已下载的.zip> [--url http://localhost:3000] [--output 输出.zip]\n故事名/ID：从运行中的应用读取当前版本，使用生产 Node 导出器生成公开 ZIP；无需浏览器或 Playwright。\nZIP 文件：直接转换现有下载，保留图片字节。默认保存到 ../awesome-shiqu/works/yysun，并沿用同作品的已有文件名。');return;
  }
  assert(positionals.length===1,'请提供一个故事名、作品 ID 或已下载的 ZIP；详见 pnpm export:story --help。');
  const input=positionals[0],options={output:values.output};

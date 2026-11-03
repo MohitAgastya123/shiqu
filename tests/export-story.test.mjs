@@ -5,8 +5,10 @@ import {readFile,mkdtemp,readdir,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {unzipSync,zipSync,strToU8,strFromU8} from 'fflate';
-import {publicStoryZip,exportStory,selectExportSession} from '../scripts/export-story.mjs';
-import {withWebpXmp,webpPayloadHash,sha256Hex,publicImageXmp} from '../lib/story-webp-metadata.ts';
+import {publicStoryZip,exportStory,exportNamedStory,selectExportSession} from '../scripts/export-story.mjs';
+import {withWebpXmp,webpPayloadHash,sha256Hex,publicImageXmp,assertStoryWebp} from '../lib/story-webp-metadata.ts';
+import {zipMetadataStory} from '../lib/reader-zip-content.ts';
+import {loadImage} from '@napi-rs/canvas';
 import {makeStory} from './fixtures/story.mjs';
 
 const raw=new Uint8Array(await readFile(new URL('./fixtures/images/publication.webp',import.meta.url)));
@@ -26,6 +28,60 @@ function fixture({unsigned=false,id='test-story',title='测试故事',revision=1
  return {story,files,bytes:zipSync(files,{level:0})};
 }
 function edit(input,change){const files={...input.files},story=JSON.parse(strFromU8(files['故事.json']));change(story,files);files['故事.json']=strToU8(JSON.stringify(story));return zipSync(files,{level:0});}
+
+// Control only the HTTP boundary; encoding, fonts, watermarks, metadata and ZIP validation are production code.
+function nativeApi(t){
+ const {story}=fixture({id:crypto.randomUUID(),revision:4});
+ story.publication=null;story.pages=story.pages.map((page,i)=>({...page,image:`/api/reader/media/frame-${i}.webp`}));
+ const session={id:story.id,state:'completed',revision:{number:4},story};
+ const state={current:story.id,mediaStatus:200,afterMedia:()=>{},author:'yysun',requests:[]};
+ t.mock.method(globalThis,'fetch',async(url,options)=>{
+  const parsed=new URL(url);assert.equal(parsed.origin,'http://export.test');assert.equal(options.method||'GET','GET');
+  state.requests.push(parsed.pathname);
+  const route=parsed.pathname.replace('/api/reader/','');
+  if(route==='sessions')return Response.json([{...session,story:{...story,sourceText:''}}]);
+  if(route===`sessions/${story.id}`)return Response.json(session);
+  if(route.endsWith('/current'))return Response.json({id:state.current});
+  if(route==='publication-defaults')return Response.json({publication:{...fixture().story.publication,author:state.author}});
+  if(route===`sessions/${story.id}/prompts`)return Response.json({productionPrompt:'PRIVATE_PRODUCTION',acceptancePrompt:'PRIVATE_ACCEPTANCE',records:[],missingRecords:[]});
+  if(route.startsWith('media/')){state.afterMedia();return new Response(raw,{status:state.mediaStatus,headers:{'Content-Type':'image/webp'}});}
+  throw Error('Unexpected API request: '+parsed.pathname);
+ });
+ return {story,session,state};
+}
+
+test('named Node export reads the complete story, applies default credits and encodes every frame without a browser',async t=>{
+ const {story,state}=nativeApi(t),root=await mkdtemp(path.join(tmpdir(),'shiqu-native-test-'));
+ try{
+  await writeFile(path.join(root,'旧分享标题.zip'),publicStoryZip(fixture({id:crypto.randomUUID(),title:'旧分享标题'}).bytes).bytes);
+  const result=await exportNamedStory(story.title,{appUrl:'http://export.test',outputDirectory:root});
+  assert.equal(path.basename(result.path),'旧分享标题.zip');
+  const files=unzipSync(await readFile(result.path)),saved=JSON.parse(strFromU8(files['故事.json']));
+  assert.equal(saved.id,story.id);assert.equal(saved.revision,4);assert.equal(saved.sourceText,story.sourceText);assert.equal(saved.author,'yysun');
+  assert.equal(saved.pages.length,story.pages.length);assert.equal(Object.keys(files).length,story.pages.length+3);
+  for(const [i,page]of saved.pages.entries()){
+   assertStoryWebp(files[page.image],zipMetadataStory(saved),i,page);
+   const decoded=await loadImage(Buffer.from(files[page.image]));assert.ok(decoded.width>0&&decoded.height>0);
+  }
+  for(const name of ['故事.json','分镜.md','署名与转载.txt'])assert.ok(!strFromU8(files[name]).includes('PRIVATE_'));
+  assert.equal(state.requests.filter(route=>route.includes('/media/')).length,story.pages.length);
+  assert.deepEqual(await readdir(root),[path.basename(result.path)]);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
+test('named Node export leaves the existing archive intact when media is missing, credits are unsigned or the current revision changes',async t=>{
+ const {story,state}=nativeApi(t),root=await mkdtemp(path.join(tmpdir(),'shiqu-native-fail-'));
+ try{
+  const output=path.join(root,'existing.zip'),original=fixture().bytes;await writeFile(output,original);
+  const options={appUrl:'http://export.test',output};
+  state.author='';await assert.rejects(exportNamedStory(story.title,options),/EXPORT_UNSIGNED/);
+  assert.equal(state.requests.filter(route=>route.includes('/media/')).length,0);
+  state.author='yysun';state.mediaStatus=404;await assert.rejects(exportNamedStory(story.title,options),/EXPORT_IMAGE_MISSING_1/);
+  state.mediaStatus=200;state.afterMedia=()=>{state.current=crypto.randomUUID();};
+  await assert.rejects(exportNamedStory(story.title,options),/导出期间书架已切换/);
+  assert.deepEqual(await readFile(output),Buffer.from(original));assert.deepEqual(await readdir(root),['existing.zip']);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
 
 test('public ZIP matches the Guandu field/layout contract and retains original signed WebPs byte for byte',()=>{
  const input=fixture(),result=publicStoryZip(input.bytes),files=unzipSync(result.bytes),story=JSON.parse(strFromU8(files['故事.json']));
