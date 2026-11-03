@@ -64,6 +64,15 @@ test('automatic discovery with a chapter scope keeps extraction neutral and appl
  assert.deepEqual(other.stories.map(story=>story.title),['乌龟报恩']);assert.equal(f.calls.catalog.length,prior);
 });
 
+test('verified title results and their cached replay never depend on an available theme matcher',async()=>{
+ const f=libraryFixture(),selected=selectionSchema.parse({...selection,bookId:'zhuangzi',discovery:{mode:'title',title:'乌龟报恩'},theme:'爱情与错过'});
+ f.provider.matchStories=async()=>assert.fail('A fixed title must not be rejected or hidden by a theme filter');
+ const first=await withLocalBooks(f.provider,f.books,f.store).suggestions(selected,[]);
+ assert.equal(first.stories[0].title,'乌龟报恩');assert.equal(f.calls.catalog.length,1);
+ const restored=await withLocalBooks(f.provider,f.books,f.store).suggestions({...selected,theme:'给我一个反转'},[]);
+ assert.deepEqual(restored.stories,first.stories);assert.equal(f.calls.catalog.length,1);
+});
+
 test('title plus a catalog story scopes inference to its exact passage and rejects mixed or forged excerpts',async()=>{
  const selected=selectionSchema.parse({...selection,bookId:'liaozhai',discovery:{mode:'title',title:'种梨'}}),book=await library.book(selected);
  const contents=await bookContents(library,selected),entry=contents.entries.find(entry=>entry.title==='種梨');

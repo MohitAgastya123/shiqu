@@ -86,8 +86,8 @@ export async function discoverLocalStories(provider:ReaderProvider,books:LocalBo
  const namespace=discoveryNamespace(book,status.provider,status.models.text,limits,status.taskReasoningEfforts?.suggest)+scope;
  const oldNamespace=previousDiscoveryNamespace(book,status.provider,status.models.text,limits,status.taskReasoningEfforts?.suggest)+scope;
  const legacyNamespace=legacySummaryDiscoveryNamespace(book,status.provider,status.models.text,limits,status.taskReasoningEfforts?.suggest)+scope;
- // A requested title fixes the event. Theme remains an editorial preference for production.
- const theme=targetTitle?'原典故事':selection.theme.normalize('NFKC').trim(),key=namespace+'/library';
+ // A requested title fixes the event. Only automatic discovery needs a theme judgment.
+ const theme=selection.theme.normalize('NFKC').trim(),key=namespace+'/library';
  const totalChars=plan.blocks.reduce((n,block)=>n+block.chars,0),excludedKeys=new Set(excludedSources.length?[]:excluded.map(titleKey));
  const validExclusions=excludedSources.filter(source=>{try{qualified(books,book,source);return true;}catch{return false;}});
  const sameRange=(a:LocalSourceReference,b:LocalSourceReference)=>sourceCovers(book,a,b)&&sourceCovers(book,b,a);
@@ -163,7 +163,7 @@ export async function discoverLocalStories(provider:ReaderProvider,books:LocalBo
  const measurement=await discoveryMeasurement(cache,observer.cycleId!,!(await read()).stories.length);
  const existingCall=observer.onCall;observer.onCall=event=>{measurement.call(event);existingCall?.(event);};
  const response=async(state:State,stories:Story[],hit:boolean):Promise<SuggestionBatch>=>{
-  const unknown=await hasUnknownJudgments(provider,cache,book.id,theme,state.stories,status.provider);
+  const unknown=!targetTitle&&await hasUnknownJudgments(provider,cache,book.id,theme,state.stories,status.provider);
   await measurement.finish(stories.length?'matched':unknown?'incomplete':'none');
   const note=(targetTitle?(stories.length?'已核对指定故事的完整原文，主题保留为制作时的叙述重点。':state.exhausted?(state.stories.length?'指定故事已列出，请选择已找到的结果。':`未能在当前原文范围核对“${targetTitle}”的完整经过，请补选相关章节或核对标题；不会以局部故事替代。`):'正在按标题核对原文。'):hit?'已复用本地故事库及主题判断缓存。':chapterStories?'已按先总故事、后小故事的顺序收录，再匹配主题。':'已逐篇收录原文故事并匹配主题。')+(state.rejected?'部分返回出处未能完整核对，已保留当前进度，可继续重试。':'')+(!targetTitle&&!stories.length&&state.exhausted?(unknown?'原文已读完，但有未能判断的故事，主题检查尚不完整。':'已检查完所给原文，暂时没有更多符合主题的故事。'):'')+(!targetTitle&&state.exhausted&&state.pendingEvents.length?'部分跨章线索尚未确认完整，未作为故事推荐。':'');
   // Discovery returns ranges and a short match reason; preparation creates the synopsis after selection.
@@ -175,7 +175,7 @@ export async function discoverLocalStories(provider:ReaderProvider,books:LocalBo
   observer?.signal.throwIfAborted();
   const saved=await read(),candidates=visibleStories(saved.stories);
   if(candidates.length)progress(saved,'selecting');
-  const matched=await matchLibraryStories(provider,cache,namespace,theme,candidates,story=>books.resolve(book,story.source).text,limits.whole,status.provider,observer,{bookId:book.id,legacyNamespaces:[oldNamespace],retryUnknown:saved.exhausted,context:observer});
+  const matched=targetTitle?candidates.map(story=>({...story,matchReason:'已依据所选原文核对指定故事，主题仅用于讲述重点。'})):await matchLibraryStories(provider,cache,namespace,theme,candidates,story=>books.resolve(book,story.source).text,limits.whole,status.provider,observer,{bookId:book.id,legacyNamespaces:[oldNamespace],retryUnknown:saved.exhausted,context:observer});
   if(matched.length||saved.exhausted)return response(saved,matched,hit);
   const baseline=saved.stories.length;
   await cache.shared(key,observer,async reading=>{

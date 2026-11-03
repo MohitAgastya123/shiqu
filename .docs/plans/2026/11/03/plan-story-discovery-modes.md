@@ -11,7 +11,7 @@ Git base: `33dba7190583fdf5fa816ef7076ae65823526eb7`
 - [x] 在 selection、intake、本地读取提示词与发现流程中加入模式；空白目标标题/非本地标题请求在保存前拒绝，标题缓存独立，保留旧任务语义；章节范围解析也接受一个经目录验证的独立故事段落，仅提供该段原文，不扩大为整章。
 - [x] 更新新建入口：独立可选标题、主题、原文范围；允许标题与书库已有独立故事段落组合；保留独立故事直选与手写制作要求。后续选题页展示查询目标与主题用途。
 - [x] 添加生产适配器与API回归：标题跨章、只选一回、目标不存在、不同标题与主题缓存隔离、自动发现主题与持久化、旧任务兼容。
-- [ ] 运行相关测试、类型检查与lint；真实Codex在隔离缓存验证完整/缺章结果。
+- [x] 运行相关测试、类型检查与lint；真实Codex在隔离缓存验证完整/缺章结果。
 - [x] 按 `.docs/tests/test-story-discovery-modes.md` 检查浏览器入口与响应式布局。
 
 运行探针：现有真实Codex已可调用；此前三回合读约13秒产出完整三败。首个实现探针用相同生产适配器与隔离缓存，检查标题任务是否保留完整三回且缺章时不输出局部。失败时修正任务契约后再扩展。
@@ -22,4 +22,12 @@ AR risk: non-low — 新增持久化选题意图与精确原文范围。
 AR review round: 2; reviewer: reused
 AR passed: no blocking architecture flaws
 
-实现验证：27项选题/章节/入口相关测试通过（其中新增6项模式回归）；独立Playwright测试通过8种组合、已有故事段落加标题、换书清空和390px窄屏无横向溢出。Node24.22.1 / pnpm11.25.0，类型检查和lint通过。真实Codex隔离缓存验证完整三败、仅78回明确补选，两种都通过。完整测试套件正在执行，CR/VR待完成。
+实现验证：27项选题/章节/入口相关测试通过（其中新增6项模式回归）；独立Playwright测试通过8种组合、已有故事段落加标题、换书清空和390px窄屏无横向溢出。Node24.22.1 / pnpm11.25.0，类型检查和lint通过。真实Codex隔离缓存验证完整三败、仅78回明确补选，两种都通过。完整测试执行1098项，1097通过；development-access一项受并行Vite服务干扰（返回了另一个测试服务的书架响应）。E2E改用独立临时端口后，7项模式/API回归、UI组合测试及2项development-access测试并行重跑共10项全通过；类型检查及lint再次通过。真实Codex的标题+主题+单篇原文段落返回《种梨》，原文覆盖开端与“一市粲然”的完整结局，未超出选定段落；独立“異史氏曰”评语不强制纳入。初始运行断言误要求整个目录段落，已按原文范围包含关系及完整结局核对记录修正，并未更改提取实现。
+
+CR risk: non-low — 标题任务、缓存与生产调用链。
+CR review round: 2; reviewer: reused
+CR fixed: 标题结果不再依赖主题判断，已移除无法恢复的空结果路径；rerun result passed
+
+实现里程碑：`a0f7ece`（初始实现，验证情况见上）；后续审查修复待保存。VR最终复核待完成。
+
+证据：`/tmp/shiqu-modes-full-tests.log`、`/tmp/shiqu-modes-review-regression.log`、`/tmp/shiqu-modes-e2e.log`、`/tmp/shiqu-title-modes-live.log`、`/tmp/shiqu-title-passage-validation.log`。桌面/390px截图位于 `/tmp/shiqu-discovery-modes/`，来自独立测试浏览器。

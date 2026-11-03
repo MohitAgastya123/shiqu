@@ -19,7 +19,11 @@ test('title, theme and original scope are independently optional in the creation
  const api=createHttpServer(request=>f.app.handle(request));await new Promise(resolve=>api.listen(0,'127.0.0.1',resolve));
  t.after(()=>new Promise(resolve=>{api.closeAllConnections();api.close(resolve);}));
  const target=`http://127.0.0.1:${api.address().port}`;
- const vite=await createServer({envFile:false,logLevel:'error',server:{host:'127.0.0.1',port:0,strictPort:false,proxy:{'/api':{target},'/art':{target}}}});
+ // Vite treats port 0 as its default port; reserve an ephemeral port to coexist with other suites.
+ const reservation=createHttpServer(async()=>new Response('reserved'));
+ await new Promise(resolve=>reservation.listen(0,'127.0.0.1',resolve));const uiPort=reservation.address().port;
+ await new Promise(resolve=>reservation.close(resolve));
+ const vite=await createServer({envFile:false,logLevel:'error',server:{host:'127.0.0.1',port:uiPort,strictPort:true,proxy:{'/api':{target},'/art':{target}}}});
  await vite.listen();t.after(()=>vite.close());
  const browser=await chromium.launch({headless:true});t.after(()=>browser.close());
  const context=await browser.newContext({viewport:{width:1280,height:900}}),page=await context.newPage();
