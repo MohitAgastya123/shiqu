@@ -8,7 +8,7 @@ CLI 只查询固定 npm registry 的 latest 元数据，不下载或执行远端
 - [x] 在 server/cli-skill.ts 实现安装状态、安全路径校验、检查/更新、受限且超时的 registry 读取，保持安装幂等和无书库副作用。
 - [x] 在 server/headless-cli.ts 添加 skill check/update 与 --auto-update on|off、--refresh，帮助和结构化结果；测试注入 registry transport/clock 仅用于隔离。
 - [x] 更新 skills/shiqu/SKILL.md、README.md、npm/README.md、.docs/user-guide.md 与仅提示词 use-as-skill.md。
-- [ ] tests/cli-skill.test.mjs 覆盖配套版本更新、缓存离线、偏好、修改拒绝、旧版认领、降级、软链接及嵌套项目发现；运行适用单元集、typecheck、lint，按 E2E 规格验证。
+- [x] tests/cli-skill.test.mjs 覆盖配套版本更新、缓存离线、偏好、修改拒绝、旧版认领、降级、软链接及嵌套项目发现；运行适用单元集、typecheck、lint，按 E2E 规格验证。
 
 文件替换使用同目录临时文件再 rename；无 force。状态损坏时保守拒绝。自动命令附 --automatic，在执行更新时再次读取已保存偏好，防止检查后关闭偏好仍被自动写入。更新跨两个文件无法事务，崩溃后视为未管理/修改过并停止更新，不覆盖用户内容。并发写使用目录锁并 finally 释放，避免互相覆盖。
 
@@ -23,3 +23,15 @@ CLI 只查询固定 npm registry 的 latest 元数据，不下载或执行远端
 AR risk: non-low — 远端版本发现与持久化契约。
 AR review round: 2; reviewer: reused
 AR passed: no blocking architecture flaws
+
+## 实现与验证证据
+
+- SS milestone: afb26ec7ee40d46f2a92f94d9d07a6fa2cd21548，安装/检查/升级、技能和文档。修复 milestone: 8ee6b79，失败缓存不携带版本且命令目标须重新校验成功状态和完整稳定版本；并行 UI 文档内容已从累计提交中拆出并保留工作区。
+- CR risk: non-low — 技能写入、缓存信任、自动更新授权及兼容。
+- CR review round: 2; reviewer: reused
+- CR fixed: 失败或畸形缓存可能错误授权自动更新的问题已修复；rerun result passed。
+- TT: Node 24.22.1 / pnpm 11.25.0，pnpm test 1164/1164，/tmp/shiqu-skill-updates-unit.log。全量启动后新增缓存回归并修复实现，针对最终代码重跑 9/9 技能流程，/tmp/shiqu-skill-updates-e2e.log；其余套件影响不变。
+- ET: tests/cli-skill.test.mjs 按 .docs/tests/test-skill-updates.md 的跨命令/子进程场景执行，最终 9/9；隔离 cwd/HOME、模拟可控 registry，正式 executeHeadless/CLI 路径。
+- 真实 npm registry 通过正式 check + 临时目录/HOME 验证，latest 0.6.5 / 本地 0.6.6，不建议降级；/tmp/shiqu-skill-updates-registry.log。无下载执行、真实全局技能写入或生成调用。
+- pnpm typecheck / pnpm lint 通过，/tmp/shiqu-skill-updates-{typecheck,lint}.log；skill-creator quick_validate 通过；提示词指南 39 段，仅标题与 text 提示，无 CLI/pnpm/JSON；38 个本地文档链接有效；git diff --check 通过。
+- 未运行桌面/Docker 构建，未打包发布或推送。发布后的真实跨 npm 版本安装暂不能验证，隔离旧/新 bundle 完成配套升级路径。
