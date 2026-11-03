@@ -62,13 +62,13 @@ export async function storyBrowser(t,caseId){
   if(theme){await sheet.getByRole('group',{name:'故事主题'}).getByRole('button',{name:'其他',exact:true}).click();await sheet.getByLabel('写下想看的主题').fill(theme);}
   const creation=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/reader/sessions'&&response.request().method()==='POST');
   await sheet.getByRole('button',{name:'进入故事提取',exact:true}).click();const saved=await(await creation).json();
-  const picker=page.getByRole('dialog',{name:'选择故事',exact:true});await picker.getByRole('button',{name:'开始提取',exact:true}).waitFor();
+  const picker=page.getByRole('dialog',{name:'故事设置',exact:true});await picker.getByRole('button',{name:'开始提取',exact:true}).waitFor();
   assert.equal(saved.intake.search.state,'idle');assert.equal(library.calls.catalog.length,0);
   if(!prepare)return saved;
   return extract(saved,title);
  }
  async function extract(saved,title){
-  const picker=page.getByRole('dialog',{name:'选择故事',exact:true});
+  const picker=page.getByRole('dialog',{name:'故事设置',exact:true});
   if(title){await picker.getByRole('button',{name:'输入标题',exact:true}).click();await picker.getByLabel('故事标题',{exact:true}).fill(title);await picker.getByRole('button',{name:'按标题提取',exact:true}).click();}
   else await picker.getByRole('button',{name:'开始提取',exact:true}).click();
   await picker.getByRole('button').filter({has:page.getByText(title||'乌龟报恩',{exact:true})}).click();
@@ -77,6 +77,7 @@ export async function storyBrowser(t,caseId){
  async function confirm(){await page.getByRole('link',{name:'开始制作',exact:true}).click();}
  async function completed(id){await until(async()=>(await f.read(id)).state==='completed',20000);}
  async function reader(id){await page.goto(url+'/?id='+id);await page.getByRole('button',{name:'故事设置',exact:true}).waitFor();}
+ async function workflow(){return settings();}
  async function settings(){await page.getByRole('button',{name:'故事设置',exact:true}).click();return page.getByRole('dialog',{name:'故事设置',exact:true});}
- return {f,library,page,context,url,directory,execute,screenshot,create,extract,confirm,completed,reader,settings,commands,transitions};
+ return {f,library,page,context,url,directory,execute,screenshot,create,extract,confirm,completed,reader,settings,workflow,commands,transitions};
 }

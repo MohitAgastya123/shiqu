@@ -34,7 +34,7 @@ test('unknown counts and timestamps stay unknown and durations include minutes',
  const progress=generationProgress({...planning,selection:{length:'auto'},frameRecommendation:null,generationProgress:{...planning.generationProgress,frameCount:null,frameCountConfirmed:false,startedAt:null,phase:'recommend'}},75000);
  assert.equal(progress.total,null);assert.equal(progress.elapsed,null);assert.equal(progress.measured,false);
  assert.equal(progress.steps[1].detail,'待确定');
- assert.equal(generationDuration(9),'9 秒');assert.equal(generationDuration(65),'1 分 05 秒');
+ assert.equal(generationDuration(9),'0分 09秒');assert.equal(generationDuration(65),'1分 05秒');
  assert.equal(generationProgress(planning,5000).elapsed,0);
 });
 test('review and repair are distinct saved stages and drawing only becomes current after approval',()=>{

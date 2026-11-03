@@ -83,13 +83,6 @@ a.yu-settings-download{text-decoration:none}
 .yu-settings-formats .yu-settings-download:hover:not(:disabled){background:#e9efdf;border-color:#b6c6a6}
 .yu-settings-formats .yu-settings-download:focus-visible{outline:2px solid #82996f;outline-offset:3px}
 .yu-settings-export-readiness{margin:0 0 16px;color:var(--yu-meta);font-size:12px;line-height:1.7}
-.yu-settings-flow{border-top:1px solid #dfe5d2;padding:20px 0}
-.yu-settings-flow h3{font-size:13px;font-weight:500;color:#526b43;margin:0 0 12px}
-.yu-settings-flow .production-timeline>li{padding:7px 4px;min-height:52px}
-.yu-settings-flow .production-stage-action{align-items:center}
-.yu-settings-flow .production-stage-copy>strong{font-size:13px}
-.yu-settings-flow .production-stage-copy>small{font-size:11px}
-.yu-settings-flow .production-stage-state{font-size:11px}
 .yu-sheet>.yu-script-content{margin-top:22px}
 
 .yu-story-script{border-top:1px solid #dfe5d2;border-bottom:1px solid #dfe5d2;color:#526b43;margin-bottom:20px}.yu-story-script>summary{cursor:pointer;padding:18px 0;font-size:14px;font-weight:500}.yu-story-script>summary span{font-size:11px;font-weight:400;color:#7c896f;margin-left:10px}.yu-script-content{padding:0 0 20px;min-width:0}.yu-script-content h3{font-size:17px;margin:0 0 10px}.yu-script-content p{font-size:13px;line-height:1.9;white-space:pre-wrap;overflow-wrap:anywhere;margin:8px 0}.yu-script-intro{color:#7c896f}.yu-script-scene{padding:16px 0;border-top:1px solid #e4e8dc}.yu-script-scene h4{font-size:12px;color:#839076;margin:0 0 8px}.yu-script-prompt>summary{cursor:pointer;font-size:12px;padding:9px 0}.yu-script-prompt p{border-radius:10px;padding:12px;background:#f3f5eb;color:#6e7f60;font-size:12px}.yu-story-script summary:focus-visible{outline:2px solid #82996f;outline-offset:3px;border-radius:4px}
@@ -140,9 +133,6 @@ button.yu-swipe-surface{padding:0;border:0;background:transparent;cursor:default
 .yu-generation-stage.has-error .yu-generation-mark{color:#94694e;background:#f7f0e5;border-color:#e2d4bf}
 .yu-generation-progress{text-align:left;margin:22px 0 20px;padding:16px;border:1px solid #dce4d2;border-radius:14px;background:#f3f6ec;color:#526e45}
 .yu-generation-stage.is-compact{padding-top:0}.yu-generation-stage.is-compact .yu-generation-progress{margin-top:10px}
-.yu-generation-progress progress{display:block;width:100%;height:5px;margin:0 0 16px;border:0;border-radius:5px;overflow:hidden;appearance:none;background:#dfe6d6;accent-color:#728b5c}
-.yu-generation-progress progress::-webkit-progress-bar{background:#dfe6d6;border-radius:5px}
-.yu-generation-progress progress::-webkit-progress-value{background:#728b5c;border-radius:5px;transition:width .35s ease}
 .yu-generation-back{display:flex;align-items:center;justify-content:center;gap:8px;min-height:48px;width:100%;padding:12px 16px;margin-top:20px;border:1px solid #cdd8c1;border-radius:10px;background:transparent;color:#526b43;font:inherit;font-size:13px;cursor:pointer}.yu-generation-back:hover{background:#edf1e4}.yu-generation-back:disabled{opacity:.5;cursor:default}.yu-settings-flow>.yu-primary{margin-top:20px}
 .yu-generation-stage>.yu-generation-exit-note{font-size:10px;line-height:1.8;text-align:center;margin:10px 0 0;color:#65775a}
 .yu-generation-back:focus-visible{outline:2px solid #4f7246;outline-offset:3px}
@@ -258,6 +248,7 @@ button.yu-swipe-surface{padding:0;border:0;background:transparent;cursor:default
 .yu-shelf-card-toolbar>small{flex:1 0 6em}
 .yu-shelf-grid-single .yu-shelf-card>div>small,.yu-shelf-grid-single .yu-pending-story>span:not(.yu-shelf-continue)>strong{padding-right:140px}
 .yu-setting-row .yu-revision-open{flex-shrink:0}
+.yu-setting-row.yu-story-name{padding-bottom:12px}
 .yu-story-name>div{min-width:0}
 .yu-setting-row.yu-story-name p{margin-top:8px;font-family:var(--serif);font-size:20px;font-weight:500;line-height:1.5;color:#3a563f;overflow-wrap:anywhere}
 
@@ -273,3 +264,8 @@ button.yu-swipe-surface{padding:0;border:0;background:transparent;cursor:default
 .yu-sheet::-webkit-scrollbar-thumb{background:#b8c2ac;border-radius:6px}
 .yu-sheet::-webkit-scrollbar-thumb:hover{background:#8c9e7b}
 }
+
+/* Keep the shared workflow close to adjacent content without stacking credit and section spacing. */
+.yu-pdf-setting>.yu-publication-summary{padding-bottom:0}
+.yu-settings-flow{margin:12px 0;padding-top:8px;border-top:1px solid #dce3cf}
+.yu-story-name+.yu-settings-flow,.yu-pdf-setting+.yu-settings-flow{margin-top:0}

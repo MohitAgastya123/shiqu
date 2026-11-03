@@ -75,7 +75,7 @@ test('title, theme and original scope are independently optional in the creation
   assert.deepEqual(saved.selection.discovery,payload.discovery);assert.equal(saved.selection.theme,payload.theme);
   assert.equal(saved.selection.source,undefined);
   assert.equal(saved.intake.search.state,'idle');assert.deepEqual(saved.intake.batches,[]);
-  const extraction=page.getByRole('dialog',{name:'选择故事',exact:true});
+  const extraction=page.getByRole('dialog',{name:'故事设置',exact:true});
   await extraction.getByRole('group',{name:'标题方式'}).waitFor();
   assert.equal(await extraction.getByRole('button',{name:'自动标题',exact:true}).getAttribute('aria-pressed'),'true');
   assert.equal(await extraction.getByLabel('故事标题',{exact:true}).count(),0);
@@ -155,7 +155,7 @@ test('title, theme and original scope are independently optional in the creation
  await sheet.getByRole('button',{name:'进入故事提取',exact:true}).click();
  const submitted=await request;assert.equal(submitted.status(),201);const selected=submitted.request().postDataJSON().selection;
  assert.deepEqual(selected.discovery,{mode:'auto'});assert.equal(selected.theme,'欲望与代价');assert.equal(selected.discoverySources.length,1);assert.equal(selected.source,undefined);
- const created=await submitted.json(),extraction=page.getByRole('dialog',{name:'选择故事',exact:true});
+ const created=await submitted.json(),extraction=page.getByRole('dialog',{name:'故事设置',exact:true});
  await extraction.getByRole('region',{name:'已选原文与主题'}).getByText('種梨',{exact:true}).waitFor();
  await extraction.getByRole('button',{name:'输入标题',exact:true}).click();
  await extraction.getByLabel('故事标题',{exact:true}).fill('种梨');
@@ -174,7 +174,7 @@ test('title, theme and original scope are independently optional in the creation
  await sheet.getByRole('button',{name:'完成原文选择',exact:true}).click();
  await sheet.getByRole('group',{name:'故事主题'}).getByRole('button',{name:'欲望与代价',exact:true}).click();
  await sheet.getByRole('button',{name:'进入故事提取',exact:true}).click();
- const margin=page.getByRole('dialog',{name:'选择故事',exact:true}),chosen=margin.getByRole('region',{name:'已选原文与主题'});
+ const margin=page.getByRole('dialog',{name:'故事设置',exact:true}),chosen=margin.getByRole('region',{name:'已选原文与主题'});
  for(const chapter of ['第七十八回','第七十九回','第八十回'])await chosen.getByText(new RegExp('^'+chapter+' ')).waitFor();
  assert.ok((await chosen.textContent()).includes('欲望与代价'));
  assert.equal(await margin.getByRole('button',{name:'自动标题',exact:true}).getAttribute('aria-pressed'),'true');
@@ -203,7 +203,7 @@ test('title, theme and original scope are independently optional in the creation
  await returned.getByRole('button',{name:'进入故事提取',exact:true}).click();
  const updated=await update;assert.equal(updated.status(),200);assert.equal((await updated.json()).id,marginId);
  assert.equal(new URL(page.url()).searchParams.get('id'),marginId);assert.equal((await f.json('sessions')).length,shelfSize);
- const revised=page.getByRole('dialog',{name:'选择故事',exact:true});
+ const revised=page.getByRole('dialog',{name:'故事设置',exact:true});
  const revisedContext=revised.getByRole('region',{name:'已选原文与主题'});
  await revisedContext.getByText(/^第八十回 /).waitFor();
  assert.equal(await revisedContext.locator('li').count(),2);

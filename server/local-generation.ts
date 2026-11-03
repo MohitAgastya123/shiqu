@@ -1,5 +1,6 @@
 // Bind whole-book or selected-chapter discovery and verified originals to the existing provider.
 // Verify and persist originals before any paid storyboard request; never fall back remotely.
+// Keep the provider's execution deadlines visible to the production countdown.
 import type {ReaderProvider} from '../lib/reader-provider.ts';
 import type {MediaStore} from '../lib/services.ts';
 import type {Selection} from '../lib/reader-model.ts';
@@ -35,6 +36,7 @@ export function withLocalBooks(provider:ReaderProvider,books:LocalBooks,media:Me
   discoveryBusy:()=>cache.busy||matchingBusy(cache)||measurementBusy(cache),
   settleDiscovery:async()=>{await settleMatching(cache);await cache.settle();await settleMeasurements(cache);await cache.settle();},
   status:()=>provider.status(),safeError:error=>provider.safeError(error),
+  generationTimeoutMs:phase=>provider.generationTimeoutMs?.(phase)??null,
   ...(provider.matchStories?{matchStories:provider.matchStories.bind(provider)}:{}),
   async suggestions(selection,excluded,_localBook,reading,excludedSources=[]){
    reading?.signal.throwIfAborted();

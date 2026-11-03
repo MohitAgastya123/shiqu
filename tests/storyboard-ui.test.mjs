@@ -14,7 +14,7 @@ test('reader renders saved directory, batch range, honest progress and automatic
  const status=renderToStaticMarkup(createElement(Status,{session,busy:false,error:'',onRetry(){},onBack(){}}));
  const timedSession={...session,generationProgress:{...session.generationProgress,startedAt:Date.now()-65000,timeoutAt:Date.now()+235000}};
  const timed=renderToStaticMarkup(createElement(Status,{session:timedSession,busy:false,error:'',onRetry(){},onBack(){}}));
- assert.doesNotMatch(timed,/本阶段|已用时/);assert.match(timed,/距超时 23[45] 秒/);
+ assert.doesNotMatch(timed,/本阶段|已用时/);assert.match(timed,/距超时 3分 5[45]秒/);
  const expired=renderToStaticMarkup(createElement(Status,{session:{...timedSession,generationProgress:{...timedSession.generationProgress,timeoutAt:Date.now()-1000}},busy:false,error:'',onRetry(){},onBack(){}}));
  assert.match(expired,/已达超时，等待状态更新/);
  assert.match(status,/已保存 20 \/ 45 幅分镜/);assert.match(status,/当前第 21–40 幅/);assert.doesNotMatch(status,/分镜目录已保存|正在生成整篇，离开页面后继续/);
@@ -63,7 +63,7 @@ test('reader renders saved directory, batch range, honest progress and automatic
  }
  const drawing={...reviewing,ready:3,stage:'正在生成画面',generationProgress:{...reviewing.generationProgress,phase:'image',reviewStatus:'passed'}};
  const images=renderToStaticMarkup(createElement(Status,{session:drawing,busy:false,error:'',onRetry(){},onBack(){}}));
- assert.match(images,/<progress aria-label="画面生成进度" max="45" value="3"/);assert.match(images,/3 \/ 45 幅/);
+ assert.doesNotMatch(images,/<progress/);assert.match(images,/3 \/ 45 幅/);
  const paused=renderToStaticMarkup(createElement(Status,{session:{...session,generationControl:'paused'},busy:false,error:'',onRetry(){},onBack(){}}));
  assert.match(paused,/生成已暂停/);assert.match(paused,/>恢复生成<\/a>/);assert.match(paused,/可在书架中管理和继续生成/);assert.doesNotMatch(paused,/is-generating|production-stage-spin|class="spin"|<progress/);
  const queued=renderToStaticMarkup(createElement(Status,{session:{...session,productionState:'queued'},busy:false,error:'',onRetry(){},onBack(){}}));

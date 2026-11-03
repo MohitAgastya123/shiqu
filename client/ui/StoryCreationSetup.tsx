@@ -87,7 +87,7 @@ export default function StoryCreationSetup({session,book,busy,onAction,onBackToD
   {!selected&&onBackToDiscovery&&<StoryFlowAction disabled={busy} onClick={onBackToDiscovery}><ArrowLeft size={14} aria-hidden="true"/>返回修改书籍、原文和主题</StoryFlowAction>}
   {selected?<p className="yu-sheet-intro">《{book}》 · {session.selection.theme==='原典故事'?'不限定主题':`主题：${session.selection.theme}`}{session.selection.discoverySources?.length?` · 已选 ${session.selection.discoverySources.length} 段原文`:''}</p>:<StoryExtractionContext selection={session.selection} book={book}/>}
   {!selected&&<StoryExtractionSearch sessionId={session.id} title={targetTitle} local={session.selection.bookId!=='other'} busy={busy} hasCandidates={candidates.length>0} onSearch={title=>act({action:'search',title})}/>}
-  {selected&&<div className="yu-batch-heading"><h3>{session.selection.storyTitle}</h3></div>}
+  {selected&&progress.showSummary!==false&&<div className="yu-batch-heading"><h3>{session.selection.storyTitle}</h3></div>}
   {!selected&&extractionStatus}
   {!selected&&extractionError}
   {!selected&&!editing&&remoteChoice}
@@ -105,7 +105,7 @@ export default function StoryCreationSetup({session,book,busy,onAction,onBackToD
    {(session.error||progress.error)&&<p className="yu-batch-error" role="alert">{progress.error||session.error}</p>}
    {(session.state==='failed'||!!progress.error)&&<StoryRetry session={session} busy={progress.busy} onRetry={progress.onRetry}/>}
    {paused&&<StoryGenerationControl session={session} busy={progress.controlBusy} onControl={progress.onControl} primary/>}
-   {!onReplace&&<StoryBackToShelf onBack={progress.onBack}/>}
+   {!onReplace&&!progress.hideBack&&<StoryBackToShelf onBack={progress.onBack}/>}
   </>}
   {!selected&&error&&<p className="yu-batch-error" role="alert">{error}</p>}
   {choosing&&<Sheet title="重新选择故事" busy={busy} onClose={()=>setChoosing(false)}>{candidateList}{error&&<p role="alert">{error}</p>}</Sheet>}

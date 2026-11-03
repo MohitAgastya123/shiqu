@@ -2,7 +2,7 @@
 // Coordinate story discovery, resumable generation, and the reading sheets.
 
 import StoryExportControl from './StoryExportControl';
-import StoryPublicationEditor,{StoryPublicationDetails,StoryPublicationSummary,StoryPublicationDefaults} from './StoryPublication';
+import StoryPublicationEditor,{StoryPublicationDetails,StoryPublicationDefaults} from './StoryPublication';
 import {storyExportKey} from '@/lib/story-publication';
 import BookReferenceStar from './BookReferenceStar';
 import {useBookReference} from '../useBookReference';
@@ -29,24 +29,19 @@ import StoryTitleEditor from './StoryTitleEditor';
 import StoryScript from './StoryScript';
 import StorySceneList from './StorySceneList';
 import StoryDiscoveryForm,{discoveryThemes} from './StoryDiscoveryForm';
-import StoryCreationSetup,{storyCreationTitle} from './StoryCreationSetup';
+import StoryCreationSetup from './StoryCreationSetup';
 import StoryReselection from './StoryReselection';
 import StoryReviewTools from './StoryReviewTools';
 import StoryReviewHistory from './StoryReviewHistory';
-import StoryBackToShelf from './StoryBackToShelf';
 import StoryPausedEditing from './StoryPausedEditing';
 import Sheet from './StorySheet';
+import StorySettingsPanel from './StorySettingsPanel';
 import StoryFrameCount from './StoryFrameCount';
 import {narrativeDetailSchema} from '@/lib/reader-frame-recommendation';
 import StoryRetry from './StoryRetry';
-import StoryGenerationControl from './StoryGenerationControl';
 import StoryGenerationStatus from './StoryGenerationStatus';
 import StoryPageSurface from './StoryPageSurface';
 import StoryEndingSurface from './StoryEndingSurface';
-import StoryProductionTimeline from './StoryProductionTimeline';
-import StoryFlowHeader from './StoryFlowHeader';
-import {generationProgress} from '@/lib/generation-progress';
-import {productionSteps} from '@/lib/production-stages';
 import {newWheelGesture,wheelPageDirection,swipePageDirection} from '@/lib/reader-navigation';
 import './reader.css';
 
@@ -84,13 +79,13 @@ export default function Reader(){
  }),[shelfTab,setShelfTab]=useState(()=>{try{return localStorage.getItem('shiqu-shelf-tab')==='saved'?'saved':'recent';}catch{return 'recent';}}),[story,setStory]=useState<Story|null>(null),[page,setPage]=useState(0),[ended,setEnded]=useState(false),[saved,setSaved]=useState(false);
  useEffect(()=>{try{localStorage.setItem('shiqu-last-tab',tab);}catch{}},[tab]);
  const [loading,setLoading]=useState(true),[loadError,setLoadError]=useState(''),[toast,setToast]=useState(''),[source,setSource]=useState(false),[configure,setConfigure]=useState(false),[unavailable,setUnavailable]=useState(''),[settings,setSettings]=useState(false);
+ const [workflowTarget,setWorkflowTarget]=useState<string|null>(null),[workflowError,setWorkflowError]=useState('');
  const [script,setScript]=useState(false),[requirements,setRequirements]=useState(false);
  const [discoveryTarget,setDiscoveryTarget]=useState<string|null>(null);
  const [reselectTarget,setReselectTarget]=useState<string|null>(null);
  const [imageIssues,setImageIssues]=useState<Record<string,string>>({}),[imageReloads,setImageReloads]=useState<Record<string,number>>({});
  const [reviewHistoryId,setReviewHistoryId]=useState<string|null>(null);
  const [publicationTarget,setPublicationTarget]=useState<Story|null>(null),[publicationDefaultsOpen,setPublicationDefaultsOpen]=useState(false);
- const [reviewRetryError,setReviewRetryError]=useState('');
  const [sceneList,setSceneList]=useState(false);
  const [selection,setSelection]=useState<Selection>(initialReaderSelection),[largeText,setLargeText]=useState(false),[install,setInstall]=useState<any>(null),[motion,setMotion]=useState('forward'),[creating,setCreating]=useState(false);
  const [deletedIds,setDeletedIds]=useState<string[]>([]),[deleteTarget,setDeleteTarget]=useState<{id:string;title:string}|null>(null),[deleting,setDeleting]=useState(false),[deleteError,setDeleteError]=useState('');
@@ -120,13 +115,33 @@ export default function Reader(){
   });
  }
  const gen=useStoryGeneration(page,{onStory:(s,p,b)=>{if(deleted.current.has(s.id))return;setStory(s);setStories(old=>[s,...old.filter(x=>x.id!==s.id)]);if(p!==undefined){setPage(p);setSaved(!!b);}},onProgress:acceptServerProgress},tab==='shelf'&&!story&&!configure&&!favoriteBusy&&!deleting&&!restoring&&!shelfRefreshing);
+ // Keep the same panel open when the first image arrives underneath it.
+ useEffect(()=>{if(gen.active&&!story&&!configure&&!workflowTarget)setWorkflowTarget(gen.active.id);},[gen.active?.id,story?.id,configure,workflowTarget]);
+ function openWorkflow(id:string){
+  setSettings(false);setWorkflowError('');setWorkflowTarget(id);
+  if(story?.id!==id)setStory(null);
+  if(gen.active?.id!==id)void gen.resume(id,story?.id===id?page:undefined).catch(error=>setWorkflowError(error instanceof Error?error.message:'制作流程暂时无法打开，请重试。'));
+ }
+ function openStorySettings(next:Story){
+  if(isGenerated(next)){openWorkflow(next.id);return;}
+  if(story?.id!==next.id)open(next);
+  setWorkflowTarget(null);setWorkflowError('');setSettings(true);
+ }
+ function closeWorkflow(){
+  setWorkflowTarget(null);setWorkflowError('');
+  if(!story){gen.leave();history.replaceState(null,'','/');}
+ }
+ async function retryWorkflow(faultId?:string){
+  setWorkflowError('');
+  try{await gen.retryStep(faultId);}catch(error){setWorkflowError(error instanceof Error?error.message:'重试暂未成功，请稍后再试。');}
+ }
  // The id stays the same when the first image arrives, so a draft written before it survives.
  const historyOwner=story?.id||gen.active?.id;
  useEffect(()=>{setReviewHistoryId(null);},[historyOwner]);
  const revision=useStoryRevision(story?(isGenerated(story)?story.id:undefined):gen.active&&(!gen.active.intake||gen.active.intake.phase==='confirmed')?gen.active.id:undefined,async next=>{await switchVersion(next.id);});
  async function switchVersion(id:string){
-  const previous={story,page,saved,ended,drag,motion,seen:seen.current,session:session.current};setSettings(false);setSource(false);setRequirements(false);setScript(false);revision.setTab(null);setStory(null);setPage(0);setEnded(false);setSaved(false);setDrag(0);setMotion('forward');seen.current=new Set();session.current=randomId();gen.leave();
-  try{await gen.resume(id,0,false,true);}catch{setPage(previous.page);setSaved(previous.saved);setEnded(previous.ended);setDrag(previous.drag);setMotion(previous.motion);seen.current=previous.seen;session.current=previous.session;setStory(previous.story);void gen.refreshLibrary().catch(()=>{});notify('这个版本暂时无法打开，已保存的新版可从书架继续。');}
+  const previous={story,page,saved,ended,drag,motion,seen:seen.current,session:session.current,workflowTarget};setWorkflowTarget(id);setWorkflowError('');setSettings(false);setSource(false);setRequirements(false);setScript(false);revision.setTab(null);setStory(null);setPage(0);setEnded(false);setSaved(false);setDrag(0);setMotion('forward');seen.current=new Set();session.current=randomId();gen.leave();
+  try{await gen.resume(id,0,false,true);}catch{setPage(previous.page);setSaved(previous.saved);setEnded(previous.ended);setDrag(previous.drag);setMotion(previous.motion);seen.current=previous.seen;session.current=previous.session;setStory(previous.story);setWorkflowTarget(previous.workflowTarget);setWorkflowError('新版暂时无法打开，请重新加载制作流程。');void gen.refreshLibrary().catch(()=>{});notify('这个版本暂时无法打开，已保存的新版可从书架继续。');}
  }
  const visitor=useRef(''),session=useRef(''),seen=useRef(new Set<number>()),noticeTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
  const notify=(text:string)=>{setToast(text);if(noticeTimer.current)clearTimeout(noticeTimer.current);noticeTimer.current=setTimeout(()=>setToast(''),4000);};
@@ -155,8 +170,8 @@ export default function Reader(){
 
  function track(kind:string,s:Story|null=story,index:number|null=null){if(!s||!visitor.current||!session.current)return;request(isGenerated(s)?'reader/sessions/'+s.id+'/events':'events','POST',{id:session.current+':'+s.id+':'+kind+(index===null?'':':'+index),visitor:visitor.current,session:session.current,storyId:s.id,kind,page:index,mode:'manual',cohort:'internal'}).catch(()=>{});}
  function remember(s:Story,index:number,isSaved:boolean){if(deleted.current.has(s.id))return;authoritativeProgress.current=reconcileReadingProgress(authoritativeProgress.current,[{storyId:s.id,page:index,saved:isSaved?1:0,updatedAt:new Date().toISOString()}]);setLastReadId(s.id);try{localStorage.setItem('shiqu-last-read',s.id);}catch{}setProgress(pr=>{const rows=[{storyId:s.id,page:index,saved:isSaved?1:0,updatedAt:new Date().toISOString()},...pr.filter(p=>p.storyId!==s.id)];localStorage.setItem('yiyu-reading',JSON.stringify(rows));return rows;});request(isGenerated(s)?'reader/sessions/'+s.id+'/progress':'me/progress','POST',{storyId:s.id,page:index,saved:isSaved}).catch(()=>{});}
- function open(s:Story,restart=false){if(deleted.current.has(s.id))return;setDrag(0);if(isGenerated(s))gen.resume(s.id,restart?0:undefined).catch(e=>notify(e.message));else gen.leave();setConfigure(false);setUnavailable('');const pr=progress.find(p=>p.storyId===s.id);const index=restart?0:Math.min(pr?.page||0,s.pages.length-1);setPage(index);setStory(s);setSaved(!!pr?.saved);setEnded(false);setMotion('forward');seen.current=new Set();session.current=randomId();history.replaceState(null,'','/read?id='+encodeURIComponent(s.id));track('start',s);window.scrollTo(0,0);}
- function home(){setDrag(0);gen.leave();setStory(null);setEnded(false);setSource(false);history.replaceState(null,'','/');}
+ function open(s:Story,restart=false){if(deleted.current.has(s.id))return;setWorkflowTarget(null);setDrag(0);if(isGenerated(s))gen.resume(s.id,restart?0:undefined).catch(e=>notify(e.message));else gen.leave();setConfigure(false);setUnavailable('');const pr=progress.find(p=>p.storyId===s.id);const index=restart?0:Math.min(pr?.page||0,s.pages.length-1);setPage(index);setStory(s);setSaved(!!pr?.saved);setEnded(false);setMotion('forward');seen.current=new Set();session.current=randomId();history.replaceState(null,'','/read?id='+encodeURIComponent(s.id));track('start',s);window.scrollTo(0,0);}
+ function home(){setWorkflowTarget(null);setWorkflowError('');setDrag(0);gen.leave();setStory(null);setEnded(false);setSource(false);history.replaceState(null,'','/');}
  function backToShelf(){setSettings(false);setSource(false);setRequirements(false);setScript(false);revision.setTab(null);home();setTab('shelf');window.scrollTo({top:0,behavior:'instant'});}
  function turn(delta:number){if(!story)return;if(!ended&&page===0&&delta<0)return;if(ended){if(delta<0){setDrag(0);setPage(story.pages.length-1);setEnded(false);setMotion('back');}else if(delta>0)home();return;}if(delta>0&&!story.pages[page]?.image){notify('这一幅还在绘制，稍等一下。');return;}setMotion(delta>0?'forward':'back');if(page+delta>=story.pages.length){setEnded(true);if(seen.current.size===story.pages.length)track('complete');}else setPage(p=>Math.max(0,p+delta));}
  function goToPage(index:number){if(!story)return;setDrag(0);setMotion(index>page?'forward':'back');setEnded(false);setPage(Math.max(0,Math.min(index,story.pages.length-1)));}
@@ -165,9 +180,9 @@ export default function Reader(){
  Promise.all([request('stories'),request('books'),request('me/progress').catch(()=>null),request('reader/deletions')]).then(([list,bookList,serverProgress,deletions])=>{setDeletedStories(deletions);const hidden:string[]=deletions.map((d:{storyId:string})=>d.storyId);hidden.forEach(id=>deleted.current.add(id));setDeletedIds([...deleted.current]);setStories(list.filter((s:Story)=>!deleted.current.has(s.id)));setBooks(choices);let local:Progress[]=[];try{local=JSON.parse(localStorage.getItem('yiyu-reading')||'[]');setLastReadId(localStorage.getItem('shiqu-last-read')||local[0]?.storyId||'');}catch{}authoritativeProgress.current=reconcileReadingProgress(authoritativeProgress.current,serverProgress||[]);const merged=reconcileReadingProgress(local,authoritativeProgress.current).filter(p=>!deleted.current.has(p.storyId));setProgress(old=>reconcileReadingProgress(mergeReadingProgress(old,merged),authoritativeProgress.current).filter(p=>!deleted.current.has(p.storyId)));localStorage.setItem('yiyu-reading',JSON.stringify(merged));const id=new URLSearchParams(location.search).get('id');const selected=list.find((s:Story)=>s.id===id);if(selected&&!deleted.current.has(selected.id)){const pr=merged.find(p=>p.storyId===id);setPage(Math.min(pr?.page||0,selected.pages.length-1));setSaved(!!pr?.saved);setStory(selected);session.current=randomId();track('start',selected);}else if(id&&!deleted.current.has(id)){gen.resume(id).catch(()=>setLoadError('这篇故事暂时无法打开。'));}}).catch(()=>setLoadError('故事暂时没有加载出来，请检查网络后再试。')).finally(()=>setLoading(false));return()=>{window.removeEventListener('beforeinstallprompt',installHandler);if(noticeTimer.current)clearTimeout(noticeTimer.current);};},[]);
  useEffect(()=>{if(story){if(!session.current)session.current=randomId();track('start',story);}},[story?.id]);
  useEffect(()=>{if(!story||ended||!story.pages[page]?.image)return;seen.current.add(page);track('page',story,page);remember(story,page,saved);const next=story.pages[page+1]?.image;if(next){const img=new Image();img.src=next;}},[story?.id,story?.pages[page]?.image,page,ended]);
- useEffect(()=>{function key(e:KeyboardEvent){if(!story||source||settings||configure||sceneList)return;if(e.key==='ArrowRight'||e.key==='ArrowDown'){e.preventDefault();turn(1);}if(e.key==='ArrowLeft'||e.key==='ArrowUp'){e.preventDefault();turn(-1);}if(e.key==='Escape')home();}window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key);},[story,page,ended,source,settings,configure,sceneList]);
+ useEffect(()=>{function key(e:KeyboardEvent){if(!story||source||settings||workflowTarget||configure||sceneList)return;if(e.key==='ArrowRight'||e.key==='ArrowDown'){e.preventDefault();turn(1);}if(e.key==='ArrowLeft'||e.key==='ArrowUp'){e.preventDefault();turn(-1);}if(e.key==='Escape')home();}window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key);},[story,page,ended,source,settings,workflowTarget,configure,sceneList]);
  useEffect(()=>{
-  const reader=readerRef.current;if(!reader||!story||source||settings||configure||sceneList)return;
+  const reader=readerRef.current;if(!reader||!story||source||settings||workflowTarget||configure||sceneList)return;
   const gesture=wheelGesture.current;
   function wheel(e:WheelEvent){
    if(e.ctrlKey||e.metaKey)return; // Preserve browser zoom and trackpad pinch.
@@ -180,15 +195,15 @@ export default function Reader(){
   }
   reader.addEventListener('wheel',wheel,{passive:false});
   return()=>reader.removeEventListener('wheel',wheel);
- },[story,page,ended,source,settings,configure,sceneList]);
+ },[story,page,ended,source,settings,workflowTarget,configure,sceneList]);
  useEffect(()=>{
-  const ending=endingRef.current;if(!ending||!ended||source||settings||configure)return;
+  const ending=endingRef.current;if(!ending||!ended||source||settings||workflowTarget||configure)return;
   let start:{x:number;y:number}|null=null;
   const touchStart=(e:TouchEvent)=>{const target=e.target as HTMLElement;start=ending.scrollTop<=1&&e.touches.length===1&&!target.closest('button,a')?{x:e.touches[0].clientX,y:e.touches[0].clientY}:null;};
   const touchMove=(e:TouchEvent)=>{if(!start||e.touches.length!==1)return;const dx=e.touches[0].clientX-start.x,dy=e.touches[0].clientY-start.y;if(dy>0&&Math.abs(dy)>Math.abs(dx)*1.3){e.preventDefault();if(swipePageDirection(dx,dy)===-1){start=null;turn(-1);}}};
   ending.addEventListener('touchstart',touchStart,{passive:true});ending.addEventListener('touchmove',touchMove,{passive:false});
   return()=>{ending.removeEventListener('touchstart',touchStart);ending.removeEventListener('touchmove',touchMove);};
- },[ended,story,source,settings,configure]);
+ },[ended,story,source,settings,workflowTarget,configure]);
  useEffect(()=>{localStorage.setItem('yiyu-preferences',JSON.stringify(selection));},[selection]);
  function bookmark(){if(!story)return;const value=!saved;setSaved(value);remember(story,page,value);if(value)track('save');notify(value?'收好了，下次接着看。':'已移出收藏');}
  async function favoriteFromShelf(id:string,value:boolean){
@@ -204,7 +219,7 @@ export default function Reader(){
 
 
  async function exportStory(format:ExportFormat,output:Story){
-  if(!story||exportLock.current)return;
+  if(exportLock.current)return;
   exportLock.current=true;setExporting(format);setExportProgress('正在准备'+format.toUpperCase());
   try{
    const key=storyExportKey(output),cached=format==='zip'?zipDownload:format==='png'?pngDownload:pdfDownload;
@@ -247,7 +262,7 @@ export default function Reader(){
  }
  function finishReselection(next:SessionView,readOnly=false){
   const previousId=story?.id||gen.active?.id,changed=next.id!==previousId;
-  reselectLock.current=false;setReselectTarget(null);
+  reselectLock.current=false;setReselectTarget(null);if(changed||!settings)setWorkflowTarget(next.id);
   if(changed){setStory(null);setPage(0);setSaved(false);setEnded(false);setDrag(0);setMotion('forward');seen.current=new Set();session.current=randomId();setSettings(false);setSource(false);setRequirements(false);setScript(false);revision.setTab(null);}
   gen.adopt(next,readOnly||!changed,readOnly||!changed?next.page:0);
  }
@@ -300,12 +315,12 @@ export default function Reader(){
   finally{restoreLock.current=false;setRestoring('');}
  }
  function askDelete(id:string,title:string){setDeleteError('');setDeleteTarget({id,title});}
- function exportControl(format:ExportFormat,className:string){
-  if(!story)return null;
+ function exportControl(format:ExportFormat,className:string,target:Story|null=story){
   const {label,description,Icon}=exportOptions[format];
   const busy=exporting===format;
   const content=<>{busy?<Loader2 size={20} className="spin"/>:<Icon size={20}/>}<span>{busy?(format==='zip'?'打包中…':'导出中…'):label}<small>{description}</small></span></>;
-  return <StoryExportControl key={story.id+':'+format} story={story} format={format} className={className} busy={busy} disabled={!!exporting||!story.pages.length||story.pages.some(p=>!p.image)} onExport={output=>exportStory(format,output)} onEdit={isGenerated(story)?()=>setPublicationTarget(story):undefined}>{content}</StoryExportControl>;
+  if(!target)return <button key={format} type="button" className={className} disabled>{content}</button>;
+  return <StoryExportControl key={target.id+':'+format} story={target} format={format} className={className} busy={busy} disabled={!!exporting||!target.pages.length||target.pages.some(p=>!p.image)} onExport={output=>exportStory(format,output)} onEdit={isGenerated(target)?()=>setPublicationTarget(target):undefined}>{content}</StoryExportControl>;
  }
  function exportStatus(showReadiness=true){
   if(!story)return null;
@@ -319,13 +334,38 @@ export default function Reader(){
  const current=story?.pages[page];
  const activeProgress=mergeReadingProgress(progress,gen.sessions.map(s=>({storyId:s.id,page:s.page,saved:s.saved?1:0,updatedAt:s.lastReadAt||s.createdAt}))).filter(p=>!deletedIds.includes(p.storyId)&&(!stories.some(s=>s.id===p.storyId&&isGenerated(s))||latestIds.has(p.storyId)));
  const readingSession=story?(gen.active?.id===story.id?gen.active:gen.sessions.find(session=>session.id===story.id)):undefined;
- const readingProduction=readingSession?generationProgress(readingSession,Date.now()):null;
+ const workflowSession=workflowTarget?(gen.active?.id===workflowTarget?gen.active:null):settings?readingSession:!story?gen.active:null;
  const scriptStory=story||gen.active?.story||null;
  const revisionSession=readingSession||(!story?gen.active:null);
  const revisionResuming=!!revisionSession&&revisionSession.state!=='completed'&&!!revisionSession.generationControl&&revisionSession.generationControl!=='active';
  const GenerationSurface=revisionResuming?StoryPausedEditing:StoryGenerationStatus;
  const revisionPending=!!revision.impact?.changed;
- const readingSteps=revisionPending&&revision.base?revisionDraftSteps(revision.base,revision.changes):story?(readingProduction?.steps??productionSteps({planReady:true,sourceReady:!!story.sourceText,frameCountConfirmed:true,total:story.pages.length,ready:story.pages.filter(page=>!!page.image).length,activeState:'paused'})).map(step=>step.id==='source'?{...step,label:'原文与制作要求',detail:`画风：${isGenerated(story)?(story.artStyleLabel||'未记录画风'):'未记录画风'}`}:step):[];
+
+ const workflowContent=(workflowSession?<>
+   {workflowSession.intake&&workflowSession.intake.phase!=='confirmed'?<StoryCreationSetup
+    session={workflowSession} book={bookName({id:workflowSession.id,bookId:workflowSession.selection.bookId})} busy={gen.setupBusy} onAction={gen.setup}
+    onBackToDiscovery={()=>{setDiscoveryTarget(workflowSession.id);setSelection(workflowSession.selection);setUnavailable('');setConfigure(true);}}
+    progress={{busy:gen.busy,controlBusy:!!gen.controlBusy,onControl:gen.control,error:workflowError||gen.error,onRetry:retryWorkflow,onBack:backToShelf,hideBack:true,showSummary:false}}
+   />:!revisionResuming&&workflowSession.awaitingFrameCount&&workflowSession.frameRecommendation?<>
+    <StoryFrameCount key={workflowSession.id} recommendation={workflowSession.frameRecommendation} disabled={gen.busy} onConfirm={gen.confirmFrameCount}/>
+    {gen.error&&<p className="yu-batch-error" role="alert">{gen.error}</p>}
+   </>:<GenerationSurface
+    session={workflowSession} busy={gen.busy} controlBusy={!!gen.controlBusy||creating} onControl={gen.control} error={workflowError||gen.error} onRetry={retryWorkflow} onBack={backToShelf} hideBack showSummary={false}
+    navigation={{source:{onClick:()=>setSource(true),disabled:!workflowSession.generationProgress?.sourceReady},reselect:{label:'替换选题',onClick:()=>void reselectStory(),disabled:creating||revision.busy||!!gen.controlBusy,title:'替换当前选题，书架保留一张卡片，旧结果保留历史'},reselecting:creating}}
+    onAcceptance={()=>revision.open('acceptance')} onHistory={()=>setReviewHistoryId(workflowSession.id)}
+    timeline={!revisionResuming?{
+     links:{source:[{label:'制作要求',onClick:()=>revision.open('requirements')},{label:'验收要求',onClick:()=>revision.open('acceptance')}]},
+     detailActions:{source:{label:'修改画风',onClick:()=>revision.open('style')}},
+     actions:{count:{label:'修改叙事详略',onClick:()=>revision.open('count')},...(workflowSession.story?{plan:{label:'查看分镜',onClick:()=>setScript(true)}}:{})}
+    }:undefined}
+    stages={revisionPending&&revision.base&&!revisionResuming?revisionDraftSteps(revision.base,revision.changes):undefined} editor={revision} onReselect={()=>void reselectStory()}
+    reviewTools={!revisionPending&&<StoryReviewTools onReplan={()=>revision.open('requirements')} session={workflowSession} busy={gen.busy||!!gen.controlBusy} error={gen.controlError} onScript={()=>setScript(true)} onEdit={page=>revision.open('script',page)} onRetry={()=>void retryWorkflow(workflowSession.faults?.find(f=>f.stage==='review')?.id)} onDrawAnyway={()=>void gen.drawAnyway(workflowSession.id)}/>}
+   />}
+   {revisionPending&&!revisionResuming&&<StoryRevisionActions editor={revision} link/>}
+  </>:<div role="status">{workflowError?<><p role="alert">{workflowError}</p><button type="button" onClick={()=>openWorkflow(workflowTarget!)}>重新加载制作流程</button></>:<p>正在打开制作流程…</p>}</div>);
+
+ const panelOpen=!!(workflowTarget||(!story&&gen.active)||(settings&&story));
+ const panelStory=workflowSession?.story||story;
  const pendingStories=gen.sessions.filter(s=>!deletedIds.includes(s.id)&&!s.story?.pages[0]?.image);
  const shelf=activeProgress.flatMap(p=>{const s=allStories.find(s=>s.id===p.storyId);return s&&s.pages[0]?.image?[s]:[];});
 
@@ -337,9 +377,9 @@ export default function Reader(){
  {story?<main className={'yu-reader'+(!metadataVisible&&!ended?' yu-metadata-hidden':'')} ref={readerRef} aria-label={'阅读'+story.title}>
  {!ended&&<div className="yu-filmstrip" style={{transform:`translateX(calc(${-page*100}% + ${drag}px))`,transition:drag?'none':undefined}}>{story.pages.map((p,i)=><div className="yu-film-frame" key={i}>{p.image&&<img key={p.image+'-'+(imageReloads[p.image]||0)} onError={()=>{if(isGenerated(story))void inspectImage(story.id,i,p.image);}} onLoad={()=>setImageIssues(old=>{if(!old[p.image])return old;const next={...old};delete next[p.image];return next;})} className={'yu-scene '+(i===page?'is-current':'')} src={p.image} alt={i===page?p.caption:''} draggable={false}/>}</div>)}</div>}
  {ended&&<div className="yu-scene-shade"/>}
- {!!readingSession?.reviewIssues?.length&&!settings&&<button type="button" className="yu-reader-review-notice" onClick={()=>setSettings(true)}>审片还有 {readingSession.reviewIssues.length} 处问题，已停止绘图。查看并处理</button>}
+ {!!readingSession?.reviewIssues?.length&&!settings&&<button type="button" className="yu-reader-review-notice" onClick={()=>openWorkflow(story.id)}>审片还有 {readingSession.reviewIssues.length} 处问题，已停止绘图。查看并处理</button>}
  {!ended&&!current?.image&&<div className="yu-drawing" role="status"><div className="yu-drawing-orbit"><Feather size={35} strokeWidth={1}/></div><span>{gen.error?'画笔暂停了一下':'这一幅，正在展开'}</span><small>{gen.error||gen.active?.stage||'正在为你绘制画面'}</small>{gen.error&&gen.active&&<StoryRetry session={gen.active} busy={gen.busy} onRetry={gen.retryStep}/>}</div>}
- <header className="yu-reader-top"><div className="yu-progress" aria-label={`第${page+1}幅，共${story.pages.length}幅`}>{story.pages.map((_,i)=><span key={i} className={i<=page?'read':''}/>)}</div><div className="yu-reader-heading"><button className="yu-glass" onClick={home} aria-label="返回发现"><ArrowLeft size={21}/></button><div className="yu-reader-title"><div><strong>{story.title}</strong><span>{bookName(story)}{isGenerated(story)?' · AI 生成':''}</span></div><div className="yu-style-label" aria-label="本篇主题与画风">{story.theme&&<span>{story.theme}</span>}<span>{isGenerated(story)?(story.artStyleLabel||'未记录画风'):'未记录画风'}</span></div></div>{!ended&&<BookReferenceStar selected={bookReference.selected} disabled={bookReference.disabled} busy={bookReference.busy} onClick={bookReference.toggle}/>}<button className="yu-glass" onClick={bookmark} aria-label={saved?'取消收藏':'收藏故事'}><Bookmark size={20} fill={saved?'currentColor':'none'}/></button><button className="yu-glass" onClick={()=>setSettings(true)} aria-label="故事设置"><Settings2 size={19}/></button></div></header>
+ <header className="yu-reader-top"><div className="yu-progress" aria-label={`第${page+1}幅，共${story.pages.length}幅`}>{story.pages.map((_,i)=><span key={i} className={i<=page?'read':''}/>)}</div><div className="yu-reader-heading"><button className="yu-glass" onClick={home} aria-label="返回发现"><ArrowLeft size={21}/></button><div className="yu-reader-title"><div><strong>{story.title}</strong><span>{bookName(story)}{isGenerated(story)?' · AI 生成':''}</span></div><div className="yu-style-label" aria-label="本篇主题与画风">{story.theme&&<span>{story.theme}</span>}<span>{isGenerated(story)?(story.artStyleLabel||'未记录画风'):'未记录画风'}</span></div></div>{!ended&&<BookReferenceStar selected={bookReference.selected} disabled={bookReference.disabled} busy={bookReference.busy} onClick={bookReference.toggle}/>}<button className="yu-glass" onClick={bookmark} aria-label={saved?'取消收藏':'收藏故事'}><Bookmark size={20} fill={saved?'currentColor':'none'}/></button><button className="yu-glass" onClick={()=>openStorySettings(story)} aria-label="故事设置"><Settings2 size={19}/></button></div></header>
  {ended?<StoryEndingSurface surfaceRef={endingRef} onTurn={turn} onDrag={setDrag} drag={drag}><div className="yu-ending-mark"><Leaf size={32} strokeWidth={1.3}/></div><p className="yu-kicker">故事到这里，余味留给你</p><h1>{story.reflection}</h1><div className="yu-end-line"/><p>有些故事的最后一页，<br/>其实在你的生活里。</p><button className="yu-primary" onClick={()=>open(story,true)}><RotateCcw size={18}/>从头再看<ArrowRight size={19}/></button><div className="yu-ending-navigation"><button onClick={()=>turn(-1)}><ChevronLeft size={17}/>返回上一幅</button><button onClick={()=>{home();setTab('shelf');window.scrollTo({top:0,behavior:'instant'});}}><BookOpen size={16}/>书架</button><button onClick={()=>{home();choose();}}><Sparkles size={16}/>开启下一篇</button></div><section className="yu-ending-downloads" aria-label="下载故事"><h2>把故事带走</h2><div className="yu-ending-formats">{exportControl('pdf','yu-ending-download')}{exportControl('png','yu-ending-download')}{exportControl('zip','yu-ending-download yu-download-zip')}</div>{exportStatus()}</section><StoryPublicationDetails story={story}/><button className="yu-end-source" onClick={()=>setSource(true)}>读一读原文 <ChevronRight size={13}/></button></StoryEndingSurface>:<>
  <StoryPageSurface onTurn={turn} onDrag={setDrag} onToggleMetadata={()=>setMetadataVisible(visible=>!visible)}/>
  <div className={'yu-scene-caption '+(largeText?'large':'')} key={'caption-'+page}><div className="yu-scene-number"><span>{String(page+1).padStart(2,'0')}</span><i/><span>{String(story.pages.length).padStart(2,'0')}</span>{isGenerated(story)&&gen.busy&&<span className="yu-scene-generation" role="status"><Loader2 size={12} className="spin"/>{gen.active?.stage||'正在生成'}</span>}</div><p>{current?.caption}</p>{current?.image&&(gen.error||imageIssues[current.image]||!!readingSession?.faults?.length)&&<div className="yu-reader-error">{gen.error||imageIssues[current.image]}{isGenerated(story)&&imageIssues[current.image]&&<button type="button" onClick={()=>void inspectImage(story.id,page,current.image,true)}>重新检查图片</button>}{readingSession&&<StoryRetry session={readingSession} busy={gen.busy} onRetry={gen.retryStep}/>}</div>}</div>
@@ -357,14 +397,22 @@ export default function Reader(){
  <button className="yu-surprise" onClick={()=>{const b=choices[Math.floor(Math.random()*(choices.length-1))];choose(b.id,moods[Math.floor(Math.random()*(moods.length-1))]);}}><span><Feather size={24}/></span><div><strong>不挑了，给我一个故事</strong><small>让偶然替你翻开第一页</small></div><ArrowRight size={19}/></button>
  <div className="yu-generation-note"><Sparkles size={13}/><p>故事、画面与文字，由 AI 为这一次阅读生成。</p></div>
  {loading?<p className="yu-inline-status" role="status">正在打开书页…</p>:loadError?<div className="yu-inline-status" role="alert">{loadError}<button onClick={()=>location.reload()}>重新加载</button></div>:null}
- </>:tab==='shelf'?<ReaderShelf onControl={gen.control} controlBusy={gen.controlBusy} stories={shelf} pending={pendingStories} sessions={gen.sessions} progress={activeProgress} refreshing={shelfRefreshing||gen.libraryRefreshing} onRefresh={()=>{void refreshShelf();}} loading={loading||gen.libraryLoading} error={loadError||gen.libraryError} tab={shelfTab} onTab={changeShelfTab} query={shelfQuery} onQuery={changeShelfQuery} grouping={shelfGrouping} onGrouping={changeShelfGrouping} bookName={bookName} onOpen={open} onResume={session=>{setStory(null);setPage(session.page);gen.resume(session.id).catch(e=>notify(e.message));}} onRetry={session=>{setStory(null);setPage(session.page);gen.retrySession(session.id).catch(e=>notify(e.message));}} onDelete={askDelete} onRename={(id,title)=>setRenameTarget({id,title})} onFavorite={favoriteFromShelf} favoriteBusy={favoriteBusy} onCreate={()=>choose()} onDiscover={()=>setTab('discover')}/>:<section className="yu-profile"><div className="yu-profile-portrait"><UserRound size={33} strokeWidth={1.2}/></div><h1>留一点时间，给自己。</h1><p>拾趣，随身的一小座故事馆。</p><div className="yu-profile-stats"><div><strong>{shelfCount}</strong><span>书架故事</span></div><div><strong>{favoriteCount}</strong><span>已收藏</span></div></div><div className="yu-preferences"><button onClick={()=>setPublicationDefaultsOpen(true)}><Feather size={20}/>署名与转载<ChevronRight size={18}/></button><button onClick={()=>{setRecoveryOpen(true);void loadDeletedStories();}}><Trash2 size={20}/>已删除的故事<ChevronRight size={18}/></button><button onClick={()=>setSettings(true)}><Settings2 size={20}/>阅读偏好<ChevronRight size={18}/></button><button onClick={async()=>{if(install){await install.prompt();setInstall(null);}else notify('在浏览器的分享或菜单中，选择“添加到主屏幕”。');}}><BookOpen size={20}/>把拾趣放到桌面<ChevronRight size={18}/></button></div><p className="yu-profile-quote">“故事有尽，余味未尽。”</p></section>}
+ </>:tab==='shelf'?<ReaderShelf onControl={gen.control} controlBusy={gen.controlBusy} stories={shelf} pending={pendingStories} sessions={gen.sessions} progress={activeProgress} refreshing={shelfRefreshing||gen.libraryRefreshing} onRefresh={()=>{void refreshShelf();}} loading={loading||gen.libraryLoading} error={loadError||gen.libraryError} tab={shelfTab} onTab={changeShelfTab} query={shelfQuery} onQuery={changeShelfQuery} grouping={shelfGrouping} onGrouping={changeShelfGrouping} bookName={bookName} onOpen={open} onResume={session=>openWorkflow(session.id)} onRetry={session=>{setWorkflowTarget(session.id);setWorkflowError('');setStory(null);gen.retrySession(session.id).catch(e=>setWorkflowError(e.message));}} onDelete={askDelete} onSettings={id=>{const next=allStories.find(item=>item.id===id);if(next&&!isGenerated(next))openStorySettings(next);else openWorkflow(id);}} onFavorite={favoriteFromShelf} favoriteBusy={favoriteBusy} onCreate={()=>choose()} onDiscover={()=>setTab('discover')}/>:<section className="yu-profile"><div className="yu-profile-portrait"><UserRound size={33} strokeWidth={1.2}/></div><h1>留一点时间，给自己。</h1><p>拾趣，随身的一小座故事馆。</p><div className="yu-profile-stats"><div><strong>{shelfCount}</strong><span>书架故事</span></div><div><strong>{favoriteCount}</strong><span>已收藏</span></div></div><div className="yu-preferences"><button onClick={()=>setPublicationDefaultsOpen(true)}><Feather size={20}/>署名与转载<ChevronRight size={18}/></button><button onClick={()=>{setRecoveryOpen(true);void loadDeletedStories();}}><Trash2 size={20}/>已删除的故事<ChevronRight size={18}/></button><button onClick={()=>setSettings(true)}><Settings2 size={20}/>阅读偏好<ChevronRight size={18}/></button><button onClick={async()=>{if(install){await install.prompt();setInstall(null);}else notify('在浏览器的分享或菜单中，选择“添加到主屏幕”。');}}><BookOpen size={20}/>把拾趣放到桌面<ChevronRight size={18}/></button></div><p className="yu-profile-quote">“故事有尽，余味未尽。”</p></section>}
  </main>
  <nav className="yu-tabbar" aria-label="主导航">{[{id:'discover',title:'发现',Icon:Compass},{id:'shelf',title:'书架',Icon:BookOpen},{id:'me',title:'我的',Icon:UserRound}].map(({id,title,Icon})=><button key={id} className={tab===id?'active':''} aria-current={tab===id?'page':undefined} onClick={()=>{setTab(id);window.scrollTo({top:0,behavior:'instant'});}}><Icon size={22} strokeWidth={tab===id?2:1.6}/><span>{title}</span>{tab===id&&<i/>}</button>)}</nav>
  </>}
  {configure&&<Sheet title="这一篇，想怎样读？" busy={creating} onClose={()=>{setConfigure(false);setDiscoveryTarget(null);}}><StoryDiscoveryForm selection={selection} books={choices} busy={creating} error={unavailable} onBookChange={bookId=>setSelection(old=>({...old,bookId,storyTitle:undefined,source:undefined,discoverySources:undefined}))} onSubmit={generate}/></Sheet>}
 
  {reselectTarget&&<StoryReselection key={reselectTarget} parentId={reselectTarget} onSubmitted={next=>finishReselection(next)} onCancelled={(next,error)=>{if(next)finishReselection(next,true);else{reselectLock.current=false;setReselectTarget(null);backToShelf();void gen.refreshLibrary().catch(()=>{});if(error)notify(error);}}}/>}
- {gen.active&&!story&&!configure&&<Sheet title={storyCreationTitle(gen.active)} busy={gen.setupBusy} onClose={()=>gen.leave()}>{gen.active.intake&&gen.active.intake.phase!=='confirmed'?<><StoryCreationSetup session={gen.active} book={bookName({id:gen.active.id,bookId:gen.active.selection.bookId})} busy={gen.setupBusy} onAction={gen.setup} onBackToDiscovery={()=>{setDiscoveryTarget(gen.active!.id);setSelection(gen.active!.selection);setUnavailable('');setConfigure(true);}} progress={{busy:gen.busy,controlBusy:!!gen.controlBusy,onControl:gen.control,error:gen.error,onRetry:gen.retryStep,onBack:backToShelf}}/></>:!revisionResuming&&gen.active.awaitingFrameCount&&gen.active.frameRecommendation?<><StoryFrameCount key={gen.active.id} recommendation={gen.active.frameRecommendation} disabled={gen.busy} onConfirm={gen.confirmFrameCount}/>{gen.error&&<p className="yu-batch-error" role="alert">{gen.error}</p>}<StoryBackToShelf onBack={backToShelf}/></>:<GenerationSurface navigation={{source:{onClick:()=>setSource(true),disabled:!gen.active.generationProgress?.sourceReady},reselect:{label:'替换选题',onClick:()=>void reselectStory(),disabled:creating||revision.busy||!!gen.controlBusy,title:'替换当前选题，书架保留一张卡片，旧结果保留历史'},reselecting:creating}} onAcceptance={()=>revision.open('acceptance')} onHistory={()=>setReviewHistoryId(gen.active!.id)} editor={revision} onReselect={()=>void reselectStory()} session={gen.active} busy={gen.busy} controlBusy={!!gen.controlBusy||creating} onControl={gen.control} error={gen.error} onRetry={gen.retryStep} onBack={backToShelf} reviewTools={!revisionPending&&<StoryReviewTools onReplan={()=>revision.open('requirements')} session={gen.active} busy={gen.busy||!!gen.controlBusy} error={gen.controlError} onScript={()=>setScript(true)} onEdit={revisionResuming?undefined:page=>revision.open('script',page)} onRetry={()=>gen.retryStep(gen.active?.faults?.find(f=>f.stage==='review')?.id)} onDrawAnyway={()=>void gen.drawAnyway(gen.active!.id)}/>}/>}</Sheet>}
+ {panelOpen&&!configure&&<StorySettingsPanel
+  story={panelStory} session={workflowSession} busy={gen.setupBusy||revision.busy||creating} disabled={creating}
+  onClose={()=>{setSettings(false);closeWorkflow();}} onBack={backToShelf}
+  onRename={isGenerated(panelStory)?(id,title)=>setRenameTarget({id,title}):undefined}
+  downloads={(['pdf','png','zip'] as const).map(format=>exportControl(format,'yu-settings-download',panelStory))}
+  exportStatus={exportProgress} exporting={!!exporting} onPublicationEdit={isGenerated(panelStory)?()=>setPublicationTarget(panelStory):undefined}
+  workflow={workflowSession||workflowTarget?workflowContent:undefined}
+ />}
+
  {reviewHistoryId&&<Sheet title="审核记录" onClose={()=>setReviewHistoryId(null)}><StoryReviewHistory key={reviewHistoryId} sessionId={reviewHistoryId}/></Sheet>}
  {source&&(story||gen.active)&&<Sheet title="故事从哪里来" onClose={()=>setSource(false)}>{story?<><StorySource key={story.id} story={story} book={bookName(story)}/><StoryPublicationDetails story={story}/></>:<StorySource key={gen.active!.id} sessionId={gen.active!.id} book={bookName({id:gen.active!.id,bookId:gen.active!.selection.bookId})}/>}</Sheet>}
  {sceneList&&story&&<Sheet title="分镜列表" onClose={()=>setSceneList(false)}><StorySceneList story={story} page={page} onSelect={index=>{goToPage(index);setSceneList(false);}}/></Sheet>}
@@ -374,8 +422,9 @@ export default function Reader(){
  {undoTarget&&!recoveryOpen&&<div className="yu-undo-notice" role="status"><div><span>已删除《{undoTarget.title}》</span>{recoveryError&&<small role="alert">{recoveryError}</small>}</div><button type="button" disabled={!!restoring} onClick={()=>void restoreStory(undoTarget)}><RotateCcw size={17}/>{restoring?'恢复中…':'撤销删除'}</button><button type="button" className="yu-undo-dismiss" aria-label="关闭撤销提示" disabled={!!restoring} onClick={()=>setUndoTarget(null)}><X size={18}/></button></div>}
  {deleteTarget&&<Sheet title="删除这篇故事？" onClose={()=>{if(!deleting)setDeleteTarget(null);}}><div className="yu-delete-confirm"><h3>{deleteTarget.title}</h3><p>将从首页、书架和收藏中移除。故事文件和阅读进度会保留，可撤销删除，也可在「我的 → 已删除的故事」中恢复。</p>{deleteError&&<p role="alert">{deleteError}</p>}<div><button className="yu-delete-cancel" disabled={deleting} onClick={()=>setDeleteTarget(null)}>保留故事</button><button className="yu-delete-submit" disabled={deleting} onClick={deleteStory}>{deleting?'正在删除…':'删除故事'}</button></div></div></Sheet>}
  {gen.controlError&&<div className="yu-toast" role="alert">{gen.controlError}</div>}
- {settings&&<Sheet title={story?'故事设置':'舒服地读'} busy={revision.busy||creating} onClose={()=>setSettings(false)}><fieldset className="yu-revision-fields" disabled={creating}>{!story&&<div className="yu-setting-row"><div><strong>大一点的文字</strong><p>让画面上的旁白更容易读</p></div><button className={'yu-switch '+(largeText?'on':'')} role="switch" aria-checked={largeText} aria-label="大一点的文字" onClick={()=>{setLargeText(!largeText);localStorage.setItem('yiyu-large-text',largeText?'0':'1');}}><i/></button></div>}{story&&<>{isGenerated(story)&&<div className="yu-setting-row yu-story-name"><div><strong>故事名</strong><p>{story.title}</p></div><button type="button" className="yu-revision-open" onClick={()=>setRenameTarget({id:story.id,title:story.title})}>修改故事名</button></div>}<div className="yu-pdf-setting"><div className="yu-settings-formats" aria-label="下载故事">{exportControl('pdf','yu-settings-download')}{exportControl('png','yu-settings-download')}{exportControl('zip','yu-settings-download')}</div>{exportStatus(false)}{story.pages.some(p=>!p.image)&&<p className="yu-settings-export-readiness" role="status">画面已完成 {story.pages.filter(p=>p.image).length} / {story.pages.length} 幅，全部生成后可导出。</p>}</div><StoryPublicationSummary story={story} onEdit={isGenerated(story)?()=>setPublicationTarget(story):undefined} disabled={!!exporting}/><section className="yu-settings-flow" aria-label="本篇制作流程"><StoryFlowHeader title={revisionPending&&!revisionResuming?'新版制作流程':'制作流程'} source={{onClick:()=>setSource(true)}} reselect={isGenerated(story)?{label:'替换选题',onClick:()=>void reselectStory(),disabled:creating||revision.busy,title:'替换当前选题，书架保留一张卡片，旧结果保留历史'}:undefined} reselecting={creating}/><StoryProductionTimeline session={!revisionPending?readingSession:undefined} busy={gen.busy||!!gen.controlBusy} error={reviewRetryError||gen.controlError} onRetry={faultId=>{setReviewRetryError('');if(readingSession)void gen.retrySession(readingSession.id,faultId).catch(error=>setReviewRetryError(error instanceof Error?error.message:'故事暂时无法打开，请稍后再试。'));}} onAcceptance={()=>revision.open('acceptance')} reviewTools={readingSession&&!revisionPending&&<StoryReviewTools onReplan={()=>revision.open('requirements')} session={readingSession} busy={gen.busy||!!gen.controlBusy} error="" onScript={()=>setScript(true)} onEdit={page=>revision.open('script',page)} onRetry={()=>{setReviewRetryError('');void gen.retrySession(readingSession.id,readingSession.faults?.find(f=>f.stage==='review')?.id).catch(error=>setReviewRetryError(error instanceof Error?error.message:'故事暂时无法打开，请稍后再试。'));}} onDrawAnyway={()=>void gen.drawAnyway(readingSession.id)}/>} onHistory={isGenerated(story)?()=>setReviewHistoryId(story.id):undefined} stages={readingSteps} moving={!revisionPending&&readingProduction?.running} queued={!revisionPending&&readingProduction?.queued} actions={{...(!revisionPending?{plan:{label:'查看分镜',onClick:()=>setScript(true)}}:{}),...(isGenerated(story)?{count:{label:'修改叙事详略',onClick:()=>revision.open('count')}}:{})}} detailActions={isGenerated(story)?{source:{label:'修改画风',onClick:()=>revision.open('style')}}:undefined} links={{source:[{label:'制作要求',onClick:()=>isGenerated(story)?revision.open('requirements'):setRequirements(true)},...(isGenerated(story)?[{label:'验收要求',onClick:()=>revision.open('acceptance')}]:[])]}}/>{readingSession&&!revisionPending&&<StoryGenerationControl session={readingSession} busy={!!gen.controlBusy} onControl={gen.control} primary={revisionResuming} link/>}</section>{revision.impact?.changed&&<StoryRevisionActions editor={revision} resuming={revisionResuming} link/>}<StoryBackToShelf onBack={backToShelf} disabled={revision.busy||creating} link/></>}</fieldset></Sheet>}
- {revision.tab&&<Sheet title="修改故事" busy={revision.busy} onClose={()=>{if(!revision.busy)revision.setTab(null);}}><StoryRevisionEditor editor={revision} reviewIssues={revisionSession?.reviewIssues} resuming={revisionResuming} onDone={settings||revisionResuming?()=>revision.setTab(null):undefined}/></Sheet>}
+ {settings&&!story&&!workflowTarget&&!gen.active&&<Sheet title="舒服地读" onClose={()=>setSettings(false)}><div className="yu-setting-row"><div><strong>大一点的文字</strong><p>让画面上的旁白更容易读</p></div><button className={'yu-switch '+(largeText?'on':'')} role="switch" aria-checked={largeText} aria-label="大一点的文字" onClick={()=>{setLargeText(!largeText);localStorage.setItem('yiyu-large-text',largeText?'0':'1');}}><i/></button></div></Sheet>}
+
+ {revision.tab&&<Sheet title="修改故事" busy={revision.busy} onClose={()=>{if(!revision.busy)revision.setTab(null);}}><StoryRevisionEditor editor={revision} reviewIssues={revisionSession?.reviewIssues} resuming={revisionResuming} onDone={workflowTarget||settings||revisionResuming?()=>revision.setTab(null):undefined}/></Sheet>}
  {publicationDefaultsOpen&&<StoryPublicationDefaults onClose={()=>setPublicationDefaultsOpen(false)} onSaved={()=>notify('默认说明已保存，导出时会实时补全单篇未填写的内容。')}/>}
  {publicationTarget&&<StoryPublicationEditor key={publicationTarget.id} story={publicationTarget} onClose={()=>setPublicationTarget(null)} onSave={async(value,expected)=>{
   await gen.savePublication(publicationTarget.id,value,expected);notify('署名与转载说明已保存。');

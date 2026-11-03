@@ -39,8 +39,6 @@ ol.production-timeline--horizontal{grid-template-columns:repeat(7,minmax(0,1fr))
 
 .production-review-loop{margin:10px 0 0;color:#758468;font-size:11px;line-height:1.8}
 
-.production-review-history{text-align:right}
-
 /* Errors and their next actions stay beneath the owning checkpoint, outside navigation buttons. */
 .production-timeline>li.has-stage-content{flex-wrap:wrap}.production-stage-notice{display:grid;gap:8px;flex-basis:calc(100% - 34px);min-width:0;margin-left:34px;line-height:1.7}.production-acceptance-notice>strong{font-weight:600}.production-acceptance-notice>p{margin:6px 0}.production-acceptance-notice>button{min-height:40px}
 
@@ -61,6 +59,7 @@ ol.production-timeline--horizontal{grid-template-columns:repeat(7,minmax(0,1fr))
 .production-stage-complete>.production-stage-copy>small{line-height:1.4}
 .production-stage-meta{display:flex;flex-direction:column;align-items:flex-end;align-self:flex-end;flex:none;gap:2px;max-width:55%;margin-left:auto;text-align:right}
 .production-stage-meta>.production-stage-timing{justify-content:flex-end}
+.production-stage-meta>.story-flow-link{font-size:11px}
 .production-stage-complete>.production-stage-meta>.production-stage-timing{line-height:1.4}
 .production-timeline--horizontal .production-stage-meta{align-items:center;align-self:center;max-width:100%;margin-left:0}
 .production-stage-complete>.production-stage-notice{flex-basis:100%;margin-left:0}

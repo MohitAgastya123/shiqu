@@ -28,5 +28,5 @@ export function redrawNotice(redraw:RevisionRedraw){return `实际需重绘 ${re
 
 export function generationDuration(seconds:number){
  const minutes=Math.floor(seconds/60),remaining=seconds%60;
- return minutes?`${minutes} 分 ${String(remaining).padStart(2,'0')} 秒`:`${remaining} 秒`;
+ return `${minutes}分 ${String(remaining).padStart(2,'0')}秒`;
 }

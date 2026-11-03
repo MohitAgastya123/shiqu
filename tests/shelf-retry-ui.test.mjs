@@ -12,7 +12,7 @@ const Shelf=compiled.exports.default,noop=()=>{};
 const story={id:'failed-story',bookId:'honglou',title:'雪日探钗，黛玉含酸',theme:'爱情与错过',artStyleLabel:'软萌 Q 版',pages:Array.from({length:30},(_,i)=>({image:i<16?'/saved.png':''}))};
 const failed={id:story.id,selection:{bookId:story.bookId,theme:story.theme,artStyle:'chibi'},state:'failed',error:'绘图失败',retryAllowed:true,generationControl:'active',ready:16,story,page:1};
 function props(session=failed,extra={}){
- return {stories:session.story?[story]:[],pending:session.story?[]:[session],sessions:[session],progress:[],loading:false,refreshing:false,error:'',tab:'recent',query:'',grouping:'none',bookName:()=> '红楼梦',controlBusy:'',favoriteBusy:'',onControl:noop,onRetry:noop,onRefresh:noop,onTab:noop,onQuery:noop,onGrouping:noop,onOpen:noop,onResume:noop,onDelete:noop,onFavorite:noop,onCreate:noop,onDiscover:noop,...extra};
+ return {stories:session.story?[story]:[],pending:session.story?[]:[session],sessions:[session],progress:[],loading:false,refreshing:false,error:'',tab:'recent',query:'',grouping:'none',bookName:()=> '红楼梦',controlBusy:'',favoriteBusy:'',onControl:noop,onRetry:noop,onRefresh:noop,onTab:noop,onQuery:noop,onGrouping:noop,onOpen:noop,onSettings:noop,onResume:noop,onDelete:noop,onFavorite:noop,onCreate:noop,onDiscover:noop,...extra};
 }
 function retryButton(node){
  if(!node||typeof node!=='object')return;
@@ -54,4 +54,17 @@ test('manual pause and stop retain resume; running cards retain pause; completed
 test('a failure with no retryable step does not offer pause or dispatch recovery',()=>{
  const html=renderToStaticMarkup(createElement(Shelf,props({...failed,retryAllowed:false})));
  assert.match(html,/生成失败/);assert.doesNotMatch(html,/重试生成|暂停生成/);
+});
+
+
+test('settings opens the selected story while card clicks keep reading',()=>{
+ const opened=[],settings=[],options=props(failed,{onOpen:story=>opened.push(story),onSettings:story=>settings.push(story)});
+ const tree=Shelf(options);
+ function button(node,label){
+  if(!node||typeof node!=='object')return;
+  if(node.type==='button'&&node.props['aria-label']===label)return node;
+  for(const child of [node.props?.children].flat(Infinity)){const found=button(child,label);if(found)return found;}
+ }
+ button(tree,'《'+story.title+'》的故事设置').props.onClick();assert.deepEqual(settings,[story.id]);assert.deepEqual(opened,[]);
+ button(tree,'继续阅读《'+story.title+'》').props.onClick();assert.deepEqual(opened,[story]);assert.deepEqual(settings,[story.id]);
 });

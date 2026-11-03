@@ -3,6 +3,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {productionFixture,until,turn,encoded,makePlan} from './fixtures/production.mjs';
 import {imageBytes} from './fixtures/images.mjs';
+import {withLocalBooks} from '../server/local-generation.ts';
+import {LocalBooks} from '../server/local-books.ts';
+import {generationProgress} from '../lib/generation-progress.ts';
 import {advanceStory} from '../lib/reader-engine.ts';
 import {ReaderRepository} from '../lib/reader-repository.ts';
 import {configuredImageWorkers,ReaderProductionCoordinator} from '../server/reader-production.ts';
@@ -103,6 +106,9 @@ test('session and job heartbeats fence legacy advances while slow images are sti
 for(const [provider,timeout] of [['codex',900000],['gemini',120000]])test(`${provider}: step timing uses the persisted production claim across reads and renewals`,async t=>{
  const f=await productionFixture(t,provider),id=await f.createLegacyReader();await f.demand(id);await until(()=>f.control.calls.length===1);
  assert.equal(f.generation.generationTimeoutMs('plan'),provider==='codex'?900000:300000);
+ const local=withLocalBooks(f.generation,new LocalBooks(process.cwd()),f.media);
+ assert.equal(local.generationTimeoutMs('plan'),provider==='codex'?900000:300000);
+ assert.equal(local.generationTimeoutMs('image'),timeout);
  assert.equal(f.generation.generationTimeoutMs('source'),null);
  const jobs=await f.app.services.production.queue.jobs(id,'docker-local-owner'),image=jobs.find(job=>job.kind==='image'&&job.state==='running');
  const startedAt=Date.now()-65000;
@@ -112,6 +118,12 @@ for(const [provider,timeout] of [['codex',900000],['gemini',120000]])test(`${pro
  await f.app.services.production.queue.enqueue(search);
  await f.app.services.database.prepare("UPDATE production_jobs SET state='running',lease_until=?,updated_at=? WHERE id=?").bind(Date.now()+180000,startedAt-60000,search.id).run();
  const first=await f.read(id);assert.equal(first.generationProgress.startedAt,startedAt);assert.equal(first.generationProgress.timeoutAt,startedAt+timeout);
+ const wrappedCoordinator=new ReaderProductionCoordinator(f.app.services.database,local,f.media,{autoStart:false});f.coordinators.push(wrappedCoordinator);
+ const wrapped=await wrappedCoordinator.snapshot('docker-local-owner',id);
+ assert.equal(wrapped.generationProgress.startedAt,startedAt);assert.equal(wrapped.generationProgress.timeoutAt,startedAt+timeout);
+ assert.equal(generationProgress(wrapped,startedAt+65000).remaining,timeout/1000-65);
+ assert.equal(generationProgress(first,startedAt+65000).remaining,timeout/1000-65);
+ assert.equal(generationProgress(first,startedAt+timeout).remaining,0);
  await f.app.services.production.queue.renew();
  const reopened=await f.read(id);assert.equal(reopened.generationProgress.startedAt,startedAt);assert.equal(reopened.generationProgress.timeoutAt,first.generationProgress.timeoutAt);
  await f.app.services.database.prepare('DELETE FROM production_jobs WHERE id=?').bind(search.id).run();
