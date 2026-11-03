@@ -12,7 +12,12 @@ test('reader renders saved directory, batch range, honest progress and automatic
  const compiled={exports:{}};new Function('require','module','exports',bundle.outputFiles[0].text)(createRequire(import.meta.url),compiled,compiled.exports);
  const {Status,Count,Retry,Review}=compiled.exports,session={id:'render',selection:{length:45},state:'running',productionState:'running',ready:0,story:null,error:null,stage:'正在编排第 21–40 幅分镜',awaitingFrameCount:false,frameRecommendation:null,generationProgress:{sourceReady:true,frameCountConfirmed:true,frameCount:45,phase:'plan',startedAt:Date.now(),attempt:1,storyboardFrames:20,storyboardBatch:{first:21,last:40}}};
  const status=renderToStaticMarkup(createElement(Status,{session,busy:false,error:'',onRetry(){},onBack(){}}));
- assert.match(status,/已保存 20 \/ 45 幅分镜/);assert.match(status,/分镜目录已保存/);assert.match(status,/当前编排第 21–40 幅/);
+ const timedSession={...session,generationProgress:{...session.generationProgress,startedAt:Date.now()-65000,timeoutAt:Date.now()+235000}};
+ const timed=renderToStaticMarkup(createElement(Status,{session:timedSession,busy:false,error:'',onRetry(){},onBack(){}}));
+ assert.doesNotMatch(timed,/本阶段|已用时/);assert.match(timed,/距超时 23[45] 秒/);
+ const expired=renderToStaticMarkup(createElement(Status,{session:{...timedSession,generationProgress:{...timedSession.generationProgress,timeoutAt:Date.now()-1000}},busy:false,error:'',onRetry(){},onBack(){}}));
+ assert.match(expired,/已达超时，等待状态更新/);
+ assert.match(status,/已保存 20 \/ 45 幅分镜/);assert.match(status,/当前第 21–40 幅/);assert.doesNotMatch(status,/分镜目录已保存|正在生成整篇，离开页面后继续/);
  assert.doesNotMatch(status,/<progress/);assert.match(status,/进行中/);
  for(const label of ['确认原文','叙事详略与篇幅','分批分镜','全篇审片','定向修订','复核','绘图'])assert.ok(status.includes(label),label);
  assert.match(status,/data-stage="review" data-state="pending"/);
@@ -20,7 +25,7 @@ test('reader renders saved directory, batch range, honest progress and automatic
  assert.doesNotMatch(count,/type="range"|type="number"/);assert.match(count,/80 幅/);assert.match(count,/由编排和审核确定/);
  const reviewing={...session,story:{pages:Array(45).fill({})},stage:'正在审核全篇分镜',generationProgress:{...session.generationProgress,phase:'review',reviewStatus:'pending',reviewRound:0}};
  const review=renderToStaticMarkup(createElement(Status,{session:reviewing,busy:false,error:'',onRetry(){},onBack(){}}));
- assert.match(review,/全篇审片/);assert.match(review,/审片通过后才开始绘图/);assert.doesNotMatch(review,/<progress/);
+ assert.match(review,/全篇审片/);assert.match(review,/等待审片通过/);assert.doesNotMatch(review,/<progress/);
  const blocked={...reviewing,state:'failed',error:'第 2 幅动作不清楚。',retryStage:'review',retryAllowed:true,generationProgress:{...reviewing.generationProgress,reviewStatus:'blocked',repairTotal:1}};
  const retry=renderToStaticMarkup(createElement(Status,{session:blocked,busy:false,error:blocked.error,onRetry(){},onBack(){}}));
  assert.match(retry,/继续自动修复/);assert.match(retry,/仍有 1 项待修订/);assert.match(retry,/第 2 幅动作不清楚/);
@@ -31,8 +36,8 @@ test('reader renders saved directory, batch range, honest progress and automatic
  assert.match(shelfTools,/收尾缺少对应动作/);assert.match(shelfTools,/继续自动修复/);
  assert.equal(renderToStaticMarkup(createElement(Review,{...reviewProps,session:{...trimmed,story:null}})),'');
  assert.match(tools,/已完成 20 轮自动修复，复核仍未通过/);assert.match(tools,/已修复 20 轮 · 已审核 21 次/);
- assert.match(tools,/本次最多 20 轮/);assert.match(tools,/<button[^>]*class="yu-primary"[^>]*>.*继续自动修复/);assert.match(tools,/手动修改/);assert.match(tools,/跳过问题并绘图/);assert.match(tools,/<details><summary>修订建议/);
- const combined=renderToStaticMarkup(createElement(Status,{session:reviewProps.session,reviewActionsInContent:true,busy:false,error:blocked.error,onRetry(){},onBack(){}},createElement(Review,reviewProps)));
+ assert.match(tools,/本次最多 20 轮/);assert.match(tools,/<a[^>]*class="story-flow-link"[^>]*>继续自动修复/);assert.match(tools,/手动修改/);assert.match(tools,/跳过问题并绘图/);assert.match(tools,/<details><summary>修订建议/);
+ const combined=renderToStaticMarkup(createElement(Status,{session:reviewProps.session,reviewTools:createElement(Review,reviewProps),busy:false,error:blocked.error,onRetry(){},onBack(){}}));
  assert.equal((combined.match(/继续自动修复/g)||[]).length,1,'Only the issue panel owns review recovery');assert.match(combined,/has-review-issues/);
  const unchanged=renderToStaticMarkup(createElement(Review,{...reviewProps,session:{...reviewProps.session,generationProgress:{reviewStopReason:'unchanged',repairPasses:1,reviewAudits:1}}}));
  assert.match(unchanged,/上次修订没有产生实际变化/);assert.doesNotMatch(unchanged,/复核仍未通过/);
@@ -48,7 +53,7 @@ test('reader renders saved directory, batch range, honest progress and automatic
  const oldLimit=renderToStaticMarkup(createElement(Review,{...reviewProps,session:{...reviewProps.session,generationProgress:{reviewStopReason:'limit',repairPasses:3,reviewAudits:4}}}));
  assert.match(oldLimit,/已完成 3 轮自动修复/);assert.match(oldLimit,/本次最多 20 轮/);
  for(const extra of [{busy:true},{session:{...reviewProps.session,retryAllowed:false}},{session:{...reviewProps.session,generationControl:'paused'}}]){
-  const locked=renderToStaticMarkup(createElement(Review,{...reviewProps,...extra}));assert.match(locked,/<button[^>]*class="yu-primary"[^>]*disabled=""/);
+  const locked=renderToStaticMarkup(createElement(Review,{...reviewProps,...extra}));assert.match(locked,/<a[^>]*aria-disabled="true"/);
  }
  const pausedReview=renderToStaticMarkup(createElement(Review,{...reviewProps,session:{...reviewProps.session,generationControl:'paused'}}));assert.match(pausedReview,/请先恢复生成/);
  for(const [retryStage,label] of [['source','重试原文检索'],['publication','重试保存图片'],['review','继续自动修复'],['redraw','重绘图片'],[undefined,'重试生成']]){
@@ -60,7 +65,7 @@ test('reader renders saved directory, batch range, honest progress and automatic
  const images=renderToStaticMarkup(createElement(Status,{session:drawing,busy:false,error:'',onRetry(){},onBack(){}}));
  assert.match(images,/<progress aria-label="画面生成进度" max="45" value="3"/);assert.match(images,/3 \/ 45 幅/);
  const paused=renderToStaticMarkup(createElement(Status,{session:{...session,generationControl:'paused'},busy:false,error:'',onRetry(){},onBack(){}}));
- assert.match(paused,/生成已暂停/);assert.match(paused,/点击“恢复生成”后继续/);assert.match(paused,/可在书架中管理和继续生成/);assert.doesNotMatch(paused,/is-generating|production-stage-spin|class="spin"|<progress/);
+ assert.match(paused,/生成已暂停/);assert.match(paused,/>恢复生成<\/a>/);assert.match(paused,/可在书架中管理和继续生成/);assert.doesNotMatch(paused,/is-generating|production-stage-spin|class="spin"|<progress/);
  const queued=renderToStaticMarkup(createElement(Status,{session:{...session,productionState:'queued'},busy:false,error:'',onRetry(){},onBack(){}}));
  assert.match(queued,/等待中/);assert.doesNotMatch(queued,/is-generating|production-stage-spin|class="spin"|<progress/);
 });

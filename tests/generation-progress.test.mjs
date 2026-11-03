@@ -1,6 +1,7 @@
 // Progress must reflect saved work and current attempt timing, never fabricated model percentages.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {productionStageDurations,productionTimingScope} from '../lib/production-timing.ts';
 import {generationDuration,generationProgress} from '../lib/generation-progress.ts';
 
 const planning={id:'story',state:'running',productionState:'running',error:null,stage:'正在编排故事',selection:{length:32},ready:0,story:null,awaitingFrameCount:false,frameRecommendation:{count:32},generationProgress:{sourceReady:true,frameCountConfirmed:true,frameCount:32,phase:'plan',startedAt:10000,attempt:2}};
@@ -42,4 +43,27 @@ test('review and repair are distinct saved stages and drawing only becomes curre
  const repair=generationProgress({...session,generationProgress:{...session.generationProgress,phase:'repair',reviewStatus:'repair',repairCompleted:1,repairTotal:2}},20000);assert.equal(repair.steps[4].detail,'第 1 轮 · 已修订 1 / 2 项');
  const failed=generationProgress({...session,state:'failed',error:'仍有问题',generationProgress:{...session.generationProgress,reviewStatus:'blocked',repairTotal:2}},20000);assert.equal(failed.steps[5].state,'failed');assert.equal(failed.steps[6].state,'pending');assert.equal(failed.steps[5].detail,'仍有 2 项待修订，绘图已阻止');
  const images=generationProgress({...session,generationProgress:{...session.generationProgress,phase:'image',reviewStatus:'passed'}},20000);assert.equal(images.measured,true);assert.equal(images.steps[3].state,'done');assert.equal(images.steps[6].state,'current');
+});
+
+test('step clocks survive reopening and count down to the saved deadline',()=>{
+ const session={...planning,generationProgress:{...planning.generationProgress,timeoutAt:310000}};
+ assert.equal(generationProgress(session,75000).remaining,235);
+ assert.equal(generationProgress(structuredClone(session),76001).elapsed,66);
+ assert.equal(generationProgress(session,76001).remaining,234);
+ assert.equal(generationProgress(session,309999).remaining,1);
+ assert.equal(generationProgress(session,310000).remaining,0);
+ assert.equal(generationProgress(session,320000).remaining,0);
+ assert.equal(generationProgress(planning,75000).remaining,null);
+ for(const productionState of ['paused','queued'])assert.equal(generationProgress({...session,productionState},75000).remaining,null);
+ const next={...session,generationProgress:{...session.generationProgress,startedAt:76000,timeoutAt:376000}};
+ assert.equal(generationProgress(next,77000).elapsed,1);assert.equal(generationProgress(next,77000).remaining,299);
+});
+
+test('completed durations merge parallel work, accumulate batches and exclude waiting gaps',()=>{
+ const selection={bookId:'zhuangzi',storyTitle:'庄周梦蝶'},scope=productionTimingScope(selection);
+ const job=(stage,timings,timingScope=scope)=>({kind:'script',payload:JSON.stringify({timingStage:stage,timingScope,timings:timings.map(([startedAt,finishedAt])=>({startedAt,finishedAt}))})});
+ const jobs=[job('plan',[[1000,4000],[10000,15000]]),job('image',[[20000,30000]]),job('image',[[25000,35000]]),job('image',[[40000,43000]]),job('review',[[4000,6000]]),job('plan',[[0,99000]],'different selected story'),{kind:'script',payload:'{}'}];
+ assert.deepEqual(productionStageDurations(jobs,selection),{plan:8,image:18,review:2});
+ assert.deepEqual(productionStageDurations(jobs,{...selection,displayTitle:'新显示标题'}),{plan:8,image:18,review:2});
+ assert.deepEqual(productionStageDurations(jobs,{...selection,storyTitle:'另一篇故事'}),{});
 });

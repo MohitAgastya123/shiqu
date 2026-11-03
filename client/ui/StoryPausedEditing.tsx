@@ -17,5 +17,5 @@ export default function StoryPausedEditing({editor,onReselect,...props}:Props){
   links:{source:[{label:'制作要求',onClick:()=>edit('requirements')},{label:'验收要求',onClick:()=>edit('acceptance')}]},
   detailActions:{source:{label:'修改画风',onClick:()=>edit('style')}},
   actions:{count:{label:'修改叙事详略',onClick:()=>edit('count')},...(session.story?{plan:{label:'修改分镜',onClick:()=>edit('script')}}:{})}
- }} control={changed?<StoryRevisionActions editor={{...editor,busy:locked}} resuming/>:undefined}/>;
+ }} control={changed?<StoryRevisionActions editor={{...editor,busy:locked}} resuming link/>:undefined}/>;
 }

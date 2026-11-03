@@ -100,6 +100,23 @@ test('session and job heartbeats fence legacy advances while slow images are sti
  assert.ok((await f.app.services.production.queue.jobs(id,'docker-local-owner')).filter(j=>j.state==='running').every(j=>j.lease_until>Date.now()+100000));
 });
 
+for(const [provider,timeout] of [['codex',900000],['gemini',120000]])test(`${provider}: step timing uses the persisted production claim across reads and renewals`,async t=>{
+ const f=await productionFixture(t,provider),id=await f.createLegacyReader();await f.demand(id);await until(()=>f.control.calls.length===1);
+ assert.equal(f.generation.generationTimeoutMs('plan'),provider==='codex'?900000:300000);
+ assert.equal(f.generation.generationTimeoutMs('source'),null);
+ const jobs=await f.app.services.production.queue.jobs(id,'docker-local-owner'),image=jobs.find(job=>job.kind==='image'&&job.state==='running');
+ const startedAt=Date.now()-65000;
+ await f.app.services.database.prepare('UPDATE production_jobs SET updated_at=? WHERE id=?').bind(startedAt,image.id).run();
+ // Model a concurrent background search older than the image currently being made.
+ const search={id:crypto.randomUUID(),sessionId:id,ownerId:'docker-local-owner',kind:'discover',pool:'search',version:'background',dependencies:[],payload:{},priority:-10};
+ await f.app.services.production.queue.enqueue(search);
+ await f.app.services.database.prepare("UPDATE production_jobs SET state='running',lease_until=?,updated_at=? WHERE id=?").bind(Date.now()+180000,startedAt-60000,search.id).run();
+ const first=await f.read(id);assert.equal(first.generationProgress.startedAt,startedAt);assert.equal(first.generationProgress.timeoutAt,startedAt+timeout);
+ await f.app.services.production.queue.renew();
+ const reopened=await f.read(id);assert.equal(reopened.generationProgress.startedAt,startedAt);assert.equal(reopened.generationProgress.timeoutAt,first.generationProgress.timeoutAt);
+ await f.app.services.database.prepare('DELETE FROM production_jobs WHERE id=?').bind(search.id).run();
+});
+
 test('shutdown stops dispatch before draining in-flight outputs and closes SQLite after publication',async t=>{
  const f=await productionFixture(t),id=await f.createLegacyReader();await f.demand(id);await until(()=>f.control.calls.length===1);f.control.calls[0].resolve();await until(()=>f.control.calls.length===4);
  const close=f.app.close();assert.equal(f.control.calls.length,4);for(const call of f.control.calls)call.resolve();await close;
@@ -235,4 +252,15 @@ test('shrinking lookahead after backtracking reports a full buffer idle despite 
  await until(async()=>(await f.read(id)).state==='idle');
  const jobs=await f.app.services.production.queue.jobs(id,'docker-local-owner');assert.ok(jobs.some(j=>j.kind==='image'&&j.state==='queued'&&JSON.parse(j.payload).page>6));
  assert.equal((await f.read(id)).state,'idle');assert.equal(f.control.calls.length,10);
+});
+
+test('completed step durations survive the next stage, fresh reads and service restart',async t=>{
+ const f=await productionFixture(t),id=await f.create(4);await until(()=>f.control.calls.length===1);
+ const drawing=await f.read(id),durations=drawing.generationProgress.stageDurations;
+ assert.equal(typeof durations.plan,'number');assert.equal(typeof durations.review,'number');assert.equal(durations.image,undefined);
+ f.control.hold=false;for(const call of f.control.calls)call.resolve();
+ await until(async()=>(await f.read(id)).state==='completed');await f.app.services.production.queue.settle();
+ const completed=await f.read(id);assert.equal(completed.generationProgress.stageDurations.plan,durations.plan);assert.equal(typeof completed.generationProgress.stageDurations.image,'number');
+ await f.restart();const reopened=await f.read(id);assert.deepEqual(reopened.generationProgress.stageDurations,completed.generationProgress.stageDurations);
+ const shelf=(await f.json('sessions')).find(session=>session.id===id);assert.deepEqual(shelf.generationProgress.stageDurations,completed.generationProgress.stageDurations);
 });

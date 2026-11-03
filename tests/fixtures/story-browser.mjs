@@ -72,9 +72,9 @@ export async function storyBrowser(t,caseId){
   if(title){await picker.getByRole('button',{name:'输入标题',exact:true}).click();await picker.getByLabel('故事标题',{exact:true}).fill(title);await picker.getByRole('button',{name:'按标题提取',exact:true}).click();}
   else await picker.getByRole('button',{name:'开始提取',exact:true}).click();
   await picker.getByRole('button').filter({has:page.getByText(title||'乌龟报恩',{exact:true})}).click();
-  await until(async()=>(await f.read(saved.id)).intake.phase==='confirming',15000);await page.getByRole('button',{name:'开始制作',exact:true}).waitFor();return f.read(saved.id);
+  await until(async()=>(await f.read(saved.id)).intake.phase==='confirming',15000);await page.getByRole('link',{name:'开始制作',exact:true}).waitFor();return f.read(saved.id);
  }
- async function confirm(){await page.getByRole('button',{name:'开始制作',exact:true}).click();}
+ async function confirm(){await page.getByRole('link',{name:'开始制作',exact:true}).click();}
  async function completed(id){await until(async()=>(await f.read(id)).state==='completed',20000);}
  async function reader(id){await page.goto(url+'/?id='+id);await page.getByRole('button',{name:'故事设置',exact:true}).waitFor();}
  async function settings(){await page.getByRole('button',{name:'故事设置',exact:true}).click();return page.getByRole('dialog',{name:'故事设置',exact:true});}

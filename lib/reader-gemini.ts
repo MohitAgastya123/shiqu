@@ -7,7 +7,7 @@ import type {DiscoveryContext} from './reader-discovery-call.ts';
 import {normalizeProductionPrompt,storyEditorialContext} from './reader-prompts.ts';
 import {z} from 'zod';
 import {frameRecommendationOutputSchema,frameRecommendationOutputJson,frameRecommendationPrompt,frameRecommendationPayload} from './reader-frame-recommendation.ts';
-import {readerMaxFrames,readerStoryboardTimeoutMs} from './reader-limits.ts';
+import {readerMaxFrames,readerGenerationTimeoutMs,readerStoryboardTimeoutMs} from './reader-limits.ts';
 import {storyDraftSchema,readerBooks} from './reader-model.ts';
 import type {Plan,Selection} from './reader-model.ts';
 import type {StoryGenerator} from './reader-engine.ts';
@@ -87,7 +87,7 @@ export function safeGeminiError(error:unknown){
  return '这一步暂时没能生成，已保留前面的内容。可手动重试。';
 }
 function client(key:string,transport:typeof fetch){
- return async(model:string,input:Record<string,unknown>,timeout=120000)=>{
+ return async(model:string,input:Record<string,unknown>,timeout=readerGenerationTimeoutMs)=>{
   if(!/^[a-zA-Z0-9._-]+$/.test(model))throw new GeminiError('INVALID_MODEL',400);
   const response=await transport(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,{
    method:'POST',headers:{'x-goog-api-key':key,'Content-Type':'application/json'},

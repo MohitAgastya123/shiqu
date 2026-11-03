@@ -140,15 +140,9 @@ button.yu-swipe-surface{padding:0;border:0;background:transparent;cursor:default
 .yu-generation-stage.has-error .yu-generation-mark{color:#94694e;background:#f7f0e5;border-color:#e2d4bf}
 .yu-generation-progress{text-align:left;margin:22px 0 20px;padding:16px;border:1px solid #dce4d2;border-radius:14px;background:#f3f6ec;color:#526e45}
 .yu-generation-stage.is-compact{padding-top:0}.yu-generation-stage.is-compact .yu-generation-progress{margin-top:10px}
-.yu-generation-progress-heading{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px 12px;margin-bottom:14px}
-.yu-generation-progress-heading>strong{font-size:12px;font-weight:500;color:#46613c}
-.yu-generation-progress-heading>span{display:flex;align-items:center;gap:4px;font-size:10px;line-height:1.6;color:#65775a;font-variant-numeric:tabular-nums}
 .yu-generation-progress progress{display:block;width:100%;height:5px;margin:0 0 16px;border:0;border-radius:5px;overflow:hidden;appearance:none;background:#dfe6d6;accent-color:#728b5c}
 .yu-generation-progress progress::-webkit-progress-bar{background:#dfe6d6;border-radius:5px}
 .yu-generation-progress progress::-webkit-progress-value{background:#728b5c;border-radius:5px;transition:width .35s ease}
-.yu-generation-progress-note,.yu-generation-slow{font-size:11px;line-height:1.8;margin:14px 0 0;padding-top:12px;border-top:1px solid #dfe6d5;color:#617254}
-.yu-generation-slow{color:#855e43}
-.yu-generation-stage .yu-retry-control{margin-top:18px}
 .yu-generation-back{display:flex;align-items:center;justify-content:center;gap:8px;min-height:48px;width:100%;padding:12px 16px;margin-top:20px;border:1px solid #cdd8c1;border-radius:10px;background:transparent;color:#526b43;font:inherit;font-size:13px;cursor:pointer}.yu-generation-back:hover{background:#edf1e4}.yu-generation-back:disabled{opacity:.5;cursor:default}.yu-settings-flow>.yu-primary{margin-top:20px}
 .yu-generation-stage>.yu-generation-exit-note{font-size:10px;line-height:1.8;text-align:center;margin:10px 0 0;color:#65775a}
 .yu-generation-back:focus-visible{outline:2px solid #4f7246;outline-offset:3px}
@@ -245,8 +239,6 @@ button.yu-swipe-surface{padding:0;border:0;background:transparent;cursor:default
 .yu-generation-control:hover{text-decoration-color:currentColor}
 .yu-generation-control:focus-visible{outline:2px solid #526b43;outline-offset:3px}
 .yu-generation-control:disabled{opacity:.55;cursor:wait;text-decoration:none}
-.yu-generation-progress-heading{gap:4px 12px;margin-top:-6px;margin-bottom:8px}
-.yu-generation-progress-heading>span{margin-left:auto}
 .yu-shelf-generation-progress{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 12px;color:#617254;font-size:11px;line-height:1.7}
 .yu-shelf-generation-progress>span{min-width:0;overflow-wrap:anywhere}
 .yu-shelf-row-compact>.yu-shelf-generation-progress{padding:0}

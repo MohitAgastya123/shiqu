@@ -1,6 +1,7 @@
 // Keep discovery in the story picker; a chosen story enters one continuous production flow.
 // Edits are saved as a draft on the side; only a recommendation or final confirmation starts work.
 // Discovery continues one story at a time while open, and stops when a story is chosen or the picker closes.
+import StoryFlowAction from './StoryFlowAction';
 import {readingChapterLabel} from '@/lib/reader-suggestions';
 import {useEffect,useRef,useState} from 'react';
 import type {ComponentProps} from 'react';
@@ -66,8 +67,8 @@ export default function StoryCreationSetup({session,book,busy,onAction,progress,
  function closeEditor(){setEditing(null);if(JSON.stringify(settings)!==baseline.current&&!busy&&!remote)void act({action:'draft',settings});}
  function adoptRemote(){baseline.current=savedKey;setSettings({...saved,length:'auto'});setRemote(false);}
  function keepEdits(){baseline.current=savedKey;setRemote(false);void act({action:'draft',settings});}
- const remoteChoice=remote&&<div className="yu-revision-conflict-note" role="status"><p>另一台设备更新了制作内容。你的修改还没有保存。</p><div className="yu-revision-buttons"><button type="button" disabled={busy} onClick={adoptRemote}>采用最新内容</button><button type="button" disabled={busy} onClick={keepEdits}>保留我的修改</button></div></div>;
- const findMore=(!targetTitle||search.state==='failed')&&<button type="button" className="yu-refresh-batch" aria-busy={searching&&!paused} disabled={busy||searching||intake.batches.length>=40} onClick={()=>void act({action:'more'})}>{searching&&!paused&&<Loader2 size={14} className="spin" aria-hidden="true"/>}{searching?(paused?'恢复后继续查找':'正在查找…'):search.state==='failed'?'重试查找':'继续找故事'}</button>;
+ const remoteChoice=remote&&<div className="yu-revision-conflict-note" role="status"><p>另一台设备更新了制作内容。你的修改还没有保存。</p><div className="yu-revision-buttons"><StoryFlowAction disabled={busy} onClick={adoptRemote}>采用最新内容</StoryFlowAction><StoryFlowAction disabled={busy} onClick={keepEdits}>保留我的修改</StoryFlowAction></div></div>;
+ const findMore=(!targetTitle||search.state==='failed')&&<StoryFlowAction asLink={!!selected} type="button" className="yu-refresh-batch" aria-busy={searching&&!paused} disabled={busy||searching||intake.batches.length>=40} onClick={()=>void act({action:'more'})}>{searching&&!paused&&<Loader2 size={14} className="spin" aria-hidden="true"/>}{searching?(paused?'恢复后继续查找':'正在查找…'):search.state==='failed'?'重试查找':'继续找故事'}</StoryFlowAction>;
  const terminalBatch=intake.batches.at(-1),terminalNote=terminalBatch?.stories.length===0?terminalBatch.note:'';
  const candidateList=<>
   <div className="yu-batch-heading"><h3>已找到 {candidates.length} 篇故事</h3>{findMore}</div>
@@ -80,28 +81,32 @@ export default function StoryCreationSetup({session,book,busy,onAction,progress,
   if(ready&&step.id==='count')return {...step,detail:`${settings.narrativeDetail==='brief'?'简短':settings.narrativeDetail==='detailed'?'详细':'适中'} · 画幅数由编排与审核确定`};
   return step;
  });
+ const extractionStatus=showExtractionStatus&&<div className="yu-extraction-status" role="status">{(paused||!candidates.length)&&<p>{paused?'提取已暂停，恢复后继续。':'正在提取，找到的故事会逐篇显示。'}</p>}{!paused&&(!!intake.progress?.currentChapters?.length||!!intake.progress?.completedChars)&&<p className="yu-extraction-status-detail">{intake.progress.currentChapters?.length?`正在阅读：${readingChapterLabel(intake.progress.currentChapters)}`:''}{intake.progress.completedChars?` 已读 ${intake.progress.completedChars.toLocaleString('zh-CN')} 字。`:''}</p>}</div>;
+ const extractionError=search.state==='failed'&&<div className="yu-batch-error" role="alert"><p>提取未完成。{search.error}</p><p>已找到的故事会保留，可以重试或直接选择。</p>{selected&&findMore}</div>;
  return <section className="yu-creation-setup" aria-label={selected?'故事流程':'选择故事'}>
   {selected?<p className="yu-sheet-intro">《{book}》 · {session.selection.theme==='原典故事'?'不限定主题':`主题：${session.selection.theme}`}{session.selection.discoverySources?.length?` · 已选 ${session.selection.discoverySources.length} 段原文`:''}</p>:<StoryExtractionContext selection={session.selection} book={book}/>}
   {!selected&&<StoryExtractionSearch sessionId={session.id} title={targetTitle} local={session.selection.bookId!=='other'} busy={busy} hasCandidates={candidates.length>0} onSearch={title=>act({action:'search',title})}/>}
   {selected&&<div className="yu-batch-heading"><h3>{session.selection.storyTitle}</h3></div>}
-  {showExtractionStatus&&<div className="yu-extraction-status" role="status">{(paused||!candidates.length)&&<p>{paused?'提取已暂停，恢复后继续。':'正在提取，找到的故事会逐篇显示。'}</p>}{!paused&&(!!intake.progress?.currentChapters?.length||!!intake.progress?.completedChars)&&<p className="yu-extraction-status-detail">{intake.progress.currentChapters?.length?`正在阅读：${readingChapterLabel(intake.progress.currentChapters)}`:''}{intake.progress.completedChars?` 已读 ${intake.progress.completedChars.toLocaleString('zh-CN')} 字。`:''}</p>}</div>}
-  {search.state==='failed'&&<div className="yu-batch-error" role="alert"><p>提取未完成。{search.error}</p><p>已找到的故事会保留，可以重试或直接选择。</p>{selected&&findMore}</div>}
-  {!editing&&remoteChoice}
+  {!selected&&extractionStatus}
+  {!selected&&extractionError}
+  {!selected&&!editing&&remoteChoice}
   {!selected&&(intake.batches.length>0||search.state==='failed')&&candidateList}
-  {selected?<StoryGenerationStatus session={session} {...progress} compact={ready} control={ready?null:undefined} stages={stages} navigation={{source:{onClick:()=>setSourceOpen(true),disabled:!ready||busy},reselect:{onClick:()=>setChoosing(true),disabled:busy}}} timeline={{
+  {selected?<StoryGenerationStatus session={session} {...progress} compact={ready} control={ready?null:undefined} stages={stages} stageContent={{source:<>{extractionStatus}{extractionError}</>,count:<>
+   {!editing&&remoteChoice}
+   {error&&<p className="yu-batch-error" role="alert">{error}</p>}
+   {ready&&<StoryFlowAction type="button" className="yu-primary" disabled={busy||session.state==='running'} onClick={()=>void act({action:'confirm',settings})}>{busy?'正在保存…':'开始制作'}</StoryFlowAction>}
+   {preparable&&<StoryFlowAction type="button" className="yu-primary" disabled={busy||session.state==='running'} onClick={()=>void act({action:'choose',batch:intake.selected!.batch,index:intake.selected!.index,settings:preferences})}>准备这篇</StoryFlowAction>}
+  </>}} navigation={{source:{onClick:()=>setSourceOpen(true),disabled:!ready||busy},reselect:{onClick:()=>setChoosing(true),disabled:busy}}} timeline={{
    links:{source:editable?[{label:'制作要求（可选）',onClick:()=>setEditing('requirements')},{label:'验收要求（可选）',onClick:()=>setEditing('acceptance')}]:[]},
    detailActions:editable?{source:{label:'修改画风',onClick:()=>setEditing('style')}}:undefined,
    actions:editable?{count:{label:'修改叙事详略',onClick:()=>setEditing('count')}}:undefined
-  }}>
-   {ready&&<><button type="button" className="yu-primary" disabled={busy||session.state==='running'} onClick={()=>void act({action:'confirm',settings})}>{busy?'正在保存…':'开始制作'}</button></>}
-   {preparable&&<button type="button" className="yu-primary" disabled={busy||session.state==='running'} onClick={()=>void act({action:'choose',batch:intake.selected!.batch,index:intake.selected!.index,settings:preferences})}>准备这篇</button>}
-  </StoryGenerationStatus>:<>
+  }}/>:<>
    {(session.error||progress.error)&&<p className="yu-batch-error" role="alert">{progress.error||session.error}</p>}
    {(session.state==='failed'||!!progress.error)&&<StoryRetry session={session} busy={progress.busy} onRetry={progress.onRetry}/>}
    {paused&&<StoryGenerationControl session={session} busy={progress.controlBusy} onControl={progress.onControl} primary/>}
    {!onReplace&&<StoryBackToShelf onBack={progress.onBack}/>}
   </>}
-  {error&&<p className="yu-batch-error" role="alert">{error}</p>}
+  {!selected&&error&&<p className="yu-batch-error" role="alert">{error}</p>}
   {choosing&&<Sheet title="重新选择故事" busy={busy} onClose={()=>setChoosing(false)}>{candidateList}{error&&<p role="alert">{error}</p>}</Sheet>}
   {sourceOpen&&<Sheet title="故事原文" onClose={()=>setSourceOpen(false)}><StorySource sessionId={session.id} book={book}/></Sheet>}
   {editing&&<Sheet title="修改故事" busy={busy} onClose={closeEditor}>

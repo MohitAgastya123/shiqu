@@ -1,0 +1,146 @@
+// Render production components and verify that errors and next actions belong to their step.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {createRequire} from 'node:module';
+import {build} from 'esbuild';
+import {createElement} from 'react';
+import {renderToStaticMarkup} from 'react-dom/server';
+import {parseDocument,DomUtils} from 'htmlparser2';
+
+const bundle=await build({stdin:{contents:"export {default as Action} from './client/ui/StoryFlowAction.tsx';export {default as Status} from './client/ui/StoryGenerationStatus.tsx';export {default as Review} from './client/ui/StoryReviewTools.tsx';export {default as Setup} from './client/ui/StoryCreationSetup.tsx';",resolveDir:process.cwd(),loader:'tsx'},bundle:true,write:false,platform:'node',format:'cjs',packages:'external',loader:{'.css':'empty'}});
+const compiled={exports:{}};new Function('require','module','exports',bundle.outputFiles[0].text)(createRequire(import.meta.url),compiled,compiled.exports);
+const {Status,Review,Setup,Action}=compiled.exports,noop=()=>{};
+const base={id:'flow',selection:{bookId:'zhuangzi',storyTitle:'庄周梦蝶',theme:'原典故事',length:4,artStyle:'ink-pencil',productionPrompt:'保留原文因果。'},state:'failed',generationControl:'active',ready:0,story:null,error:'分镜生成等待超时。',retryAllowed:true,generationProgress:{sourceReady:true,frameCountConfirmed:true,frameCount:4,phase:'plan',startedAt:0,attempt:1}};
+const defaults={busy:false,controlBusy:false,error:'',onControl:noop,onRetry:noop,onBack:noop};
+function render(session,extra={}){return renderToStaticMarkup(createElement(Status,{...defaults,session,...extra}));}
+function stage(html,id){const document=parseDocument(html),node=DomUtils.findOne(node=>node.name==='li'&&node.attribs?.['data-stage']===id,document.children);assert.ok(node,`Missing ${id}`);return DomUtils.textContent(node);}
+function beforeSteps(html){return html.slice(0,html.indexOf('<ol '));}
+
+test('a planning failure and retry are inside the planning step, once',()=>{
+ const html=render(base);
+ assert.match(stage(html,'plan'),/分镜生成等待超时。.*重试生成/s);
+ assert.doesNotMatch(beforeSteps(html),/分镜生成等待超时|重试生成/);
+ assert.equal(html.split(base.error).length-1,1);
+ assert.doesNotMatch(stage(html,'source'),/等待超时|重试生成/);
+});
+
+test('independent faults keep their own stage, saved-image recovery and paused explanations',()=>{
+ const faults=[{id:'source',stage:'source',page:null,message:'原文检索失败。'},{id:'prepare',stage:'prepare',page:null,message:'制作建议失败。'},{id:'image',stage:'redraw',page:2,message:'第三幅图片丢失。'},{id:'save',stage:'publication',page:1,message:'第二幅保存失败。'}].map(fault=>({...fault,state:'pending',retryAllowed:true}));
+ const session={...base,error:null,faults};
+ const html=render(session);
+ assert.match(stage(html,'source'),/原文检索失败。.*重试原文检索/s);
+ assert.match(stage(html,'count'),/制作建议失败。.*重试准备/s);
+ assert.match(stage(html,'image'),/第三幅图片丢失。.*重绘第 3 幅/s);
+ assert.match(stage(html,'image'),/第二幅保存失败。.*不重新绘制。.*重试保存图片/s);
+ for(const fault of faults){assert.equal(html.split(fault.message).length-1,1);assert.ok(!beforeSteps(html).includes(fault.message));}
+ const paused=render({...session,generationControl:'paused'});
+ assert.match(stage(paused,'image'),/已暂停，另有问题：/);
+ assert.doesNotMatch(stage(paused,'image'),/重绘第 3 幅|重试保存图片/);
+ assert.match(stage(paused,'plan'),/恢复生成/);
+ assert.equal((paused.match(/>恢复生成<\/a>/g)||[]).length,1);
+});
+
+test('review issue details and next actions live in the failed repair checkpoint',()=>{
+ const session={...base,error:'修订未产生变化。',story:{original:{},pages:Array(4).fill({})},reviewIssues:[{page:2,category:'caption',problem:'第二幅没有说清主语。',instruction:'补充明确的主语。'}],generationProgress:{...base.generationProgress,phase:'review',reviewStatus:'blocked',reviewStopReason:'unchanged',repairPasses:1,repairTotal:1}};
+ const tools=createElement(Review,{session,busy:false,error:'',onScript:noop,onEdit:noop,onRetry:noop,onDrawAnyway:noop});
+ const html=render(session,{reviewTools:tools});
+ assert.match(stage(html,'repair'),/没有说清主语/);assert.match(stage(html,'repair'),/继续自动修复/);assert.match(stage(html,'repair'),/跳过问题并绘图/);
+ assert.doesNotMatch(stage(html,'recheck'),/没有说清主语|继续自动修复/);
+ assert.equal((html.match(/继续自动修复/g)||[]).length,1);
+ assert.doesNotMatch(beforeSteps(html),/修订未产生变化|继续自动修复/);
+});
+
+test('recovering image errors remain visible beneath images while work continues',()=>{
+ const session={...base,state:'running',productionState:'running',error:null,story:{pages:Array(4).fill({})},generationProgress:{...base.generationProgress,phase:'image'},faults:[{id:'recovering',stage:'redraw',page:1,message:'图片正在恢复。',state:'recovering',retryAllowed:false}]};
+ const html=render(session);
+ assert.match(stage(html,'image'),/正在重绘第 2 幅/);assert.match(stage(html,'image'),/上次错误/);
+ const disclosure=DomUtils.findOne(node=>node.name==='details'&&node.attribs?.class==='yu-recovery-detail',parseDocument(html).children);assert.ok(disclosure);assert.equal(disclosure.attribs.open,undefined);
+ assert.doesNotMatch(stage(html,'plan'),/图片正在恢复/);
+});
+
+test('confirmation puts its start action directly under the confirmation step',()=>{
+ const session={...base,state:'idle',error:null,retryAllowed:false,intake:{phase:'confirming',generation:1,search:{state:'idle'},selected:{batch:0,index:0},batches:[{stories:[{title:'庄周梦蝶',description:'梦与醒的故事。'}],note:''}]},generationProgress:{...base.generationProgress,phase:'production-confirmation',frameCountConfirmed:false}};
+ const html=renderToStaticMarkup(createElement(Setup,{session,book:'庄子',busy:false,onAction:noop,progress:defaults}));
+ assert.match(stage(html,'count'),/开始制作/);
+ assert.equal((html.match(/>开始制作<\/a>/g)||[]).length,1);
+ assert.doesNotMatch(beforeSteps(html),/开始制作/);
+ const searchError='后台提取失败，候选仍已保存。';
+ const failedSearch=renderToStaticMarkup(createElement(Setup,{session:{...session,intake:{...session.intake,search:{state:'failed',error:searchError}}},book:'庄子',busy:false,onAction:noop,progress:defaults}));
+ assert.ok(stage(failedSearch,'source').includes(searchError));assert.match(stage(failedSearch,'source'),/重试查找/);
+ assert.ok(!beforeSteps(failedSearch).includes(searchError));
+});
+
+test('active steps show only their timeout countdown below the current step',()=>{
+ const now=Date.now();
+ const session={...base,state:'running',productionState:'running',error:null,generationProgress:{...base.generationProgress,startedAt:now-65000,timeoutAt:now+235000}};
+ for(const [phase,target,review] of [['plan','plan',{}],['review','review',{reviewStatus:'pending'}],['repair','repair',{reviewStatus:'repair'}],['review','recheck',{reviewStatus:'pending',repairPasses:1}],['image','image',{reviewStatus:'passed'}]]){
+  const active={...session,...(phase==='plan'?{}:{story:{pages:Array(4).fill({})}}),generationProgress:{...session.generationProgress,phase,...review}};
+  const html=render(active);
+  assert.match(stage(html,target),/距超时/);assert.doesNotMatch(stage(html,target),/本阶段|最后耗时|正在生成整篇|分镜目录已保存/);
+  assert.doesNotMatch(beforeSteps(html),/本阶段|距超时|最后耗时/);
+  assert.equal((html.match(/距超时/g)||[]).length,1);
+  for(const id of ['source','count','plan','review','repair','recheck','image'])if(id!==target)assert.doesNotMatch(stage(html,id),/本阶段|距超时|最后耗时/);
+ }
+ const expired=render({...session,generationProgress:{...session.generationProgress,timeoutAt:now-1000}});
+ assert.match(stage(expired,'plan'),/已达超时，等待状态更新/);
+ assert.doesNotMatch(beforeSteps(expired),/已达超时/);
+ for(const fields of [{generationControl:'paused'},{productionState:'queued'}])assert.doesNotMatch(render({...session,...fields}),/本阶段|距超时|已达超时/);
+});
+
+test('completed steps retain their own final duration as the current step changes or finishes',()=>{
+ const now=Date.now(),meta={...base.generationProgress,startedAt:now-5000,timeoutAt:now+295000,stageDurations:{source:2,count:3,plan:65,review:12,repair:0,recheck:8,image:40}};
+ const session={...base,state:'running',productionState:'running',error:null,story:{pages:Array(4).fill({})},generationProgress:{...meta,phase:'review',reviewStatus:'pending'}};
+ const reviewing=render(session);
+ assert.match(stage(reviewing,'plan'),/最后耗时 1 分 05 秒/);assert.match(stage(reviewing,'source'),/最后耗时 2 秒/);
+ assert.doesNotMatch(stage(reviewing,'review'),/最后耗时/);
+ const drawing=render({...session,generationProgress:{...meta,phase:'image',reviewStatus:'passed'}});
+ assert.match(stage(drawing,'plan'),/最后耗时 1 分 05 秒/);assert.match(stage(drawing,'review'),/最后耗时 12 秒/);
+ assert.doesNotMatch(stage(drawing,'repair'),/最后耗时/);
+ const done=render({...session,state:'completed',ready:4,generationProgress:{...meta,phase:'completed',reviewStatus:'passed'}});
+ assert.match(stage(done,'plan'),/最后耗时 1 分 05 秒/);assert.match(stage(done,'image'),/最后耗时 40 秒/);
+ assert.doesNotMatch(beforeSteps(done),/最后耗时/);
+ const unknown=render({...session,generationProgress:{...session.generationProgress,stageDurations:undefined}});
+ assert.doesNotMatch(unknown,/最后耗时/);
+});
+
+test('active recovery is concise, retains the old error in a closed disclosure and has no retry button',()=>{
+ const session={...base,state:'running',productionState:'running',error:null,ready:0,generationProgress:{...base.generationProgress,storyboardFrames:40,storyboardBatch:{first:41,last:60},frameCount:80,startedAt:Date.now()-49000,timeoutAt:Date.now()+851000},faults:[{id:'retrying',stage:'generation',page:null,message:'Codex 生成等待超时，已保留前面的内容。可稍后重试。',state:'recovering',retryAllowed:true}]};
+ const html=render(session),document=parseDocument(html);
+ assert.match(stage(html,'plan'),/正在恢复生成/);assert.match(stage(html,'plan'),/距超时/);
+ assert.doesNotMatch(stage(html,'plan'),/本阶段|每批最多|正在生成整篇/);
+ assert.doesNotMatch(html,/>重试生成<\/a>/);
+ const detail=DomUtils.findOne(node=>node.name==='details'&&node.attribs?.class==='yu-recovery-detail',document.children);assert.ok(detail);assert.equal(detail.attribs.open,undefined);assert.ok(DomUtils.textContent(detail).includes(session.faults[0].message));
+ const noDeadline=render({...session,generationProgress:{...session.generationProgress,timeoutAt:null}});
+ assert.match(stage(noDeadline,'plan'),/超时信息待同步/);assert.doesNotMatch(noDeadline,/本阶段|最后耗时/);
+});
+
+test('finished steps contain only their name, result and final time, and flow operations are links',()=>{
+ const session={...base,state:'completed',error:null,ready:4,story:{pages:Array(4).fill({})},generationProgress:{...base.generationProgress,phase:'completed',reviewStatus:'passed',stageDurations:{plan:65,review:12,image:40}}};
+ const html=render(session,{timeline:{actions:{plan:{label:'查看分镜',onClick:noop}}},onHistory:noop}),document=parseDocument(html);
+ const plan=DomUtils.findOne(node=>node.name==='li'&&node.attribs?.['data-stage']==='plan',document.children);
+ assert.match(DomUtils.textContent(plan),/分批分镜.*4 幅分镜已保存.*最后耗时 1 分 05 秒/s);
+ assert.ok(DomUtils.findOne(node=>node.attribs?.class==='production-stage-icon',plan.children));
+ assert.equal(DomUtils.findOne(node=>node.attribs?.class==='production-stage-state',plan.children),null);
+ assert.equal(DomUtils.findOne(node=>node.name==='button',document.children),null);
+ assert.ok(DomUtils.findOne(node=>node.name==='a'&&node.attribs?.['aria-label']==='查看分镜',plan.children));
+ const failed=parseDocument(render(base));assert.equal(DomUtils.findOne(node=>node.name==='button',failed.children),null);
+ const paused=parseDocument(render({...base,generationControl:'paused'}));assert.ok(DomUtils.findOne(node=>node.name==='a'&&DomUtils.textContent(node)==='恢复生成',paused.children));
+});
+
+test('flow links prevent fragment navigation and respect both local and fieldset locks',()=>{
+ let calls=0,prevented=0;
+ const event=locked=>({preventDefault(){prevented++;},currentTarget:{closest(){return locked?{}:null;}}});
+ const enabled=Action({children:'恢复生成',onClick(){calls++;}});assert.equal(enabled.type,'a');enabled.props.onClick(event(false));assert.equal(calls,1);
+ const disabled=Action({children:'恢复生成',disabled:true,onClick(){calls++;}});assert.equal(disabled.props['aria-disabled'],true);assert.equal(disabled.props.tabIndex,-1);disabled.props.onClick(event(false));assert.equal(calls,1);
+ enabled.props.onClick(event(true));assert.equal(calls,1);assert.equal(prevented,3);
+});
+
+test('running countdown and final duration occupy the same right-side metadata slot',()=>{
+ const now=Date.now(),session={...base,state:'running',productionState:'running',error:null,story:{pages:Array(4).fill({})},generationProgress:{...base.generationProgress,phase:'review',reviewStatus:'pending',startedAt:now-5000,timeoutAt:now+295000,stageDurations:{plan:65}}};
+ const document=parseDocument(render(session));
+ for(const [id,text] of [['plan','最后耗时 1 分 05 秒'],['review','距超时']]){
+  const step=DomUtils.findOne(node=>node.name==='li'&&node.attribs?.['data-stage']===id,document.children);
+  const meta=step.children.find(node=>node.attribs?.class==='production-stage-meta');assert.ok(meta);assert.ok(DomUtils.textContent(meta).includes(text));
+  const note=step.children.find(node=>node.attribs?.class==='production-stage-notice');if(note)assert.ok(!DomUtils.textContent(note).includes(text));
+ }
+});

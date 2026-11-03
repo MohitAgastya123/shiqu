@@ -1,4 +1,5 @@
 // Route reading, recovery and generation through the single local library.
+import {productionStageDurations} from './production-timing.ts';
 import {publicationSchema} from './story-publication.ts';
 import {draftInstructions} from './reader-generation-contract.ts';
 import {outlineDirection,batchDirection} from './reader-storyboard.ts';
@@ -97,7 +98,18 @@ return async function readerApi(req:Request,path:string[]):Promise<Response>{
   }
   if(path[0]==='sessions'&&path.length===1){
    // One unreadable saved story must not take the whole shelf down with it.
-   if(req.method==='GET')return json(await Promise.all((await repo.list(uid)).filter(readableStory).map(async row=>shelfView(services.production&&row.state!=='completed'?await services.production.snapshot(uid,row.id):view(row)))));
+   if(req.method==='GET'){
+    const rows=(await repo.list(uid)).filter(readableStory),completed=rows.filter(row=>row.state==='completed').map(row=>row.id);
+    // Load completed timing in one owner-scoped read; shelf visits never inspect media or start work.
+    const timings=completed.length?(await repo.db.prepare("SELECT session_id,kind,payload FROM production_jobs WHERE owner_id=? AND session_id IN (SELECT value FROM json_each(?)) AND json_type(CASE WHEN json_valid(payload) THEN payload ELSE '{}' END,'$.timings')='array'").bind(uid,JSON.stringify(completed)).all<{session_id:string;kind:string;payload:string}>()).results:[];
+    const bySession=new Map<string,typeof timings>();
+    for(const timing of timings){const group=bySession.get(timing.session_id)||[];group.push(timing);bySession.set(timing.session_id,group);}
+    return json(await Promise.all(rows.map(async row=>{
+     const session=services.production&&row.state!=='completed'?await services.production.snapshot(uid,row.id):view(row);
+     if(row.state==='completed')session.generationProgress={...session.generationProgress!,stageDurations:productionStageDurations(bySession.get(row.id)||[],session.selection)};
+     return shelfView(session);
+    })));
+   }
    if(req.method==='POST'){await requireProvider();const b=z.object({requestId:uuid,selection:selectionSchema.omit({displayTitle:true}),intake:z.boolean().optional()}).parse(await body(req,32768));if((b.selection.discoverySources||b.selection.discovery?.mode==='title')&&b.intake!==true)throw new ReaderError(400,'章节或标题提取必须通过选题流程创建。');return json(view(b.intake?await createIntake(repo,b.requestId,uid,b.selection,services.localBooks):await repo.create(b.requestId,uid,b.selection)),201);}
   }
   if(path[0]==='sessions'&&path[1]){

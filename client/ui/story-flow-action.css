@@ -1,0 +1,6 @@
+/* One text-link treatment for navigation, editing and recovery throughout the flow. */
+.story-flow-link{display:inline-flex;align-items:center;gap:4px;padding:3px 0;color:#526b43;font:inherit;font-size:12px;line-height:1.6;text-decoration:underline;text-decoration-color:#aabb98;text-underline-offset:3px;cursor:pointer;overflow-wrap:anywhere}
+.story-flow-link:hover{text-decoration-color:currentColor;color:#294f31}
+.story-flow-link:focus-visible{outline:2px solid #82996f;outline-offset:3px;border-radius:3px}
+.story-flow-link[aria-disabled=true]{opacity:.5;cursor:default;text-decoration:none}
+fieldset:disabled .story-flow-link{opacity:.5;cursor:default;text-decoration:none;pointer-events:none}

@@ -86,6 +86,7 @@ export function createOpenAIProvider(variables:Record<string,string|undefined>,m
   const source=storySource(selection);if(source.isUrl)throw new ReaderError(400,'OpenAI API 模式请使用内置书籍或书名；网页 URL 来源请使用 Gemini。');return source.book;
  }
  return {
+  generationTimeoutMs:phase=>['recommend','plan','reflection','review','repair','image'].includes(phase)?readerStoryboardTimeoutMs:null,
   async status(){return {configured:!!key,provider:'openai',models,voiceEnabled:false,taskReasoningEfforts:reasoning,themeMatching:{model:themeMatchModel,reasoningEffort:themeMatchEffort}};},
   async suggestions(selection,excluded,localBook,reading){
    const scanning=localBook?.purpose==='scan'||localBook?.purpose==='catalog';

@@ -36,17 +36,17 @@ test('an unknown criterion without fabricated frame issues still exposes the acc
  }
 });
 
-test('flow resume is primary, shelf return is secondary and all creation/status states retain an explicit exit',()=>{
+test('flow recovery and exits are links while controls outside the flow retain their presentation',()=>{
  const session={id:'flow',selection:{bookId:'zhuangzi',theme:'选择',artStyle:'ink-pencil',productionPrompt:'保留对白',length:3},state:'idle',generationControl:'paused',story:null,error:null,ready:0,awaitingFrameCount:false,retryAllowed:false};
  const calls=[],props={session,busy:false,controlBusy:false,error:'',onControl:()=>calls.push('control'),onRetry:noop,onBack:()=>calls.push('back')};
  for(const state of ['idle','failed','running']){
-  const html=render(Status,{...props,session:{...session,state}});assert.match(html,/<button[^>]*class="yu-primary"[^>]*>恢复生成<\/button>/);assert.match(html,/<button[^>]*class="yu-generation-back"[^>]*>.*?返回书架<\/button>/s);
+  const html=render(Status,{...props,session:{...session,state}});assert.match(html,/<a[^>]*class="story-flow-link"[^>]*>恢复生成<\/a>/);assert.match(html,/<a[^>]*class="story-flow-link"[^>]*>.*?返回书架<\/a>/s);
  }
  const primary=render(Control,{session,busy:false,onControl:noop,primary:true});assert.match(primary,/class="yu-primary"/);
  const compact=render(Control,{session,busy:false,onControl:noop});assert.match(compact,/class="yu-generation-control"/);
  const back=Back({onBack:props.onBack});back.props.onClick();assert.deepEqual(calls,['back']);assert.equal(back.props.className,'yu-generation-back');
  for(const phase of ['discovering','choosing','confirming']){
   const intake={phase,generation:0,search:{state:phase==='discovering'?'searching':'idle'},batches:phase==='confirming'?[{stories:[{title:'庄周梦蝶',description:'故事简介'}],note:''}]:[],...(phase==='confirming'?{selected:{batch:0,index:0}}:{})};
-  const html=render(Setup,{session:{...session,intake,selection:{...session.selection,narrativeDetail:'balanced'}},book:'庄子',busy:false,onAction:noop,progress:props});assert.match(html,/class="yu-generation-back"/);assert.equal((html.match(/>返回书架<\/button>/g)||[]).length,1,phase);
+  const html=render(Setup,{session:{...session,intake,selection:{...session.selection,narrativeDetail:'balanced'}},book:'庄子',busy:false,onAction:noop,progress:props});assert.equal((html.match(/>返回书架<\/(?:button|a)>/g)||[]).length,1,phase);
  }
 });

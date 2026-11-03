@@ -1,4 +1,5 @@
 // Edit a local draft; saving review corrections submits directly to the existing review-and-draw flow.
+import StoryFlowAction from './StoryFlowAction';
 import StoryProductionEditor,{StoryEditorTabs} from './StoryProductionEditor';
 import type {StoryRevisionEditorState} from './useStoryRevision';
 import type {Plan} from '@/lib/reader-model';
@@ -18,16 +19,17 @@ export function revisionDraftSteps(base:RevisionSnapshot,changes:RevisionChanges
   return step;
  });
 }
-export function StoryRevisionActions({editor,onDone,resuming=false,reviewOnSave=false}:{editor:StoryRevisionEditorState;onDone?:()=>void;resuming?:boolean;reviewOnSave?:boolean}){
+export function StoryRevisionActions({editor,onDone,resuming=false,reviewOnSave=false,link=false}:{editor:StoryRevisionEditorState;onDone?:()=>void;resuming?:boolean;reviewOnSave?:boolean;link?:boolean}){
+ const Action=link?StoryFlowAction:'button';
  const impact=editor.impact;if(!impact)return null;
  const finish=reviewOnSave?undefined:onDone;
  return <section className="yu-revision-impact" aria-label="本次修改影响">
   <p role="status">{!impact.changed?(reviewOnSave?'修改分镜后，保存并重新审核，通过后继续绘图。':resuming?'完成编辑后，恢复生成时继续制作。':'调整制作内容，确认后开始制作。'):impact.replan?impact.preserveScript?`保留已保存的分镜与草稿，只完成剩余编排并审片；需绘制 ${impact.total} 幅。`:`将按叙事详略重新编排并审片，审核后确定画幅数。${impact.reusePending?'原图能否复用，待新分镜完成后逐幅比较。':'新分镜完成后重新核对图片。'}`:`保留分镜编排，重新审片；预计复用 ${impact.reused} 幅、重绘 ${impact.redraw} 幅。`}</p>
   {impact.changed&&!impact.replan&&<small>画面指令或首幅参考变化时会重新核对旧图复用。</small>}
-  {impact.conflict&&<div role="alert"><p>制作要求或叙事详略的变化需要重新编排，会替换手改分镜。请选择保留哪类修改：</p><div className="yu-revision-conflict"><button type="button" disabled={editor.busy} onClick={()=>editor.setChanges(c=>({...c,plan:undefined}))}>保留重新编排设置</button><button type="button" disabled={editor.busy} onClick={()=>editor.setChanges(c=>({...c,productionPrompt:undefined,length:undefined,narrativeDetail:undefined}))}>保留手改分镜</button></div></div>}
+  {impact.conflict&&<div role="alert"><p>制作要求或叙事详略的变化需要重新编排，会替换手改分镜。请选择保留哪类修改：</p><div className="yu-revision-conflict"><Action type="button" disabled={editor.busy} onClick={()=>editor.setChanges(c=>({...c,plan:undefined}))}>保留重新编排设置</Action><Action type="button" disabled={editor.busy} onClick={()=>editor.setChanges(c=>({...c,productionPrompt:undefined,length:undefined,narrativeDetail:undefined}))}>保留手改分镜</Action></div></div>}
   {editor.error&&<p role="alert">{editor.error}</p>}
-  {editor.conflict&&<div className="yu-revision-conflict-note" role="alert"><p>这篇故事的分镜、制作要求或版本已在别处更新。草稿仍在这里，不会自动合并；需要的内容可以先复制出来。</p><button type="button" className="yu-revision-reload" disabled={editor.busy} onClick={()=>void editor.load()}>丢弃草稿，载入最新</button></div>}
-  <div className="yu-revision-buttons"><button type="button" className="yu-primary" disabled={editor.busy||!finish&&(!impact.changed||impact.conflict||editor.conflict)} onClick={()=>{if(finish)finish();else void editor.submit();}}>{editor.busy?'正在提交…':finish?'完成编辑':resuming?'应用修改并恢复':reviewOnSave?'保存并重新审核':'开始制作'}</button><button type="button" disabled={editor.busy} onClick={editor.discard}>丢弃草稿</button></div>
+  {editor.conflict&&<div className="yu-revision-conflict-note" role="alert"><p>这篇故事的分镜、制作要求或版本已在别处更新。草稿仍在这里，不会自动合并；需要的内容可以先复制出来。</p><Action type="button" className="yu-revision-reload" disabled={editor.busy} onClick={()=>void editor.load()}>丢弃草稿，载入最新</Action></div>}
+  <div className="yu-revision-buttons"><Action type="button" className="yu-primary" disabled={editor.busy||!finish&&(!impact.changed||impact.conflict||editor.conflict)} onClick={()=>{if(finish)finish();else void editor.submit();}}>{editor.busy?'正在提交…':finish?'完成编辑':resuming?'应用修改并恢复':reviewOnSave?'保存并重新审核':'开始制作'}</Action><Action type="button" disabled={editor.busy} onClick={editor.discard}>丢弃草稿</Action></div>
   <small>{reviewOnSave?'保存后自动重新审片，通过后继续绘图；书架显示最新版，原故事保留。':resuming?(finish?'完成编辑后回到制作流程，点击“应用修改并恢复”时应用修改。':'恢复生成时应用修改，已保存的内容保留。'):finish?'完成编辑后回到制作流程，确认后才开始制作。':'开始制作后会自动编排、审片和绘图。书架显示最新版，原故事保留。'}</small>
  </section>;
 }

@@ -194,7 +194,7 @@ test('title, theme and original scope are independently optional in the creation
  const parentId=await f.create(2);await until(async()=>(await f.read(parentId)).state==='completed');const parent=await f.read(parentId);
  await page.goto(url+'/read?id='+parentId);
  await page.getByRole('button',{name:'故事设置',exact:true}).click();
- await page.getByRole('button',{name:'替换选题',exact:true}).click();
+ await page.getByRole('link',{name:'替换选题',exact:true}).click();
  const replacement=page.getByRole('dialog',{name:'替换选题',exact:true});
  await replacement.getByRole('button',{name:'开始提取',exact:true}).waitFor();
  assert.equal(await replacement.locator('.yu-extraction-help').textContent(),'按所选原文和主题寻找故事，并自动拟题。');

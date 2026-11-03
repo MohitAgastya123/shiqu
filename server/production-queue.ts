@@ -3,6 +3,7 @@
 // Wall-clock expiry only reclaims attempts from dead services, so a live one survives sleep.
 // Stop-time and persistence errors recover as interruptions, never as job failures.
 // Finished jobs re-run only through an explicit rerun, which the caller must have consent for.
+// Scoped step timing is saved atomically with receipts, under the same attempt token.
 import {createHash,randomUUID} from 'node:crypto';
 import {persistenceError} from '../lib/reader-repository.ts';
 import type {Database} from '../lib/reader-repository.ts';
@@ -19,6 +20,7 @@ export function inputVersion(input:unknown){return createHash('sha256').update(J
 export function productionJobId(scope:string,kind:string,version:string,key=''){return inputVersion([scope,kind,version,key]);}
 const dependencyCache=new WeakMap<ProductionJob,string[]>();
 export function jobDependencies(job:ProductionJob){let value=dependencyCache.get(job);if(!value){value=JSON.parse(job.dependencies) as string[];dependencyCache.set(job,value);}return value;}
+const timedPayload="CASE WHEN json_type(payload,'$.timingStage')='text' THEN json_insert(json_set(payload,'$.timings',COALESCE(json_extract(payload,'$.timings'),json('[]'))),'$.timings[#]',json(?)) ELSE payload END";
 const ready=`NOT EXISTS (SELECT 1 FROM json_each(j.dependencies) d LEFT JOIN production_jobs parent ON parent.id=d.value WHERE parent.id IS NULL OR parent.state!='succeeded')`;
 
 export class ProductionQueue{
@@ -93,7 +95,7 @@ export class ProductionQueue{
      WHERE id=? AND state='queued' AND ${ready} AND (SELECT COUNT(*) FROM production_jobs WHERE pool=? AND state='running' AND lease_until>?)<?`)
      .bind(token,now+this.leaseMs,now,job.id,job.pool,now,limit).run();
     if(!claimed.meta.changes)continue;
-    const task=this.execute({...job,state:'running',lease_token:token,lease_until:now+this.leaseMs,attempts:job.attempts+1},handler)
+    const task=this.execute({...job,state:'running',lease_token:token,lease_until:now+this.leaseMs,attempts:job.attempts+1,updated_at:now},handler)
      .finally(()=>{this.tasks.delete(job.id);this.tokens.delete(job.id);this.options.onSettled?.();});
     this.tasks.set(job.id,task);this.tokens.set(job.id,token);
     }catch(error){this.contain(job,error);}
@@ -128,13 +130,15 @@ export class ProductionQueue{
    const interrupted=this.stopping&&!handler.drain&&!this.options.terminal?.(error,job);
    // Only safe application messages are persisted; provider responses may contain private data.
    const message=interrupted?interruptedMessage:this.options.safeError?.(error,job)||'制作暂时未完成，已保存的结果会保留。';
-   try{await this.database.prepare("UPDATE production_jobs SET state='failed',error=?,interrupted=?,failure_id=?,lease_token=NULL,lease_until=0,updated_at=? WHERE id=? AND state='running' AND lease_token=?")
-    .bind(message,interrupted?1:0,interrupted&&job.failure_id?job.failure_id:randomUUID(),this.clock(),job.id,job.lease_token).run();}
+   const finishedAt=this.clock(),timing=JSON.stringify({startedAt:job.updated_at,finishedAt});
+   try{await this.database.prepare(`UPDATE production_jobs SET payload=${timedPayload},state='failed',error=?,interrupted=?,failure_id=?,lease_token=NULL,lease_until=0,updated_at=? WHERE id=? AND state='running' AND lease_token=?`)
+    .bind(timing,message,interrupted?1:0,interrupted&&job.failure_id?job.failure_id:randomUUID(),finishedAt,job.id,job.lease_token).run();}
    catch(writeError){unsaved(writeError);}
    return;
   }
-  try{await this.database.prepare("UPDATE production_jobs SET state='succeeded',result=?,error=NULL,lease_token=NULL,lease_until=0,updated_at=? WHERE id=? AND state='running' AND lease_token=?")
-   .bind(JSON.stringify(result??null),this.clock(),job.id,job.lease_token).run();}
+  const finishedAt=this.clock(),timing=JSON.stringify({startedAt:job.updated_at,finishedAt});
+  try{await this.database.prepare(`UPDATE production_jobs SET payload=${timedPayload},state='succeeded',result=?,error=NULL,lease_token=NULL,lease_until=0,updated_at=? WHERE id=? AND state='running' AND lease_token=?`)
+   .bind(timing,JSON.stringify(result??null),finishedAt,job.id,job.lease_token).run();}
   catch(error){unsaved(error);}
  }
  stop(){this.stopping=true;}

@@ -22,6 +22,8 @@ async function fixture(t,handler){
 }
 
 test('OpenAI covers suggestions, artwork advice, counts, drafts, outlines, batches, reflections and review',async t=>{
+ const provider=createReaderProvider({SHIQU_AI_PROVIDER:'openai'},{});
+ assert.equal(provider.generationTimeoutMs('plan'),300000);assert.equal(provider.generationTimeoutMs('image'),300000);assert.equal(provider.generationTimeoutMs('source'),null);
  const contextualOriginal={...original,chapterContext:{title:'《庄子·齐物论》',text:'完整章节包含梦蝶的起因、经过与醒来后的思考。',source:original.localSource}};
  const f=await fixture(t,(_url,options)=>{
   const body=JSON.parse(options.body),schema=body.text.format.schema,payload=JSON.parse(body.input[0].content),plan=makePlan(payload.exactPageCount||8);

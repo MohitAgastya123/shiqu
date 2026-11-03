@@ -8,6 +8,8 @@
 // story lock it stops when no longer wanted, and
 // its failures stay with the search unless a stop interrupted the call.
 // Only current image inputs may publish; their paid receipt can replace a stale version's slot.
+import {generationProgress} from '../lib/generation-progress.ts';
+import {productionTimingScope,productionStageDurations} from '../lib/production-timing.ts';
 import {BookImageReferences} from './book-image-reference.ts';
 import {storyReplanMessage} from '../lib/reader-review.ts';
 import {randomUUID} from 'node:crypto';
@@ -346,9 +348,15 @@ export class ReaderProductionCoordinator implements ReaderProduction{
   if(row.state!=='completed'&&await this.repository.superseded(id,ownerId))return {...saved,superseded:true,generationControl:'paused',productionState:'paused'};
   const allJobs=await this.queue.jobs(row.id,row.user_id),jobs=await this.currentJobs(row,allJobs),faults=await this.faults(row,jobs),failed=jobs.find(job=>job.state==='failed'&&lostImageError(job.error))||jobs.find(job=>job.state==='failed');
   const active=jobs.filter(job=>job.state==='running'&&job.lease_until>this.clock()).sort((a,b)=>a.updated_at-b.updated_at);
-  // Claim timestamps measure this attempt, rather than time since the story was first created.
+  // A background search must not supply the selected story step's clock. Renewals only
+  // extend leases, leaving the persisted claim timestamp stable across screen visits.
+  const phase=saved.generationProgress!.phase,parsed=this.parsed(row)!;
+  const step=nextStep(parsed.doc,parsed.selection,readerMaxFrames-1);
+  const current=active.find(job=>phase==='discover'?job.kind==='discover':phase==='image'?job.kind==='image':['prepare','script'].includes(job.kind)&&(!JSON.parse(job.payload).stepKey||JSON.parse(job.payload).stepKey===step?.key));
+  const startedAt=current?.updated_at??null,timeoutMs=this.provider.generationTimeoutMs?.(phase);
+  const timeoutAt=startedAt!==null&&timeoutMs?startedAt+timeoutMs:null;
   const search=this.searches.get(id);
-  const session={...saved,...(saved.intake&&search?.progress?{intake:{...saved.intake,progress:search.progress}}:{}),generationProgress:{...saved.generationProgress!,startedAt:active[0]?.updated_at??search?.startedAt??null,attempt:active[0]?.attempts??saved.generationProgress!.attempt}};
+  const session={...saved,...(saved.intake&&search?.progress?{intake:{...saved.intake,progress:search.progress}}:{}),generationProgress:{...saved.generationProgress!,startedAt,timeoutAt,stageDurations:productionStageDurations(allJobs,parsed.selection),attempt:current?.attempts??saved.generationProgress!.attempt}};
   const working=active.length>0||jobs.some(job=>job.kind==='image-publish'&&job.state==='queued'&&jobs.some(parent=>parent.id===jobDependencies(job)[0]&&parent.state==='succeeded'));
   if(faults.length){
    const views=faults.map(fault=>this.faultView(row,fault,allJobs)),pending=views.find(f=>f.retryAllowed&&f.stage==='redraw')||views.find(f=>f.retryAllowed)||views[0];
@@ -373,7 +381,9 @@ export class ReaderProductionCoordinator implements ReaderProduction{
   return {...session,productionState};
  }
  private spec(row:SessionRow,kind:string,pool:string,version:string,key:string,dependencies:string[],payload:unknown,priority:number):JobSpec{
-  return {id:productionJobId(row.id,kind,version,key),sessionId:row.id,ownerId:row.user_id,kind,pool,version,dependencies,payload,priority};
+  const {selection}=this.parsed(row)!;
+  const timingStage=kind==='discover'?'source':kind==='prepare'?'count':['image','image-publish'].includes(kind)?'image':generationProgress({...view(row),state:'running',productionState:'running',generationControl:'active',error:null},this.clock()).steps.find(step=>step.state==='current')?.id;
+  return {id:productionJobId(row.id,kind,version,key),sessionId:row.id,ownerId:row.user_id,kind,pool,version,dependencies,payload:{...(payload as Record<string,unknown>),timingStage,timingScope:productionTimingScope(selection,kind==='discover')},priority};
  }
  private async graph(row:SessionRow){
   const {doc,selection}=this.parsed(row)!;

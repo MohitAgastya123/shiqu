@@ -115,3 +115,17 @@ test('a database error before the handler starts makes no paid call and is not a
  const saved=await queue.job(job.id);assert.equal(saved.state,'running');assert.equal(saved.error,null);assert.equal(calls,0);
  assert.equal(logs.mock.calls[0].arguments[0],'production_job_unsaved');assert.match(logs.mock.calls[0].arguments[1],/ERR_SQLITE_ERROR/);assert.doesNotMatch(logs.mock.calls[0].arguments[1],/locked/);
 });
+
+test('completed timing is saved with the receipt and retained across queue instances and retries',async t=>{
+ const {adapter}=database(t);let now=10000,fail=true;
+ const job={...spec('script','text'),payload:{timingStage:'plan',timingScope:'test'}};
+ const options={limits:{text:1},now:()=>now,handlers:{script:{pool:'text',run:async()=>{now+=2500;if(fail)throw Error('controlled');return {saved:true};}}}};
+ const queue=new ProductionQueue(adapter,options);
+ await queue.enqueue(job);now=20000;await queue.pump();await queue.settle();
+ let saved=await queue.job(job.id);assert.equal(saved.state,'failed');assert.deepEqual(JSON.parse(saved.payload).timings,[{startedAt:20000,finishedAt:22500}]);
+ now=90000;await queue.retry('story','owner');fail=false;await queue.pump();await queue.settle();
+ const reopened=new ProductionQueue(adapter,options);saved=await reopened.job(job.id);
+ assert.equal(saved.state,'succeeded');assert.deepEqual(JSON.parse(saved.result),{saved:true});
+ assert.deepEqual(JSON.parse(saved.payload).timings,[{startedAt:20000,finishedAt:22500},{startedAt:90000,finishedAt:92500}]);
+ await reopened.enqueue(job);assert.deepEqual(JSON.parse((await reopened.job(job.id)).payload).timings,JSON.parse(saved.payload).timings);
+});
