@@ -5,6 +5,7 @@ type Props={session:SessionView;busy:boolean;onControl:(id:string,action:Product
 export default function StoryGenerationControl({session,busy,onControl,primary=false}:Props){
  if(session.state==='completed')return null;
  if(session.superseded)return <p className="yu-generation-control">这是旧版本，请打开书架中的最新版本继续生成。</p>;
+ const preparing=!!session.intake&&['preparing','discovering'].includes(session.intake.phase);
  const manual=!!session.generationControl&&session.generationControl!=='active';
- return <button type="button" className={primary?'yu-primary':'yu-generation-control'} disabled={busy} aria-busy={busy} onClick={()=>void onControl(session.id,manual?'resume':'pause')}>{manual?'恢复生成':'暂停生成'}</button>;
+ return <button type="button" className={primary?'yu-primary':'yu-generation-control'} disabled={busy} aria-busy={busy} onClick={()=>void onControl(session.id,manual?'resume':'pause')}>{manual?(preparing?'恢复准备':'恢复生成'):'暂停生成'}</button>;
 }

@@ -114,8 +114,8 @@ test('a read that throws stays transient without redrawing, even at retry',async
  const saved=await f.read(id);
  assert.equal(saved.retryStage,'publication');
  // A marked job whose file can't be read at the retry must not pay either.
- mode='lost';await retry(f,id);await failed(f,id);assert.equal((await f.read(id)).retryStage,'redraw');
- mode='throw';await retry(f,id);await failed(f,id);assert.equal(pageCalls(f,0),1);
+ mode='lost';assert.equal((await f.request(`sessions/${id}/recover`,'POST',{requestId:crypto.randomUUID(),faultId:(await f.read(id)).faults[0].id})).status,409);assert.equal((await f.read(id)).retryStage,'redraw');
+ mode='throw';const response=await f.request(`sessions/${id}/recover`,'POST',{requestId:crypto.randomUUID(),faultId:(await f.read(id)).faults[0].id});assert.ok(response.status>=500);assert.equal(pageCalls(f,0),1);
  mode='none';await retry(f,id);await completed(f,id);assert.equal(pageCalls(f,0),1);
 });
 

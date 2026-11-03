@@ -341,7 +341,7 @@ test('retry restores only the current selection; superseded jobs leave the queue
  const failed=await jobs(f,id,'prepare');assert.equal(failed.length,1);assert.equal(failed[0].state,'failed');
  reject=false;await reuseSource(f,id);await setup(f,id,{action:'choose',batch:0,index:1});await phase(f,id,'confirming');
  assert.equal((await jobs(f,id,'prepare')).filter(job=>job.state==='failed').length,0,'The old failure is gone, not requeued or left to be checked');
- const current=await f.read(id);await f.json(`sessions/${id}/production`,'POST',{viewerId:crypto.randomUUID(),page:0,retry:true});
+ const current=await f.read(id);assert.equal((await f.request(`sessions/${id}/production`,'POST',{viewerId:crypto.randomUUID(),page:0,retry:true})).status,400);
  assert.equal((await jobs(f,id,'prepare')).filter(job=>job.state==='queued').length,0);assert.equal((await f.read(id)).intake.generation,current.intake.generation);
 });
 

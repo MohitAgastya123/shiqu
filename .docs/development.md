@@ -8,6 +8,7 @@
 - [本地检查与桌面开发](#本地检查与桌面开发)
 - [故事生成机制](#故事生成机制)
 - [故事创建、编辑与队列流程图](story-creation-editing-queue.md)
+- [故事生成状态机](story-generation-state-machine.md)
 - [图片请求与展示](#图片请求与展示)
 
 ## 本地启动
@@ -154,3 +155,13 @@ Codex/OpenAI主题匹配独立使用gpt-6-luna/low；Gemini仍用自身文本模
 `0010_book_image_references.sql`新增owner/book唯一选择；API从服务器故事记录推导归属，不接受客户端book或媒体URL。`GET/POST reader/library/:id/reference`返回`reference:{storyId,page,token}|null`；设星传`{page,starred:true}`，取消带当前token。每次设星新token防止迟到取消的ABA；删除来源故事清选择。源图片严格从已拥有生成故事或已发布本地故事导出，读写受可见性及图片URL条件保护。快照按内容哈希保存，用户/书级目录隔离，校验类型/尺寸/12MB及哈希。
 
 coordinator先解析实际参考，legacy advance调用同一解析器；将书级快照复制到目标故事不可变artifact后交给provider，保留严格同namespace校验。三个provider允许第一幅附件，星级优先、无星本篇首图fallback。生图派发时读取选择，旧调用字节固定；不把可变星标加入job版本，已有图片及成功待发布回执保持，只有后续尝试使用新选择。坏快照在付费前失败，用户可取消或重选。旧D1导入豁免本地0010，由openDatabase创建空表。
+
+## 状态机恢复协议
+
+[故事生成状态机](story-generation-state-machine.md)是正式行为契约。重选以不可见的reselection草稿查找；显式选择另一篇后，以统一家族epoch／内容基版CAS提交，旧结果保留历史。取消只读刷新当前家族，不用打开时快照回滚。普通修订与替换都在提交SQL中检查未被替代、未删除；提交回执不重新激活历史。
+
+`reader_faults`独立于Document保存故障实例，`reader_commands`持久保存用户命令与结果。`POST sessions/:id/recover`要求`{requestId,faultId}`；`production-control`要求`{requestId,action}`，人工审核放行同样传故障身份。命令受理、故障领取与任务重排通过同一个SQLite事务中的触发器完成；重放只读已有回执。普通再次失败产生新实例并接替旧实例，只有新授权可恢复。其他非依赖故障不阻止已授权的局部恢复。旧`production/advance`的`retry:true`返回400；普通轮询和需求心跳不能恢复故障。
+
+图片onError调用`image-health`，传当前幅号与保存地址；服务端核对所属版本、内容与文件格式结构。存储临时异常不当作失效；确认失效才撤销完成。重绘前重新检查，文件恢复则复用；发布失败只重试保存，如果付费结果也失效，要求新的明确重绘。首幅失效保留其他图片及在途成果，只阻止新依赖调用。
+
+0012建立故障／命令表，0013补全状态转换，0014在开库事务中迁移含显示名的旧任务身份及其依赖、故障、回执，不调用模型。保留已应用迁移，禁止编辑已部署迁移代替增量升级。升级前停服并备份；数据库升级后降级必须恢复匹配备份，不能只切回旧二进制。完整证据见[验收记录](tests/test-story-generation-state-machine.md)。

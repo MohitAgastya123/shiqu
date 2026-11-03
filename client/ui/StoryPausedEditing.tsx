@@ -13,7 +13,7 @@ export default function StoryPausedEditing({editor,onReselect,...props}:Props){
  const changed=!!editor.impact?.changed,locked=busy||controlBusy||editor.busy;
  const stages=changed&&editor.base?revisionDraftSteps(editor.base,editor.changes):generationProgress(session,Date.now()).steps.map(step=>step.id==='source'?{...step,detail:`画风：${getArtStyle(session.selection.artStyle).label}`}:step);
  const edit=(tab:Parameters<typeof editor.open>[0])=>{if(!locked)editor.open(tab);};
- return <StoryGenerationStatus {...props} controlBusy={locked} stages={stages} navigation={{...props.navigation,source:props.navigation?.source?{...props.navigation.source,disabled:props.navigation.source.disabled||locked}:undefined,reselect:{onClick:onReselect,disabled:locked},reselecting:props.navigation?.reselecting}} timeline={{
+ return <StoryGenerationStatus {...props} controlBusy={locked} stages={stages} navigation={{...props.navigation,source:props.navigation?.source?{...props.navigation.source,disabled:props.navigation.source.disabled||locked}:undefined,reselect:{label:'替换选题',onClick:onReselect,disabled:locked},reselecting:props.navigation?.reselecting}} timeline={{
   links:{source:[{label:'制作要求',onClick:()=>edit('requirements')},{label:'验收要求',onClick:()=>edit('acceptance')}]},
   detailActions:{source:{label:'修改画风',onClick:()=>edit('style')}},
   actions:{count:{label:'修改叙事详略',onClick:()=>edit('count')},...(session.story?{plan:{label:'修改分镜',onClick:()=>edit('script')}}:{})}

@@ -4,7 +4,7 @@ import type {StoryPublication} from './story-publication';
 import {acceptancePromptSchema} from './reader-acceptance.ts';
 import type {PromptRecord} from './reader-prompt-records.ts';
 import {effectiveIntakePhase,intakeSearch} from './reader-intake.ts';
-import type {StoryIntake,IntakeView} from './reader-intake.ts';
+import type {StoryIntake,IntakeView,ReselectionDraft} from './reader-intake.ts';
 import type {RevisionRecord,RevisionView} from './reader-revision.ts';
 import {revisionRedraw} from './reader-revision-images.ts';
 import type {Story} from './content';
@@ -16,6 +16,7 @@ import {storyBriefVerified} from './reader-story-brief.ts';
 import {narrativeDetailSchema} from './reader-frame-recommendation.ts';
 import type {FrameRecommendation} from './reader-frame-recommendation.ts';
 import type {ReviewCheckpoint,ReviewIssue} from './reader-review.ts';
+import type {FaultView,RecoveryReceiptView} from './reader-recovery.ts';
 export {readerBooks} from './reader-books.ts';
 // A reader's display name stays separate from the selected source and AI-authored script.
 export const displayTitleSchema=z.string().trim().min(1,'请输入故事名。').max(40,'故事名最多 40 字。').regex(/^[^\r\n]+$/,'故事名请写在一行内。');
@@ -36,14 +37,14 @@ export type StoryboardOutline=z.infer<typeof storyboardOutlineSchema>;
 export type Storyboard={outline:StoryboardOutline;pages:Plan['pages']};
 export const storyboardBatchSchema=(count:number)=>z.object({pages:planSchema.shape.pages.length(count)});
 export type GeneratedStory=Story&{generated:true;original?:OriginalSource;sourceReference:string;voiceRequested:boolean;artStyleLabel:string;productionPrompt:string;generationModels?:{step:string;model:string}[]};
-export type Document={publication?:StoryPublication;intake?:StoryIntake;revision?:RevisionRecord;plan:Plan|null;draft?:StoryDraft;reflectionCandidates?:ReflectionCandidates;storyboard?:Storyboard;visualReview?:ReviewCheckpoint;original?:OriginalSource;frameRecommendation?:FrameRecommendation;frameCountConfirmed?:boolean;images:string[];audio:string[];usage:{step:string;model:string;requestId:string|null;usage:unknown;reasoningEffort?:string;promptRecord?:PromptRecord;originId?:string}[]};
+export type Document={reselection?:ReselectionDraft;publication?:StoryPublication;intake?:StoryIntake;revision?:RevisionRecord;plan:Plan|null;draft?:StoryDraft;reflectionCandidates?:ReflectionCandidates;storyboard?:Storyboard;visualReview?:ReviewCheckpoint;original?:OriginalSource;frameRecommendation?:FrameRecommendation;frameCountConfirmed?:boolean;images:string[];audio:string[];usage:{step:string;model:string;requestId:string|null;usage:unknown;reasoningEffort?:string;promptRecord?:PromptRecord;originId?:string}[]};
 export type GenerationMode='reader'|'background';
 export type GenerationControl='active'|'paused'|'stopped';
 export type ProductionAction='background'|'reader'|'pause'|'stop'|'resume';
 export type SessionRow={id:string;user_id:string;selection:string;document:string;generation_mode?:GenerationMode;generation_control?:GenerationControl;state:'idle'|'running'|'failed'|'completed';error:string|null;step_key:string|null;step_attempts:number;lock_token:string|null;lock_until:number;page:number;saved:number;last_read_at:string|null;created_at:string;updated_at:string};
 export type Step={kind:'discover'|'recommend'|'plan'|'source'|'reflection'|'review'|'repair'|'image'|'audio';page:number;key:string};
 export type GenerationProgress={sourceReady:boolean;frameCountConfirmed:boolean;frameCount:number|null;storyboardFrames?:number;storyboardBatch?:{first:number;last:number};reviewStatus?:ReviewCheckpoint['status'];reviewPhase?:'frames'|'full';reviewRound?:number;repairCompleted?:number;repairTotal?:number;reviewAudits?:number;repairBatches?:number;repairPasses?:number;reviewStopReason?:'limit'|'unchanged'|'replan'|'requirements';reviewOverridden?:boolean;phase:Step['kind']|'frame-count'|'story-choice'|'production-confirmation'|'completed';startedAt:number|null;attempt:number};
-export type SessionView={superseded?:boolean;intake?:IntakeView;revision?:RevisionView;reviewIssues?:ReviewIssue[];id:string;selection:Selection;generationMode?:GenerationMode;generationControl?:GenerationControl;state:SessionRow['state'];productionState?:'running'|'queued'|'paused';generationProgress?:GenerationProgress;error:string|null;retryAllowed:boolean;retryAt:number|null;retryStage?:'source'|'publication'|'review'|'redraw';stage:string;frameRecommendation:FrameRecommendation|null;awaitingFrameCount:boolean;ready:number;story:GeneratedStory|null;page:number;saved:boolean;lastReadAt:string|null;createdAt:string};
+export type SessionView={reselection?:ReselectionDraft;faults?:FaultView[];recoveryReceipt?:RecoveryReceiptView;superseded?:boolean;intake?:IntakeView;revision?:RevisionView;reviewIssues?:ReviewIssue[];id:string;selection:Selection;generationMode?:GenerationMode;generationControl?:GenerationControl;state:SessionRow['state'];productionState?:'running'|'queued'|'paused';generationProgress?:GenerationProgress;error:string|null;retryAllowed:boolean;retryAt:number|null;retryStage?:'source'|'prepare'|'generation'|'publication'|'review'|'redraw';stage:string;frameRecommendation:FrameRecommendation|null;awaitingFrameCount:boolean;ready:number;story:GeneratedStory|null;page:number;saved:boolean;lastReadAt:string|null;createdAt:string};
 export function reviewPassed(doc:Document){return !doc.visualReview||doc.visualReview.status==='passed';}
 // Pending automatic drafts enter the count gate; old passed/blocked records keep their saved meaning.
 export function reviewPhase(review:ReviewCheckpoint,selection:Selection):'frames'|'full'{return selection.length==='auto'?(review.phase||(review.status==='pending'?'frames':'full')):'full';}
@@ -51,6 +52,7 @@ export function reviewPhase(review:ReviewCheckpoint,selection:Selection):'frames
 export function blockedIssues(review:ReviewCheckpoint){return review.stopReason==='unchanged'?review.issues.filter(issue=>!review.repaired.includes(issue.page)):review.issues;}
 export function emptyDocument():Document{return {plan:null,images:[],audio:[],usage:[]};}
 export function nextStep(doc:Document,selection:Selection,through:number):Step|null{
+ if(doc.reselection&&doc.intake?.phase!=='discovering')return null;
  if(doc.intake?.phase==='discovering')return {kind:'discover',page:0,key:'discover:'+doc.intake.generation};
  if(doc.intake&&['choosing','confirming'].includes(doc.intake.phase))return null;
  if(doc.storyboard&&!doc.original)return {kind:'source',page:0,key:'source'};
@@ -96,7 +98,7 @@ export function view(row:SessionRow):SessionView{
  const search=doc.intake?intakeSearch(doc.intake):undefined;
  const intake=doc.intake?{phase:intakePhase!,generation:doc.intake.generation,batches:doc.intake.batches,selected:doc.intake.selected,manualArt:doc.intake.manualArt,draft:doc.intake.draft,search:{state:search!.state,error:search!.error}}:undefined;
  const redraw=doc.revision&&p&&reviewPassed(doc)?revisionRedraw(doc.revision,selection,p,doc.images):undefined;
- return {...(doc.intake?{intake:intake as IntakeView}:{}),...(doc.revision?{revision:{parentId:doc.revision.parentId,rootId:doc.revision.rootId,number:doc.revision.number,...(redraw?{redraw}:{})}}:{}),...(doc.visualReview?.status==='blocked'?{reviewIssues:blockedIssues(doc.visualReview)}:{}),id:row.id,selection,generationMode:row.generation_mode||'reader',generationControl:row.generation_control||'active',state:row.state,generationProgress,error:row.error,retryAllowed:!!step&&!['replan','requirements'].includes(doc.visualReview?.stopReason||''),retryAt,...(doc.visualReview?.status==='blocked'?{retryStage:'review' as const}:step?.kind==='source'||row.state==='failed'&&!doc.original&&row.error?.startsWith('原文未能核对')?{retryStage:'source' as const}:{}),stage,frameRecommendation:doc.frameRecommendation||null,awaitingFrameCount:waiting,ready:doc.images.filter(Boolean).length,story,page:row.page,saved:!!row.saved,lastReadAt:row.last_read_at||null,createdAt:row.created_at};
+ return {...(doc.reselection?{reselection:doc.reselection}:{}),...(doc.intake?{intake:intake as IntakeView}:{}),...(doc.revision?{revision:{parentId:doc.revision.parentId,rootId:doc.revision.rootId,number:doc.revision.number,...(redraw?{redraw}:{})}}:{}),...(doc.visualReview?.status==='blocked'?{reviewIssues:blockedIssues(doc.visualReview)}:{}),id:row.id,selection,generationMode:row.generation_mode||'reader',generationControl:row.generation_control||'active',state:row.state,generationProgress,error:row.error,retryAllowed:!!step&&!['replan','requirements'].includes(doc.visualReview?.stopReason||''),retryAt,...(doc.visualReview?.status==='blocked'?{retryStage:'review' as const}:step?.kind==='source'||row.state==='failed'&&!doc.original&&row.error?.startsWith('原文未能核对')?{retryStage:'source' as const}:{}),stage,frameRecommendation:doc.frameRecommendation||null,awaitingFrameCount:waiting,ready:doc.images.filter(Boolean).length,story,page:row.page,saved:!!row.saved,lastReadAt:row.last_read_at||null,createdAt:row.created_at};
 }
 // Saved documents are not schema-checked, so rendering is the proof that a row can be used at all.
 export function readableStory(row:SessionRow){try{view(row);return true;}catch{return false;}}

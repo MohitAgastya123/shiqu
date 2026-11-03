@@ -57,7 +57,7 @@ test('unknown/conflicting criteria stop immediately with evidence, no fabricated
  assert.equal(saved.generationProgress.reviewStopReason,'requirements');assert.equal(saved.retryAllowed,false);assert.match(saved.error,/无法从文字分镜判断/);
  assert.equal(f.control.repairs.length,0);assert.equal(f.control.calls.length,0);assert.equal(f.control.reviews.length,1);
  assert.equal((await f.json(`sessions/${id}/prompts`)).results[0].status,'unknown');
- assert.equal((await f.request(`sessions/${id}/production`,'POST',{viewerId:crypto.randomUUID(),page:0,retry:true})).status,409);
+ assert.equal((await f.request(`sessions/${id}/recover`,'POST',{requestId:crypto.randomUUID(),faultId:(await f.read(id)).faults[0].id})).status,409);
 });
 test('historical rows have no invented capture history, and previews do not commission inference',async t=>{
  const f=await productionFixture(t),id=await f.createLegacyReader(3);f.app.stopGeneration();

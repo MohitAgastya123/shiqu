@@ -36,43 +36,35 @@ test('a full buffer keeps its viewer alive, page changes update demand, and leav
  assert.equal(result,'');assert.ok(reads>5);assert.deepEqual(calls.filter(c=>c.method==='POST').map(c=>[c.time,c.body.page]),[[0,0],[3000,1]]);
  assert.deepEqual(calls.at(-1).body,{viewerId:'viewer-a'});assert.equal(calls.at(-1).method,'DELETE');
 });
-test('persistent failures have two automatic retries',async()=>{
- let time=0,attempts=0;const calls=[],retries=new Map();
- const result=await runQueuedStoryGeneration({sessionId:'story',viewerId:'viewer',page:()=>0,retries,isActive:()=>true,onSession:()=>{},now:()=>time,sleep:async()=>{time+=1000;},
-  request:async(path,method,body)=>{calls.push({method,body});if(method==='DELETE')return base;if(method==='POST')attempts++;return {...base,state:'failed',error:'controlled failure'};},
- });
- assert.equal(result,'controlled failure');assert.equal(attempts,3);assert.equal(retries.get('story:drawing 8'),2);assert.equal(calls.at(-1).method,'DELETE');
+test('ordinary failure observation never automatically retries paid work',async()=>{
+ const calls=[];const result=await runQueuedStoryGeneration({sessionId:'story',viewerId:'viewer',page:()=>0,retries:new Map(),isActive:()=>true,onSession:()=>{},sleep:async()=>assert.fail('Failure stops polling'),request:async(path,method)=>{calls.push([path,method]);return {...base,state:'failed',error:'controlled failure'};}});
+ assert.equal(result,'controlled failure');assert.deepEqual(calls,[['reader/sessions/story',undefined]]);
 });
-test('quality review blockage stops automatic retries; explicit continue is dispatched exactly once',async()=>{
+test('review continuation sends one explicit immutable fault authorization',async()=>{
  for(const initialRetry of [false,true]){
-  const calls=[];const blocked={...base,state:'failed',retryStage:'review',error:'分镜复核仍有问题。'};
-  const result=await runQueuedStoryGeneration({sessionId:'story',viewerId:'viewer',initialRetry,page:()=>0,retries:new Map(),isActive:()=>true,onSession:()=>{},sleep:async()=>{},request:async(path,method,body)=>{calls.push({method,body});return blocked;}});
-  assert.equal(result,blocked.error);assert.deepEqual(calls.filter(c=>c.method==='POST').map(c=>c.body.retry),[initialRetry]);assert.equal(calls.at(-1).method,'DELETE');
+  const calls=[],blocked={...base,state:'failed',retryStage:'review',error:'分镜复核仍有问题。',faults:[{id:'F1',retryAllowed:true}]};
+  const result=await runQueuedStoryGeneration({sessionId:'story',viewerId:'viewer',initialRetry,page:()=>0,retries:new Map(),isActive:()=>true,onSession:()=>{},sleep:async()=>{},request:async(path,method,body)=>{calls.push({path,method,body});return blocked;}});
+  assert.equal(result,blocked.error);const posts=calls.filter(c=>c.method==='POST');assert.equal(posts.length,initialRetry?1:0);if(initialRetry){assert.ok(posts[0].path.endsWith('/recover'));assert.equal(posts[0].body.faultId,'F1');assert.ok(posts[0].body.requestId);}
  }
 });
 
-test('accepted but lost retry responses re-read progress before spending the next retry',async()=>{
- let time=0,retryPosts=0,reads=0;const retries=new Map(),calls=[];
- const result=await runQueuedStoryGeneration({sessionId:'story',viewerId:'viewer',page:()=>0,retries,isActive:()=>true,onSession:()=>{},now:()=>time,sleep:async()=>{time+=1000;},
-  request:async(path,method,body)=>{
-   calls.push({method,body});if(method==='DELETE')return base;
-   if(method==='POST'&&body.retry){retryPosts++;throw Error('response lost after acceptance');}
-   if(!method){reads++;if(retryPosts===2)return {...base,state:'completed'};}
-   return {...base,state:'failed',error:'stale failure'};
-  },
- });
- assert.equal(result,'');assert.equal(retryPosts,2);assert.equal(reads,2);assert.equal(retries.get('story:drawing 8'),2);assert.equal(calls.at(-1).method,'DELETE');
+test('accepted but lost recovery responses replay the same grant after a new failure',async()=>{
+ const calls=[],command={requestId:crypto.randomUUID(),faultId:'F1'};let posts=0;
+ const result=await runQueuedStoryGeneration({sessionId:'story',viewerId:'viewer',initialRecovery:command,page:()=>0,retries:new Map(),isActive:()=>true,onSession:()=>{},sleep:async()=>{},request:async(path,method,body)=>{
+  calls.push({path,method,body});if(path.endsWith('/recover')){if(++posts===1)throw Error('lost reply');return {...base,state:'failed',error:'F2',recoveryReceipt:{status:'failed'},faults:[{id:'F2',retryAllowed:true}]};}return {...base,state:'failed',faults:[{id:'F2',retryAllowed:true}]};
+ }});
+ assert.equal(result,'F2');assert.equal(posts,2);assert.deepEqual(calls.filter(c=>c.method==='POST').map(c=>c.body),[command,command]);
 });
 test('connection failure after starting demand still sends leave; lost leave falls back to server lease expiry',async()=>{
  let calls=0,sleeps=0;
  const message=await runQueuedStoryGeneration({sessionId:'story',viewerId:'viewer',page:()=>0,retries:new Map(),isActive:()=>true,onSession:()=>{},sleep:async()=>{sleeps++;},request:async()=>{calls++;throw Error('offline');}});
- assert.equal(message,'offline');assert.equal(calls,4);assert.equal(sleeps,2);
+ assert.equal(message,'offline');assert.equal(calls,3);assert.equal(sleeps,2);
 });
 
 test('awaiting count confirmation releases demand without issuing storyboard or image requests',async()=>{
  const calls=[];
  const result=await runQueuedStoryGeneration({sessionId:'story',viewerId:'viewer',page:()=>0,retries:new Map(),isActive:()=>true,onSession:()=>{},sleep:async()=>assert.fail('Do not poll the confirmation gate'),request:async(path,method,body)=>{calls.push({method,body});return {...base,awaitingFrameCount:true};}});
- assert.equal(result,'');assert.deepEqual(calls.map(c=>c.method),['POST','DELETE']);
+ assert.equal(result,'');assert.deepEqual(calls.map(c=>c.method),[undefined]);
 });
 
 test('inspecting stopped and failed checkpoints only polls snapshots and reflects external changes',async()=>{
@@ -97,18 +89,10 @@ test('inspecting a count confirmation releases the observation so the user can c
  assert.equal(await observeStoryGeneration({sessionId:'story',isActive:()=>true,onSession:()=>{},request:async()=>{reads++;return {...base,awaitingFrameCount:true};},sleep:async()=>assert.fail('Do not keep the confirmation action busy')}),'');
  assert.equal(reads,1);
 });
-test('explicit retry sets retry on the first dispatch and never replays an uncertain retry request',async()=>{
- const calls=[];let first=true;
- const result=await runQueuedStoryGeneration({sessionId:'story',viewerId:'viewer',initialRetry:true,page:()=>0,retries:new Map(),isActive:()=>true,onSession:()=>{},sleep:async()=>{},
-  request:async(path,method,body)=>{
-   calls.push({method,body});if(method==='DELETE')return base;
-   if(method==='POST'&&first){first=false;throw Error('lost accepted retry response');}
-   if(!method)return {...base,state:'running'};
-   return {...base,state:'completed'};
-  },
- });
- assert.equal(result,'');assert.deepEqual(calls.filter(c=>c.method==='POST').map(c=>c.body.retry),[true,false]);
- assert.equal(calls.at(-1).method,'DELETE');
+test('explicit recovery retains its request ID across transport loss and reads progress',async()=>{
+ const calls=[];let posts=0;
+ const result=await runQueuedStoryGeneration({sessionId:'story',viewerId:'viewer',initialRetry:true,page:()=>0,retries:new Map(),isActive:()=>true,onSession:()=>{},sleep:async()=>{},request:async(path,method,body)=>{calls.push({path,method,body});if(path.endsWith('/recover')){if(++posts===1)throw Error('lost reply');return {...base,state:'completed'};}return {...base,state:'failed',faults:[{id:'F1',retryAllowed:true}]};}});
+ assert.equal(result,'');const recoveries=calls.filter(c=>c.path.endsWith('/recover'));assert.equal(recoveries.length,2);assert.deepEqual(recoveries[0].body,recoveries[1].body);
 });
 
 for(const fields of [{generationControl:'paused'},{generationControl:'stopped'},{generationMode:'background'}])test(`viewer loop stops dispatch and automatic retries for ${JSON.stringify(fields)}`,async()=>{
@@ -116,7 +100,7 @@ for(const fields of [{generationControl:'paused'},{generationControl:'stopped'},
  const result=await runQueuedStoryGeneration({sessionId:'story',viewerId:'viewer',page:()=>0,retries:new Map(),isActive:()=>true,onSession:()=>{},sleep:async()=>assert.fail('No demand renewal or automatic retry'),
   request:async(path,method,body)=>{calls.push({method,body});return {...base,state:'failed',...fields};},
  });
- assert.equal(result,'');assert.deepEqual(calls.map(c=>c.method),['POST','DELETE']);
+ assert.equal(result,'');assert.deepEqual(calls.map(c=>c.method),[undefined]);
 });
 
 test('mode changes and manual resume preserve failed stories as observations until explicit Retry',async()=>{
@@ -171,13 +155,11 @@ test('a failed or hung priority report never interrupts status updates or exit',
   assert.equal(result,'');assert.equal(seen,4);assert.equal(deleted,1);
  }
 });
-test('automatic retry stops on a lost image, and only an explicit retry goes through',async()=>{
- const lost={...base,state:'failed',retryStage:'redraw',retryAllowed:true,error:'这幅图片的文件已丢失或损坏。'};
+test('a lost image is read only until an explicit scoped recovery',async()=>{
+ const lost={...base,state:'failed',retryStage:'redraw',error:'这幅图片的文件已丢失或损坏。',faults:[{id:'image-loss',retryAllowed:true}]};
  for(const initialRetry of [false,true]){
-  const posts=[];let reads=0;
-  const result=await runQueuedStoryGeneration({sessionId:'story',viewerId:'viewer',page:()=>0,retries:new Map(),isActive:()=>true,onSession:()=>{},sleep:async()=>{},initialRetry,now:()=>0,
-   request:async(path,method,data)=>{if(method==='POST'){posts.push(data.retry);return initialRetry&&posts.length===1?{...lost,state:'running',retryStage:undefined}:lost;}reads++;return lost;}});
-  assert.match(result,/已丢失/);assert.deepEqual(posts,initialRetry?[true]:[false],'A later failure is never retried automatically');
+  const posts=[];const result=await runQueuedStoryGeneration({sessionId:'story',viewerId:'viewer',page:()=>0,retries:new Map(),isActive:()=>true,onSession:()=>{},sleep:async()=>{},initialRetry,request:async(path,method,data)=>{if(method==='POST')posts.push([path,data]);return lost;}});
+  assert.match(result,/已丢失/);assert.equal(posts.length,initialRetry?1:0);if(initialRetry){assert.ok(posts[0][0].endsWith('/recover'));assert.equal(posts[0][1].faultId,'image-loss');}
  }
 });
 

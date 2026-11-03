@@ -25,7 +25,7 @@ for(const provider of ['codex','gemini'])test(`${provider}: structural omissions
  assert.equal(stopped.reviewIssues[0].requiresReplan,true);assert.match(stopped.error,/重新编排/);
  assert.equal(before.visualReview.reports.length,1);assert.equal(before.visualReview.repairs,0);
  assert.equal(f.control.repairs.length,0);assert.equal(f.control.calls.length,0);
- assert.equal((await f.request(`sessions/${id}/production`,'POST',{viewerId:crypto.randomUUID(),page:0,retry:true})).status,409);
+ assert.equal((await f.request(`sessions/${id}/recover`,'POST',{requestId:crypto.randomUUID(),faultId:(await f.read(id)).faults[0].id})).status,409);
  assert.deepEqual(await document(f,id),before);
  await f.restart();await f.app.services.production.tick();
  assert.equal((await f.read(id)).generationProgress.reviewStopReason,'replan');

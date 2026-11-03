@@ -55,12 +55,27 @@ export async function productionFixture(t,provider='codex',variables={}){
  async function stop(){control.hold=false;for(const call of control.calls)call.resolve();await app.close();}
  const coordinators=[];
  t?.after(async()=>{app.stopGeneration();for(const coordinator of coordinators)coordinator.stop();control.hold=false;for(const call of control.calls)call.resolve();for(const coordinator of coordinators)await coordinator.close();await stop();await rm(root,{recursive:true,force:true});});
- function request(suffix,method='GET',body,headers={}){return app.handle(new Request('http://localhost/api/reader/'+suffix,{method,headers:{'Content-Type':'application/json',...headers},body:body===undefined?undefined:JSON.stringify(body)}));}
+ const overrides=new Map();
+ async function request(suffix,method='GET',body,headers={}){
+  // Helpers model explicit user commands; raw transport-contract tests can call app.handle directly.
+  if(method==='POST'&&suffix.endsWith('/production-control')&&body?.action&&!body.requestId)body={...body,requestId:crypto.randomUUID()};
+  if(method==='POST'&&suffix.endsWith('/review-override')&&!body?.requestId){
+   const id=suffix.split('/')[1];
+   if(!overrides.has(id)){const snapshot=await read(id),fault=snapshot.faults?.find(f=>f.stage==='review'&&f.state==='pending');overrides.set(id,{requestId:crypto.randomUUID(),faultId:fault?.id||'no-current-review'});}
+   body={...body,...overrides.get(id)};
+  }
+  return app.handle(new Request('http://localhost/api/reader/'+suffix,{method,headers:{'Content-Type':'application/json',...headers},body:body===undefined?undefined:JSON.stringify(body)}));
+ }
  async function json(suffix,method='GET',body){const response=await request(suffix,method,body);assert.ok(response.ok,`${response.status}: ${suffix}`);return response.json();}
  async function create(length=8,overrides={}){const id=crypto.randomUUID();await json('sessions','POST',{requestId:id,selection:{...selection,length,...overrides}});return id;}
  // Deliberately model persisted clients from before whole-story generation became the default.
  async function createLegacyReader(length=8,overrides={}){const id=await create(length,overrides);await app.services.database.prepare("UPDATE reader_sessions SET generation_mode='reader' WHERE id=?").bind(id).run();return id;}
- const demand=(id,viewerId=crypto.randomUUID(),page=0,retry=false)=>json(`sessions/${id}/production`,'POST',{viewerId,page,retry});
+ const demand=async(id,viewerId=crypto.randomUUID(),page=0,retry=false)=>{
+  const session=await json(`sessions/${id}/production`,'POST',{viewerId,page,retry:false});
+  if(!retry||session.generationControl!=='active'||session.superseded)return session;
+  const fault=session.faults?.find(f=>f.retryAllowed);if(!fault)return session;
+  return json(`sessions/${id}/recover`,'POST',{requestId:crypto.randomUUID(),faultId:fault.id});
+ };
  const read=id=>json(`sessions/${id}`);
  const leave=(id,viewerId)=>json(`sessions/${id}/production`,'DELETE',{viewerId});
  return {root,dataDirectory,options,control,media,generation,request,json,create,createLegacyReader,demand,read,leave,stop,coordinators,get app(){return app;},async restart(){await stop();app=createApplication(options);}};

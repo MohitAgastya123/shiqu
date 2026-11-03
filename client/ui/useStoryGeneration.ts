@@ -8,6 +8,7 @@ import {observeOnlyGeneration,observeStoryGeneration,runQueuedStoryGeneration} f
 import type {IntakeCommand} from '@/lib/reader-intake';
 import {latestStoryVersions} from '@/lib/reader-versions';
 import type {GeneratedStory,Selection,SessionView,ProductionAction} from '@/lib/reader-model';
+import type {RecoveryRequest} from '@/lib/reader-recovery';
 type Callbacks={onStory:(story:GeneratedStory,initialPage?:number,saved?:boolean)=>void;onProgress:(rows:{storyId:string;page:number;saved:number;updatedAt?:string|null}[])=>void};
 export function useStoryGeneration(page:number,callbacks:Callbacks,watchShelf=false){
  const cb=useRef(callbacks);cb.current=callbacks;
@@ -22,6 +23,10 @@ export function useStoryGeneration(page:number,callbacks:Callbacks,watchShelf=fa
  const [controlBusy,setControlBusy]=useState(''),[controlError,setControlError]=useState('');
  const controlLock=useRef(false);
  const generationMode=useRef<'observe'|'generate'>('observe'),retryRequested=useRef(false);
+ const passive=useRef(false),recoveryCommand=useRef<RecoveryRequest|null>(null);
+ const controlRequest=useRef<{signature:string;body:{requestId:string;action:ProductionAction}}|null>(null),overrideRequest=useRef<{signature:string;body:RecoveryRequest}|null>(null);
+ const imageChecks=useRef(new Map<string,Promise<SessionView>>());
+ const recoveries=useRef(new Map<string,RecoveryRequest>()),recovering=useRef(new Set<string>());
  function collect(s:SessionView,submitted=false){
   // Only the list response or a new submission may add members; historical reads only update known cards.
   if(removed.current.has(s.id)||!submitted&&!librarySessions.current.some(row=>row.id===s.id))return;
@@ -29,6 +34,7 @@ export function useStoryGeneration(page:number,callbacks:Callbacks,watchShelf=fa
  }
  useEffect(()=>{live.current=true;request('reader/status').then(s=>{if(live.current)setConnected(s.configured);}).catch(()=>{});refreshLibrary().catch(()=>{}).finally(()=>{if(live.current)setLibraryLoading(false);});return()=>{live.current=false;libraryRead.current++;id.current='';};},[]);
  async function start(selection:Selection,intake=false){
+  passive.current=false;
   const signature=JSON.stringify([selection,intake]);
   if(creation.current?.signature!==signature)creation.current={signature,id:randomId()};
   const requestId=creation.current.id;
@@ -39,11 +45,41 @@ export function useStoryGeneration(page:number,callbacks:Callbacks,watchShelf=fa
   try{history.replaceState(null,'','/read?id='+s.id);}catch{}
   setWake(v=>v+1);return s;
  }
- async function resume(sessionId:string,initialPage?:number,retry=false,submitted=false){id.current=sessionId;retries.current=new Map();setError('');const s:SessionView=await request('reader/sessions/'+sessionId);if(id.current!==sessionId||removed.current.has(sessionId))return;generationMode.current=(!s.generationControl||s.generationControl==='active')&&(retry||s.generationMode!=='background'&&s.story?.pages[0]?.image&&s.state!=='failed')?'generate':'observe';retryRequested.current=retry;setBusy(retry);setError(!retry&&s.state==='failed'?(s.error||'生成失败，请重试继续。'):'');setActive(s);collect(s,submitted);history.replaceState(null,'','/read?id='+s.id);cb.current.onProgress([{storyId:s.id,page:s.page,saved:s.saved?1:0,updatedAt:s.lastReadAt||s.createdAt}]);if(s.story?.pages[0]?.image)cb.current.onStory(s.story,initialPage??s.page,s.saved);setWake(v=>v+1);}
+ function recoveryFor(s:SessionView,faultId?:string){
+  const fault=s.faults?.find(f=>f.retryAllowed&&(!faultId||f.id===faultId));
+  if(!fault)throw Error(s.error||'这项问题已更新，请刷新后再操作。');
+  let command=recoveries.current.get(fault.id);if(!command){command={requestId:randomId(),faultId:fault.id};recoveries.current.set(fault.id,command);}
+  recoveryCommand.current=command;return command;
+ }
+ function adopt(s:SessionView,readOnly=false,initialPage?:number){
+  id.current=s.id;passive.current=readOnly;generationMode.current=readOnly||observeOnlyGeneration(s)?'observe':'generate';retryRequested.current=false;
+  setActive(s);collect(s,true);setBusy(false);setError(s.state==='failed'?s.error||'生成失败，请选择对应问题恢复。':'');
+  try{history.replaceState(null,'','/read?id='+s.id);}catch{}
+  cb.current.onProgress([{storyId:s.id,page:s.page,saved:s.saved?1:0,updatedAt:s.lastReadAt||s.createdAt}]);
+  if(s.story?.pages[0]?.image)cb.current.onStory(s.story,initialPage,s.saved);setWake(v=>v+1);
+ }
+ async function resume(sessionId:string,initialPage?:number,retry=false,submitted=false,faultId?:string){
+  id.current=sessionId;passive.current=false;retries.current=new Map();setError('');
+  const s:SessionView=await request('reader/sessions/'+sessionId);if(id.current!==sessionId||removed.current.has(sessionId))return;
+  if(retry)recoveryFor(s,faultId);
+  generationMode.current=retry||!observeOnlyGeneration(s)?'generate':'observe';retryRequested.current=retry;
+  setBusy(retry);setError(!retry&&s.state==='failed'?s.error||'生成失败，请选择对应问题恢复。':'');setActive(s);collect(s,submitted);
+  history.replaceState(null,'','/read?id='+s.id);cb.current.onProgress([{storyId:s.id,page:s.page,saved:s.saved?1:0,updatedAt:s.lastReadAt||s.createdAt}]);
+  if(s.story?.pages[0]?.image)cb.current.onStory(s.story,initialPage??s.page,s.saved);setWake(v=>v+1);
+ }
+ async function checkImage(sessionId:string,page:number,image:string){
+  const key=JSON.stringify([sessionId,page,image]),existing=imageChecks.current.get(key);if(existing)return existing;
+  const operation=request(`reader/sessions/${sessionId}/image-health`,'POST',{page,image}).then((s:SessionView)=>{
+   collect(s);if(id.current===sessionId){generationMode.current='observe';setActive(s);setError(s.state==='failed'?s.error||'图片需要处理。':'');if(s.story)cb.current.onStory(s.story);setWake(v=>v+1);}return s;
+  }).finally(()=>imageChecks.current.delete(key));
+  imageChecks.current.set(key,operation);return operation;
+ }
+
  const setupLock=useRef(false),setupRequest=useRef<{signature:string;body:IntakeCommand&{requestId:string;generation:number}}|null>(null);
  const [setupBusy,setSetupBusy]=useState(false);
  async function setup(command:IntakeCommand){
   if(!active?.intake||setupLock.current)return;
+  passive.current=false;
   const sessionId=active.id,signature=JSON.stringify([sessionId,command]);
   if(setupRequest.current?.signature!==signature)setupRequest.current={signature,body:{...command,requestId:randomId(),generation:active.intake.generation}};
   setupLock.current=true;setSetupBusy(true);
@@ -58,7 +94,7 @@ export function useStoryGeneration(page:number,callbacks:Callbacks,watchShelf=fa
   }
   finally{setupLock.current=false;setSetupBusy(false);}
  }
- async function retrySession(sessionId:string){await resume(sessionId,undefined,true);}
+ async function retrySession(sessionId:string,faultId?:string){const s:SessionView=await request('reader/sessions/'+sessionId);await recoverFault(s,faultId);}
  async function renameTitle(sessionId:string,title:string){
   const s:SessionView=await request(`reader/sessions/${sessionId}/title`,'POST',{title});
   collect(s);
@@ -95,20 +131,26 @@ export function useStoryGeneration(page:number,callbacks:Callbacks,watchShelf=fa
  }
  async function control(sessionId:string,action:ProductionAction){
   if(controlLock.current)return;controlLock.current=true;setControlBusy(sessionId);setControlError('');
+  const signature=JSON.stringify([sessionId,action]);if(controlRequest.current?.signature!==signature)controlRequest.current={signature,body:{requestId:randomId(),action}};
   try{
-   const s:SessionView=await request('reader/sessions/'+sessionId+'/production-control','POST',{action});
+   const s:SessionView=await request('reader/sessions/'+sessionId+'/production-control','POST',controlRequest.current.body);
+   controlRequest.current=null;passive.current=false;
    collect(s);
    if(id.current===sessionId){
     generationMode.current=observeOnlyGeneration(s)?'observe':'generate';
     retryRequested.current=false;setActive(s);setError(s.state==='failed'?s.error||'生成失败，请重试继续。':'');setWake(v=>v+1);
    }
-  }catch(error){setControlError(error instanceof Error?error.message:'生成方式暂未保存，请重试。');}
+  }catch(error){if((error as {status?:number}).status!==undefined)controlRequest.current=null;setControlError(error instanceof Error?error.message:'生成方式暂未保存，请重试。');}
   finally{controlLock.current=false;setControlBusy('');}
  }
  async function drawAnyway(sessionId:string){
   if(controlLock.current)return;controlLock.current=true;setControlBusy(sessionId);setControlError('');
   try{
-   const s:SessionView=await request(`reader/sessions/${sessionId}/review-override`,'POST',{});
+   const current:SessionView=active?.id===sessionId?active:await request('reader/sessions/'+sessionId);
+   const fault=current.faults?.find(f=>f.stage==='review'&&f.state==='pending');if(!fault&&!overrideRequest.current?.signature.startsWith(JSON.stringify([sessionId]).slice(0,-1)+','))throw Error('审核问题已更新，请刷新后再处理。');
+   if(fault){const signature=JSON.stringify([sessionId,fault.id]);if(overrideRequest.current?.signature!==signature)overrideRequest.current={signature,body:{requestId:randomId(),faultId:fault.id}};}
+   const s:SessionView=await request(`reader/sessions/${sessionId}/review-override`,'POST',overrideRequest.current!.body);
+   overrideRequest.current=null;passive.current=false;
    collect(s);
    if(id.current===sessionId){setActive(s);setError(s.state==='failed'?s.error||'生成失败，请重试继续。':'');setWake(v=>v+1);}
   }catch(error){setControlError(error instanceof Error?error.message:'操作暂未保存，请重试。');}
@@ -145,7 +187,17 @@ export function useStoryGeneration(page:number,callbacks:Callbacks,watchShelf=fa
   window.addEventListener('focus',update);document.addEventListener('visibilitychange',update);
   return()=>{stopped=true;clearInterval(timer);window.removeEventListener('focus',update);document.removeEventListener('visibilitychange',update);};
  },[watchShelf,libraryLoading,active?.id]);
- function retryStep(){if(busy||pending.current&&generationMode.current!=='observe'||!active?.retryAllowed)return;generationMode.current='generate';retryRequested.current=true;retries.current=new Map();setBusy(true);setError('');setWake(v=>v+1);}
+ async function recoverFault(s:SessionView,faultId?:string){
+  const command=recoveryFor(s,faultId);if(recovering.current.has(command.faultId))return;
+  recovering.current.add(command.faultId);setError('');
+  try{
+   const next:SessionView=await request(`reader/sessions/${s.id}/recover`,'POST',command);
+   collect(next);if(id.current===s.id){passive.current=false;generationMode.current='observe';setActive(next);setWake(v=>v+1);}
+  }catch(e){if(id.current===s.id)setError(e instanceof Error?e.message:'恢复暂未受理，请重试。');}
+  finally{recovering.current.delete(command.faultId);}
+ }
+ async function retryStep(faultId?:string){if(!active?.retryAllowed)return;await recoverFault(active,faultId);}
+
  useEffect(()=>{
   const sessionId=active?.id;if(!sessionId)return;
   let cancelled=false;
@@ -161,15 +213,15 @@ export function useStoryGeneration(page:number,callbacks:Callbacks,watchShelf=fa
     collect(s);setActive(s);setBusy(!inspecting&&(generating||s.state==='failed'));setError(s.state==='failed'?(s.error||'生成失败，请重试继续。'):'');
     if(s.story?.pages[0]?.image){
      cb.current.onStory(s.story);
-     if(inspecting&&!observeOnlyGeneration(s)){generationMode.current='generate';setWake(v=>v+1);}
+     if(inspecting&&!passive.current&&!observeOnlyGeneration(s)){generationMode.current='generate';setWake(v=>v+1);}
     }
    };
-   const operation=inspecting?observeStoryGeneration({sessionId,request,isActive,onSession,focus:{viewerId:randomId(),page:()=>currentPage.current},watchChoices:true}):runQueuedStoryGeneration({sessionId,viewerId:randomId(),page:()=>currentPage.current,request,retries:retries.current,initialRetry,isActive,onSession});
+   const operation=inspecting?observeStoryGeneration({sessionId,request,isActive,onSession,focus:passive.current?undefined:{viewerId:randomId(),page:()=>currentPage.current},watchChoices:!passive.current}):runQueuedStoryGeneration({sessionId,viewerId:randomId(),page:()=>currentPage.current,request,retries:retries.current,initialRetry,initialRecovery:initialRetry?recoveryCommand.current||undefined:undefined,isActive,onSession});
    pending.current=operation;
    try{const message=await operation;if(!cancelled&&id.current===sessionId)setError(message);}
    finally{if(pending.current===operation)pending.current=null;if(!cancelled&&id.current===sessionId)setBusy(false);}
   }
   run();return()=>{cancelled=true;};
  },[active?.id,wake]);
- return {setup,setupBusy,sessions,active,busy,error,connected,libraryLoading,libraryRefreshing,libraryError,start,resume,retrySession,renameTitle,savePublication,leave,remove,refreshLibrary,retryStep,confirmFrameCount,control,drawAnyway,controlBusy,controlError};
+ return {adopt,checkImage,setup,setupBusy,sessions,active,busy,error,connected,libraryLoading,libraryRefreshing,libraryError,start,resume,retrySession,renameTitle,savePublication,leave,remove,refreshLibrary,retryStep,confirmFrameCount,control,drawAnyway,controlBusy,controlError};
 }

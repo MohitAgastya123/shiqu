@@ -74,7 +74,7 @@ test('family epoch serializes concurrent drafts; identical request replay is sta
  await until(async()=>(await f.read(winner.id)).state==='completed');
  const replay=await revise(f,id,{plan},base,winner.id);assert.equal(replay.id,winner.id);
  const changed=await f.request(`sessions/${id}/revisions`,'POST',{requestId:winner.id,token:base.token,changes:{artStyle:'paper-cut'}});assert.equal(changed.status,409);
- const fresh=await snapshot(f,id);assert.notEqual(fresh.token,base.token);const third=await revise(f,id,{artStyle:'paper-cut'},fresh);assert.equal(third.revision.number,3);
+ assert.equal((await f.request(`sessions/${id}/revisions`)).status,409);const fresh=await snapshot(f,winner.id);assert.notEqual(fresh.token,base.token);const third=await revise(f,winner.id,{artStyle:'paper-cut'},fresh);assert.equal(third.revision.number,3);
 });
 
 test('invalid inputs, unchanged drafts, stale parent, and cross-owner IDs never create a child or write copied media',async t=>{

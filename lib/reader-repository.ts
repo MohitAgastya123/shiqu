@@ -25,6 +25,14 @@ export class ReaderRepository{
  constructor(db:Database){this.db=db;}
  async superseded(id:string,uid:string){return !!await this.db.prepare(`SELECT id FROM reader_sessions WHERE id=? AND user_id=? AND ${supersededSql()}`).bind(id,uid).first();}
  async get(id:string,uid:string){const row=await this.db.prepare(`SELECT * FROM reader_sessions WHERE id = ? AND user_id = ? AND ${visible}`).bind(id,uid).first<SessionRow>();if(!row)throw new ReaderError(404,'这篇故事不在你的书架里');return row;}
+ async current(id:string,uid:string){
+  const origin=await this.db.prepare('SELECT * FROM reader_sessions WHERE id=? AND user_id=?').bind(id,uid).first<SessionRow>();
+  if(!origin)throw new ReaderError(404,'这篇故事不在你的书架里');
+  const doc=JSON.parse(origin.document) as Document;if(doc.reselection)throw new ReaderError(409,'这是尚未提交的选题草稿。');
+  const root=doc.revision?.rootId||id;
+  const latest=await this.db.prepare(`SELECT s.id FROM reader_sessions s WHERE s.user_id=? AND ${familyRoot('s')}=? ORDER BY ${familyNumber('s')} DESC,s.created_at DESC LIMIT 1`).bind(uid,root).first<{id:string}>();
+  if(!latest)throw new ReaderError(404,'家族当前版本不可用。');return this.get(latest.id,uid);
+ }
  // Target selection metadata only: an in-flight generation checkpoint cannot overwrite this name.
  async rename(id:string,uid:string,title:string){
   await this.get(id,uid);
@@ -57,6 +65,7 @@ export class ReaderRepository{
  }
  // Count every newer submission, including deleted ones, so deletion never promotes history.
  async list(uid:string){return (await this.db.prepare(`SELECT * FROM reader_sessions WHERE user_id = ? AND ${visible}
+  AND json_type(CASE WHEN json_valid(document) THEN document ELSE '{}' END,'$.reselection') IS NULL
   AND NOT ${supersededSql()}
   ORDER BY COALESCE(last_read_at,created_at) DESC`).bind(uid).all<SessionRow>()).results;}
  async deletions(uid:string){
@@ -65,7 +74,7 @@ export class ReaderRepository{
    FROM library_deletions d
    LEFT JOIN reader_sessions s ON d.kind='generated' AND s.id=d.story_id AND s.user_id=d.user_id
    LEFT JOIN stories p ON d.kind='published' AND p.id=d.story_id AND p.status='published'
-   WHERE d.user_id=? ORDER BY d.deleted_at DESC,d.story_id`).bind(uid).all<{storyId:string;deletedAt:string;kind:'generated'|'published';title:string}>()).results;
+   WHERE d.user_id=? AND (s.id IS NULL OR json_type(s.document,'$.reselection') IS NULL) ORDER BY d.deleted_at DESC,d.story_id`).bind(uid).all<{storyId:string;deletedAt:string;kind:'generated'|'published';title:string}>()).results;
  }
  async remove(id:string,uid:string){
   const existing=await this.db.prepare('SELECT story_id AS storyId,deleted_at AS deletedAt FROM library_deletions WHERE user_id=? AND story_id=?').bind(uid,id).first<{storyId:string;deletedAt:string}>();if(existing)return existing;
@@ -119,7 +128,7 @@ export class ReaderRepository{
  }
  async create(id:string,uid:string,selection:Selection,document:Document=emptyDocument()){const now=new Date().toISOString(),saved=JSON.stringify(document);
  // Read defaults inside the insert: retries cannot change a story's original attribution snapshot.
- await this.db.prepare(`INSERT INTO reader_sessions(id,user_id,selection,document,generation_mode,state,step_attempts,lock_until,page,saved,created_at,updated_at) VALUES(?,?,?,COALESCE((SELECT json_set(?,'$.publication',json(publication)) FROM reader_publication_defaults WHERE owner_id=?),?),'background','idle',0,0,0,0,?,?) ON CONFLICT(id) DO NOTHING`).bind(id,uid,JSON.stringify(selection),saved,uid,saved,now,now).run();
+ await this.db.prepare(`INSERT INTO reader_sessions(id,user_id,selection,document,generation_mode,state,step_attempts,lock_until,page,saved,created_at,updated_at) VALUES(?,?,?,COALESCE((SELECT json_set(?,'$.publication',json(publication)) FROM reader_publication_defaults WHERE owner_id=?),?),?,'idle',0,0,0,0,?,?) ON CONFLICT(id) DO NOTHING`).bind(id,uid,JSON.stringify(selection),saved,uid,saved,document.reselection?'reader':'background',now,now).run();
  return this.get(id,uid);}
  async confirmFrameCount(id:string,uid:string,count:Selection['length']){
   const row=await this.get(id,uid),selection=selectionSchema.parse(JSON.parse(row.selection)),doc=JSON.parse(row.document) as Document;
@@ -153,7 +162,7 @@ export class ReaderRepository{
    .bind(saved,saved,saved,new Date().toISOString(),row.id,row.user_id,token,snapshot.intake?.generation??-1).run();
   if(result.meta.changes!==1)throw new ReaderError(409,'故事状态已更新，请重新打开后继续。');
  }
- async save(row:SessionRow,token:string,doc:Document,complete:boolean,error:string|null=null,progressMap?:number[]){const saved=JSON.stringify(doc),map=progressMap?JSON.stringify(progressMap):null,r=await this.db.prepare(`UPDATE reader_sessions SET document=${workerDocument},state=?,error=?,page=CASE WHEN ? IS NULL THEN page ELSE COALESCE(json_extract(?, '$['||page||']'),MAX(0,MIN(page,?))) END,lock_token=NULL,lock_until=0,updated_at=? WHERE id=? AND user_id=? AND lock_token=? AND COALESCE(json_extract(document,'$.intake.generation'),-1)=?`).bind(saved,saved,saved,error?'failed':complete?'completed':'idle',error,map,map,Math.max(0,(doc.plan?.pages.length||1)-1),new Date().toISOString(),row.id,row.user_id,token,doc.intake?.generation??-1).run();if(!r.meta.changes)throw new ReaderError(409,'故事状态已更新，请重新打开后继续。');return this.get(row.id,row.user_id);}
+ async save(row:SessionRow,token:string,doc:Document,complete:boolean,error:string|null=null,progressMap?:number[]){const saved=JSON.stringify(doc),map=progressMap?JSON.stringify(progressMap):null,r=await this.db.prepare(`UPDATE reader_sessions SET document=${workerDocument},state=CASE WHEN ? THEN 'failed' WHEN ? AND NOT EXISTS(SELECT 1 FROM reader_faults f WHERE f.session_id=reader_sessions.id AND f.owner_id=reader_sessions.user_id AND f.state IN ('pending','recovering')) THEN 'completed' ELSE 'idle' END,error=?,page=CASE WHEN ? IS NULL THEN page ELSE COALESCE(json_extract(?, '$['||page||']'),MAX(0,MIN(page,?))) END,lock_token=NULL,lock_until=0,updated_at=? WHERE id=? AND user_id=? AND lock_token=? AND COALESCE(json_extract(document,'$.intake.generation'),-1)=?`).bind(saved,saved,saved,error?1:0,complete?1:0,error,map,map,Math.max(0,(doc.plan?.pages.length||1)-1),new Date().toISOString(),row.id,row.user_id,token,doc.intake?.generation??-1).run();if(!r.meta.changes)throw new ReaderError(409,'故事状态已更新，请重新打开后继续。');return this.get(row.id,row.user_id);}
  async progress(id:string,uid:string,page:number,saved:boolean){
   const row=await this.get(id,uid),doc=JSON.parse(row.document) as Document;if(!doc.plan||!doc.images[page])throw new ReaderError(400,'这幅画面还没有展开');
   // A late reader cannot overwrite a structural save's remapped position. Image publication is independent.

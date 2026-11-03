@@ -194,8 +194,11 @@ test('REST reports Codex readiness without a Gemini key and routes checkpoints t
  const status=await(await request('status')).json();assert.equal(status.provider,'codex');assert.equal(status.configured,true);
  const id=crypto.randomUUID();assert.equal((await request('sessions','POST',{requestId:id,selection})).status,201);
  await app.services.database.prepare("UPDATE reader_sessions SET generation_mode='reader' WHERE id=?").bind(id).run();
- const result=await request(`sessions/${id}/advance`,'POST',{throughPage:0});assert.equal(result.status,200);const row=await result.json();assert.equal(row.story,null);assert.equal(row.generationProgress.phase,'reflection');assert.equal(calls,2);
- const finished=await(await request(`sessions/${id}/advance`,'POST',{throughPage:0})).json();assert.notEqual(finished.state,'failed',JSON.stringify(finished));assert.ok(finished.story.sourceText);assert.equal(calls,3);
+ const result=await request(`sessions/${id}/advance`,'POST',{throughPage:0});assert.ok([200,202].includes(result.status));
+ const deadline=Date.now()+5000;let row;
+ do{row=await(await request(`sessions/${id}`)).json();if(row.story||row.state==='failed')break;assert.ok(Date.now()<deadline);await new Promise(resolve=>setImmediate(resolve));}while(!row?.story&&row?.state!=='failed');
+ assert.notEqual(row.state,'failed',JSON.stringify(row));assert.ok(row.story.sourceText);assert.equal(calls,3);
+
 });
 
 test('pnpm login helper shares the configured home, strips API keys and rejects API-key login flags',async t=>{

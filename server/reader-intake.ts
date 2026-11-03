@@ -6,13 +6,14 @@ import {createHash} from 'node:crypto';
 import {emptyDocument,selectionSchema,ReaderError} from '../lib/reader-model.ts';
 import type {Document,Selection,SessionRow} from '../lib/reader-model.ts';
 import {effectiveIntakePhase,intakeSearch} from '../lib/reader-intake.ts';
-import type {IntakeAction,IntakeSearch} from '../lib/reader-intake.ts';
+import type {IntakeAction,IntakeSearch,ReselectionDraft} from '../lib/reader-intake.ts';
 import type {ReaderRepository} from '../lib/reader-repository.ts';
 import {maxSuggestionBatches} from '../lib/reader-suggestions.ts';
 import {storyBriefVerified} from '../lib/reader-story-brief.ts';
+import {commandReceipt,recordNoop} from './reader-commands.ts';
 const hash=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const visible='NOT EXISTS(SELECT 1 FROM library_deletions WHERE story_id=reader_sessions.id AND user_id=reader_sessions.user_id)';
-export async function createIntake(repo:ReaderRepository,id:string,uid:string,input:Selection,books?:LocalBooks){
+export async function createIntake(repo:ReaderRepository,id:string,uid:string,input:Selection,books?:LocalBooks,reselection?:ReselectionDraft){
  if(input.source&&input.discoverySources)throw new ReaderError(400,'请选择章节提取或直接故事，不能混用。');
  if((input.source||input.discoverySources)&&!books)throw new ReaderError(503,'本地书库暂不可用');
  const local=input.discoverySources?await books!.book(input):null;
@@ -23,18 +24,18 @@ export async function createIntake(repo:ReaderRepository,id:string,uid:string,in
  if(selection.bookId==='other'&&!selection.customBook?.trim())throw new ReaderError(400,'请先填写书名或 URL。');
  const creationHash=hash(selection),doc:Document={...emptyDocument(),intake:{phase:'discovering',generation:0,creationHash,batches:[],briefRequired:true,search:{round:1,state:'searching',cycleId:id}}};
  if(choice){doc.original=choice.original;doc.intake!.phase='preparing';doc.intake!.search={round:0,state:'idle'};doc.intake!.selected={batch:0,index:0};doc.intake!.batches=[{stories:[{title:choice.entry.title,description:choice.entry.excerpt,source:choice.entry.source,sourceLabel:choice.original.title.slice(0,150)}],note:''}];}
+ if(reselection){doc.reselection=reselection;doc.intake!.manualArt=true;}
  const row=await repo.create(id,uid,selection,doc);
  if((JSON.parse(row.document) as Document).intake?.creationHash!==creationHash)throw new ReaderError(409,'此创建编号已用于其他内容，请重新创建。');
  return row;
 }
 // Manual search stands outside selection generations; automatic continuation must still be unselected at write time.
-async function requestSearch(repo:ReaderRepository,row:SessionRow,doc:Document,requestId:string,automatic=false){
+async function requestSearch(repo:ReaderRepository,row:SessionRow,doc:Document,requestId:string,fingerprint:string,automatic=false){
  const intake=doc.intake!,search=intakeSearch(intake);
- if(automatic&&(intake.selected||intake.phase!=='choosing'||search.state!=='idle'||!intake.batches.at(-1)?.stories.length))return row;
- if(search.state==='searching'||search.state==='idle'&&search.requestId===requestId)return row;
+ if(automatic&&(intake.selected||intake.phase!=='choosing'||search.state!=='idle'||!intake.batches.at(-1)?.stories.length)||search.state==='searching'||search.state==='idle'&&search.requestId===requestId){await recordNoop(repo.db,row.user_id,row.id,requestId,'setup',fingerprint);return row;}
  if(doc.plan||intake.phase==='confirmed')throw new ReaderError(409,'制作已确认；需要调整时请创建修订版本。');
  if(intake.batches.length>=maxSuggestionBatches)throw new ReaderError(400,'已保存40批候选，请回看选择，或新建其他书籍与主题。');
- const next:IntakeSearch={round:search.round+1,state:'searching',requestId,cycleId:automatic?(search.cycleId||hash([row.id,search.round])):requestId};
+ const next:IntakeSearch={round:search.round+1,state:'searching',requestId,commandHash:fingerprint,cycleId:automatic?(search.cycleId||hash([row.id,search.round])):requestId};
  await repo.db.prepare(`UPDATE reader_sessions SET document=json_set(document,'$.intake.search',json(?),'$.intake.phase',CASE WHEN json_type(document,'$.intake.selected')='object' THEN json_extract(document,'$.intake.phase') ELSE 'discovering' END),updated_at=?
   WHERE id=? AND user_id=? AND COALESCE(json_extract(document,'$.intake.search.round'),0)=? AND json_extract(document,'$.intake.phase')!='confirmed'${automatic?" AND json_type(document,'$.intake.selected') IS NOT 'object' AND json_extract(document,'$.intake.phase')='choosing' AND json_extract(document,'$.intake.search.state')='idle'":''} AND ${visible}`)
   .bind(JSON.stringify(next),new Date().toISOString(),row.id,row.user_id,search.round).run();
@@ -43,10 +44,12 @@ async function requestSearch(repo:ReaderRepository,row:SessionRow,doc:Document,r
 }
 export async function changeIntake(repo:ReaderRepository,id:string,uid:string,action:IntakeAction,attempt=0):Promise<SessionRow>{
  const row=await repo.get(id,uid),doc=JSON.parse(row.document) as Document,intake=doc.intake,selection=selectionSchema.parse(JSON.parse(row.selection));
+ const fingerprint=hash(action),receipt=await commandReceipt(repo.db,uid,action.requestId,fingerprint);
+ if(receipt){if(receipt.action!=='setup'||receipt.session_id!==id)throw new ReaderError(409,'这个操作编号已用于其他内容。');return row;}
+ if(doc.reselection&&action.action!=='more')throw new ReaderError(409,'请在替换选题窗口提交选择；草稿不能开始制作。');
  if(!intake)throw new ReaderError(409,'这篇故事使用旧制作流程，请继续原来的步骤。');
  intake.phase=effectiveIntakePhase(doc,selection)!;
- if(action.action==='more')return requestSearch(repo,row,doc,action.requestId,action.automatic);
- const fingerprint=hash(action);
+ if(action.action==='more')return requestSearch(repo,row,doc,action.requestId,fingerprint,action.automatic);
  if(intake.lastAction?.id===action.requestId){if(intake.lastAction.hash!==fingerprint)throw new ReaderError(409,'此操作编号已用于其他内容。');return row;}
  if(intake.generation!==action.generation)throw new ReaderError(409,'制作内容已由另一次操作更新，请重新打开后继续。');
  if(doc.plan||intake.phase==='confirmed')throw new ReaderError(409,'制作已确认；需要调整时请创建修订版本。');

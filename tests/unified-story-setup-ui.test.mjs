@@ -62,7 +62,7 @@ test('discovery stays in the picker and selection opens one continuous story flo
  const pausedSearch=renderToStaticMarkup(createElement(Setup,{...props,session:{...session,generationControl:'paused',intake:{...session.intake,search:{state:'searching'}}}}));
  assert.match(pausedSearch,/查找已暂停/);assert.doesNotMatch(pausedSearch,/正在寻找更多故事/);
  const pausedConfirmation=renderToStaticMarkup(createElement(Setup,{...props,session:{...session,generationControl:'paused'}}));
- assert.equal((pausedConfirmation.match(/>恢复生成<\/button>/g)||[]).length,1);assert.doesNotMatch(pausedConfirmation,/>开始制作<\/button>/);
+ assert.match(pausedConfirmation,/>开始制作<\/button>/);assert.doesNotMatch(pausedConfirmation,/>恢复生成<\/button>/);
  const unprepared={...session,frameRecommendation:null,intake:{...session.intake,phase:'choosing'}};
  assert.match(renderToStaticMarkup(createElement(Setup,{...props,session:unprepared})),/准备这篇/);
  const failedPreparation=renderToStaticMarkup(createElement(Setup,{...props,session:{...unprepared,state:'failed',error:'准备失败。',retryAllowed:true,intake:{...session.intake,phase:'preparing'}}}));
@@ -71,16 +71,16 @@ test('discovery stays in the picker and selection opens one continuous story flo
  const preparing=renderToStaticMarkup(createElement(Setup,{...props,session:{...session,state:'running',frameRecommendation:null,intake:{...session.intake,phase:'preparing'}}}));
  assert.match(preparing,/生成进展/);assert.match(preparing,/data-stage="count"/);assert.doesNotMatch(preparing,/>开始制作<\/button>/);
  const pausedPreparation=renderToStaticMarkup(createElement(Setup,{...props,session:{...session,state:'idle',generationControl:'paused',frameRecommendation:null,intake:{...session.intake,phase:'preparing'}}}));
- assert.match(pausedPreparation,/恢复生成/);assert.match(pausedPreparation,/生成进展/);
+ assert.match(pausedPreparation,/恢复准备/);assert.match(pausedPreparation,/生成进展/);
  for(const label of ['制作要求（可选）','修改画风','修改叙事详略','重新选择故事'])assert.ok(pausedPreparation.includes(label),label);
  const pausedProps={navigation:{source:{onClick:noop}},session:{...session,intake:undefined,generationControl:'paused'},...props.progress,editor:{base:null,changes:{},impact:null,busy:false,open:noop},onReselect:noop};
  const pausedWithoutPlan=renderToStaticMarkup(createElement(Paused,pausedProps));
  const pausedTimeline=pausedWithoutPlan.match(/<ol .*?<\/ol>/s)[0];
  for(const label of ['制作要求','修改画风','修改叙事详略'])assert.ok(pausedTimeline.includes(label),label);
  assert.doesNotMatch(pausedTimeline,/重新选择故事/);
- const assertFlowNavigation=markup=>{const nav=markup.match(/<nav aria-label="制作流程导航">.*?<\/nav>/s)?.[0];assert.ok(nav);assert.match(nav,/>原文<\/button>/);assert.match(nav,/>重新选择故事<\/button>/);assert.ok(nav.indexOf('>原文</button>')<nav.indexOf('>重新选择故事</button>'));assert.equal((markup.match(/aria-label="制作流程导航"/g)||[]).length,1);assert.doesNotMatch(markup.match(/<ol .*?<\/ol>/s)?.[0]||'',/重新选择故事/);};
- assertFlowNavigation(html);assertFlowNavigation(pausedWithoutPlan);
- const lockedPaused=renderToStaticMarkup(createElement(Paused,{...pausedProps,controlBusy:true}));assert.match(lockedPaused,/<button[^>]*disabled[^>]*>重新选择故事<\/button>/);
+ const assertFlowNavigation=(markup,reselect='重新选择故事')=>{const nav=markup.match(/<nav aria-label="制作流程导航">.*?<\/nav>/s)?.[0];assert.ok(nav);assert.match(nav,/>原文<\/button>/);assert.ok(nav.includes('>'+reselect+'</button>'));assert.ok(nav.indexOf('>原文</button>')<nav.indexOf('>'+reselect+'</button>'));assert.equal((markup.match(/aria-label="制作流程导航"/g)||[]).length,1);assert.doesNotMatch(markup.match(/<ol .*?<\/ol>/s)?.[0]||'',/重新选择故事/);};
+ assertFlowNavigation(html);assertFlowNavigation(pausedWithoutPlan,'替换选题');
+ const lockedPaused=renderToStaticMarkup(createElement(Paused,{...pausedProps,controlBusy:true}));assert.match(lockedPaused,/<button[^>]*disabled[^>]*>替换选题<\/button>/);
  assert.match(lockedPaused,/<button[^>]*disabled[^>]*>原文<\/button>/);
  assert.equal((pausedWithoutPlan.match(/>恢复生成<\/button>/g)||[]).length,1);
  assert.match(pausedWithoutPlan,/<button type="button" class="yu-primary"[^>]*>恢复生成<\/button>/);
@@ -118,7 +118,7 @@ test('discovery stays in the picker and selection opens one continuous story flo
  // Review corrections submit immediately even from settings or a paused editor with onDone.
  for(const resuming of [false,true]){
   const saving=renderToStaticMarkup(createElement(Editor,{editor:{...targetEditor,impact:{...targetEditor.impact,changed:true}},reviewIssues,onDone:noop,resuming}));
-  assert.match(saving,/>保存并重新审核<\/button>/);assert.match(saving,/保存后自动重新审片，通过后继续绘图/);assert.doesNotMatch(saving,/>完成编辑<\/button>|>恢复生成<\/button>|>开始制作<\/button>/);
+  assert.match(saving,resuming?/>应用修改并恢复<\/button>/:/>保存并重新审核<\/button>/);assert.match(saving,/重新审片，通过后继续绘图/);assert.doesNotMatch(saving,/>完成编辑<\/button>|>恢复生成<\/button>|>开始制作<\/button>/);
  }
  let submitted=0,finished=0;
  const saveTree=Actions({editor:{...targetEditor,impact:{...targetEditor.impact,changed:true},submit:()=>{submitted++;}},reviewOnSave:true,onDone:()=>{finished++;}});
@@ -142,11 +142,11 @@ test('discovery stays in the picker and selection opens one continuous story flo
  assert.match(confirmation,/>开始制作<\/button>/);assert.doesNotMatch(confirmation,/>完成编辑<\/button>|保持暂停|恢复生成/);
  const pausedDraft=renderToStaticMarkup(createElement(Paused,{...pausedProps,editor:draftEditor}));
  assert.match(pausedDraft,/按叙事详略编排 · 审核后确定数量/);assert.doesNotMatch(pausedDraft,/开始制作|暂停后修改/);
- assert.equal((pausedDraft.match(/>恢复生成<\/button>/g)||[]).length,1);
+ assert.equal((pausedDraft.match(/>应用修改并恢复<\/button>/g)||[]).length,1);
  const pausedEditor=renderToStaticMarkup(createElement(Editor,{editor:draftEditor,onDone:noop,resuming:true}));
  assert.match(pausedEditor,/>完成编辑<\/button>/);assert.doesNotMatch(pausedEditor,/>恢复生成<\/button>|开始制作/);
  const pausedConflict=renderToStaticMarkup(createElement(Paused,{...pausedProps,editor:{...draftEditor,conflict:true}}));
- assert.match(pausedConflict,/<button type="button" class="yu-primary" disabled="">恢复生成<\/button>/);
+ assert.match(pausedConflict,/<button type="button" class="yu-primary" disabled="">应用修改并恢复<\/button>/);
  const draftSteps=revisionDraftSteps(draftEditor.base,draftEditor.changes);
  assert.equal(draftSteps.find(s=>s.id==='count').detail,'按叙事详略编排 · 审核后确定数量');
  assert.equal(draftSteps.find(s=>s.id==='count').state,'current');

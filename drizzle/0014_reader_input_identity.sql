@@ -1,0 +1,2 @@
+-- server/reader-input-migration.ts remaps paid work and its dependencies atomically at startup.
+-- No schema change and no generation, review or image request is performed by this migration.

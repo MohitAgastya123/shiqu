@@ -14,19 +14,23 @@ import {newReview} from '../lib/reader-review.ts';
 import {readerImageAsset,referenceImageKey} from '../lib/reader-image-assets.ts';
 import {mediaType,imageTypes} from '../lib/reader-generation-contract.ts';
 const hash=(value:string|Uint8Array)=>createHash('sha256').update(value).digest('hex');
-const familyEpoch=`SELECT COALESCE(MAX(${familyNumber('reader_sessions')}),1) AS epoch FROM reader_sessions WHERE user_id=? AND (id=? OR ${familyRoot('reader_sessions')}=?)`;
+export const familyEpoch=`SELECT COALESCE(MAX(${familyNumber('reader_sessions')}),1) AS epoch FROM reader_sessions WHERE user_id=? AND (id=? OR ${familyRoot('reader_sessions')}=?)`;
+export const currentFamilyVersion=(alias='p')=>`NOT ${supersededSql(alias)} AND NOT EXISTS(SELECT 1 FROM library_deletions WHERE story_id=${alias}.id AND user_id=${alias}.user_id)`;
+export function editableSelection(selection:string){const {displayTitle:_,...value}=JSON.parse(selection);void _;return value;}
+export const replacementToken=(selection:string,epoch:number)=>hash(JSON.stringify([editableSelection(selection),epoch]));
 const savedFrameCount=(doc:Document)=>doc.draft?.pages.length??doc.storyboard?.outline.beats.length;
-async function basis(repo:ReaderRepository,row:SessionRow){
+export async function revisionBasis(repo:ReaderRepository,row:SessionRow,allowInFlight=false){
  const doc=JSON.parse(row.document) as Document;
+ if(doc.reselection||await repo.superseded(row.id,row.user_id))throw new ReaderError(409,'这是草稿或旧版本，请打开书架当前版本。');
  if(doc.intake&&doc.intake.phase!=='confirmed')throw new ReaderError(409,'请在制作确认前保存设置草稿。');
- if(!doc.plan&&row.generation_control!=='paused'&&row.generation_control!=='stopped'&&!await repo.superseded(row.id,row.user_id))throw new ReaderError(409,'请先暂停生成，再修改制作内容。');
+ if(!allowInFlight&&!doc.plan&&row.generation_control!=='paused'&&row.generation_control!=='stopped')throw new ReaderError(409,'请先暂停生成，再修改制作内容。');
  const rootId=doc.revision?.rootId||row.id;
  const epoch=(await repo.db.prepare(familyEpoch).bind(row.user_id,rootId,rootId).first<{epoch:number}>())!.epoch;
- const token=hash(JSON.stringify([row.selection,doc.plan,epoch]));
+ const token=hash(JSON.stringify([editableSelection(row.selection),doc.plan,epoch]));
  return {doc,rootId,epoch,token};
 }
 export async function revisionSnapshot(repo:ReaderRepository,id:string,ownerId:string):Promise<RevisionSnapshot>{
- const row=await repo.get(id,ownerId),{doc,epoch,token}=await basis(repo,row);
+ const row=await repo.get(id,ownerId),{doc,epoch,token}=await revisionBasis(repo,row);
  return {selection:selectionSchema.parse(JSON.parse(row.selection)),plan:doc.plan,images:doc.images,savedFrameCount:savedFrameCount(doc),...(doc.frameRecommendation?{frameRecommendation:doc.frameRecommendation}:{}),token,epoch,...(doc.revision?{revision:{parentId:doc.revision.parentId,rootId:doc.revision.rootId,number:doc.revision.number}}:{})};
 }
 export async function forkRevision(repo:ReaderRepository,media:MediaStore,ownerId:string,parentId:string,requestId:string,token:string,changes:RevisionChanges,paused=false){
@@ -40,7 +44,7 @@ export async function forkRevision(repo:ReaderRepository,media:MediaStore,ownerI
   return repo.get(requestId,ownerId);
  };
  const existing=await replay();if(existing)return existing;
- const row=await repo.get(parentId,ownerId),{doc,rootId,epoch,token:current}=await basis(repo,row);
+ const row=await repo.get(parentId,ownerId),{doc,rootId,epoch,token:current}=await revisionBasis(repo,row);
  if(current!==token)throw new ReaderError(409,'故事或版本已更新，请重新载入后再修改。');
  const original={selection:selectionSchema.parse(JSON.parse(row.selection)),plan:doc.plan,images:doc.images,savedFrameCount:savedFrameCount(doc),...(doc.frameRecommendation?{frameRecommendation:doc.frameRecommendation}:{})};
  const {selection,plan,impact}=checkedRevision(original,changes);
@@ -64,13 +68,13 @@ export async function forkRevision(repo:ReaderRepository,media:MediaStore,ownerI
  if(impact.preserveScript){document.storyboard=doc.storyboard;document.draft=doc.draft;}
  const now=new Date().toISOString();
  const inserted=await repo.db.prepare(`INSERT INTO reader_sessions(id,user_id,selection,document,generation_mode,generation_control,state,step_attempts,lock_until,page,saved,last_read_at,created_at,updated_at)
-  SELECT ?,?,?,?,'background',?,'idle',0,0,MIN(p.page,?),p.saved,p.last_read_at,?,? FROM reader_sessions p
-  WHERE p.id=? AND p.user_id=? AND json_extract(p.document,'$.plan') IS json_extract(?,'$.plan') AND p.selection=? AND json_extract(p.document,'$.publication') IS json_extract(?,'$.publication')
+  SELECT ?,?,json_patch(?,CASE WHEN json_type(p.selection,'$.displayTitle')='text' THEN json_object('displayTitle',json_extract(p.selection,'$.displayTitle')) ELSE '{}' END),json_patch(?,json_object('publication',json_extract(p.document,'$.publication'))),'background',?,'idle',0,0,MIN(p.page,?),p.saved,p.last_read_at,?,? FROM reader_sessions p
+  WHERE p.id=? AND p.user_id=? AND json_extract(p.document,'$.plan') IS json_extract(?,'$.plan') AND json_remove(p.selection,'$.displayTitle')=json_remove(?,'$.displayTitle')
   AND (json_extract(p.document,'$.plan') IS NOT NULL OR p.generation_control IN ('paused','stopped') OR ${supersededSql('p')})
-  AND NOT EXISTS(SELECT 1 FROM library_deletions WHERE story_id=p.id AND user_id=p.user_id)
+  AND ${currentFamilyVersion('p')}
   AND (${familyEpoch.replace(' AS epoch','')})=?
   ON CONFLICT(id) DO NOTHING`)
-  .bind(requestId,ownerId,JSON.stringify(selection),JSON.stringify(document),paused?'paused':'active',impact.total-1,now,now,parentId,ownerId,row.document,row.selection,row.document,ownerId,rootId,rootId,epoch).run();
+  .bind(requestId,ownerId,JSON.stringify(selection),JSON.stringify(document),paused?'paused':'active',impact.total-1,now,now,parentId,ownerId,row.document,row.selection,ownerId,rootId,rootId,epoch).run();
  if(!inserted.meta.changes){const raced=await replay();if(raced)return raced;throw new ReaderError(409,'故事或版本已更新，请重新载入后再修改。');}
  return repo.get(requestId,ownerId);
 }

@@ -10,7 +10,7 @@ import type {IntakeCommand} from '@/lib/reader-intake';
 import {getArtStyle} from '@/lib/reader-styles';
 import {generationProgress} from '@/lib/generation-progress';
 import StoryProductionEditor,{StoryEditorTabs} from './StoryProductionEditor';
-import type {StoryEditorTab} from './StoryProductionEditor';
+import type {StoryEditorTab,ProductionSettings} from './StoryProductionEditor';
 import Sheet from './StorySheet';
 import StoryBackToShelf from './StoryBackToShelf';
 import StorySource from './StorySource';
@@ -23,7 +23,7 @@ type Props={session:SessionView;book:string;busy:boolean;onAction:(command:Intak
 // Stable titles prevent the initial discovery snapshot from flashing a production screen.
 export function storyCreationTitle(session:SessionView){return session.intake?(session.intake.selected?'故事流程':'选择故事'):session.story?.title||session.selection.storyTitle||'你的故事，正在展开';}
 const savedSettings=(session:SessionView)=>session.intake!.draft||{artStyle:session.selection.artStyle,productionPrompt:session.selection.productionPrompt,...(session.selection.acceptancePrompt!==undefined?{acceptancePrompt:session.selection.acceptancePrompt}:{}),narrativeDetail:session.selection.narrativeDetail||'balanced' as const,length:'auto' as const};
-export default function StoryCreationSetup({session,book,busy,onAction,progress}:Props){
+export default function StoryCreationSetup({session,book,busy,onAction,progress,onReplace}:Props&{onReplace?:(batch:number,index:number,settings:ProductionSettings)=>Promise<void>}){
  const intake=session.intake!,saved={...savedSettings(session),length:'auto' as const},savedKey=JSON.stringify(saved);
  const [error,setError]=useState('');
  const [finding,setFinding]=useState(false);
@@ -54,6 +54,7 @@ export default function StoryCreationSetup({session,book,busy,onAction,progress}
  }
  const isSelected=(batchIndex:number,index:number)=>intake.selected?.batch===batchIndex&&intake.selected.index===index;
  async function select(batchIndex:number,index:number){
+  if(onReplace){await onReplace(batchIndex,index,{...settings,length:'auto'});return;}
   // The story already being prepared or waiting here has nothing to redo.
   if(isSelected(batchIndex,index)&&['preparing','confirming'].includes(intake.phase)){setChoosing(false);return;}
   if(await act({action:'choose',batch:batchIndex,index,...(selected?{settings:preferences}:{})}))setChoosing(false);
@@ -66,7 +67,7 @@ export default function StoryCreationSetup({session,book,busy,onAction,progress}
  const terminalBatch=intake.batches.at(-1),terminalNote=terminalBatch?.stories.length===0?terminalBatch.note:'';
  const candidateList=<>
   <div className="yu-batch-heading"><h3>已找到 {candidates.length} 篇故事</h3>{findMore}</div>
-  <div className="yu-candidate-list">{candidates.map(({candidate,batchIndex,index})=><button type="button" key={`${batchIndex}:${index}`} aria-pressed={isSelected(batchIndex,index)} className={isSelected(batchIndex,index)?'selected':''} disabled={(busy||session.state==='running')&&!isSelected(batchIndex,index)} onClick={()=>void select(batchIndex,index)}><strong>{candidate.title}</strong><span className="yu-candidate-description">{candidate.description}</span>{candidate.sourceLabel&&<small>{candidate.sourceLabel}</small>}<span className="yu-candidate-action">{isSelected(batchIndex,index)?'已选这篇':'选择这篇'}</span></button>)}</div>
+  <div className="yu-candidate-list">{candidates.map(({candidate,batchIndex,index})=><button type="button" key={`${batchIndex}:${index}`} aria-pressed={isSelected(batchIndex,index)} className={isSelected(batchIndex,index)?'selected':''} disabled={(busy||session.state==='running')&&!isSelected(batchIndex,index)} onClick={()=>void select(batchIndex,index)}><strong>{candidate.title}</strong><span className="yu-candidate-description">{candidate.description}</span>{candidate.sourceLabel&&<small>{candidate.sourceLabel}</small>}<span className="yu-candidate-action">{isSelected(batchIndex,index)?'已选这篇':onReplace?'选择并替换':'选择这篇'}</span></button>)}</div>
   {!searching&&search.state!=='failed'&&(!candidates.length||terminalBatch?.stories.length===0)&&<p className="yu-candidate-note">{terminalNote||(candidates.length?'暂时没有找到更多故事，已找到的故事都在上方。':'还没有找到符合主题的故事，可以继续查找，或换个主题。')}</p>}
   {intake.batches.length>=40&&<p className="yu-candidate-note">已达到候选保存上限，请从已找到的故事中选择，或换个主题。</p>}
  </>;
@@ -87,13 +88,13 @@ export default function StoryCreationSetup({session,book,busy,onAction,progress}
    detailActions:editable?{source:{label:'修改画风',onClick:()=>setEditing('style')}}:undefined,
    actions:editable?{count:{label:'修改叙事详略',onClick:()=>setEditing('count')}}:undefined
   }}>
-   {ready&&<><button type="button" className="yu-primary" disabled={busy||session.state==='running'} onClick={()=>void act({action:'confirm',settings})}>{busy?'正在保存…':paused?'恢复生成':'开始制作'}</button></>}
+   {ready&&<><button type="button" className="yu-primary" disabled={busy||session.state==='running'} onClick={()=>void act({action:'confirm',settings})}>{busy?'正在保存…':'开始制作'}</button></>}
    {preparable&&<button type="button" className="yu-primary" disabled={busy||session.state==='running'} onClick={()=>void act({action:'choose',batch:intake.selected!.batch,index:intake.selected!.index,settings:preferences})}>准备这篇</button>}
   </StoryGenerationStatus>:<>
    {(session.error||progress.error)&&<p className="yu-batch-error" role="alert">{progress.error||session.error}</p>}
    {(session.state==='failed'||!!progress.error)&&<StoryRetry session={session} busy={progress.busy} onRetry={progress.onRetry}/>}
    {paused&&<StoryGenerationControl session={session} busy={progress.controlBusy} onControl={progress.onControl} primary/>}
-   <StoryBackToShelf onBack={progress.onBack}/>
+   {!onReplace&&<StoryBackToShelf onBack={progress.onBack}/>}
   </>}
   {error&&<p className="yu-batch-error" role="alert">{error}</p>}
   {choosing&&<Sheet title="重新选择故事" busy={busy} onClose={()=>setChoosing(false)}>{candidateList}{error&&<p role="alert">{error}</p>}</Sheet>}

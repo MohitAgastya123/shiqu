@@ -28,7 +28,7 @@ for(const action of ['pause','stop'])test(`${action} overrides viewers and legac
  await until(()=>f.control.calls.length===1);f.control.calls[0].resolve();await until(()=>f.control.calls.length===4);
  await control(f,id,action);for(const call of f.control.calls)call.resolve();await until(async()=>(await f.read(id)).ready===4&&(await f.read(id)).state!=='running');
  const expected=action==='pause'?'paused':'stopped';
- await f.demand(id,viewer,2,true);await f.json(`sessions/${id}/advance`,'POST',{throughPage:9,retry:true});
+ await f.demand(id,viewer,2,true);assert.equal((await f.request(`sessions/${id}/advance`,'POST',{throughPage:9,retry:true})).status,400);
  await f.app.services.production.tick();assert.equal(f.control.calls.length,4);
  assert.equal((await f.read(id)).generationControl,expected);
  await f.restart();await f.app.services.production.tick();assert.equal(f.control.calls.length,4);
@@ -40,7 +40,7 @@ for(const action of ['pause','stop'])test(`${action} overrides viewers and legac
 
 test('manual pause also fences an unmanaged legacy session and direct engine acquisition',async t=>{
  const f=await productionFixture(t),id=await f.create();await control(f,id,'pause');
- await f.json(`sessions/${id}/advance`,'POST',{throughPage:7,retry:true});
+ assert.equal((await f.request(`sessions/${id}/advance`,'POST',{throughPage:7,retry:true})).status,400);
  const repo=new ReaderRepository(f.app.services.database);
  await advanceStory(repo,f.generation.generator(),owner,id,7,true);
  await f.app.services.production.tick();assert.equal(f.control.plans.length,0);assert.equal(f.control.calls.length,0);
@@ -186,7 +186,7 @@ test('upgrading a pre-background library preserves checkpoints and pauses old st
  const after=db.prepare('SELECT * FROM reader_sessions').get(),savedJob=db.prepare('SELECT * FROM production_jobs').get();
  assert.deepEqual({...after,generation_mode:undefined,generation_control:undefined},{...before,generation_mode:undefined,generation_control:undefined});
  assert.equal(after.generation_mode,'background');assert.equal(after.generation_control,'paused');
- assert.deepEqual({...savedJob,interrupted:undefined},{...job,interrupted:undefined});assert.equal(savedJob.interrupted,0);
+ assert.deepEqual({...savedJob,interrupted:undefined,failure_id:undefined,recovery_id:undefined},{...job,interrupted:undefined,failure_id:undefined,recovery_id:undefined});assert.equal(savedJob.interrupted,0);
  migrate(db,process.cwd());assert.deepEqual(db.prepare('SELECT * FROM reader_sessions').get(),after);
 });
 
@@ -218,7 +218,7 @@ test('single-control upgrade preserves background intent, manual controls, failu
   assert.equal(after.generation_mode,'background');assert.equal(after.generation_control,expected);
   assert.deepEqual({...after,generation_mode:undefined,generation_control:undefined},{...old,generation_mode:undefined,generation_control:undefined});
  }
- assert.deepEqual(db.prepare('SELECT * FROM production_jobs ORDER BY id').all(),jobs);
+ assert.deepEqual(db.prepare('SELECT * FROM production_jobs ORDER BY id').all().map(({failure_id,recovery_id,...job})=>{assert.equal(failure_id,null);assert.equal(recovery_id,null);return job;}),jobs.map(job=>({...job})));
  const after=db.prepare('SELECT * FROM reader_sessions ORDER BY id').all();migrate(db,process.cwd());
  assert.deepEqual(db.prepare('SELECT * FROM reader_sessions ORDER BY id').all(),after);
 });

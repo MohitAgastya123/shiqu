@@ -6,7 +6,7 @@ WITH selected_sessions AS (
  SELECT s.*, CASE WHEN json_type(document,'$.intake.selected.batch')='integer' AND json_extract(document,'$.intake.selected.batch')>=0
   AND json_type(document,'$.intake.selected.index')='integer' AND json_extract(document,'$.intake.selected.index')>=0
   THEN json_extract(document,'$.intake.batches['||json_extract(document,'$.intake.selected.batch')||'].stories['||json_extract(document,'$.intake.selected.index')||']') END AS selected_candidate
- FROM reader_sessions s
+ FROM reader_sessions s WHERE json_type(document,'$.reselection') IS NULL
 ), prepared_sessions AS (
  SELECT s.*, CASE WHEN json_extract(document,'$.intake.phase')='choosing' AND json_extract(document,'$.plan') IS NULL
   AND json_extract(selected_candidate,'$.title')=json_extract(selection,'$.storyTitle')

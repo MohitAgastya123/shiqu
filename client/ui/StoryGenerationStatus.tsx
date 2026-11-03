@@ -15,7 +15,7 @@ import StoryGenerationControl from './StoryGenerationControl';
 import StoryFlowHeader from './StoryFlowHeader';
 import type {StoryFlowNavigation} from './StoryFlowHeader';
 
-export default function StoryGenerationStatus({session,busy,controlBusy,error,onControl,onRetry,onBack,onHistory,onAcceptance,navigation,timeline,stages,control,compact=false,reviewActionsInContent=false,children}:{reviewActionsInContent?:boolean;compact?:boolean;children?:ReactNode;control?:ReactNode;timeline?:ProductionTimelineNavigation;stages?:ProductionStage[];session:SessionView;busy:boolean;controlBusy:boolean;error:string;onControl:(id:string,action:ProductionAction)=>Promise<void>;onRetry:()=>void;onBack:()=>void;onHistory?:()=>void;onAcceptance?:()=>void;navigation?:StoryFlowNavigation}){
+export default function StoryGenerationStatus({session,busy,controlBusy,error,onControl,onRetry,onBack,onHistory,onAcceptance,navigation,timeline,stages,control,compact=false,reviewActionsInContent=false,children}:{reviewActionsInContent?:boolean;compact?:boolean;children?:ReactNode;control?:ReactNode;timeline?:ProductionTimelineNavigation;stages?:ProductionStage[];session:SessionView;busy:boolean;controlBusy:boolean;error:string;onControl:(id:string,action:ProductionAction)=>Promise<void>;onRetry:(faultId?:string)=>void;onBack:()=>void;onHistory?:()=>void;onAcceptance?:()=>void;navigation?:StoryFlowNavigation}){
  const status=shelfGenerationStatus(session),stopped=status.group==='生成失败'||status.group==='生成已暂停';
  const [now,setNow]=useState(Date.now);
  const progress=generationProgress(session,now),moving=progress.running&&!error&&!stopped;
@@ -35,7 +35,7 @@ export default function StoryGenerationStatus({session,busy,controlBusy,error,on
    <div><p className="yu-generation-kicker">{failed?'需要处理':stopped?'进度已保留':session.state==='completed'?'制作完成':'把故事变成画面'}</p><h3>{title}</h3></div>
   </div>
   {!acceptanceBlocked&&<p className="yu-generation-description" role={failed?'alert':'status'}>{busy&&stopped?'请求确认后会自动更新进度。':error||detail}</p>}</>}
-  {(stopped||!!error)&&!(reviewActionsInContent&&!!session.reviewIssues?.length)&&<StoryRetry session={session} busy={busy} onRetry={onRetry} primary/>}
+  {(stopped||!!error||!!session.faults?.length)&&!(reviewActionsInContent&&!!session.reviewIssues?.length)&&<StoryRetry session={session} busy={busy} onRetry={onRetry} primary/>}
   <StoryFlowHeader title={progress.measured?'画面生成进度':'制作流程'} {...navigation}/>
   <section className="yu-generation-progress" aria-label="生成进展">
    <div className="yu-generation-progress-heading"><span>{moving&&progress.elapsed!==null?<><Clock3 size={12} aria-hidden="true"/>本阶段 {generationDuration(progress.elapsed)}</>:error&&session.state!=='failed'?'状态待同步':progress.queued?'排队中':stopped?'已保存的进度':session.state==='completed'?'已完成':session.intake?.phase==='confirming'?'待确认':session.intake?.phase==='choosing'?'待选择':'等待更新'}</span>{!paused&&generationControl}</div>

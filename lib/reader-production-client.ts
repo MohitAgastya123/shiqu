@@ -3,6 +3,7 @@
 // and tells the server which page is open only so that page is drawn first.
 // An open picker also owns discovery demand and requests the next single story after each receipt.
 import type {SessionView} from './reader-model.ts';
+import type {RecoveryRequest} from './reader-recovery.ts';
 import {maxSuggestionBatches} from './reader-suggestions.ts';
 import {randomId} from './reader-random-id.ts';
 // Mode/control changes and passive reads must never turn a saved failure into a paid retry.
@@ -53,42 +54,45 @@ export async function observeStoryGeneration({sessionId,request,isActive,onSessi
   if(focused)try{if(posting)await Promise.race([posting,sleep(2000)]);await request(path+'/production','DELETE',{viewerId:focus!.viewerId});}catch{/* Expiring demand also ends priority after disconnect. */}
  }
 }
-type Options={sessionId:string;viewerId:string;page:()=>number;request:(path:string,method?:string,data?:unknown)=>Promise<SessionView>;retries:Map<string,number>;isActive:()=>boolean;onSession:(session:SessionView)=>void;initialRetry?:boolean;sleep?:(ms:number)=>Promise<void>;now?:()=>number};
-export async function runQueuedStoryGeneration({sessionId,viewerId,page,request,retries,isActive,onSession,initialRetry=false,sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms)),now=Date.now}:Options){
+type Options={sessionId:string;viewerId:string;page:()=>number;request:(path:string,method?:string,data?:unknown)=>Promise<SessionView>;retries:Map<string,number>;isActive:()=>boolean;onSession:(session:SessionView)=>void;initialRetry?:boolean;initialRecovery?:RecoveryRequest;sleep?:(ms:number)=>Promise<void>;now?:()=>number};
+export async function runQueuedStoryGeneration({sessionId,viewerId,page,request,isActive,onSession,initialRetry=false,initialRecovery,sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms)),now=Date.now}:Options){
  const path='reader/sessions/'+sessionId;
  let heartbeat=-Infinity,lastPage=-1,transportRetries=0,lastProgress=now(),progress='',started=false;
- let session:SessionView|undefined,recovering=false;
+ let session:SessionView|undefined,command=initialRecovery,needsRecovery=initialRetry||!!initialRecovery;
  try{
   while(isActive()){
    try{
-    if(recovering){session=await request(path);recovering=false;}
-    else{
-     const currentPage=page(),retry=initialRetry||session?.state==='failed';
-     if(retry&&session){
-      if(session.retryStage==='review'&&!initialRetry)return session.error||'分镜审片尚未通过，请手动继续修订。';
-      if(session.retryStage==='redraw'&&!initialRetry)return session.error||'这幅图片需要重新绘制，请手动重试。';
-      const key=sessionId+':'+session.stage,attempts=retries.get(key)||0;
-      if(!session.retryAllowed||attempts>=2)return session.error||'制作暂停，请重试继续。';
-      retries.set(key,attempts+1);
+    session??=await request(path);
+    if(!isActive())break;
+    if(!needsRecovery&&(session.state==='completed'||session.awaitingFrameCount||session.generationMode==='background'||session.generationControl&&session.generationControl!=='active')){onSession(session);return '';}
+    const currentPage=Math.max(0,Math.min(page(),(session.story?.pages.length||80)-1));
+    if(needsRecovery){
+     if(!command){
+      const fault=session.faults?.find(fault=>fault.retryAllowed);
+      if(!fault)return session.error||'没有可恢复的问题，请刷新后再试。';
+      command={requestId:randomId(),faultId:fault.id};
      }
-     if(retry||currentPage!==lastPage||now()-heartbeat>=10000){
-      started=true;initialRetry=false;session=await request(path+'/production','POST',{viewerId,page:currentPage,retry:!!retry});
-      lastPage=currentPage;heartbeat=now();
-     }else session=await request(path);
+     // A lost reply repeats the same command; never infer a new grant from a later failure.
+     session=await request(path+'/recover','POST',command);needsRecovery=false;
+    }else if(session.state==='failed'){
+     onSession(session);return session.error||'制作已停止，请选择对应问题重试。';
+    }else if(currentPage!==lastPage||now()-heartbeat>=10000){
+     started=true;session=await request(path+'/production','POST',{viewerId,page:currentPage,retry:false});
+     lastPage=currentPage;heartbeat=now();
     }
     if(!isActive())break;
     transportRetries=0;onSession(session);
     if(session.state==='completed'||session.awaitingFrameCount||session.generationMode==='background'||session.generationControl&&session.generationControl!=='active')return '';
+    if(session.state==='failed')return session.error||'制作已停止，请选择对应问题重试。';
     const currentProgress=session.stage+':'+session.ready;
     if(currentProgress!==progress){progress=currentProgress;lastProgress=now();}
     if(session.state==='running'&&now()-lastProgress>360000)return '这一幅等待较久，请稍后重新打开故事继续。';
-    if(session.state!=='running')lastProgress=now();
-    await sleep(1000);
+    await sleep(1000);session=await request(path);
    }catch(error){
     if(!isActive())break;
-    session=undefined;recovering=true;
-    if(transportRetries++>=2)return error instanceof Error?error.message:'制作暂停，请重试继续。';
-    await sleep(1000);
+    // HTTP refusals are authoritative; transport errors may replay only the retained command.
+    if((error as {status?:number}).status!==undefined||transportRetries++>=2)return error instanceof Error?error.message:'制作暂停，请重试继续。';
+    session=undefined;await sleep(1000);
    }
   }
   return '';

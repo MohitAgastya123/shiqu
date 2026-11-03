@@ -70,7 +70,7 @@ test('local publication failure and legacy retry reuse the paid receipt and reco
  f.control.calls.find(c=>c.page===1).resolve();await until(async()=>(await f.app.services.production.queue.jobs(id,'docker-local-owner')).some(j=>j.kind==='image-publish'&&j.state==='failed'));
  for(const call of f.control.calls)call.resolve();await until(async()=>(await f.read(id)).state==='failed');assert.equal(f.control.calls.length,4);
  const failed=await f.read(id);assert.equal(failed.retryStage,'publication');assert.equal(failed.story.pages[1].image,'');
- blocked=false;f.control.hold=false;await f.json(`sessions/${id}/advance`,'POST',{throughPage:6,retry:true});
+ blocked=false;f.control.hold=false;await f.demand(id,crypto.randomUUID(),0,true);
  await until(async()=>(await f.read(id)).ready===7);assert.equal(f.control.calls.filter(c=>c.page===1).length,1);
  const stored=await f.app.services.database.prepare('SELECT document FROM reader_sessions WHERE id=?').bind(id).first();assert.equal(JSON.parse(stored.document).usage.filter(u=>u.step==='image:1').length,1);
 });
@@ -158,7 +158,7 @@ for(const provider of ['codex','gemini'])test(`${provider}: immutable attempts a
  await f.app.services.database.prepare("UPDATE reader_sessions SET state='failed',lock_token=NULL,lock_until=0 WHERE id=?").bind(id).run();
  const replacement=new ReaderProductionCoordinator(f.app.services.database,f.generation,f.app.services.media);
  f.coordinators.push(replacement);
- await replacement.request('docker-local-owner',id,crypto.randomUUID(),0,true);await until(()=>f.control.calls.length===2);
+ await replacement.request('docker-local-owner',id,crypto.randomUUID(),0,false);await replacement.queue.recoverExpired();const fault=(await replacement.snapshot('docker-local-owner',id)).faults[0];await replacement.recover('docker-local-owner',id,{requestId:crypto.randomUUID(),faultId:fault.id});await until(()=>f.control.calls.length===2);
  // Distinct valid portrait bytes keep the race about fencing, not malformed-media rejection.
  f.control.calls[1].bytes=Buffer.from(imageBytes('large.png')).toString('base64');f.control.calls[1].resolve();
  await until(async()=>(await replacement.snapshot('docker-local-owner',id)).ready===1);replacement.stop();
