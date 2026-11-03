@@ -24,7 +24,7 @@ for(const provider of ['codex','gemini'])test(`${provider}: automatic counts dif
  const before=await document(f,id);assert.equal(before.frameRecommendation.count,7);assert.equal(before.plan.pages.length,4);assert.equal(before.visualReview.history[0].structure.before,3);assert.equal(before.visualReview.history[0].structure.after,4);assert.equal(before.storyboard,undefined);
  assert.equal(f.control.structures.length,1);assert.equal(f.control.calls.length,0);assert.equal((await f.read(id)).selection.length,'auto');
  release();await until(()=>f.control.calls.length===1);assert.equal((await document(f,id)).visualReview.status,'passed');
- assert.deepEqual((await document(f,id)).usage.filter(u=>/review:|repair:/.test(u.step)).map(u=>u.step),['review:0','repair:1:structure','review:1']);
+ assert.deepEqual((await document(f,id)).usage.filter(u=>/review:|repair:/.test(u.step)).map(u=>u.step),['review:frames:0:0','review:full:0:1','repair:full:1:1:structure','review:frames:1:1','review:full:1:2']);
 });
 
 test('structural edits remap existing duplicate pictures and concurrent reading progress atomically',async t=>{
@@ -72,7 +72,7 @@ test('saved structural edits survive restart without being charged a second time
  await until(async()=>(await document(f,id)).plan.pages.length===4);
  assert.equal((await document(f,id)).visualReview.status,'pending');await f.restart();
  f.control.hold=true;await f.demand(id);await until(()=>f.control.calls.length===1);
- assert.equal(f.control.structures.length,1);assert.equal((await document(f,id)).usage.filter(u=>u.step==='repair:1:structure').length,1);
+ assert.equal(f.control.structures.length,1);assert.equal(f.control.frameReviews.length,2);assert.equal((await document(f,id)).usage.filter(u=>u.step==='repair:full:1:1:structure').length,1);
 });
 
 test('automatic structural repairs share the twenty-pass stop and never draw through it',async t=>{

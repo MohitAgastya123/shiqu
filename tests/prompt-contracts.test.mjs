@@ -4,13 +4,15 @@ import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {createReaderProvider} from '../server/generation.ts';
 import {selectionSchema} from '../lib/reader-model.ts';
-import {defaultProductionPrompt,normalizeProductionPrompt} from '../lib/reader-prompts.ts';
+import {defaultProductionPrompt,normalizeProductionPrompt,titleDirection,storyScopeDirection,storyOpeningDirection,narrativeMeaningDirection,sourceFidelityDirection,storyboardDirection} from '../lib/reader-prompts.ts';
 import {legacyProductionDirection} from '../lib/reader-legacy-prompts.ts';
 import {legacyLocalReadingPrompt,legacyLocalScanJson} from '../lib/reader-local-contract.ts';
 import {studioPlanPrompt,studioImagePrompt} from '../lib/studio-prompts.ts';
 import {makePlan,makeReflectionCandidates,encoded} from './fixtures/production.mjs';
 
 const hash=value=>createHash('sha256').update(typeof value==='string'?value:JSON.stringify(value)).digest('hex');
+const plain=text=>text.replace(/^\s*- /gm,'').replace(/\s/g,'');
+const occurrences=(text,rule)=>plain(text).split(plain(rule)).length-1;
 const faithfulPrefix='按原文自身的事件、人物与因果展开，不额外套入主题或要求反转。';
 test('pre-cleanup v2 fingerprints and automatic presets remain byte-compatible',()=>{
  assert.equal(hash(legacyLocalReadingPrompt({purpose:'scan'})),'13a70fa6aac5d4a3bc0497c39c8e073c1dd1a39e455be4936c24f4a6603dbd9a');
@@ -43,7 +45,7 @@ function responseFor(payload,schema){
  if(schema.properties.candidates)return {title:plan.title,candidates:makeReflectionCandidates(plan.reflection)};
  if(payload.draft)return {reflection:plan.reflection};
  if(schema.properties.beats){const {pages,...metadata}=draft;return {...metadata,beats:pages.map((_,i)=>`第${i+1}幅的动作与回应。`)};}
- if(payload.batch)return {pages:plan.pages};
+ if(payload.batch)return {pages:makePlan(payload.batch.last-payload.batch.first+1).pages};
  return draft;
 }
 async function requestsFor(provider,acceptancePrompt){
@@ -88,6 +90,7 @@ async function requestsFor(provider,acceptancePrompt){
  await call('draft',()=>g.plan(inputSelection,'fixed-id',original));
  const outline=await call('outline',()=>g.outline(inputSelection,'fixed-id',original));
  await call('batch',()=>g.planBatch(inputSelection,'fixed-id',{outline,pages:[]},original));
+ await call('batch-later',()=>g.planBatch({...inputSelection,length:'auto'},'fixed-id',{outline:{...outline,beats:Array.from({length:21},(_,i)=>`第${i+1}幅的动作与回应。`)},pages:makePlan(20).pages},original));
  await call('candidates',()=>g.reflectionCandidates(inputSelection,draft,original));
  await call('reflection',()=>g.reflection(inputSelection,draft,original));
  await call('reflection-repair',()=>g.reflection(inputSelection,draft,original,{reflection:plan.reflection,issues:[{...issue,page:0,category:'reflection'}]}));
@@ -111,13 +114,13 @@ test('all providers send the same stage-specific instructions, data and strict o
   assert.deepEqual(canonical(other.get(stage).schema),canonical(request.schema),stage);
  }
  const get=stage=>codex.get(stage);
- for(const stage of ['frames','draft','outline','batch','candidates','reflection','reflection-repair','review','review-candidates','repair']){
+ for(const stage of ['frames','draft','outline','batch','batch-later','candidates','reflection','reflection-repair','review','review-candidates','repair']){
   assert.equal(get(stage).payload.theme,undefined,stage);
   assert.equal(get(stage).payload.productionPrompt,selection.productionPrompt,stage);
   assert.equal(get(stage).payload.verifiedOriginal.text,original.text,stage);
   assert.match(get(stage).instructions,/资料/);
  }
- for(const stage of ['draft','outline','batch','repair']){
+ for(const stage of ['draft','outline','batch','batch-later','repair']){
   assert.deepEqual(get(stage).payload.editorialContext,{mode:'theme',theme:selection.theme});
   assert.doesNotMatch(get(stage).instructions,/余味写给已经读完故事的人/);
   assert.doesNotMatch(get(stage).instructions,/优先于上述|优先于单句/);
@@ -128,6 +131,17 @@ test('all providers send the same stage-specific instructions, data and strict o
  assert.doesNotMatch(get('outline').instructions,/caption 正常目标/);
  assert.doesNotMatch(get('batch').instructions,/本次生成完整文字分镜/);
  assert.doesNotMatch(get('repair').instructions,/本次生成完整文字分镜/);
+ // Quality definitions are shared once; planning and title duties stay in their own stages.
+ for(const stage of ['draft','batch','batch-later','review','review-candidates','repair'])for(const rule of [narrativeMeaningDirection,sourceFidelityDirection,storyboardDirection])assert.equal(occurrences(get(stage).instructions,rule),1,stage);
+ for(const stage of ['draft','outline','review','review-candidates'])assert.equal(occurrences(get(stage).instructions,storyScopeDirection),1,stage);
+ assert.equal(occurrences(get('batch').instructions,storyScopeDirection),0);
+ assert.equal(occurrences(get('outline').instructions,storyboardDirection),0);
+ for(const stage of ['candidates','review','review-candidates'])assert.equal(occurrences(get(stage).instructions,titleDirection),1,stage);
+ for(const stage of ['draft','outline','batch','batch-later','reflection','reflection-repair','repair'])assert.equal(occurrences(get(stage).instructions,titleDirection),0,stage);
+ assert.equal(occurrences(get('batch').instructions,storyOpeningDirection),1,'the first batch retains its opening guidance');
+ assert.equal(get('batch-later').payload.batch.first,21);
+ assert.equal(occurrences(get('batch-later').instructions,storyOpeningDirection),0,'later batches continue instead of restarting');
+ assert.equal(occurrences(get('batch-later').instructions,storyScopeDirection),0);
  assert.equal(get('draft').schema.properties.reflection,undefined);
  assert.equal(get('draft').schema.properties.pages.items.properties.caption.maxLength,90);
  assert.match(get('draft').instructions,/目标8至55字/);assert.match(get('draft').instructions,/90字硬上限/);
@@ -156,7 +170,7 @@ test('legacy studio retains its own caption target, fixed art and independent en
 
 for(const provider of ['codex','gemini','openai'])test(`${provider}: story-specific acceptance criteria reach production, review and repairs with exact prompt captures`,async()=>{
  const prompt='关键反应落实到画面。\n保留对白的条件。',requests=await requestsFor(provider,prompt);
- for(const stage of ['frames','draft','outline','batch','candidates','reflection','reflection-repair','review','review-candidates','repair']){
+ for(const stage of ['frames','draft','outline','batch','batch-later','candidates','reflection','reflection-repair','review','review-candidates','repair']){
   assert.equal(requests.get(stage).payload.acceptancePrompt,prompt,stage);
   assert.deepEqual(requests.get(stage).payload.acceptanceCriteria,prompt.split('\n'),stage);
  }

@@ -27,6 +27,7 @@ async function fixture(t,provider='codex'){
  await cp('drizzle',path.join(root,'drizzle'),{recursive:true});await mkdir(path.join(root,'docker'));await cp('docker/seed.sql',path.join(root,'docker/seed.sql'));
  const control={calls:[],plans:[],outlines:[],pending:new Map(),hold:false,autoLength:30,overridePlanLength:null,recommendations:[],recommendation:{count:7,reason:'保留完整因果与关键转折，节奏适合这篇短寓言。'}};
  function planned(payload,schema,instructions,budget){
+  if(schema.properties.requirements)return {frameCountReview:{decision:'keep',proposedCount:payload.plan.pages.length,reason:'受控叙事任务已有空间。'},requirements:[]};
   if(schema.properties.issues)return {coverage:[{quote:payload.verifiedOriginal.text.slice(0,30),task:'受控原文核对',pages:[1],assessment:'adequate',reason:'受控记录，不代表语义质量。',issuePage:0}],issues:[],titleReview:{title:payload.plan.title,reason:'标题准确对应当前故事。'},...(payload.reflectionCandidates?{reflectionChoice:{index:1,reason:'保留原文支持的认识。'}}:{})};
   if(schema.properties.candidates)return {title:payload.draft.title,candidates:[makePlan(1).reflection,'醒来之后，梦中的自在仍值得回味。','梦与醒的分界，也未必是心境的分界。']};
   if(payload.draft)return {reflection:makePlan(1).reflection};
@@ -81,7 +82,7 @@ for(const provider of ['gemini','codex']){
    assert.equal(current.selection.length,'auto');assert.equal(current.story.pages.length,length);
    const outline=f.control.outlines.at(-1);assert.equal(outline.payload.exactPageCount,'auto');assert.equal(outline.schema.properties.beats.minItems,1);assert.equal(outline.schema.properties.beats.maxItems,80);
    assert.equal(job.payload.exactPageCount,length);assert.ok(job.schema.properties.pages.maxItems<=20);
-   assert.match(job.instructions,/为 auto 时/);assert.match(job.instructions,/1 至 80 幅/);assert.doesNotMatch(job.instructions,/30至60幅/);
+   assert.match(outline.instructions,/为auto时按任务在1至80内决定/);assert.match(job.instructions,/不重新选题、分配全篇幅数/);assert.doesNotMatch(outline.instructions+job.instructions,/30至60幅/);
    if(provider==='gemini')assert.ok(job.budget<=16000);
    f.restart();
    assert.equal(await f.generate(id,length-1,'auto'),'');

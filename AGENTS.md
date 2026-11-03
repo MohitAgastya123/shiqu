@@ -23,6 +23,11 @@
 
 - Delete `.DS_Store` files whenever encountered, including capitalization variants such as `.DS_store`. Do not move them aside or keep backups.
 
+## Production Workflow
+
+- Improvements to generation, review, or revision must ship through the production workflow; do not stop at an implementation that only works in an evaluation tool.
+- Tests and evaluation tools must call the same workflow implementation as production. Use isolated data for verification, without maintaining a separate functional pipeline.
+
 ## Story Export
 
 - When the user asks to output/export stories, default to ZIP archives saved in `../awesome-shiqu/works/yysun`.

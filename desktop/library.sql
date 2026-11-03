@@ -69,6 +69,9 @@ SELECT json_object('stories', json_group_array(json(summary))) FROM (
     ELSE 'image' END,
    'storyboardFrames', coalesce(json_array_length(s.document, '$.draft.pages'),json_array_length(s.document, '$.storyboard.pages')),
    'reviewStatus', json_extract(s.document, '$.visualReview.status'),
+   'reviewPhase', CASE WHEN json_type(s.document,'$.visualReview')='object' THEN CASE
+    WHEN json_extract(s.selection,'$.length')='auto' THEN coalesce(json_extract(s.document,'$.visualReview.phase'),CASE WHEN json_extract(s.document,'$.visualReview.status')='pending' THEN 'frames' ELSE 'full' END)
+    ELSE 'full' END END,
    'reviewRound', coalesce(json_extract(s.document, '$.visualReview.round'), 0),
    'repairCompleted', coalesce(json_array_length(s.document, '$.visualReview.repaired'), 0),
    'repairTotal', coalesce(json_array_length(s.document, '$.visualReview.issues'), 0)

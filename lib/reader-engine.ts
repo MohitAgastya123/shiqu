@@ -1,6 +1,6 @@
 // Advance local story generation under one session lock, retaining every paid result it can save.
 // A failed save is rethrown for recovery rather than recorded as a provider failure.
-import {blockedIssues,nextStep,planSchema,reflectionCandidatesSchema,storyPresentationSchema,storyDraftSchema,storyboardOutlineSchema,storyboardBatchSchema,selectionSchema,view,ReaderError,productionComplete,readerBooks} from './reader-model.ts';
+import {blockedIssues,nextStep,reviewPhase,planSchema,reflectionCandidatesSchema,storyPresentationSchema,storyDraftSchema,storyboardOutlineSchema,storyboardBatchSchema,selectionSchema,view,ReaderError,productionComplete,readerBooks} from './reader-model.ts';
 import type {Document,Plan,StoryDraft,ReflectionCandidates,StoryPresentation,Selection,SessionRow,Storyboard,StoryboardOutline} from './reader-model.ts';
 import {persistenceError} from './reader-repository.ts';
 import type {ReaderRepository} from './reader-repository.ts';
@@ -13,7 +13,7 @@ import type {FrameRecommendation} from './reader-frame-recommendation.ts';
 import {artRecommendationSchema} from './reader-art-recommendation.ts';
 import type {ArtRecommendation} from './reader-art-recommendation.ts';
 import {readerImageBatchSize,readerStoryboardBatchSize,readerMaxAutomaticRepairs} from './reader-limits.ts';
-import {newReview,reviewReportSchema,repairOutputSchema,pendingRepairs,storyReplanMessage} from './reader-review.ts';
+import {newReview,parseFrameCountReport,reviewReportSchema,repairOutputSchema,pendingRepairs,storyReplanMessage} from './reader-review.ts';
 import {syncRevisionImages,reusableRevisionImages} from './reader-revision.ts';
 import {applyStructuralEdits} from './reader-structure.ts';
 import type {StructuralEdits} from './reader-structure.ts';
@@ -133,6 +133,15 @@ export async function advanceStory(repo:ReaderRepository,generator:StoryGenerato
     if(!retry)throw new ReaderError(409,'分镜审片尚未通过，请手动继续修订。');
     // Give the continuation its own generation so the later recheck cannot reuse this receipt.
     const partial=review.stopReason==='unchanged';review.round++;review.status='repair';review.repairs=0;if(!partial)review.repaired=[];delete review.stopReason;
+   }else if(reviewPhase(review,selection)==='frames'){
+    if(!generator.reviewFrameCount)throw new ReaderError(503,'生成服务暂不支持画幅数审核，请更新服务后重试。');
+    const result=await generator.reviewFrameCount(selection,structuredClone(doc.plan!),doc.original!);
+    const report=parseFrameCountReport(doc.plan!.pages.length,{frameCountReview:result.value.frameCountReview,requirements:result.value.requirements});
+    validateEditorialCoverage(report.coverage,doc.original!);
+    (review.frameCountReports??=[]).push(report);review.issues=report.issues;review.repaired=[];
+    review.phase=report.issues.length?'frames':'full';
+    review.status=!report.issues.length?'pending':review.repairs>=readerMaxAutomaticRepairs?'blocked':'repair';
+    if(review.status==='blocked')review.stopReason='limit';else delete review.stopReason;generated=result;
    }else{
     if(!generator.review)throw new ReaderError(503,'生成服务暂不支持分镜审片，请更新服务后重试。');
     const candidates=doc.reflectionCandidates?reflectionCandidatesSchema.parse(doc.reflectionCandidates):undefined;
@@ -142,7 +151,7 @@ export async function advanceStory(repo:ReaderRepository,generator:StoryGenerato
     if(report.coverage)validateEditorialCoverage(report.coverage,doc.original!);
     const previousTitle=doc.plan!.title;doc.plan={...doc.plan!,title:report.titleReview.title};
     if(candidates&&report.reflectionChoice){doc.plan={...doc.plan!,reflection:candidates[report.reflectionChoice.index-1]};delete doc.reflectionCandidates;}
-    review.reports.push({round:review.round,...(report.acceptanceResults?{acceptanceResults:report.acceptanceResults}:{}),issues:report.issues,...(report.coverage?{coverage:report.coverage}:{}),titleReview:{...report.titleReview,previousTitle},...(candidates&&report.reflectionChoice?{reflectionChoice:{...report.reflectionChoice,candidates}}:{})});review.round++;review.issues=report.issues;review.repaired=[];
+    review.phase='full';review.reports.push({round:review.round,...(report.acceptanceResults?{acceptanceResults:report.acceptanceResults}:{}),issues:report.issues,...(report.coverage?{coverage:report.coverage}:{}),titleReview:{...report.titleReview,previousTitle},...(candidates&&report.reflectionChoice?{reflectionChoice:{...report.reflectionChoice,candidates}}:{})});review.round++;review.issues=report.issues;review.repaired=[];
     const unknown=report.acceptanceResults?.some(result=>result.status==='unknown');
     const replan=report.issues.some(issue=>issue.requiresReplan);
     review.status=unknown?'blocked':!report.issues.length?'passed':replan&&selection.length!=='auto'||review.repairs>=readerMaxAutomaticRepairs?'blocked':'repair';if(review.status==='blocked')review.stopReason=unknown?'requirements':replan&&selection.length!=='auto'?'replan':'limit';else delete review.stopReason;generated=result;
@@ -152,7 +161,8 @@ export async function advanceStory(repo:ReaderRepository,generator:StoryGenerato
    const review=doc.visualReview!,requested=pendingRepairs(review),issues=review.issues.filter(issue=>requested.includes(issue.page));
    if(review.issues.some(issue=>issue.requiresReplan)){
     if(selection.length!=='auto'||!generator.restructure)throw new ReaderError(503,'生成服务暂不支持自动调整分镜结构。已保存审核结果，尚未绘图。');
-    const before=doc.plan!,result=await generator.restructure(selection,structuredClone(before),doc.original!,review.issues,review.reports.at(-1)?.coverage);
+    const count=reviewPhase(review,selection)==='frames'?review.frameCountReports?.at(-1):undefined;
+    const before=doc.plan!,result=await generator.restructure(selection,structuredClone(before),doc.original!,review.issues,count?.coverage||review.reports.at(-1)?.coverage,count?{frameCountReview:count.frameCountReview,requirements:count.requirements}:undefined);
     const edited=applyStructuralEdits(before,result.value);
     (review.history??=[]).push({round:review.round,requested:review.issues.filter(issue=>issue.requiresReplan).map(issue=>issue.page),changes:[],structure:{edits:edited.edits,before:before.pages.length,after:edited.plan.pages.length,sourcePages:edited.sourcePages,removed:edited.removed,...(edited.characters?{characters:edited.characters,previousCharacters:edited.previousCharacters}:{}),...(doc.storyboard?{previousOutline:doc.storyboard.outline}:{})}});
     generated=result;
@@ -161,7 +171,7 @@ export async function advanceStory(repo:ReaderRepository,generator:StoryGenerato
      doc.images=reusableRevisionImages({selection,plan:before,images:doc.images},selection,edited.plan,edited.sourcePages);
      doc.audio=[];doc.plan=edited.plan;progressMap=edited.progressMap;
      delete doc.storyboard;delete doc.draft;
-     review.status='pending';review.repaired=[];review.repairs++;
+     review.phase='frames';review.status='pending';review.repaired=[];review.repairs++;
     }
    }else if(requested[0]===0){
     const result=await generator.reflection(selection,structuredClone(doc.plan!),doc.original!,{reflection:doc.plan!.reflection,issues});

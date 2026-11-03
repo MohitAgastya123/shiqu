@@ -26,20 +26,22 @@ export const suggestionSystemPrompt=promptSections(
  ['来源与不足处理','只推荐确知属于该书的篇目；不足数量上限时少列并在 note 说明，不为凑数编造。不能确认该书时 stories 为空，note 请读者补充作者或原文链接。URL 来源必须用 URL context 读取页面，只依据成功读取的内容；打不开或内容不足时返回空数组并说明。'],
  ['画风推荐',artRecommendationInstructions],['输入与输出',inputBoundaryDirection]);
 export const storyPlanningDirection=promptSections(
- ['故事与事实','面向成年读者，用简体中文改编指定经典中的 chosenStory，保持核心人物、事件与因果；没有选定故事时才按 theme 选题。选定后依据已核原文编排。只改编确知属于该书的故事；存在 verifiedOriginal 时，仅以 text 和存在时的 chapterContext.text 为事实依据，不用记忆补充情节。未提供已核原文的 URL 来源须经 URL context 读取，不能确认时拒绝编造。'],
+ ['读者与选题','面向成年读者，用简体中文改编chosenStory；未选故事时才按theme选题。无已核原文的URL来源须成功读取后采用，不能确认时拒绝编造。'],
  ['原文编排',storySourceDirection],
  ['作品知识与补文',storyKnowledgeDirection],
  ['范围与开场',storyScopeDirection+'\n'+storyOpeningDirection],
- ['叙事与轻重',narrativeMeaningDirection],['静态画面与衔接',storyboardDirection],
+ ['叙事与轻重',narrativeMeaningDirection],
  ['事实边界',sourceFidelityDirection],
- ['幅数与制作要求',narrativeDetailInstructions+`全篇 exactPageCount 为数字时严格遵守；为 auto 时按关键事件、因果、转折与停顿决定 ${readerMinFrames} 至 ${readerMaxFrames} 幅，不预设常见数量区间，不为凑数重复或为压缩丢掉关键转折。只有1幅时，用一个核心瞬间配合旁白交代必要因果与结果，不拼入连续动作。productionPrompt 优先于默认叙事建议，仍服从原文事实及选定故事、总幅数、画风和 schema，不能为主题、误会、反转或温暖余味改变动机、行为性质或结局。`],
+ ['幅数与制作要求',narrativeDetailInstructions+`exactPageCount为数字时遵守；为auto时按叙事任务决定${readerMinFrames}至${readerMaxFrames}幅，不预设数量区间。仅一幅时用核心瞬间配必要旁白保留因果与结果。productionPrompt优先于默认表达建议，仍服从原文、选定故事、幅数策略、artDirection和schema。`],
  ['本篇验收要求',acceptanceDirection],['输入与输出',inputBoundaryDirection]);
-export const storyMetadataDirection=storySummaryDirection+'\n'+'summary 只作归档元信息，依据原文记录完整主事件及实际结果，最多1200字；先依据原文编排，不以摘要决定分镜顺序、轻重或分幅，也不把开场引子当作完整摘要。sourceReference 写书名与篇名；有 chapterContext 时使用 chapterContext.title，否则使用 verifiedOriginal.title，不伪造古文或网址。adaptationNote 说明新增、压缩和改写，明确属于 AI 演绎。characters 用简体中文记录有依据的时代、年龄、外貌、服饰和辨识特征，必要物件写稳定外观，作为全篇身份依据；不重复画风、排线、光影或构图，不要求每幅全员或全身出场，也不阻止有原文依据的配角。';
+// Scene execution shares quality standards without instructions to choose a new story scope or count.
+export const storySceneDirection=promptSections(['原文依据',storySourceDirection],['作品知识与补文',storyKnowledgeDirection],['叙事标准',narrativeMeaningDirection],['事实边界',sourceFidelityDirection],['静态画面与衔接',storyboardDirection]);
+export const storyMetadataDirection=storySummaryDirection+'\n'+'summary只作归档，不决定分镜顺序与轻重。sourceReference用书名及chapterContext.title，缺省用verifiedOriginal.title；不伪造引文或网址。adaptationNote说明压缩、改写及视觉补足，明确AI演绎。characters用简体中文记录有据的时代、年龄、外貌、服饰、辨识特征及关键物件；身份稳定，动态状态按剧情阶段描述。不混入画风或构图，也不要求每幅全员全身。';
 export const storyPageDirection=promptSections(
- ['配文','caption 正常目标8至55字，最多3个短句；必要时可超过55字，但不得超过 schema 的90字硬上限，不为凑字数解释画面。可用现代旁白、对白或两者。对白默认自然现代译写，保留原意、口气、条件与力度，今天仍易懂的原句可保留；不改成概括转述或潜台词解说。'],
- ['画面指令','prompt 默认用简体中文，专业术语可保留英文，不整段双语重复。每幅可独立生成：先写核心瞬间，再写动作或反应、接触与空间关系、当前物件状态，按本幅功能选择景别、视点、环境及画外信息。具体简洁，不填术语表，不以抽象情绪、运镜、泛泛“张口讲述”或长串否定句代替设计。重复本幅可见的必要位置和外观线索，使单独生成仍能衔接；局部特写不强塞全身衣着和全景。'],
- ['画风','严格服从 artDirection，不混入其他画风；分镜景别不改变所选画风。保持人物年龄、身份、时代一致，画中不写字。每幅只补必要的视觉表达，不机械抄整套风格与禁止项。']);
-export const planSystemPrompt=promptSections(['任务','你是古典短篇连环画编剧与分镜导演。本次生成完整文字分镜。'],['编排标准',storyPlanningDirection],['元数据',storyMetadataDirection],['逐幅要求',storyPageDirection],['本次输出',storyDraftDirection]);
+ ['配文','caption用现代旁白、对白或两者，目标8至55字、最多3个短句，必要时可到90字硬上限。与本幅瞬间和上下文对应，不为凑字数解释画面。'],
+ ['画面指令','prompt默认简体中文，可保留专业英文术语；依次写核心瞬间、动作或反应、接触与空间、必要状态及景别焦点，使每幅可独立生成。只补本幅可见的必要身份与位置线索，不双语复述、堆术语或用泛泛“张口讲述”代替设计。'],
+ ['画风','服从artDirection，保持人物年龄、身份与时代；画中不写字，景别不改变画风，不逐幅抄整套风格和禁止项。']);
+export const planSystemPrompt=promptSections(['任务','你是古典短篇连环画编剧与分镜导演，本次生成完整文字分镜。'],['编排标准',storyPlanningDirection],['静态画面与衔接',storyboardDirection],['元数据',storyMetadataDirection],['逐幅要求',storyPageDirection],['本次输出',storyDraftDirection]);
 export function draftInstructions(local=false){return planSystemPrompt+(local?'\n\n## 本地原文\n'+localPlanConstraint:'');}
 export function storySource(selection:Selection){
  const book=(selection.bookId==='other'?selection.customBook:readerBooks.find(b=>b.id===selection.bookId)?.title||selection.bookId)?.trim();

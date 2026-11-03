@@ -31,7 +31,7 @@ test('count verdicts respect the current count, direction, bounds and correspond
  assert.ok(reviewReportSchema(3).parse({titleReview,issues:[]}),'Historical reports have no mandatory new field');
 });
 test('the original audit remains intact and the appended count audit follows the requested four-step order',()=>{
- const steps=['1. 从完整原文','2. 找这些任务','3. 判断压缩损失','4. 将损失写成具体补戏要求'];
+ const steps=['1. 从完整原文','2. 找这些任务','3. 判断压缩损失','4. 将缺失、重复或失衡写成具体修订要求'];
  const positions=steps.map(text=>frameCountReviewDirection.indexOf(text));assert.ok(positions.every((p,i)=>p>=0&&(!i||p>positions[i-1])));
  assert.match(reviewSystemPrompt,/逐对比较相邻画面/);assert.match(reviewSystemPrompt,/结语标准/);assert.match(frameCountReviewDirection,/不能先定一个新数量再凑内容/);assert.match(frameCountReviewDirection,/诗词和人物讲述/);assert.match(frameCountReviewDirection,/不能只列一串结论便算表现/);assert.match(frameCountReviewDirection,/合并、删除或重分配/);assert.match(frameCountReviewDirection,/不含封面或系统另页展示的plan.reflection/);
 });

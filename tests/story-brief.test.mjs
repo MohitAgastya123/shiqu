@@ -1,5 +1,6 @@
 // Verify binary matching receipts and source-only production and synopsis-assisted review across all provider request boundaries.
 import test from 'node:test';
+import {storyOpeningDirection,storyReviewDirection,storyboardDirection,narrativeMeaningDirection} from '../lib/reader-prompts.ts';
 import assert from 'node:assert/strict';
 import {createReaderProvider} from '../server/generation.ts';
 import {themeMatchesSchema,themeMatchPayload} from '../lib/reader-theme-match.ts';
@@ -7,6 +8,7 @@ import {libraryFixture} from './fixtures/story-library.mjs';
 import {themeStoryId} from '../server/story-theme-matching.ts';
 import {makePlan,makeReflectionCandidates} from './fixtures/production.mjs';
 
+const plain=text=>text.replace(/^\s*- /gm,'').replace(/\s/g,'');
 const summary='勇士为保护村民迎战猛虎，最终击退猛虎，平安返回村庄。【核对摘要专用标记】';
 const matchReason='人物面对危险保护村民，其实际行动体现勇气。【匹配理由专用标记】';
 const brief={summary,matchReason};
@@ -72,7 +74,7 @@ for(const provider of ['codex','gemini','openai'])test(`${provider}: brief verif
    assert.deepEqual(call.payload.editorialContext,context);assert.equal(call.payload.verifiedOriginal.text,original.text);assert.equal(call.payload.verifiedOriginal.storyBrief,undefined);
    if(reviewing){
     assert.deepEqual(call.payload.storyBrief,brief);assert.deepEqual(call.payload.plan,plan);assert.deepEqual(call.payload.outline,outline);
-    assert.match(call.instructions,/先依据完整原文与实际分镜，独立检查/);assert.match(call.instructions,/再参考已核对的 storyBrief.summary/);assert.match(call.instructions,/摘要与原文冲突时按原文裁决/);
+    assert.ok(plain(call.instructions).includes(plain(storyReviewDirection)));
    }else{
     assert.equal(call.payload.storyBrief,undefined);
     for(const marker of ['核对摘要专用标记','匹配理由专用标记','归档剧本摘要专用标记','归档提纲摘要专用标记'])assert.ok(!JSON.stringify(call.payload).includes(marker),marker);
@@ -80,7 +82,12 @@ for(const provider of ['codex','gemini','openai'])test(`${provider}: brief verif
     assert.doesNotMatch(call.instructions,/先参照摘要|摘要负责叙事主线/);
    }
    if(call.schema.properties.summary)assert.match(call.instructions,/2–3句/);
-   if(!call.payload.draft){assert.match(call.instructions,/第一页开场/);assert.match(call.instructions,/静态/);assert.match(call.instructions,/连续性/);assert.match(call.instructions,/从已核原文中提取理解开局所需的必要背景、人物关系和眼前处境/);assert.match(call.instructions,/不把全篇概述当作开场/);assert.match(call.instructions,/不先剧透结局/);}
+   if(!call.payload.draft){
+    assert.ok(plain(call.instructions).includes(plain(storyOpeningDirection)));
+    assert.ok(plain(call.instructions).includes(plain(narrativeMeaningDirection)));
+    // Outlines assign beats; detailed static staging belongs to scene execution and review.
+    assert.equal(plain(call.instructions).includes(plain(storyboardDirection)),!call.schema.properties.beats);
+   }
   }
   const guarded=calls.length;
   for(const action of [()=>g.outline(long,'id',pending),()=>g.planBatch(long,'id',board,pending),()=>g.reflection(selection,draft,pending),()=>g.reflectionCandidates(selection,draft,pending),()=>g.review(selection,plan,pending,outline),()=>g.repair(selection,plan,pending,issues,outline)])await assert.rejects(action(),/STORY_BRIEF_UNVERIFIED/);

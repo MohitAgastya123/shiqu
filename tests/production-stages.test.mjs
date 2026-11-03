@@ -47,6 +47,10 @@ test('native/preview SQL and reader show the same saved stages without exporting
    {name:'count',doc:{original,frameRecommendation:{count:45}}},
    {name:'batches',doc:{original,frameCountConfirmed:true,storyboard:{outline:{beats:Array(45).fill('beat')},pages:Array(20).fill({})}}},
    {name:'review',doc:{original,plan,visualReview:review('pending',0)}},
+   {name:'auto-count-initial',selection:{...selection,length:'auto'},doc:{original,plan,visualReview:review('pending',0)}},
+   {name:'auto-count-keep',selection:{...selection,length:'auto'},doc:{original,plan,visualReview:review('pending',0,{phase:'full',repairs:0})}},
+   {name:'count-structure-recheck',selection:{...selection,length:'auto'},doc:{original,plan,visualReview:review('pending',0,{phase:'frames',repairs:1})}},
+   {name:'count-structure-passed',selection:{...selection,length:'auto'},doc:{original,plan,visualReview:review('passed',1,{phase:'full',repairs:1})}},
    {name:'repair',doc:{original,plan,visualReview:review('repair',1,{issues:[{page:2},{page:21}],repaired:[2]})}},
    {name:'recheck',doc:{original,plan,visualReview:review('pending',1,{issues:[{page:2}],repaired:[2]})}},
    {name:'blocked',state:'failed',doc:{original,plan,visualReview:review('blocked',2,{issues:[{page:2}]})}},
@@ -57,7 +61,7 @@ test('native/preview SQL and reader show the same saved stages without exporting
    {name:'legacy',doc:{original,plan}},
   ];
   const insert=database.prepare('INSERT INTO reader_sessions(id,user_id,selection,document,state,page,saved,created_at,updated_at) VALUES(?,?,?,?,?,0,0,?,?)');
-  for(const f of fixtures)insert.run(f.name,'owner',JSON.stringify(selection),JSON.stringify({plan:null,images:[],audio:[],usage:[],...f.doc}),f.state||'running','2026-10-29','2026-10-29');
+  for(const f of fixtures)insert.run(f.name,'owner',JSON.stringify(f.selection||selection),JSON.stringify({plan:null,images:[],audio:[],usage:[],...f.doc}),f.state||'running','2026-10-29','2026-10-29');
   const before=readFileSync(path.join(directory,'shiqu.sqlite'));
   const summary=readLibrarySummary(directory);
   for(const item of summary.stories){
@@ -67,6 +71,9 @@ test('native/preview SQL and reader show the same saved stages without exporting
    assert.deepEqual(desktop.map(s=>[s.id,s.state]),reader.map(s=>[s.id,s.state]),item.id);
   }
   assert.match(JSON.stringify(summary.stories.find(s=>s.id==='batches').production),/20/);
+  const countRepaired=summary.stories.find(s=>s.id==='count-structure-passed');
+  const countStages=productionSteps({...countRepaired.production,total:45,ready:0});
+  assert.equal(countStages.find(s=>s.id==='repair').state,'done');assert.equal(countStages.find(s=>s.id==='recheck').state,'done');assert.doesNotMatch(countStages.find(s=>s.id==='repair').detail,/无需修订/);
   assert.doesNotMatch(JSON.stringify(summary),/private-original|private-image-prompt|private-production-prompt/);
   assert.deepEqual(readFileSync(path.join(directory,'shiqu.sqlite')),before);
   database.close();

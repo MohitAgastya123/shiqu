@@ -185,7 +185,8 @@ export class ReaderProductionCoordinator implements ReaderProduction{
   await this.pruneSuperseded(id);await this.graph(await this.raw(id,ownerId));
   this.wake();return this.snapshot(ownerId,id);
  }
- // Let a blocked story draw on the reader's word. The review reads as passed first, and its
+ // Explicitly bypass any unfinished review gates on the reader's word, retaining overridden.
+ // The review reads as passed first, and its
  // finished checkpoints are removed rather than rerun: a script job would repair what was accepted.
  async overrideReview(ownerId:string,id:string){
   if(this.stopping)throw new ReaderError(503,'制作服务正在停止，请稍后重新打开故事。');
