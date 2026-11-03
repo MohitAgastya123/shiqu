@@ -49,6 +49,7 @@ ol.production-timeline--horizontal{grid-template-columns:repeat(7,minmax(0,1fr))
 .production-stage-footer{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:4px 12px;min-width:0}
 .production-stage-timing{display:inline-flex;align-items:center;gap:4px;margin:0;font-size:11px;line-height:1.7;color:#617254;font-variant-numeric:tabular-nums}
 .production-stage-footer>.story-flow-link{margin-left:auto}
+.production-stage-footer>.yu-retry-actions{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:4px 12px;margin-left:auto}
 .production-stage-notice .yu-retry-control small{margin:0}
 .yu-recovery-status{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 12px;color:#617254}
 .yu-recovery-detail{font-size:10px;color:#718064}.yu-recovery-detail>summary{cursor:pointer;text-decoration:underline;text-underline-offset:3px}.yu-recovery-detail[open]{flex-basis:100%}.yu-recovery-detail>p{margin:6px 0 0;overflow-wrap:anywhere}

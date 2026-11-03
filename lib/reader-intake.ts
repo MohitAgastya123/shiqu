@@ -8,6 +8,7 @@ import {readerMinFrames,readerMaxFrames} from './reader-limits.ts';
 import type {Document,Selection} from './reader-model.ts';
 import {localSourceKey} from './reader-source-key.ts';
 import {storyBriefVerified} from './reader-story-brief.ts';
+import {localSourceSchema} from './reader-local-contract.ts';
 import type {SuggestionBatch,SuggestionProgress} from './reader-suggestions.ts';
 export type IntakeSearch={round:number;state:'idle'|'searching'|'failed';error?:string|null;requestId?:string;cycleId?:string;commandHash?:string};
 export const setupSettingsSchema=z.object({artStyle:z.enum(artStyleIds),productionPrompt:z.string().max(1200),acceptancePrompt:acceptancePromptSchema.optional(),narrativeDetail:narrativeDetailSchema});
@@ -20,6 +21,7 @@ export type IntakeView=Omit<StoryIntake,'creationHash'|'lastAction'|'search'>&{s
 export function intakeSearch(intake:StoryIntake):IntakeSearch{return intake.search||{round:0,state:intake.phase==='discovering'?'searching':'idle'};}
 const common={requestId:z.string().uuid(),generation:z.number().int().min(0)};
 export const intakeActionSchema=z.discriminatedUnion('action',[
+ z.object({...common,action:z.literal('conditions'),conditions:z.object({bookId:z.string().min(1).max(100),customBook:z.string().max(500).optional(),theme:z.string().trim().min(1).max(100),discoverySources:z.array(localSourceSchema).min(1).max(24).optional(),productionPrompt:z.string().max(1200)}).strict()}).strict(),
  z.object({...common,action:z.literal('search'),title:z.string().trim().max(100).regex(/^[^\r\n]*$/,'故事标题请写在一行内。')}).strict(),
  z.object({...common,action:z.literal('choose'),settings:setupSettingsSchema.optional(),batch:z.number().int().min(0).max(39),index:z.number().int().min(0).max(4)}).strict(),
  z.object({...common,action:z.literal('more'),automatic:z.boolean().optional(),settings:setupSettingsSchema.optional()}).strict(),

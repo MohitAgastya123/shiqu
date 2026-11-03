@@ -5,7 +5,7 @@ import StoryFlowAction from './StoryFlowAction';
 import {readingChapterLabel} from '@/lib/reader-suggestions';
 import {useEffect,useRef,useState} from 'react';
 import type {ComponentProps} from 'react';
-import {Loader2} from 'lucide-react';
+import {ArrowLeft,Loader2} from 'lucide-react';
 import type {SessionView} from '@/lib/reader-model';
 import type {IntakeCommand} from '@/lib/reader-intake';
 import {getArtStyle} from '@/lib/reader-styles';
@@ -22,11 +22,11 @@ import StoryExtractionSearch from './StoryExtractionSearch';
 import StoryExtractionContext from './StoryExtractionContext';
 import './story-revision.css';
 type SetupTab=Exclude<StoryEditorTab,'script'>;
-type Props={session:SessionView;book:string;busy:boolean;onAction:(command:IntakeCommand)=>Promise<void>;progress:Omit<ComponentProps<typeof StoryGenerationStatus>,'session'|'timeline'|'stages'|'children'|'compact'>};
+type Props={session:SessionView;book:string;busy:boolean;onAction:(command:IntakeCommand)=>Promise<void>;onBackToDiscovery?:()=>void;progress:Omit<ComponentProps<typeof StoryGenerationStatus>,'session'|'timeline'|'stages'|'children'|'compact'>};
 // Stable titles prevent the initial discovery snapshot from flashing a production screen.
 export function storyCreationTitle(session:SessionView){return session.intake?(session.intake.selected?'故事流程':'选择故事'):session.story?.title||session.selection.storyTitle||'你的故事，正在展开';}
 const savedSettings=(session:SessionView)=>session.intake!.draft||{artStyle:session.selection.artStyle,productionPrompt:session.selection.productionPrompt,...(session.selection.acceptancePrompt!==undefined?{acceptancePrompt:session.selection.acceptancePrompt}:{}),narrativeDetail:session.selection.narrativeDetail||'balanced' as const,length:'auto' as const};
-export default function StoryCreationSetup({session,book,busy,onAction,progress,onReplace}:Props&{onReplace?:(batch:number,index:number,settings:ProductionSettings)=>Promise<void>}){
+export default function StoryCreationSetup({session,book,busy,onAction,onBackToDiscovery,progress,onReplace}:Props&{onReplace?:(batch:number,index:number,settings:ProductionSettings)=>Promise<void>}){
  const intake=session.intake!,saved={...savedSettings(session),length:'auto' as const},savedKey=JSON.stringify(saved);
  const targetTitle=session.selection.discovery?.mode==='title'?session.selection.discovery.title:undefined;
  const [error,setError]=useState('');
@@ -84,6 +84,7 @@ export default function StoryCreationSetup({session,book,busy,onAction,progress,
  const extractionStatus=showExtractionStatus&&<div className="yu-extraction-status" role="status">{(paused||!candidates.length)&&<p>{paused?'提取已暂停，恢复后继续。':'正在提取，找到的故事会逐篇显示。'}</p>}{!paused&&(!!intake.progress?.currentChapters?.length||!!intake.progress?.completedChars)&&<p className="yu-extraction-status-detail">{intake.progress.currentChapters?.length?`正在阅读：${readingChapterLabel(intake.progress.currentChapters)}`:''}{intake.progress.completedChars?` 已读 ${intake.progress.completedChars.toLocaleString('zh-CN')} 字。`:''}</p>}</div>;
  const extractionError=search.state==='failed'&&<div className="yu-batch-error" role="alert"><p>提取未完成。{search.error}</p><p>已找到的故事会保留，可以重试或直接选择。</p>{selected&&findMore}</div>;
  return <section className="yu-creation-setup" aria-label={selected?'故事流程':'选择故事'}>
+  {!selected&&onBackToDiscovery&&<StoryFlowAction disabled={busy} onClick={onBackToDiscovery}><ArrowLeft size={14} aria-hidden="true"/>返回修改书籍、原文和主题</StoryFlowAction>}
   {selected?<p className="yu-sheet-intro">《{book}》 · {session.selection.theme==='原典故事'?'不限定主题':`主题：${session.selection.theme}`}{session.selection.discoverySources?.length?` · 已选 ${session.selection.discoverySources.length} 段原文`:''}</p>:<StoryExtractionContext selection={session.selection} book={book}/>}
   {!selected&&<StoryExtractionSearch sessionId={session.id} title={targetTitle} local={session.selection.bookId!=='other'} busy={busy} hasCandidates={candidates.length>0} onSearch={title=>act({action:'search',title})}/>}
   {selected&&<div className="yu-batch-heading"><h3>{session.selection.storyTitle}</h3></div>}

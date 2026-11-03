@@ -24,6 +24,22 @@ test('a planning failure and retry are inside the planning step, once',()=>{
  assert.doesNotMatch(stage(html,'source'),/等待超时|重试生成/);
 });
 
+test('failed work replaces pause with one retry in the checkpoint footer after inspection links',()=>{
+ const message='上次生成已中断，已保留保存的结果。请重试继续。';
+ const session={...base,error:message,story:{original:{},pages:Array(4).fill({})},faults:[{id:'interrupted',stage:'generation',page:null,message,state:'pending',retryAllowed:true}],generationProgress:{...base.generationProgress,phase:'review',reviewStatus:'pending',reviewPhase:'frames',repairPasses:1}};
+ const tools=createElement(Review,{session,busy:false,error:'',onScript:noop,onEdit:noop,onRetry:noop,onDrawAnyway:noop});
+ const html=render(session,{reviewTools:tools}),document=parseDocument(html);
+ const footer=DomUtils.findOne(node=>node.attribs?.class==='production-stage-footer'&&DomUtils.textContent(node).includes('重试生成'),document.children);
+ assert.ok(footer);assert.equal(DomUtils.textContent(footer),'重试生成');
+ assert.equal((html.match(/>重试生成<\/a>/g)||[]).length,1);assert.doesNotMatch(html,/暂停生成/);
+ assert.ok(html.indexOf('手动修改')<html.indexOf('>重试生成</a>'));assert.equal(html.split(message).length-1,1);
+ const fallback=parseDocument(render(base));
+ assert.ok(DomUtils.findOne(node=>node.attribs?.class==='production-stage-footer'&&DomUtils.textContent(node)==='重试生成',fallback.children));
+ const noRetry=render({...base,retryAllowed:false});assert.doesNotMatch(noRetry,/暂停生成|重试生成/);
+ const running=render({...base,state:'running',productionState:'running',error:null});assert.match(running,/暂停生成/);assert.doesNotMatch(running,/>重试生成<\/a>/);
+ const paused=render({...session,generationControl:'paused'});assert.match(paused,/恢复生成/);assert.doesNotMatch(paused,/暂停生成|>重试生成<\/a>/);
+});
+
 test('independent faults keep their own stage, saved-image recovery and paused explanations',()=>{
  const faults=[{id:'source',stage:'source',page:null,message:'原文检索失败。'},{id:'prepare',stage:'prepare',page:null,message:'制作建议失败。'},{id:'image',stage:'redraw',page:2,message:'第三幅图片丢失。'},{id:'save',stage:'publication',page:1,message:'第二幅保存失败。'}].map(fault=>({...fault,state:'pending',retryAllowed:true}));
  const session={...base,error:null,faults};

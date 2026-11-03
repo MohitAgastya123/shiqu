@@ -1,5 +1,5 @@
 // Active steps show only their deadline; saved final durations stay on completed checkpoints.
-// Only saved images have measurable progress.
+// Failed work offers recovery in the control slot; only active work offers pause.
 import {useEffect,useState} from 'react';
 import type {ReactNode} from 'react';
 import {Check,Clock3,Feather,Pause,X} from 'lucide-react';
@@ -25,7 +25,7 @@ export default function StoryGenerationStatus({session,busy,controlBusy,error,on
  const title=busy&&stopped?(session.state==='failed'?'正在重试生成':'正在请求生成'):error&&session.state!=='failed'?'暂时无法确认生成状态':status.message;
  const failed=!!error||status.group==='生成失败';
  const paused=!!session.generationControl&&session.generationControl!=='active';
- const generationControl=control===undefined?<StoryGenerationControl session={session} busy={controlBusy} onControl={onControl} primary={paused} link/>:control;
+ const generationControl=control===undefined?(paused||!failed?<StoryGenerationControl session={session} busy={controlBusy} onControl={onControl} primary={paused} link/>:null):control;
  return <div className={'yu-generation-stage has-progress'+(compact?' is-compact':'')+(moving?' is-generating':'')+(failed?' has-error':'')+(session.reviewIssues?.length?' has-review-issues':'')}>
   {(!compact||failed)&&<div className="yu-generation-summary">
    <span className="yu-generation-mark" aria-hidden="true">{failed?<X size={23}/>:stopped?<Pause size={23}/>:session.state==='completed'?<Check size={23}/>:<Feather size={23}/>}</span>
@@ -34,11 +34,7 @@ export default function StoryGenerationStatus({session,busy,controlBusy,error,on
   <StoryFlowHeader title={progress.measured?'画面生成进度':'制作流程'} {...navigation}/>
   <section className="yu-generation-progress" aria-label="生成进展">
    {progress.measured&&<progress aria-label="画面生成进度" max={progress.total!} value={progress.ready}/>}
-   <StoryProductionTimeline session={session} busy={busy||controlBusy} error={error} onRetry={onRetry} onAcceptance={onAcceptance} reviewTools={reviewTools} stageContent={stageContent} onHistory={onHistory} stages={stages||progress.steps} moving={moving} queued={progress.queued} {...timeline} currentTiming={moving?<><Clock3 size={12} aria-hidden="true"/>{progress.remaining===null?'超时信息待同步':progress.remaining>0?`距超时 ${progress.remaining} 秒`:'已达超时，等待状态更新'}</>:undefined} currentContent={<>
-    {session.state!=='completed'&&<div className="production-stage-footer">
-     {generationControl}
-    </div>}
-   </>}/>
+   <StoryProductionTimeline session={session} busy={busy||controlBusy} error={error} onRetry={onRetry} onAcceptance={onAcceptance} reviewTools={reviewTools} stageContent={stageContent} onHistory={onHistory} stages={stages||progress.steps} moving={moving} queued={progress.queued} {...timeline} currentTiming={moving?<><Clock3 size={12} aria-hidden="true"/>{progress.remaining===null?'超时信息待同步':progress.remaining>0?`距超时 ${progress.remaining} 秒`:'已达超时，等待状态更新'}</>:undefined} currentContent={session.state!=='completed'?generationControl:null}/>
   </section>
   {children}
   <StoryBackToShelf onBack={onBack} link/>

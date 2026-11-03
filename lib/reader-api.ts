@@ -164,7 +164,7 @@ return async function readerApi(req:Request,path:string[]):Promise<Response>{
     const b=z.object({page:z.number().int().min(0).max(readerMaxFrames-1),image:z.string().min(1).max(1024)}).strict().parse(await body(req));
     return json(await services.production.checkImage(uid,id,b.page,b.image));
    }
-   if(path[2]==='setup'&&path.length===3&&req.method==='POST'){await requireProvider();const action=intakeActionSchema.parse(await body(req,32768));await changeIntake(repo,id,uid,action);return json(services.production?await services.production.snapshot(uid,id):view(await repo.get(id,uid)));}
+   if(path[2]==='setup'&&path.length===3&&req.method==='POST'){await requireProvider();const action=intakeActionSchema.parse(await body(req,32768));await changeIntake(repo,id,uid,action,services.localBooks);return json(services.production?await services.production.snapshot(uid,id):view(await repo.get(id,uid)));}
    if(path[2]==='revisions'&&path.length===3){
     if(req.method==='GET')return json(await revisionSnapshot(repo,id,uid));
     if(req.method==='POST'){
