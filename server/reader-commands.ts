@@ -10,6 +10,7 @@ export type CommandReceipt={request_id:string;owner_id:string;session_id:string;
 export const commandFingerprint=(input:unknown)=>createHash('sha256').update(JSON.stringify(input)).digest('hex');
 export async function commandReceipt(db:Database,ownerId:string,requestId:string,fingerprint?:string){
  const row=await db.prepare('SELECT * FROM reader_commands WHERE owner_id=? AND request_id=?').bind(ownerId,requestId).first<CommandReceipt>();
+ if(!row&&await db.prepare('SELECT id FROM reader_sessions WHERE id=? AND user_id=?').bind(requestId,ownerId).first())throw new ReaderError(409,'这个操作编号已用于创建或提交故事。');
  if(row&&fingerprint!==undefined&&row.fingerprint!==fingerprint)throw new ReaderError(409,'这个操作编号已用于其他内容，请重新操作。');
  return row;
 }
@@ -23,9 +24,9 @@ export async function recordNoop(db:Database,ownerId:string,sessionId:string,req
   .bind(requestId,ownerId,sessionId,action,fingerprint,resultId,now,now).run();
  return (await commandReceipt(db,ownerId,requestId,fingerprint))!;
 }
-export async function authorizeRecovery(db:Database,input:{ownerId:string;sessionId:string;requestId:string;faultId:string;jobs:string[];resolutionJob:string;redraw?:boolean;resolved?:boolean;basis?:{selection:string;document:string}},now=Date.now()){
+export async function authorizeRecovery(db:Database,input:{ownerId:string;sessionId:string;requestId:string;faultId:string;jobs:string[];resolutionJob:string;redraw?:boolean;resolved?:boolean;adopt?:{jobId:string;result:string;attempts:number};basis?:{selection:string;document:string}},now=Date.now()){
  const {ownerId,sessionId,requestId,faultId,jobs,resolutionJob,redraw=false}=input;
- const resolved=input.resolved||false,payload=JSON.stringify({jobs,resolutionJob,redraw}),fingerprint=commandFingerprint(['recover',sessionId,faultId,jobs,resolutionJob,redraw,resolved]);
+ const resolved=input.resolved||false,payload=JSON.stringify({jobs,resolutionJob,redraw,...(input.adopt?{adopt:input.adopt}:{})}),fingerprint=commandFingerprint(['recover',sessionId,faultId,jobs,resolutionJob,redraw,resolved,...(input.adopt?[input.adopt]:[])]);
  const replay=await commandReceipt(db,ownerId,requestId,fingerprint);if(replay)return replay;
  if(!resolved&&(!jobs.length||!jobs.includes(resolutionJob)||new Set(jobs).size!==jobs.length))throw new ReaderError(400,'恢复任务不完整。');
  const eligible=input.basis?`AND EXISTS(SELECT 1 FROM reader_sessions s WHERE s.id=f.session_id AND s.user_id=f.owner_id
@@ -40,9 +41,12 @@ export async function authorizeRecovery(db:Database,input:{ownerId:string;sessio
   WHERE f.id=? AND f.session_id=? AND f.owner_id=? AND f.state='pending'
    AND NOT EXISTS(SELECT 1 FROM json_each(?) selected LEFT JOIN production_jobs j ON j.id=selected.value
     WHERE j.id IS NULL OR j.session_id!=? OR j.owner_id!=? OR j.state='running')
+   AND NOT EXISTS(SELECT 1 FROM json_each(?) selected JOIN production_jobs j ON j.id=selected.value
+    JOIN reader_commands c ON c.request_id=j.recovery_id AND c.owner_id=j.owner_id
+    WHERE c.status IN ('queued','running'))
    ${eligible}
   ON CONFLICT(owner_id,request_id) DO NOTHING`)
-  .bind(requestId,ownerId,sessionId,fingerprint,payload,faultId,resolved?'succeeded':'queued',now,now,faultId,sessionId,ownerId,JSON.stringify(jobs),sessionId,ownerId,...(input.basis?[input.basis.selection,input.basis.document,input.basis.document]:[])).run();
+  .bind(requestId,ownerId,sessionId,fingerprint,payload,faultId,resolved?'succeeded':'queued',now,now,faultId,sessionId,ownerId,JSON.stringify([...jobs,...(input.adopt?[input.adopt.jobId]:[])]),sessionId,ownerId,JSON.stringify([...jobs,...(input.adopt?[input.adopt.jobId]:[])]),...(input.basis?[input.basis.selection,input.basis.document,input.basis.document]:[])).run();
  const receipt=await commandReceipt(db,ownerId,requestId,fingerprint);
  if(receipt)return receipt;
  const fault=await db.prepare('SELECT * FROM reader_faults WHERE id=? AND owner_id=? AND session_id=?').bind(faultId,ownerId,sessionId).first<ReaderFault>();

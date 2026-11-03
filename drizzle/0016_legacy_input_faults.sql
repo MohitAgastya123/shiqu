@@ -1,0 +1,2 @@
+-- Startup conservatively retains failures whose old display-name hash cannot be associated with
+-- current generation input. Explicit recovery binds the durable legacy fault to current work.

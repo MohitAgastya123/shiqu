@@ -10,6 +10,8 @@ import {familyRoot,familyNumber,supersededSql} from '../lib/reader-repository.ts
 import type {MediaStore} from '../lib/services.ts';
 import {checkedRevision,reusableRevisionImages} from '../lib/reader-revision.ts';
 import type {RevisionChanges,RevisionSnapshot} from '../lib/reader-revision.ts';
+import {readableImage} from './reader-image-health.ts';
+import {commandReceipt} from './reader-commands.ts';
 import {newReview} from '../lib/reader-review.ts';
 import {readerImageAsset,referenceImageKey} from '../lib/reader-image-assets.ts';
 import {mediaType,imageTypes} from '../lib/reader-generation-contract.ts';
@@ -44,6 +46,7 @@ export async function forkRevision(repo:ReaderRepository,media:MediaStore,ownerI
   return repo.get(requestId,ownerId);
  };
  const existing=await replay();if(existing)return existing;
+ if(await commandReceipt(repo.db,ownerId,requestId))throw new ReaderError(409,'这个操作编号已用于其他内容。');
  const row=await repo.get(parentId,ownerId),{doc,rootId,epoch,token:current}=await revisionBasis(repo,row);
  if(current!==token)throw new ReaderError(409,'故事或版本已更新，请重新载入后再修改。');
  const original={selection:selectionSchema.parse(JSON.parse(row.selection)),plan:doc.plan,images:doc.images,savedFrameCount:savedFrameCount(doc),...(doc.frameRecommendation?{frameRecommendation:doc.frameRecommendation}:{})};
@@ -57,7 +60,7 @@ export async function forkRevision(repo:ReaderRepository,media:MediaStore,ownerI
    const key=referenceImageKey(parentId,value);if(!key){lostPages.push(page);continue;}
    const asset=await media.get(key).catch(()=>{throw new ReaderError(503,`第 ${page+1} 幅原图暂时无法读取，未创建新版，请稍后重试。`);});if(!asset){lostPages.push(page);continue;}
    const bytes=new Uint8Array(await asset.arrayBuffer()),type=mediaType(bytes);
-   if(!type){lostPages.push(page);continue;}
+   if(!type||!await readableImage(bytes).catch(()=>{throw new ReaderError(503,`第 ${page+1} 幅原图暂时无法核对，未创建新版，请稍后重试。`);})){lostPages.push(page);continue;}
    const target=readerImageAsset(requestId,page,imageTypes[type],hash(bytes));
    await media.put(target.key,bytes,{contentType:type});images[page]=target.url;
   }

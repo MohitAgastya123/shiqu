@@ -28,7 +28,7 @@ for(const provider of ['codex','gemini'])test(`${provider}: twenty automatic rep
  const stopped=await f.read(id);assert.equal(stopped.retryStage,'review');assert.equal(stopped.generationProgress.reviewStatus,'blocked');assert.match(stopped.error,/第 3 幅/);
  assert.equal(f.control.reviews.length,21);assert.equal(f.control.repairs.length,20);assert.equal(f.control.calls.length,0);
  await f.app.services.production.tick();await f.read(id);assert.equal(f.control.reviews.length,21);
- blocked=false;await Promise.all([f.demand(id,viewer,0,true),f.demand(id,crypto.randomUUID(),0,true)]);await until(()=>f.control.calls.length===1);
+ blocked=false;const requestId=crypto.randomUUID(),command={requestId,faultId:stopped.faults[0].id};await Promise.all([f.json(`sessions/${id}/recover`,'POST',command),f.json(`sessions/${id}/recover`,'POST',command)]);await until(()=>f.control.calls.length===1);
  assert.equal(f.control.repairs.length,21);assert.equal(f.control.reviews.length,22);assert.deepEqual(f.control.repairs.map(p=>p.requestedPages),Array.from({length:21},()=>[3]));
  const doc=await document(f,id);assert.equal(doc.visualReview.status,'passed');assert.equal(doc.visualReview.reports.length,22);assert.equal(stopped.generationProgress.repairPasses,20);assert.equal(stopped.generationProgress.reviewStopReason,'limit');
  assert.deepEqual(doc.usage.filter(u=>u.step.startsWith('repair:')).map(u=>u.step),[...Array.from({length:20},(_,i)=>`repair:${i+1}:3`),'repair:22:3']);

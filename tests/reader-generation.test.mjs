@@ -68,7 +68,8 @@ test('sessions are owner-scoped and client retries reuse a single session',async
 test('new stories have no rolling daily cap, including concurrent starts',async()=>{
  const {repo}=setup();const rows=await Promise.all(Array.from({length:25},()=>repo.create(crypto.randomUUID(),'alice',selection)));
  assert.equal((await repo.list('alice')).length,25);
- const retries=await Promise.all(Array.from({length:5},()=>repo.create(rows[0].id,'alice',{...selection,theme:'人情冷暖'})));
+ await assert.rejects(repo.create(rows[0].id,'alice',{...selection,theme:'人情冷暖'}),e=>e.status===409);
+ const retries=await Promise.all(Array.from({length:5},()=>repo.create(rows[0].id,'alice',selection)));
  assert.ok(retries.every(row=>row.id===rows[0].id&&row.selection===rows[0].selection&&row.created_at===rows[0].created_at));
  assert.equal((await repo.list('alice')).length,25);
  await assert.rejects(repo.create(rows[0].id,'bob',selection),e=>e.status===404);

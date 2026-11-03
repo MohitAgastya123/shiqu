@@ -69,3 +69,38 @@ test('restarting an accepted recovery shares its three interrupted attempts; rep
  }
  assert.equal((await commandReceipt(f.db,'owner',command.requestId)).status,'failed');assert.equal(f.calls,1);
 });
+
+test('an image-loss insert revokes completed atomically without a second application write',async t=>{
+ const f=fixture(t);f.sqlite.prepare("INSERT INTO reader_sessions(id,user_id,selection,document,state,created_at,updated_at) VALUES('story','owner','{}','{\"images\":[\"saved.png\"]}','completed','created','updated')").run();
+ f.sqlite.prepare("INSERT INTO reader_faults(id,session_id,owner_id,kind,page,version,image,message,created_at,updated_at) VALUES('loss','story','owner','image-loss',0,'v','saved.png','lost',1,1)").run();
+ const row=f.sqlite.prepare("SELECT state,error FROM reader_sessions WHERE id='story'").get();assert.equal(row.state,'failed');assert.equal(row.error,'lost');
+});
+
+test('an already-upgraded library keeps an older display-name failure as an independent legacy block',async t=>{
+ const {migrate}=await import('../server/database.ts'),{selectionSchema}=await import('../lib/reader-model.ts'),{inputVersion,productionJobId}=await import('../server/production-queue.ts');
+ const sqlite=new DatabaseSync(':memory:');t.after(()=>sqlite.close());sqlite.exec('CREATE TABLE app_migrations(name TEXT PRIMARY KEY,applied_at TEXT NOT NULL)');
+ for(const name of readdirSync('drizzle').filter(f=>f.endsWith('.sql')&&f<'0016').sort()){sqlite.exec(readFileSync('drizzle/'+name,'utf8'));sqlite.prepare('INSERT INTO app_migrations VALUES(?,?)').run(name,'before');}
+ const old=selectionSchema.parse({bookId:'zhuangzi',theme:'测试',displayTitle:'A',length:1}),selection={...old,displayTitle:'B'},plan={title:'原题',pages:[{caption:'已保存旁白',prompt:'原有画面'}]},doc={plan,images:[],audio:[],usage:[]};
+ sqlite.prepare("INSERT INTO reader_sessions(id,user_id,selection,document,state,generation_control,created_at,updated_at) VALUES('story','owner',?,?,'idle','paused','created','updated')").run(JSON.stringify(selection),JSON.stringify(doc));
+ const version=inputVersion({scriptVersion:inputVersion({selection:old}),plan,style:old.artStyle,prompt:old.productionPrompt}),id=productionJobId('story','image',version,'0');
+ sqlite.prepare("INSERT INTO production_jobs(id,session_id,owner_id,kind,pool,version,dependencies,payload,state,created_at,updated_at) VALUES(?,'story','owner','image','image',?,'[]','{\"page\":0}','queued',1,2)").run(id,version);
+ sqlite.prepare("UPDATE production_jobs SET state='failed',error='failure under name A' WHERE id=?").run(id);const fault=sqlite.prepare('SELECT * FROM reader_faults WHERE job_id=?').get(id);
+ migrate(sqlite,process.cwd());let saved=sqlite.prepare('SELECT * FROM reader_faults WHERE id=?').get(fault.id);assert.equal(saved.state,'pending');assert.equal(saved.version,'legacy');assert.equal(saved.job_id,id);assert.equal(saved.message,fault.message);assert.equal(sqlite.prepare('SELECT state FROM production_jobs WHERE id=?').get(id).state,'failed','Keep the old work link until explicit recovery can inspect its paid result');
+});
+
+test('restored complete checkpoints settle atomically even while paused and without a subsequent request',async t=>{
+ const f=fixture(t),document=JSON.stringify({plan:{pages:[{}]},original:{},images:['saved.png'],audio:[],usage:[]});
+ f.sqlite.prepare("INSERT INTO reader_sessions(id,user_id,selection,document,state,generation_control,created_at,updated_at) VALUES('story','owner','{}',?,'completed','paused','created','updated')").run(document);
+ f.sqlite.prepare("INSERT INTO reader_faults(id,session_id,owner_id,kind,page,version,image,message,created_at,updated_at) VALUES('loss','story','owner','image-loss',0,'v','saved.png','lost',1,1)").run();
+ f.sqlite.prepare("UPDATE reader_faults SET state='resolved' WHERE id='loss'").run();const row=f.sqlite.prepare("SELECT state,generation_control FROM reader_sessions WHERE id='story'").get();assert.equal(row.state,'completed');assert.equal(row.generation_control,'paused');
+});
+test('cross-table request ID guards close the race after two connections have both read no receipt',async t=>{
+ const {mkdtemp,rm}=await import('node:fs/promises'),path=await import('node:path'),os=await import('node:os');
+ const directory=await mkdtemp(path.join(os.tmpdir(),'shiqu-command-race-')),a=new DatabaseSync(path.join(directory,'test.sqlite'));
+ for(const name of readdirSync('drizzle').filter(f=>f.endsWith('.sql')).sort())a.exec(readFileSync('drizzle/'+name,'utf8'));
+ const b=new DatabaseSync(path.join(directory,'test.sqlite'));t.after(async()=>{a.close();b.close();await rm(directory,{recursive:true,force:true});});
+ const requestId=crypto.randomUUID();assert.equal(a.prepare('SELECT 1 FROM reader_commands WHERE owner_id=? AND request_id=?').get('owner',requestId),undefined);assert.equal(b.prepare('SELECT 1 FROM reader_sessions WHERE user_id=? AND id=?').get('owner',requestId),undefined);
+ a.prepare("INSERT INTO reader_commands(request_id,owner_id,session_id,action,fingerprint,payload,created_at,updated_at) VALUES(?,'owner','story','control','fingerprint','{\"action\":\"pause\"}',1,1)").run(requestId);
+ const insert=b.prepare("INSERT INTO reader_sessions(id,user_id,selection,document,state,created_at,updated_at) VALUES(?,'owner','{}','{}','idle','created','updated')");assert.throws(()=>insert.run(requestId),/reader_request_id_conflict/);
+ const second=crypto.randomUUID();insert.run(second);assert.throws(()=>a.prepare("INSERT INTO reader_commands(request_id,owner_id,session_id,action,fingerprint,payload,created_at,updated_at) VALUES(?,'owner','story','control','f','{}',1,1)").run(second),/reader_request_id_conflict/);
+});

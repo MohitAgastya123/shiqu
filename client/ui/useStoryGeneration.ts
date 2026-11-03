@@ -94,7 +94,7 @@ export function useStoryGeneration(page:number,callbacks:Callbacks,watchShelf=fa
   }
   finally{setupLock.current=false;setSetupBusy(false);}
  }
- async function retrySession(sessionId:string,faultId?:string){const s:SessionView=await request('reader/sessions/'+sessionId);await recoverFault(s,faultId);}
+ async function retrySession(sessionId:string,faultId?:string){const s:SessionView=await request('reader/sessions/'+sessionId);adopt(s,false,s.page);await recoverFault(s,faultId);}
  async function renameTitle(sessionId:string,title:string){
   const s:SessionView=await request(`reader/sessions/${sessionId}/title`,'POST',{title});
   collect(s);
@@ -192,7 +192,7 @@ export function useStoryGeneration(page:number,callbacks:Callbacks,watchShelf=fa
   recovering.current.add(command.faultId);setError('');
   try{
    const next:SessionView=await request(`reader/sessions/${s.id}/recover`,'POST',command);
-   collect(next);if(id.current===s.id){passive.current=false;generationMode.current='observe';setActive(next);setWake(v=>v+1);}
+   collect(next);if(id.current===s.id){passive.current=false;generationMode.current=next.generationMode==='reader'&&next.generationControl==='active'?'generate':'observe';setActive(next);setWake(v=>v+1);}
   }catch(e){if(id.current===s.id)setError(e instanceof Error?e.message:'恢复暂未受理，请重试。');}
   finally{recovering.current.delete(command.faultId);}
  }

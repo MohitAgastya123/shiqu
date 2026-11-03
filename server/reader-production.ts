@@ -20,7 +20,7 @@ import type {Document,SessionRow,SessionView,ProductionAction,Selection} from '.
 import type {ReaderProvider} from '../lib/reader-provider.ts';
 import type {MediaStore} from '../lib/services.ts';
 import {mediaType} from '../lib/reader-generation-contract.ts';
-import {imageDimensions} from '../lib/reader-image-dimensions.ts';
+import {readableImage} from './reader-image-health.ts';
 import {referenceImageKey} from '../lib/reader-image-assets.ts';
 import {effectiveIntakePhase,intakeSearch} from '../lib/reader-intake.ts';
 import type {IntakeSearch} from '../lib/reader-intake.ts';
@@ -88,7 +88,7 @@ export class ReaderProductionCoordinator implements ReaderProduction{
   this.queue=new ProductionQueue(database,{
    limits:{search:1,text:1,image:options.imageWorkers??3,local:2},now:this.clock,leaseMs:options.leaseMs,
    canRun:job=>this.canRun(job),resumeInterrupted:job=>this.resumeInterrupted(job),onSettled:()=>this.wake(),
-   candidateFilter:`j.kind='image-publish' OR NOT EXISTS(SELECT 1 FROM reader_sessions s WHERE s.id=j.session_id AND s.user_id=j.owner_id AND (s.generation_control!='active' OR EXISTS(SELECT 1 FROM library_deletions d WHERE d.story_id=s.id AND d.user_id=s.user_id)))`,
+   candidateFilter:`j.kind='image-publish' OR NOT EXISTS(SELECT 1 FROM reader_sessions s WHERE s.id=j.session_id AND s.user_id=j.owner_id AND (s.generation_control!='active' OR (s.state='failed' AND NOT EXISTS(SELECT 1 FROM reader_faults f WHERE f.session_id=s.id AND f.owner_id=s.user_id AND f.state='recovering' AND (f.command_id=j.recovery_id OR f.kind='interrupted' AND f.job_id=j.id))) OR EXISTS(SELECT 1 FROM library_deletions d WHERE d.story_id=s.id AND d.user_id=s.user_id)))`,
    skipCandidate:job=>job.kind!=='image-publish'&&this.supersededJobs.has(job.session_id),
    safeError:(error,job)=>error instanceof ReaderError?error.message:job.kind==='image-publish'?'图片已生成，暂时无法展开。请重试继续。':this.provider.safeError(error),
    terminal:error=>error instanceof ReaderError&&error.status<500,
@@ -217,7 +217,7 @@ export class ReaderProductionCoordinator implements ReaderProduction{
   const saved=await sessionFaults(this.database,row.id,row.user_id);if(!saved.length)return [];
   const current=jobs||await this.currentJobs(row),ids=new Set(current.map(job=>job.id));
   const version=this.imageInputs(row).version;
-  return saved.filter(fault=>fault.job_id?ids.has(fault.job_id):fault.version==='legacy'||fault.version===version);
+  return saved.filter(fault=>fault.version==='legacy'||(fault.job_id?ids.has(fault.job_id):fault.version===version));
  }
  private faultView(row:SessionRow,fault:ReaderFault,jobs:ProductionJob[]):FaultView{
   const doc=JSON.parse(row.document) as Document,job=jobs.find(job=>job.id===fault.job_id),step=nextStep(doc,selectionSchema.parse(JSON.parse(row.selection)),0);
@@ -226,10 +226,15 @@ export class ReaderProductionCoordinator implements ReaderProduction{
   return {id:fault.id,message:fault.message,page:fault.page,stage,state:fault.state as FaultView['state'],retryAllowed:fault.state==='pending'&&!['replan','requirements'].includes(doc.visualReview?.stopReason||'')};
  }
  private async resolveFault(row:SessionRow,fault:ReaderFault){
-  await this.database.prepare("UPDATE reader_faults SET state='resolved',updated_at=? WHERE id=? AND session_id=? AND owner_id=? AND state='pending'")
-   .bind(this.clock(),fault.id,row.id,row.user_id).run();
-  await this.database.prepare("UPDATE reader_sessions SET state='idle',error=NULL WHERE id=? AND user_id=? AND state IN ('failed','completed') AND NOT EXISTS(SELECT 1 FROM reader_faults WHERE session_id=? AND owner_id=? AND state IN ('pending','recovering'))")
-   .bind(row.id,row.user_id,row.id,row.user_id).run();this.wake();
+  await this.database.prepare("UPDATE reader_faults SET state='resolved',updated_at=? WHERE id=? AND session_id=? AND owner_id=? AND state='pending' AND EXISTS(SELECT 1 FROM reader_sessions s WHERE s.id=reader_faults.session_id AND s.user_id=reader_faults.owner_id AND json_extract(s.document,'$.images['||reader_faults.page||']')=?)")
+   .bind(this.clock(),fault.id,row.id,row.user_id,(JSON.parse(row.document) as Document).images[fault.page!]).run();
+  this.wake();
+ }
+ private async completeHealthy(ownerId:string,id:string){
+  const row=await this.repository.get(id,ownerId),doc=JSON.parse(row.document) as Document;
+  if(!productionComplete(doc,selectionSchema.parse(JSON.parse(row.selection))))return;
+  await this.database.prepare("UPDATE reader_sessions SET state='completed',error=NULL WHERE id=? AND user_id=? AND state!='running' AND document=? AND NOT EXISTS(SELECT 1 FROM reader_faults f WHERE f.session_id=reader_sessions.id AND f.owner_id=reader_sessions.user_id AND f.state IN ('pending','recovering'))")
+   .bind(id,ownerId,row.document).run();
  }
  async checkImage(ownerId:string,id:string,page:number,image:string){
   const row=await this.repository.get(id,ownerId),doc=JSON.parse(row.document) as Document;
@@ -238,7 +243,13 @@ export class ReaderProductionCoordinator implements ReaderProduction{
   const key=referenceImageKey(id,image);if(!key)throw new ReaderError(409,'图片地址无法核对。');
   let lost:boolean;try{lost=await this.fileLost(key,true);}catch{throw new ReaderError(503,'图片暂时无法读取，请重试检查；尚未重新绘图。');}
   const version=this.imageInputs(row).version,existing=(await this.faults(row)).find(fault=>fault.kind==='image-loss'&&fault.page===page);
-  if(!lost){if(existing?.state==='pending')await this.resolveFault(row,existing);return this.snapshot(ownerId,id);}
+  if(!lost){
+   // A restored file removes a physical loss, but a later ordinary model failure still needs
+   // its own explicit acknowledgement. Its retained fault remains available for a free reuse.
+   if(existing?.state==='pending'&&(!existing.job_id||lostImageError(existing.message)))await this.resolveFault(row,existing);
+   await this.completeHealthy(ownerId,id);
+   return this.snapshot(ownerId,id);
+  }
   // A late browser report must not mark a new image, plan or selection. Keep in-flight writes valid.
   await this.database.prepare(`INSERT INTO reader_faults(id,session_id,owner_id,kind,page,version,image,message,created_at,updated_at)
    SELECT ?,?,?,'image-loss',?,?,?,?,?,? FROM reader_sessions s
@@ -248,9 +259,6 @@ export class ReaderProductionCoordinator implements ReaderProduction{
     AND NOT ${supersededSql('s')} AND NOT EXISTS(SELECT 1 FROM library_deletions d WHERE d.story_id=s.id AND d.user_id=s.user_id)
    ON CONFLICT DO NOTHING`)
    .bind(randomUUID(),id,ownerId,page,version,image,lostImageMessage,this.clock(),this.clock(),id,ownerId,`$.images[${page}]`,image,row.selection,row.document).run();
-  await this.database.prepare(`UPDATE reader_sessions SET state=CASE WHEN state='running' THEN state ELSE 'failed' END,error=?
-   WHERE id=? AND user_id=? AND EXISTS(SELECT 1 FROM reader_faults f WHERE f.session_id=? AND f.owner_id=? AND f.state IN ('pending','recovering'))`)
-   .bind(lostImageMessage,id,ownerId,id,ownerId).run();
   this.wake();return this.snapshot(ownerId,id);
  }
  private async recoveryImageJobs(row:SessionRow,page:number){
@@ -282,7 +290,7 @@ export class ReaderProductionCoordinator implements ReaderProduction{
   if(['requirements','replan'].includes(doc.visualReview?.stopReason||''))throw new ReaderError(409,'请先修改存在问题的制作或验收要求，再提交。');
   const fault=(await this.faults(row)).find(fault=>fault.id===command.faultId);
   if(!fault||fault.state!=='pending')throw new ReaderError(409,'这项问题正在处理或已更新，请刷新后再操作。');
-  let jobs:string[],resolutionJob:string,redraw=false;
+  let jobs:string[],resolutionJob:string,redraw=false,adopt:{jobId:string;result:string;attempts:number}|undefined;
   if(fault.kind==='image-loss'){
    const page=fault.page;if(page===null)throw new ReaderError(409,'无法确定待恢复画幅。');
    const current=doc.images[page];
@@ -290,7 +298,7 @@ export class ReaderProductionCoordinator implements ReaderProduction{
    const key=current?referenceImageKey(id,current):null;
    if(key&&!await this.fileLost(key,true)){
     const receipt=await authorizeRecovery(this.database,{ownerId,sessionId:id,...command,jobs:[],resolutionJob:'',resolved:true,basis:row},this.clock());
-    this.wake();return {...await this.snapshot(ownerId,id),recoveryReceipt:{requestId:receipt.request_id,status:receipt.status,error:receipt.error}};
+    await this.completeHealthy(ownerId,id);this.wake();return {...await this.snapshot(ownerId,id),recoveryReceipt:{requestId:receipt.request_id,status:receipt.status,error:receipt.error}};
    }
    const pair=await this.recoveryImageJobs(row,page);if(!pair.image||!pair.publication)throw new ReaderError(409,'图片任务尚未准备好。');
    const paid=pair.image.result?JSON.parse(pair.image.result) as Generated<string>:null,paidKey=paid?.value?referenceImageKey(id,paid.value):null;
@@ -308,7 +316,8 @@ export class ReaderProductionCoordinator implements ReaderProduction{
   }else{
    await this.graph(row);
    const step=nextStep(doc,selectionSchema.parse(JSON.parse(row.selection)),readerMaxFrames-1);
-   const job=fault.job_id?await this.queue.job(fault.job_id):(await this.currentJobs(row)).find(job=>job.pool==='text'&&['queued','failed'].includes(job.state)&&(JSON.parse(job.payload).stepKey===step?.key||job.kind==='prepare'))||(step?.kind==='image'?(await this.currentJobs(row)).find(job=>job.kind==='image'&&['queued','failed'].includes(job.state)&&JSON.parse(job.payload).page===step.page):undefined);
+   const legacy=fault.version==='legacy'&&fault.job_id?await this.queue.job(fault.job_id):null;
+   const job=legacy?.kind==='image-publish'?legacy:fault.job_id&&fault.version!=='legacy'?await this.queue.job(fault.job_id):(await this.currentJobs(row)).find(job=>job.pool==='text'&&['queued','failed'].includes(job.state)&&(JSON.parse(job.payload).stepKey===step?.key||job.kind==='prepare'))||(step?.kind==='image'?(await this.currentJobs(row)).find(job=>job.kind==='image'&&['queued','failed'].includes(job.state)&&JSON.parse(job.payload).page===(fault.page??step.page)):undefined);
    if(!job)throw new ReaderError(409,'恢复任务已更新，请刷新后再操作。');
    if(job.kind==='image-publish'){
     const result=jobDependencies(job)[0],paid=result?await this.queue.job(result):null;
@@ -319,23 +328,30 @@ export class ReaderProductionCoordinator implements ReaderProduction{
     }
    }
    if(!fault.job_id)await this.database.prepare("UPDATE reader_faults SET job_id=?,version=? WHERE id=? AND state='pending'").bind(job.id,job.version,fault.id).run();
-   jobs=[job.id];resolutionJob=job.id;
+   if(legacy?.kind==='image-publish'){
+    const pair=await this.recoveryImageJobs(row,JSON.parse(job.payload).page),paid=await this.queue.job(jobDependencies(job)[0]);
+    if(!paid?.result||!pair.image||!pair.publication)throw new ReaderError(409,'已生成回执暂不可用，请重新核对。');
+    adopt={jobId:pair.image.id,result:paid.result,attempts:paid.attempts};jobs=[pair.publication.id];resolutionJob=pair.publication.id;
+   }else{
+    if(fault.version==='legacy')await this.database.prepare("UPDATE reader_faults SET job_id=?,version=? WHERE id=? AND state='pending'").bind(job.id,job.version,fault.id).run();
+    jobs=[job.id];resolutionJob=job.id;
+   }
   }
   row=await this.repository.get(id,ownerId);
-  const receipt=await authorizeRecovery(this.database,{ownerId,sessionId:id,...command,jobs,resolutionJob,redraw,basis:row},this.clock());
+  const receipt=await authorizeRecovery(this.database,{ownerId,sessionId:id,...command,jobs,resolutionJob,redraw,adopt,basis:row},this.clock());
   this.wake();return {...await this.snapshot(ownerId,id),recoveryReceipt:{requestId:receipt.request_id,status:receipt.status,error:receipt.error}};
  }
  async snapshot(ownerId:string,id:string):Promise<SessionView>{
   const row=await this.repository.get(id,ownerId),saved=view(row);
   if(row.state!=='completed'&&await this.repository.superseded(id,ownerId))return {...saved,superseded:true,generationControl:'paused',productionState:'paused'};
-  const jobs=await this.currentJobs(row),faults=await this.faults(row,jobs),failed=jobs.find(job=>job.state==='failed'&&lostImageError(job.error))||jobs.find(job=>job.state==='failed');
+  const allJobs=await this.queue.jobs(row.id,row.user_id),jobs=await this.currentJobs(row,allJobs),faults=await this.faults(row,jobs),failed=jobs.find(job=>job.state==='failed'&&lostImageError(job.error))||jobs.find(job=>job.state==='failed');
   const active=jobs.filter(job=>job.state==='running'&&job.lease_until>this.clock()).sort((a,b)=>a.updated_at-b.updated_at);
   // Claim timestamps measure this attempt, rather than time since the story was first created.
   const search=this.searches.get(id);
   const session={...saved,...(saved.intake&&search?.progress?{intake:{...saved.intake,progress:search.progress}}:{}),generationProgress:{...saved.generationProgress!,startedAt:active[0]?.updated_at??search?.startedAt??null,attempt:active[0]?.attempts??saved.generationProgress!.attempt}};
   const working=active.length>0||jobs.some(job=>job.kind==='image-publish'&&job.state==='queued'&&jobs.some(parent=>parent.id===jobDependencies(job)[0]&&parent.state==='succeeded'));
   if(faults.length){
-   const views=faults.map(fault=>this.faultView(row,fault,jobs)),pending=views.find(f=>f.retryAllowed&&f.stage==='redraw')||views.find(f=>f.retryAllowed)||views[0];
+   const views=faults.map(fault=>this.faultView(row,fault,allJobs)),pending=views.find(f=>f.retryAllowed&&f.stage==='redraw')||views.find(f=>f.retryAllowed)||views[0];
    const recovering=working||faults.some(fault=>fault.state==='recovering'&&jobs.some(job=>job.state==='queued'&&(job.recovery_id===fault.command_id||job.id===fault.job_id)));
    const manual=row.generation_control!=='active';
    return {...session,faults:views,state:recovering?'running':'failed',error:recovering?null:pending.message,retryAllowed:views.some(f=>f.retryAllowed),retryStage:pending.stage,
@@ -451,7 +467,7 @@ export class ReaderProductionCoordinator implements ReaderProduction{
  private async fileLost(key:string,strict=false){
   const asset=await this.media.get(key);if(!asset)return true;
   const bytes=new Uint8Array(await asset.arrayBuffer()),type=mediaType(bytes);
-  return !imageDimensions(bytes)||(strict?type!==asset.contentType:!type);
+  return (strict?type!==asset.contentType:!type)||!await readableImage(bytes);
  }
  private async ownSession(row:SessionRow,allowDeleted:boolean){
   const lease=this.leases.get(row.id);
@@ -527,7 +543,8 @@ export class ReaderProductionCoordinator implements ReaderProduction{
      ELSE COALESCE(json_extract(production_jobs.payload,'$.setupGeneration'),-1)!=json_extract(s.document,'$.intake.generation') END
     ELSE 0 END)`).bind(row.id,row.user_id).run();
    const jobs=await this.queue.jobs(row.id,row.user_id),current=await this.currentJobs(row,jobs),ids=new Set(current.map(job=>job.id));
-   const obsolete=jobs.filter(job=>['image','image-publish'].includes(job.kind)&&['queued','failed'].includes(job.state)&&!ids.has(job.id));
+   const legacyFaults=new Set((await sessionFaults(this.database,row.id,row.user_id)).filter(f=>f.version==='legacy').map(f=>f.job_id));
+   const obsolete=jobs.filter(job=>!legacyFaults.has(job.id)&&['image','image-publish'].includes(job.kind)&&['queued','failed'].includes(job.state)&&!ids.has(job.id));
    if(!obsolete.length){this.pruneKeys.set(row.id,key);continue;}
    // A current worker may have saved its error before the queue has recorded that failure.
    if(row.state==='failed'&&obsolete.some(job=>job.state==='failed'&&job.error===row.error)&&!current.some(job=>['failed','running'].includes(job.state))){
@@ -633,7 +650,7 @@ export class ReaderProductionCoordinator implements ReaderProduction{
   const usage={step:`image:${page}`,model:result.model,requestId:result.requestId,usage:result.usage,...(result.promptRecord?{promptRecord:result.promptRecord}:{})};
   const saved=await this.database.prepare(`UPDATE reader_sessions SET document=json_set(document,?, ?, '$.usage',json_insert(json_extract(document,'$.usage'),'$[#]',json(?))),updated_at=?
    WHERE id=? AND user_id=? AND state='running' AND lock_token=? AND COALESCE(json_extract(document,?),'')=?
-   AND selection=? AND json_extract(document,'$.plan')=json_extract(?,'$.plan')
+   AND json_remove(selection,'$.displayTitle')=json_remove(?,'$.displayTitle') AND json_extract(document,'$.plan')=json_extract(?,'$.plan')
    AND COALESCE(json_extract(document,'$.intake.generation'),-1)=?
    AND EXISTS(SELECT id FROM production_jobs WHERE id=? AND state='running' AND lease_token=?)`)
    .bind(`$.images[${page}]`,result.value,JSON.stringify(usage),new Date(this.clock()).toISOString(),row.id,row.user_id,lease.token,`$.images[${page}]`,doc.images[page]||'',row.selection,row.document,doc.intake?.generation??-1,job.id,job.lease_token).run();
@@ -648,6 +665,15 @@ export class ReaderProductionCoordinator implements ReaderProduction{
   if(this.closed)return;if(this.ticking)return this.ticking;
   const work=this.cycle();this.ticking=work;
   try{await work;}finally{if(this.ticking===work)this.ticking=undefined;}
+ }
+ private async settleHealthyCheckpoints(){
+  // Local completion is independent of generation permission or a viewer. A crash after a saved
+  // checkpoint cannot leave a healthy paused story waiting for an unrelated Resume command.
+  const rows=(await this.database.prepare("SELECT * FROM reader_sessions WHERE state='idle' AND json_valid(document) AND json_type(document,'$.plan')='object' AND json_type(document,'$.original')='object' AND NOT EXISTS(SELECT 1 FROM reader_faults f WHERE f.session_id=reader_sessions.id AND f.owner_id=reader_sessions.user_id AND f.state IN ('pending','recovering'))").all<SessionRow>()).results;
+  for(const row of rows){
+   if(!this.readable(row)||!productionComplete(JSON.parse(row.document) as Document,selectionSchema.parse(JSON.parse(row.selection))))continue;
+   await this.database.prepare("UPDATE reader_sessions SET state='completed',error=NULL WHERE id=? AND user_id=? AND state='idle' AND document=? AND NOT EXISTS(SELECT 1 FROM reader_faults f WHERE f.session_id=reader_sessions.id AND f.owner_id=reader_sessions.user_id AND f.state IN ('pending','recovering'))").bind(row.id,row.user_id,row.document).run();
+  }
  }
  private async cycle(){
   await this.database.prepare('DELETE FROM production_demand WHERE expires_at<=?').bind(this.clock()).run();
@@ -672,6 +698,7 @@ export class ReaderProductionCoordinator implements ReaderProduction{
      .bind(row.id,row.user_id,this.clock(),row.lock_token,row.document,row.selection).run();
    }
   }
+  await this.settleHealthyCheckpoints();
   const demands=await this.demands(),seen=new Set<string>();
   for(const demand of demands)if(!seen.has(demand.session_id)){
    seen.add(demand.session_id);
@@ -699,7 +726,7 @@ export class ReaderProductionCoordinator implements ReaderProduction{
    // An interruption is not a story failure: the job resumes, and the row must not block it.
    const failed=jobs.find(job=>job.state==='failed'&&!job.interrupted);
    const faults=await this.faults(row,jobs);
-   await this.repository.save(row,lease.token,doc,!faults.length&&productionComplete(doc,selection),failed?.error||faults[0]?.message||null).catch(error=>{if(!(error instanceof ReaderError&&[404,409].includes(error.status)))throw error;});
+   await this.repository.save(row,lease.token,doc,!faults.length&&productionComplete(doc,selection),failed?.error||faults.find(fault=>fault.kind!=='interrupted'||(jobs.find(job=>job.id===fault.job_id)?.attempts||0)>=maxAutomaticAttempts)?.message||null).catch(error=>{if(!(error instanceof ReaderError&&[404,409].includes(error.status)))throw error;});
    this.leases.delete(id);
   }
  }

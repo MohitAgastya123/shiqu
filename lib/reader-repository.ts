@@ -1,4 +1,5 @@
 // Persist owner-scoped defaults/checkpoints and serialize immediate retries without duplicating paid steps.
+import {createHash} from 'node:crypto';
 import {emptyDocument,ReaderError,selectionSchema,awaitingFrameCount} from './reader-model.ts';
 import type {Selection,SessionRow,Document,Step,ProductionAction} from './reader-model.ts';
 import type {OriginalSource} from './reader-source-types.ts';
@@ -126,10 +127,15 @@ export class ReaderRepository{
   if(!result.meta.changes)throw new ReaderError(409,'故事正在更新，请稍后再保存原文。');
   return this.get(row.id,row.user_id);
  }
- async create(id:string,uid:string,selection:Selection,document:Document=emptyDocument()){const now=new Date().toISOString(),saved=JSON.stringify(document);
+ async create(id:string,uid:string,selection:Selection,document:Document=emptyDocument()){
+ const normalized=selectionSchema.parse(selection),creationHash=createHash('sha256').update(JSON.stringify([normalized,!!document.intake,document.reselection||null])).digest('hex');
+ const command=await this.db.prepare('SELECT request_id FROM reader_commands WHERE owner_id=? AND request_id=?').bind(uid,id).first();if(command)throw new ReaderError(409,'此创建编号已用于其他操作。');
+ const now=new Date().toISOString(),saved=JSON.stringify({...document,creationHash});
  // Read defaults inside the insert: retries cannot change a story's original attribution snapshot.
  await this.db.prepare(`INSERT INTO reader_sessions(id,user_id,selection,document,generation_mode,state,step_attempts,lock_until,page,saved,created_at,updated_at) VALUES(?,?,?,COALESCE((SELECT json_set(?,'$.publication',json(publication)) FROM reader_publication_defaults WHERE owner_id=?),?),?,'idle',0,0,0,0,?,?) ON CONFLICT(id) DO NOTHING`).bind(id,uid,JSON.stringify(selection),saved,uid,saved,document.reselection?'reader':'background',now,now).run();
- return this.get(id,uid);}
+ const row=await this.get(id,uid),doc=JSON.parse(row.document) as Document;
+ if(doc.creationHash?doc.creationHash!==creationHash:doc.revision||doc.intake?.creationHash!==document.intake?.creationHash||JSON.stringify(selectionSchema.parse(JSON.parse(row.selection)))!==JSON.stringify(normalized))throw new ReaderError(409,'此创建编号已用于其他内容，请重新创建。');
+ return row;}
  async confirmFrameCount(id:string,uid:string,count:Selection['length']){
   const row=await this.get(id,uid),selection=selectionSchema.parse(JSON.parse(row.selection)),doc=JSON.parse(row.document) as Document;
   if(doc.intake)throw new ReaderError(409,'请在制作确认中统一确认故事、画风、幅数和制作要求。');

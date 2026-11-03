@@ -39,7 +39,7 @@ for(const action of ['resume','background'])test(`concurrent publication fences 
  let published=false;
  repo.db.prepare=sql=>{
   const statement=prepare(sql);
-  if(sql.startsWith('UPDATE reader_sessions SET generation_mode')){
+  if(sql.startsWith('INSERT INTO reader_commands')){
    const run=statement.run.bind(statement);
    statement.run=async()=>{
     repo.db.prepare=prepare;
@@ -55,7 +55,7 @@ for(const action of ['resume','background'])test(`concurrent publication fences 
  const response=await f.request(`sessions/${id}/production-control`,'POST',{action});
  assert.equal(published,true);
  assert.equal(response.status,409);
- assert.match((await response.json()).error,/最新版本/);
+ assert.match((await response.json()).error,/最新版本|版本已更新/);
  assert.deepEqual(await repo.get(id,owner),before);
  assert.equal(f.control.calls.length,0);
 });
@@ -65,7 +65,7 @@ test('every old-version start point refuses without changing attempts or documen
  await repo.db.prepare('UPDATE reader_sessions SET document=? WHERE id=?').bind(JSON.stringify({revision:{rootId:id,number:2}}),child).run();
  await repo.db.prepare("UPDATE reader_sessions SET generation_control='active' WHERE id=?").bind(id).run();
  const {ReaderProductionCoordinator}=await import('../server/reader-production.ts');
- const coordinator=new ReaderProductionCoordinator(repo.db,f.generation,f.media,{tickMs:3600000});f.coordinators.push(coordinator);
+ const coordinator=new ReaderProductionCoordinator(repo.db,f.generation,f.media,{tickMs:3600000});f.coordinators.push(coordinator);f.app.services.production=coordinator;
  const job={session_id:id,owner_id:owner,kind:'script',pool:'text',payload:'{}',attempts:0};
  assert.equal(await coordinator.canRun(job),false);
  assert.equal(await coordinator.resumeInterrupted(job),false);
@@ -116,10 +116,11 @@ for(const kind of ['storyboard','draft'])test(`style-only pre-plan edit preserve
  const child=await forkRevision(repo,f.media,owner,id,crypto.randomUUID(),base.token,{artStyle:'paper-cut'},true),doc=JSON.parse(child.document);
  assert.deepEqual(doc[kind],saved[kind]);
  assert.equal(nextStep(doc,JSON.parse(child.selection),0).key,kind==='storyboard'?'plan:40':'reflection');
+ let parent=child;
  for(const changes of [{productionPrompt:'new direction'},{length:count+1}]){
-  const current=await revisionSnapshot(repo,child.id,owner);
+  const current=await revisionSnapshot(repo,parent.id,owner);
   assert.equal(revisionImpact(current,changes).preserveScript,false);
-  const replanned=await forkRevision(repo,f.media,owner,child.id,crypto.randomUUID(),current.token,changes,true),fresh=JSON.parse(replanned.document);
+  const replanned=await forkRevision(repo,f.media,owner,parent.id,crypto.randomUUID(),current.token,changes,true),fresh=JSON.parse(replanned.document);parent=replanned;
   assert.equal(fresh.draft,undefined);assert.equal(fresh.storyboard,undefined);
  }
  assert.equal(f.control.plans.length,0);assert.equal(f.control.outlines.length,0);

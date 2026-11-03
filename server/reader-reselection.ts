@@ -17,6 +17,7 @@ export async function openReselection(repo:ReaderRepository,parentId:string,owne
   if(existing.user_id!==ownerId||(doc.reselection?.parentId!==parentId&&!(doc.revision?.kind==='selection'&&doc.revision.parentId===parentId)))throw new ReaderError(409,'这个操作编号已用于其他内容。');
   return repo.get(requestId,ownerId);
  }
+ if(await commandReceipt(repo.db,ownerId,requestId))throw new ReaderError(409,'这个操作编号已用于其他内容。');
  const row=await repo.get(parentId,ownerId),{epoch,rootId}=await revisionBasis(repo,row,true);
  const selection=selectionSchema.parse(JSON.parse(row.selection));
  const {displayTitle:_,storyTitle:__,source:___,...settings}=selection;void _;void __;void ___;
@@ -26,7 +27,7 @@ export async function openReselection(repo:ReaderRepository,parentId:string,owne
 export async function commitReselection(repo:ReaderRepository,parentId:string,draftId:string,ownerId:string,choice:ReplacementChoice,attempt=0):Promise<SessionRow>{
  const fingerprint=commandFingerprint(['replace',parentId,draftId,choice]);
  const receipt=await commandReceipt(repo.db,ownerId,choice.requestId,fingerprint);
- if(receipt){if(receipt.action!=='same-selection'||receipt.session_id!==parentId)throw new ReaderError(409,'操作编号冲突。');return repo.current(parentId,ownerId);}
+ if(receipt){if(receipt.session_id!==parentId)throw new ReaderError(409,'操作编号冲突。');if(receipt.action==='replace'&&receipt.result_id)return repo.get(receipt.result_id,ownerId);if(receipt.action==='same-selection')return repo.current(parentId,ownerId);throw new ReaderError(409,'操作编号冲突。');}
  const row=await repo.get(draftId,ownerId),doc=JSON.parse(row.document) as Document;
  if(doc.revision?.kind==='selection'){
   if(doc.revision.parentId!==parentId||doc.revision.selectionRequest!==choice.requestId||doc.revision.requestHash!==fingerprint)throw new ReaderError(409,'这次替换已提交或操作编号冲突，请刷新当前版本。');
@@ -38,7 +39,7 @@ export async function commitReselection(repo:ReaderRepository,parentId:string,dr
  if(basis.epoch!==draft.epoch||replacementToken(parent.selection,basis.epoch)!==draft.baseToken)throw new ReaderError(409,'当前选题或制作设置已更新，请保留草稿并重新核对。');
  const candidate=doc.intake.batches[choice.batch]?.stories[choice.index];if(!candidate)throw new ReaderError(400,'请选择已保存的候选故事。');
  const previous=selectionSchema.parse(JSON.parse(parent.selection));
- const same=candidate.source&&previous.source?localSourceKey(candidate.source)===localSourceKey(previous.source):!candidate.source&&!previous.source&&candidate.title===previous.storyTitle;
+ const same=!!candidate.source&&!!previous.source&&localSourceKey(candidate.source)===localSourceKey(previous.source);
  if(same){await recordNoop(repo.db,ownerId,parentId,choice.requestId,'same-selection',fingerprint);await repo.remove(draftId,ownerId);return repo.current(parentId,ownerId);}
  const selection=selectionSchema.parse({...JSON.parse(row.selection),...choice.settings,storyTitle:candidate.title,source:candidate.source,length:'auto'});
  delete selection.displayTitle;
@@ -57,8 +58,10 @@ export async function commitReselection(repo:ReaderRepository,parentId:string,dr
   FROM reader_sessions p WHERE d.id=? AND d.user_id=? AND d.document=? AND p.id=? AND p.user_id=?
    AND ${currentFamilyVersion('p')} AND json_remove(p.selection,'$.displayTitle')=json_remove(?,'$.displayTitle')
    AND NOT EXISTS(SELECT 1 FROM library_deletions x WHERE x.story_id=d.id AND x.user_id=d.user_id)
+   AND NOT EXISTS(SELECT 1 FROM reader_commands c WHERE c.owner_id=? AND c.request_id=?)
+   AND NOT EXISTS(SELECT 1 FROM reader_sessions occupied WHERE occupied.user_id=? AND occupied.id=?)
    AND (${familyEpoch.replace(' AS epoch','')})=?`)
-  .bind(JSON.stringify(selection),JSON.stringify(doc),now,draftId,ownerId,row.document,parentId,ownerId,parent.selection,ownerId,draft.rootId,draft.rootId,draft.epoch).run();
+  .bind(JSON.stringify(selection),JSON.stringify(doc),now,draftId,ownerId,row.document,parentId,ownerId,parent.selection,ownerId,choice.requestId,ownerId,choice.requestId,ownerId,draft.rootId,draft.rootId,draft.epoch).run();
  if(!changed.meta.changes){
   const current=await repo.get(draftId,ownerId),saved=JSON.parse(current.document) as Document;
   if(saved.revision?.kind==='selection'||saved.reselection?.baseToken===draft.baseToken&&attempt<3)return commitReselection(repo,parentId,draftId,ownerId,choice,attempt+1);

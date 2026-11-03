@@ -37,7 +37,7 @@ test('reader renders saved directory, batch range, honest progress and automatic
  const unchanged=renderToStaticMarkup(createElement(Review,{...reviewProps,session:{...reviewProps.session,generationProgress:{reviewStopReason:'unchanged',repairPasses:1,reviewAudits:1}}}));
  assert.match(unchanged,/上次修订没有产生实际变化/);assert.doesNotMatch(unchanged,/复核仍未通过/);
  const incomplete=renderToStaticMarkup(createElement(Review,{...reviewProps,onReplan(){},session:{...reviewProps.session,retryAllowed:false,reviewIssues:[{page:18,requiresReplan:true,problem:'缺少原文已有的结局。',instruction:'重新分配全篇画幅。'}],generationProgress:{reviewStopReason:'replan',repairPasses:0,reviewAudits:1}}}));
- assert.match(incomplete,/调整要求并重新编排/);assert.match(incomplete,/整篇结构/);assert.match(incomplete,/局部自动修补与绘图已停止/);
+ assert.match(incomplete,/修改制作要求/);assert.match(incomplete,/整篇结构/);assert.match(incomplete,/局部自动修补与绘图已停止/);
  assert.doesNotMatch(incomplete,/继续自动修复|手动修改第 18 幅|已完成 20 轮/);
  const legacy=defaultProductionPrompt().replace('按原文自身的事件、人物与因果展开，不额外套入主题或要求反转。','用相遇、犹疑与错过的具体细节表现感情，克制煽情，让未说出口的话和选择留下余味。');
  const editor={tab:'requirements',base:{selection:{artStyle:'chibi',theme:'爱情与错过',productionPrompt:legacy,length:18},plan:null},changes:{},impact:null,setTab(){},setChanges(){}};
@@ -51,7 +51,7 @@ test('reader renders saved directory, batch range, honest progress and automatic
   const locked=renderToStaticMarkup(createElement(Review,{...reviewProps,...extra}));assert.match(locked,/<button[^>]*class="yu-primary"[^>]*disabled=""/);
  }
  const pausedReview=renderToStaticMarkup(createElement(Review,{...reviewProps,session:{...reviewProps.session,generationControl:'paused'}}));assert.match(pausedReview,/请先恢复生成/);
- for(const [retryStage,label] of [['source','重试原文检索'],['publication','重试生成'],['review','继续自动修复'],['redraw','重试生成'],[undefined,'重试生成']]){
+ for(const [retryStage,label] of [['source','重试原文检索'],['publication','重试保存图片'],['review','继续自动修复'],['redraw','重绘图片'],[undefined,'重试生成']]){
   const action=renderToStaticMarkup(createElement(Retry,{session:{...blocked,retryStage},busy:false,onRetry(){}}));
   assert.match(action,new RegExp(label));assert.doesNotMatch(action,/收费|计费|额度/);
   if(retryStage==='publication'){assert.match(action,/重试保存/);assert.doesNotMatch(action,/重试展开/);}

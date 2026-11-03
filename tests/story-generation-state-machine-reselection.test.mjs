@@ -54,7 +54,10 @@ test('a pause arriving after the picker opens is inherited at commit, and only e
 });
 
 test('same source selection is a durable no-op, including replay after the draft is discarded',async t=>{
- const {f,id}=await fixture(t),s=await draft(f,id),body={requestId:crypto.randomUUID(),batch:0,index:0,settings};
+ const {f,id}=await fixture(t),source={edition:'a'.repeat(64),sectionId:'chapter',firstUnit:'u1',lastUnit:'u1'};
+ await f.app.services.database.prepare("UPDATE reader_sessions SET selection=json_set(selection,'$.source',json(?)) WHERE id=?").bind(JSON.stringify(source),id).run();
+ f.generation.suggestions=async()=>({stories:[{...candidates.stories[0],source}],note:''});
+ const s=await draft(f,id),body={requestId:crypto.randomUUID(),batch:0,index:0,settings};
  assert.equal((await choose(f,id,s,body)).id,id);assert.equal((await choose(f,id,s,body)).id,id);assert.equal((await f.json('sessions')).length,1);assert.equal(f.control.calls.length,3);
  const children=await f.app.services.database.prepare("SELECT id FROM reader_sessions WHERE json_extract(document,'$.revision.rootId')=?").bind(id).all();assert.equal(children.results.length,0);
 });
@@ -82,4 +85,17 @@ for(const stopped of [false,true])test(`replacement of a ${stopped?'stopped':'fa
 test('cancel after old in-flight completion returns its new saved checkpoint without resetting it',async t=>{
  const {f,id}=await fixture(t,true),s=await draft(f,id);f.control.hold=false;f.control.calls[0].resolve();await until(async()=>(await f.read(id)).state==='completed');
  const result=await f.json(`sessions/${id}/reselection/${s.id}`,'DELETE');assert.equal(result.state,'completed');assert.equal(result.ready,3);assert.equal(f.control.calls.length,3);
+});
+
+test('a matching title without verifiable source identity is not silently discarded as the current story',async t=>{
+ const {f,id}=await fixture(t),s=await draft(f,id);const next=await choose(f,id,s,{requestId:crypto.randomUUID(),batch:0,index:0,settings});assert.notEqual(next.id,id);assert.equal(next.revision.rootId,id);assert.equal((await f.json('sessions')).length,1);
+});
+
+test('a committed replacement occupies its request ID across families and command kinds',async t=>{
+ const {f,id}=await fixture(t),s=await draft(f,id),requestId=crypto.randomUUID(),body={requestId,batch:0,index:1,settings},next=await choose(f,id,s,body);
+ assert.equal((await choose(f,id,s,body)).id,next.id);
+ assert.equal((await f.request(`sessions/${next.id}/production-control`,'POST',{requestId,action:'pause'})).status,409);
+ assert.equal((await f.request('sessions','POST',{requestId,selection:{bookId:'zhuangzi',theme:'新的创建',length:1}})).status,409);
+ const other=await f.create(3);await until(async()=>(await f.read(other)).state==='completed');const otherDraft=await draft(f,other);
+ assert.equal((await f.request(`sessions/${other}/reselection/${otherDraft.id}`,'POST',body)).status,409);assert.equal((await f.json('sessions')).length,2);
 });

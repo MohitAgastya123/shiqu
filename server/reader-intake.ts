@@ -36,10 +36,11 @@ async function requestSearch(repo:ReaderRepository,row:SessionRow,doc:Document,r
  if(doc.plan||intake.phase==='confirmed')throw new ReaderError(409,'制作已确认；需要调整时请创建修订版本。');
  if(intake.batches.length>=maxSuggestionBatches)throw new ReaderError(400,'已保存40批候选，请回看选择，或新建其他书籍与主题。');
  const next:IntakeSearch={round:search.round+1,state:'searching',requestId,commandHash:fingerprint,cycleId:automatic?(search.cycleId||hash([row.id,search.round])):requestId};
- await repo.db.prepare(`UPDATE reader_sessions SET document=json_set(document,'$.intake.search',json(?),'$.intake.phase',CASE WHEN json_type(document,'$.intake.selected')='object' THEN json_extract(document,'$.intake.phase') ELSE 'discovering' END),updated_at=?
+ const changed=await repo.db.prepare(`UPDATE reader_sessions SET document=json_set(document,'$.intake.search',json(?),'$.intake.phase',CASE WHEN json_type(document,'$.intake.selected')='object' THEN json_extract(document,'$.intake.phase') ELSE 'discovering' END),updated_at=?
   WHERE id=? AND user_id=? AND COALESCE(json_extract(document,'$.intake.search.round'),0)=? AND json_extract(document,'$.intake.phase')!='confirmed'${automatic?" AND json_type(document,'$.intake.selected') IS NOT 'object' AND json_extract(document,'$.intake.phase')='choosing' AND json_extract(document,'$.intake.search.state')='idle'":''} AND ${visible}`)
   .bind(JSON.stringify(next),new Date().toISOString(),row.id,row.user_id,search.round).run();
- // A lost race means another request started the same search.
+ // A command that lost the CAS was accepted as a no-op; later replay cannot start a new round.
+ if(!changed.meta.changes)await recordNoop(repo.db,row.user_id,row.id,requestId,'setup',fingerprint);
  return repo.get(row.id,row.user_id);
 }
 export async function changeIntake(repo:ReaderRepository,id:string,uid:string,action:IntakeAction,attempt=0):Promise<SessionRow>{

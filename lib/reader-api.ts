@@ -217,7 +217,7 @@ return async function readerApi(req:Request,path:string[]):Promise<Response>{
    return new Response(asset.body,{headers:{'Cache-Control':'private, max-age=31536000, immutable','X-Content-Type-Options':'nosniff','Content-Type':asset.contentType}});
   }
   throw new ReaderError(404,'找不到这个故事入口');
- }catch(error){if(error instanceof ReaderError)return json({error:error.message},error.status);if(error instanceof z.ZodError)return json({error:'请选择有效的书籍、主题与页数'},400);return json({error:'故事暂时无法打开，请稍后再试。'},500);}
+ }catch(error){if(error instanceof Error&&error.message.includes('reader_request_id_conflict'))return json({error:'这个操作编号已用于其他内容，请重新操作。'},409);if(error instanceof ReaderError)return json({error:error.message},error.status);if(error instanceof z.ZodError)return json({error:'请选择有效的书籍、主题与页数'},400);return json({error:'故事暂时无法打开，请稍后再试。'},500);}
 }
 
 }

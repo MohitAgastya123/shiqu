@@ -83,7 +83,7 @@ test('derived image IDs and anchors migrate and a paid unpublished image is publ
  }
  local.close();let images=0;const generation={status:async()=>({configured:true,provider:'codex',models:{text:'controlled',image:'controlled'},voiceEnabled:false}),generator:()=>({image:async()=>{images++;assert.fail('Paid image receipt must be reused');},safeError:()=> 'controlled failure'}),safeError:()=> 'controlled failure'};
  const app=createApplication({root:process.cwd(),dataDirectory:f.directory,generation});t.after(()=>app.close());
- const response=await app.handle(new Request(`http://localhost/api/reader/sessions/${f.id}/production-control`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'resume'})}));assert.equal(response.status,200);
+ const response=await app.handle(new Request(`http://localhost/api/reader/sessions/${f.id}/production-control`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({requestId:crypto.randomUUID(),action:'resume'})}));assert.equal(response.status,200);
  await until(async()=>{const row=await app.services.database.prepare('SELECT state FROM reader_sessions WHERE id=?').bind(f.id).first();return row.state==='completed';});assert.equal(images,0);
 });
 

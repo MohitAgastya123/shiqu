@@ -245,7 +245,7 @@ test('a failed failure write does not stop the queue or report a provider failur
 test('a failed checkpoint save during script work is not a provider failure and recovers',async t=>{
  const logs=t.mock.method(console,'error',()=>{});
  const f=await productionFixture(t),p=production(f);f.control.hold=false;
- failWrites(p.repository,'state=?,error=?,page=CASE',1,'db');
+ failWrites(p.repository,"state=CASE WHEN ? THEN 'failed'",1,'db');
  const id=await f.create(3);await until(()=>logs.mock.calls.some(call=>call.arguments[0]==='production_job_unsaved'));
  const job=(await jobs(f,id)).find(job=>job.pool==='text');
  assert.equal(job.state,'running');assert.equal(job.error,null);
@@ -314,6 +314,6 @@ test('automatic recovery stops at three attempts, and a retry restores the allow
  await database(f).prepare('UPDATE production_jobs SET attempts=2 WHERE id=?').bind(sibling.id).run();
  await f.demand(id,crypto.randomUUID(),0,true);
  await until(()=>f.control.calls.length===4);
- assert.equal((await imageJob(f,id)).attempts,1);assert.equal((await production(f).queue.job(sibling.id)).attempts,0,'The whole story gets the allowance back');
+ assert.equal((await imageJob(f,id)).attempts,1);assert.equal((await production(f).queue.job(sibling.id)).attempts,2,'An independent sibling keeps its existing allowance');
  f.control.hold=false;f.control.calls[3].resolve();await completed(f,id);
 });
