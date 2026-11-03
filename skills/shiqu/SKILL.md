@@ -14,7 +14,7 @@ description: 使用拾趣 CLI 从本地书籍选题、制作或编辑图文故�
 - 每次启用技能，用上述入口执行 `skill check`。它自动发现当前项目祖先目录（截至 Git 根）或全局安装；确认返回的 path 是本次加载的技能。若同名副本并存而发现结果不匹配，明确指定 `--scope project|global` 和安装根目录，不更新其他副本。查询缓存 24 小时，用户要求立即检查时加 `--refresh`。离线、旧 CLI 不支持检查或检查失败时简短说明，沿用可用版本继续原任务，不循环重试。
 - 默认只报告新版。仅用户明确要求开启/关闭自动更新时，执行 `skill check --auto-update on|off`（必要时指定范围）；不要从一次故事任务推断自动更新授权。
 - 无版本锁且 `autoUpdateReady` 为 true 时，以返回的 updateCwd 为工作目录执行 updateCommand 参数数组；它固定 npm 正式发布版本并带 `--automatic`，更新时会再次检查偏好。本地修改或未知来源副本不自动覆盖。用户明确要求单次更新但未开启自动更新时，也可执行返回的 updateCommand。
-- 更新成功后重新读取返回 path 的技能，用返回 version 对应的 `npx @apprun/shiqu@<version> help --json`，后续任务沿用该固定版本。未更新时，已管理副本优先用 check 返回的 installedVersion 对应 CLI；自定义副本或源码入口沿用用户选择并核对兼容性。更新失败保留现状，不手工覆盖或删除状态以绕过保护。
+- 更新成功后重新读取返回 path 的技能，用返回 version 对应的 `npx @apprun/shiqu@<version> help --json`，后续任务沿用该固定版本。未更新且无用户/项目版本锁、非源码入口时，已管理副本优先用 check 返回的 installedVersion 对应 CLI；自定义副本或源码入口沿用用户选择并核对兼容性。更新失败保留现状，不手工覆盖或删除状态以绕过保护。
 - `skill update --scope project|global` 只安装正在运行的 CLI 包自带技能，不自行寻找最新包。安装记录缺失时，仅与运行包正文完全相同的旧副本可用该版本 `skill install` 建立记录；不同内容需人工比较合并。检查/更新不操作书库或生成配置。
 
 ## 建库与选题

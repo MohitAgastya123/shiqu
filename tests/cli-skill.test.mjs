@@ -108,3 +108,14 @@ test('user cache location can be created independently; unsafe cache paths canno
  await rm(path.join(cache,'shiqu/skill-version.json'));const outside=path.join(f.base,'external-cache');await writeFile(outside,'keep');await symlink(outside,path.join(cache,'shiqu/skill-version.json'));
  const again=await executeHeadless(f.old,['skill','check','--refresh'],context);assert.equal(again.registry.status,'ok');assert.equal(await readFile(outside,'utf8'),'keep');
 });
+
+test('failed or malformed cache entries cannot authorize any automatic update or version range',async t=>{
+ const f=await fixture(t);await f.call(f.old,['install','--scope','project']);const initial=await f.call(f.old,['check','--auto-update','on']);
+ const filename=path.join(f.home,'.cache/shiqu/skill-version.json');
+ for(const latestVersion of ['9.0.0','9','9.0.0;run']){
+  await writeFile(filename,JSON.stringify({status:'unavailable',checkedAt:initial.registry.checkedAt,latestVersion}));
+  const checked=await f.call(f.old,['check']);assert.equal(checked.registry.status,'unavailable');assert.equal(checked.registry.latestVersion,undefined);assert.equal(checked.updateAvailable,false);assert.equal(checked.autoUpdateReady,false);assert.equal(checked.updateCommand,null);
+ }
+ f.mode('offline');await writeFile(filename,JSON.stringify({status:'ok',checkedAt:initial.registry.checkedAt,latestVersion:'9'}));
+ const malformed=await f.call(f.old,['check']);assert.equal(malformed.registry.status,'unavailable');assert.equal(malformed.updateCommand,null);assert.equal(malformed.autoUpdateReady,false);
+});

@@ -73,7 +73,10 @@ async function latest(context:SkillContext,refresh:boolean){
   directory=await directories(base,parts);const filename=directory&&path.join(directory,'skill-version.json');
   if(filename&&await safeFile(filename)){
    const c=JSON.parse(await readFile(filename,'utf8'));
-   if(c&&(c.status==='unavailable'||c.status==='ok'&&version(c.latestVersion))&&Number.isFinite(c.checkedAt)&&c.checkedAt<=now)cache=c;
+   if(c&&Number.isFinite(c.checkedAt)&&c.checkedAt<=now){
+    if(c.status==='ok'&&version(c.latestVersion))cache={status:'ok',checkedAt:c.checkedAt,latestVersion:c.latestVersion};
+    else if(c.status==='unavailable')cache={status:'unavailable',checkedAt:c.checkedAt};
+   }
   }
  }catch{/* A cache cannot grant update authority; unreadable caches are simply ignored. */}
  if(!refresh&&cache&&now-cache.checkedAt<(cache.status==='ok'?day:300000))return {...cache,cached:true};
@@ -98,8 +101,9 @@ export async function checkSkill(root:string,scope:string|undefined,options:{aut
   return {state,modified:!!state&&state.sha256!==digest(text)};
  });
  const registry=await latest(context,!!options.refresh),installedVersion=local.state?.version||null;
- const updateAvailable=!!(installedVersion&&registry.latestVersion&&compare(registry.latestVersion,installedVersion)>0);
- const allowed=!!local.state&&!local.modified,updateCommand=allowed&&updateAvailable?['npx','--yes',`@apprun/shiqu@${registry.latestVersion}`,'skill','update','--scope',found.scope,...(local.state?.autoUpdate?['--automatic']:[])]:null;
+ const targetVersion=registry.status==='ok'&&version(registry.latestVersion)?registry.latestVersion:undefined;
+ const updateAvailable=!!(installedVersion&&targetVersion&&compare(targetVersion,installedVersion)>0);
+ const allowed=!!local.state&&!local.modified,updateCommand=allowed&&updateAvailable?['npx','--yes',`@apprun/shiqu@${targetVersion}`,'skill','update','--scope',found.scope,...(local.state?.autoUpdate?['--automatic']:[])]:null;
  return {status:local.state?(local.modified?'modified':'managed'):'unmanaged',path:path.join(found.directory,'SKILL.md'),scope:found.scope,appVersion:bundled.version,installedVersion,autoUpdate:local.state?.autoUpdate||false,modified:local.modified,registry,updateAvailable,updateCommand,updateCwd:found.base,autoUpdateReady:!!(updateCommand&&local.state?.autoUpdate)};
 }
 export async function updateSkill(root:string,scope:string,context:SkillContext={},automatic=false){
