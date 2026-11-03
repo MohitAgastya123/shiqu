@@ -2,202 +2,74 @@
 
 **还有剩余的 Codex token？不妨用来读读故事。**
 
-把中国古典故事变成自己的插画故事书：直接选故事或按主题寻找，设置画风与叙事详略，在电脑或手机上阅读，也可以导出 PDF、PNG 长图或分镜与图片 ZIP。也可安装拾趣技能，让 Codex 通过 CLI 完成选题、制作、编辑和导出，无需启动桌面或浏览器服务。故事、图片和阅读进度保存在你的电脑上。
-
-首次运行从空书架开始，配置生成后端后创作第一篇故事。
+把中国古典故事变成自己的插画故事书。内置 24 部书籍、15 种画风，支持电脑与手机阅读，以及 PDF、PNG 长图和 ZIP 导出。故事、图片和阅读进度保存在你的电脑上。
 
 > 欢迎到 [awesome-shiqu · 拾趣好故事](https://github.com/yysun/awesome-shiqu) 阅读和分享拾趣连环画。
 
+[![拾趣作品《黛玉葬花与宝黛释疑》第 15–18 幅：宝玉兜着落花走近花冢，黛玉葬花吟诗、掩面落泪](.docs/assets/hero-story.webp)](https://yysun.github.io/awesome-shiqu/)
 
-## 书籍、主题与画风
+[在线阅读拾趣好故事 →](https://yysun.github.io/awesome-shiqu/)
 
-- **书籍（24 部）**：聊斋志异、山海经、搜神记、阅微草堂笔记、子不语、酉阳杂俎、太平广记、博物志、西游记、三国演义、红楼梦、水浒传、儒林外史、喻世明言、警世通言、醒世恒言、初刻拍案惊奇、二刻拍案惊奇、庄子、列子、史记、战国策、世说新语、浮生六记。
-- **主题**：给我一个反转、人情冷暖、放下执念、聪明与糊涂、善意与误解、命运与选择、欲望与代价、勇气与成长、爱情与错过、幽默与讽刺、因果与报应；也可自定义主题。
-- **画风（15 种）**：清新卡通、极简线描、软萌 Q 版、彩铅国漫、水彩绘本、3D 动画、黏土定格、电影写实、水墨写意、复古连环画、白描连环画、工笔重彩、木版年画、剪纸艺术、古典油画。
+## 快速开始
 
-详见[书库说明](data/README.md)与[画风说明](.docs/user-guide.md#画风)。
+生成服务可选 Codex、OpenAI API 或 Gemini，也可选择只读。Codex 需另行安装并登录 Codex CLI，支持 macOS / Linux；OpenAI API 与 Gemini 使用各自 API 密钥并单独计费。[如何选择后端](.docs/user-guide.md#如何选择后端)
 
-## 界面预览
+三种方式，任选一种：
 
-选书与故事，设置画风、叙事详略、制作与验收要求；系统按原文编排、审片，通过后绘图。故事保存在书架中以供阅读和输出。
+### 1. npx：一条命令启动
 
-![拾趣手机界面：发现、选题、制作、书架与阅读](.docs/assets/screenshots.png)
-
-[前后端架构](#前后端架构) · [如何选择后端](#如何选择后端) · [下载桌面版](#下载与快速开始) · [CLI 启动](#cli-启动) · [通过 SKILL 使用](#通过-skill-使用) · [使用指南](.docs/user-guide.md) · [开发指南](.docs/development.md)
-
-## 前后端架构
-
-拾趣由**浏览器前端、本地生产核心和 AI 生成后端**组成。本地 Node 核心管理书架和生成队列，调用所选的 Codex、OpenAI API 或 Gemini 生成文字与插图。桌面版或不带子命令的 CLI 启动 HTTP 服务，供电脑和手机浏览器访问；CLI 子命令直接调用同一生产核心，供 Codex 或脚本操作，无需监听端口。
-
-```mermaid
-flowchart TB
-    browser["浏览器前端 · React<br/>电脑 / 手机"]
-
-    subgraph local["你的电脑"]
-        desktop["拾趣桌面版<br/>内置 Node 运行环境"]
-        cli["拾趣 CLI<br/>自行安装 Node 24"]
-        agent["Codex 代理 / 脚本"]
-        server["拾趣生产核心 · Node<br/>书架 / 生成队列 / AI 后端选择"]
-        storage[("本地书库<br/>SQLite + 图片文件")]
-        codexCli["Codex CLI<br/>另行安装并登录"]
-        desktop -.->|启动与配置| server
-        agent -->|调用命令| cli
-        cli -.->|无子命令：启动 HTTP 服务| server
-        cli -->|子命令：进程内调用| server
-        server <-->|读取与保存| storage
-        server <-->|选择 Codex| codexCli
-    end
-
-    subgraph cloud["云端 AI 生成服务 · 按配置选择一种"]
-        codex["Codex 服务<br/>订阅额度"]
-        openai["OpenAI API<br/>API 密钥 · 单独计费"]
-        gemini["Gemini API<br/>API 密钥 · 单独计费"]
-    end
-
-    browser <-->|HTTP / REST API| server
-    codexCli <--> codex
-    server <-->|选择 OpenAI API| openai
-    server <-->|选择 Gemini| gemini
-```
-
-手机连接电脑上的拾趣服务，共享同一书架和生成后端，无需在手机上安装 Node、Codex CLI 或配置 API 密钥。故事、插图和阅读进度保存在电脑上；生成时所需的原文、提示词和参考图片会发送给所选 AI 服务。**只读模式**保留本地阅读与整理，不调用云端生成服务。
-
-## 如何选择后端
-
-根据已有的订阅、API 密钥和运行平台选择 AI 生成后端。桌面版和拾趣 CLI 都支持以下选择：
-
-| AI 生成后端 | 适合什么情况 | 如何接入 | 平台与费用 |
-| --- | --- | --- | --- |
-| **Codex** | 已有 Codex 订阅，想使用剩余额度 | 另行安装并登录 Codex CLI，在拾趣中选择 Codex | macOS / Linux；使用订阅额度 |
-| **OpenAI API** | 想通过 API 使用 OpenAI 的文本与图片模型 | 选择 OpenAI API，填写 API 密钥及文本、图片模型 | macOS / Linux / Windows；API 单独计费 |
-| **Gemini** | 使用 Gemini 生成，或需要从网页 URL 选题 | 选择 Gemini，填写 API 密钥及文本、图片模型 | macOS / Linux / Windows；按 Gemini API 项目计费 |
-| **只读** | 只阅读、整理已有书库 | 选择只读，无需登录或密钥 | macOS / Linux / Windows；不产生生成费用 |
-
-**在哪里选：** 桌面版在「设置」中选择服务并保存，再启动服务；CLI 首次运行会询问，也可运行 `pnpm dlx @apprun/shiqu --configure` 修改，完成后重新启动。两种入口共用已保存的服务配置；切换后端前先停止服务，新选择在下次启动时生效。详见[首次配置与修改服务](.docs/user-guide.md#首次配置与修改服务)。
-
-## 下载与快速开始
-
-推荐使用桌面版，内置运行环境，安装即可使用。习惯终端，或使用 Linux、Intel Mac、Windows ARM64？可直接使用 [CLI 启动](#cli-启动)。两种方式都能制作、阅读和导出故事，也支持手机访问。希望用自然语言委托制作或批量处理书库，可[通过 SKILL 使用](#通过-skill-使用)。
-
-桌面版内置 **Node 24**，无需自行配置运行环境；提供书库概览、生成队列、图形设置、托盘启停与手机访问入口。
-
-![拾趣桌面概览：书库统计、生成队列与本机服务控制](.docs/assets/desktop-overview.jpg)
-
-支持 **Apple Silicon（M 系列）Mac**（macOS **13.5+**）与 **Windows 10/11 x64**。Windows 需要 WebView2，缺失时安装程序会联网下载。Intel Mac、Windows ARM64 和 Linux 暂无安装包。Windows 下载在 0.4.0 或更新正式版本发布后生效。
-
-[下载 macOS DMG](https://github.com/yysun/shiqu/releases/latest/download/shiqu-standard-macos-arm64.dmg) · [下载 Windows 安装程序](https://github.com/yysun/shiqu/releases/latest/download/shiqu-standard-windows-x64-setup.exe) · [版本与校验文件](https://github.com/yysun/shiqu/releases/latest)
-
-macOS 支持 Codex、OpenAI API 和 Gemini，Windows 使用 OpenAI API 或 Gemini。桌面版不包含 Codex CLI，使用 Codex 需另行安装并登录。
-
-1. **macOS**：打开 DMG，将应用拖入「应用程序」。安装包**未签名、未经过 Apple 公证**；首次被拦截时，在「系统设置 → 隐私与安全性」中按提示选择「仍要打开」。**Windows**：运行 `-setup.exe`，按提示安装到当前用户；安装包未签名，SmartScreen 可能提示风险，仅对确认可信的下载选择「更多信息 → 仍要运行」。
-2. 打开拾趣，首次进入「设置」选择服务：**OpenAI API / Gemini** 填写 API 密钥，**Codex** 使用已登录的 CLI；也可选择**只读**。保存后与 CLI 共用，支持「重置所有服务配置」。
-3. 点击「保存设置」，再点击「启动服务」（有未保存更改时显示「保存并启动」），然后点击「在浏览器打开」。
-4. 选择书籍，直接选择独立故事，或勾选最多 24 章提取候选；也可切换「按主题找故事」，选择主题并点击「加入队列并找故事」。选择页会连续寻找、逐篇显示，选中或离开后停止，重开可接续。
-5. 选中故事并准备好原文与摘要后，在「故事流程」确认画风，选择**简短、适中或详细**，按需填写制作与验收要求，再点击「开始制作」。幅数建议只是估计，模型会按原文编排，审核时可增减画幅；文字稿稳定并通过审片后才绘图。
-
-本地书籍按需积累与主题无关的故事库，换主题时优先复用已识别原文与缓存判断，不预扫全书。选中故事后才准备简短完整摘要；分镜从原文编排，审核再借摘要查漏。主题匹配每批最多四篇，Codex / OpenAI API 使用 Luna / low，其他制作阶段保留所选模型。未能判断的条目不会冒充“不符合”，界面会提示结果可能不完整。空结果、失败、暂停或达到 40 批保存上限时停止自动续找。
-
-**制作要求**说明希望如何改编，**验收要求**按行列出需要检查的标准。可查看系统规则预览、实际制作与审核提示词，以及逐条验收结果；冲突或无法判断时会停止绘图。仅改验收要求保留分镜与可复用图片，再重新审核。详见[制作与验收要求](.docs/user-guide.md#制作与验收要求)。
-
-生成会在后台继续，可随时暂停、恢复。关闭桌面窗口后服务仍在托盘运行；选择「退出拾趣」才会停止。[完整安装与配置说明](.docs/user-guide.md#桌面版入门)。
-
-阅读画面顶部的星形按钮可将当前图片设为本书参考图，每本书最多一幅，选择新图会替换旧星，再点可取消。同书之后发起的生图（包括新故事首幅）优先使用星标图；没有星标时，后续画面仍参考本篇首图。已经生成的图片和正在生成的请求保留。整篇收藏继续使用书签按钮。
-
-## CLI 启动
-
-已有 **Node 24**（推荐 24.22.1）及随附的 npm / npx 时，可直接启动浏览器版，无需另装 pnpm：
+安装 **Node 24** 后，在终端运行：
 
 ```bash
 npx @apprun/shiqu
 ```
 
-已使用 pnpm 的用户也可运行 `pnpm dlx @apprun/shiqu`，功能相同。默认开放可信局域网，启动后打印手机扫码二维码；只允许本机访问时使用 `--host 127.0.0.1`。
+按提示选择书库和生成服务，打开终端打印的网址即可使用。同一 Wi-Fi 下，手机可扫描终端二维码接着读；保持终端运行，按 Ctrl+C 停止。
 
-CLI 优先寻找桌面版保存的书库目录，目录不存在时自动创建；没有桌面设置时，先复用 CLI 已确认目录或已有桌面默认书库；仍未找到才询问，并记住选择。打开终端打印的网址即可阅读，按 Ctrl+C 停止。首次未配置时会询问 Codex / OpenAI API / Gemini / 只读，API 密钥输入隐藏。配置保存在与桌面版共用的设置数据库，之后无需再问；`--configure` 修改服务，`--reset-providers` 清除已保存服务配置。环境变量可仅覆盖本次运行。详见[CLI 使用说明](.docs/user-guide.md#cli-启动)。
+> 默认对局域网开放，所有可连接设备共享书架和生成权限，仅限可信网络使用；只允许本机访问时加 `--host 127.0.0.1`。API 密钥以明文保存在本机设置数据库中。详见[使用前了解](.docs/user-guide.md#使用前了解)。
 
-已有书库、想在桌面版与 CLI 之间切换？先停止原服务，再按[切换步骤](.docs/user-guide.md#在-cli-与桌面版之间切换)操作。
+[CLI 使用说明](.docs/user-guide.md#cli-启动)
 
-## 通过 SKILL 使用
+### 2. Desktop：下载安装
 
-安装拾趣技能后，在 Codex 中用自然语言提出任务。技能说明数据契约、业务规则和验收要求，Codex 可自行编写程序完成筛选、比较、报告与批量调度；状态变更、故事生成、审核和导出仍通过拾趣现有生产入口执行。需要 Node 24；安装技能本身不创建书库或启动服务。
+内置 Node，无需另装运行环境。支持 Apple Silicon Mac（macOS 13.5+）和 Windows 10/11 x64。
 
-[可直接复制的提示词示例](.docs/use-as-skill.md)：技能安装、书库与模型配置、故事制作与修改、署名导出、批量任务和备份恢复。
+[下载 macOS DMG](https://github.com/yysun/shiqu/releases/latest/download/shiqu-standard-macos-arm64.dmg) · [下载 Windows 安装程序](https://github.com/yysun/shiqu/releases/latest/download/shiqu-standard-windows-x64-setup.exe) · [所有版本与校验文件](https://github.com/yysun/shiqu/releases/latest)
+
+安装后打开拾趣，在「设置」中选择生成服务，保存并启动，再点击「在浏览器打开」。安装包未签名，首次打开的系统提示见[桌面版入门](.docs/user-guide.md#桌面版入门)。
+
+### 3. Skill：让 Codex 帮你制作
+
+需要 **Node 24**。运行一次，安装供当前用户各项目使用的技能：
 
 ```bash
-# 全局安装，供当前用户的各个项目使用
 npx @apprun/shiqu skill install --scope global
 ```
 
-技能安装到 `~/.agents/skills/shiqu/SKILL.md`。只想在一个项目使用时，在该目录运行 `skill install --scope project`，目标为当前目录的 `.agents/skills/shiqu/SKILL.md`。两种方式都复制独立文件，并记录包版本和内容哈希；同内容重复安装无变化，已有不同内容时拒绝覆盖。
-
-在 Codex 中调用 `$shiqu`，例如：
+然后在 Codex 中说：
 
 ```text
 $shiqu 从《庄子》中找一个关于善意与误解的故事，用水墨写意。
 先给我候选和制作方案，确认后再生成插图，完成后导出离线预览和公开 ZIP。
 ```
 
-技能使用时检查 npm 正式发布版本，结果缓存 24 小时；默认提示、不覆盖。可以用自然语言要求“开启拾趣技能自动更新”，Codex 会保存偏好，之后仅更新未经本地修改的副本，并使用配套版本 CLI。项目或用户锁定的版本优先；离线继续使用现有版本。旧安装缺少记录时，需用内容匹配的版本重新安装一次；不同内容须人工合并。检查与更新由 CLI 执行，技能本身没有后台进程。
+无需启动桌面或浏览器服务。[更多提示词示例](.docs/use-as-skill.md) · [技能安装与配置](.docs/user-guide.md#无服务-cli-与-codex-技能)
 
-Codex 通过当前版本的 `help --json` 确认可用操作，按任务和保存状态组合执行；简单任务可直接调用 CLI，无需生成程序。自主程序使用参数数组与 JSON 输入，不直接修改数据库、重写生成流程或重新实现作品导出。文字与图片使用拾趣已配置的生成后端和书库。首次访问书库时自动建立数据库，与桌面/服务使用同一开库和迁移逻辑，无需先运行 init。只有显式 `run` 执行生成，查看、保存、编辑和导出不启动后台制作。无子命令的 `pnpm dlx @apprun/shiqu` 仍启动浏览器服务；子命令不需要服务器、桌面或前端运行。共用书库前先停止占用它的服务。
+## 界面预览
 
-如需提前指定数据库目录，运行 `npx @apprun/shiqu init --data-dir /absolute/path/my-library`；数据库为该目录下的 `shiqu.sqlite`，后续命令继续传相同的 `--data-dir`，或使用 `SHIQU_DATA_DIR`。[目录设置说明](.docs/user-guide.md#指定数据库目录)。
+以《黛玉葬花与宝黛释疑》为例：发现 → 制作流程 → 书架 → 阅读。
 
-若已发布版本尚未包含这些命令，可在源码目录运行 `pnpm cli skill install --scope global` 体验，并让 Codex 在该源码目录使用 `pnpm cli`。完整安装、配置及命令流程见[无服务 CLI 与 Codex 技能](.docs/user-guide.md#无服务-cli-与-codex-技能)。
+[![拾趣手机界面：《黛玉葬花与宝黛释疑》的发现、制作流程、书架与阅读](.docs/assets/daiyu-phone-screens.webp)](.docs/user-guide.md#制作与阅读故事)
 
-## 手机阅读与导出
+[制作与阅读指南 →](.docs/user-guide.md#制作与阅读故事)
 
-- **同一 Wi-Fi**：桌面版在「手机接着读」中选择局域网地址并扫码；CLI 启动后直接扫描终端打印的二维码，或打开局域网地址。手机无需安装应用或配对。
-- **其他网络**：使用桌面版时，先在电脑安装 cloudflared，再开启「允许互联网访问」，再扫描私密二维码。免费隧道仅适合临时访问，完整链接和二维码请勿公开分享。[设置步骤](.docs/user-guide.md#在手机上阅读)。
-- **阅读与整理**：支持翻页、查看原文和分镜、收藏及搜索书架；可独立修改故事名，无需重新制作。手机与电脑共享阅读进度。
-- **署名与转载**：在「我的 → 署名与转载」设置默认制作署名、作品链接、公开联系方式、来源许可与转载条件；也可在「故事设置」单独编辑本篇。导出时实时补全未填写的项目，已填写的内容优先，不改写保存的故事。未署名时须确认后再下载。[设置方法](.docs/user-guide.md#署名与转载)。
-- **导出保存**：全部插图生成后，可导出 PDF、一页 PNG 总览图，或包含故事 JSON、分镜 Markdown、原文和全分辨率 WebP 图片的 ZIP；各格式保留署名与 AI 披露。WebP 签名字号可设为 12–48 原图像素，默认 24 px；PDF、PNG 排版与书库原图不变。导出在浏览器本地完成，不增加 AI 请求。当前不提供配音或视频生成。
-- **分享制作过程**：ZIP 默认附带制作与验收要求、逐幅提示词和已留存的完整调用提示词。相同系统规则只保存一次，各次调用以「[系统制作提示词]」等包内链接引用；不同历史规则分别保留，未留存的记录不补造。**分享前请检查原文与自定义内容。** [ZIP 内容与提示词分享](.docs/user-guide.md#zip-内容与提示词分享)。
+## 更多说明
 
-手机访问期间，电脑需要保持唤醒，拾趣服务需要保持运行。
-
-## 发布你的拾趣作品
-
-想让更多人读到你的拾趣作品？欢迎到 [awesome-shiqu · 拾趣好故事](https://github.com/yysun/awesome-shiqu) 投稿发布。在拾趣中下载「分镜与图片 ZIP」，按[贡献指南](https://github.com/yysun/awesome-shiqu/blob/main/CONTRIBUTING.md)提交 PR；审核通过后，作品会收录到公开作品集，供大家在手机或电脑的浏览器中阅读。
-
-ZIP 中的提示词等附带文件也会随投稿公开，即使阅读页不展示。包内引用能减少重复，但并不保证所有文本文件都低于阅读网站的 1 MiB 限制。
-
-要导出与作品集《官渡之战》相同的公开 ZIP 格式，先启动拾趣，再运行：
-
-```bash
-pnpm export:story '鲁提辖拳打镇关西'
-# 应用使用其他地址时：
-pnpm export:story '吴用智取生辰纲' --url http://localhost:3000
-# 也支持处理手动下载的完整 ZIP：
-pnpm export:story '/path/to/拾趣下载的故事.zip'
-```
-
-故事名或作品 ID 模式会启动独立的无头 Playwright 浏览器，选择当前书架版本，点击应用自己的「下载 ZIP」，再转换为公开格式。首次运行先执行 `pnpm exec playwright install chromium --only-shell` 安装浏览器。找不到故事、重名、当前版缺图或未制作完成时停止；重名时可改用作品 ID，不退回旧版。应用需已启动并可直接访问，完整故事在浏览器临时目录中下载，处理完成或失败后自动清理。请先在拾趣中设置本篇或默认制作署名；未署名的交互确认仍须在应用内完成，再以 ZIP 输入模式转换。
-
-脚本默认保存到 `../awesome-shiqu/works/yysun`，仅包含 `故事.json`、`分镜.md`、`署名与转载.txt` 和 `图片/01.webp` 等连续编号图片。保留原文、出处、模型记录、署名与 AI 披露；移除制作/验收要求、逐幅提示词及内部调用记录。浏览器导出时已生成的 WebP、可见签名水印和 XMP 原样保留，不重新编码；脚本检查完整幅数、WebP 结构/尺寸、文件与像素载荷哈希，以及 XMP 中的作者、作品编号、版本、幅号和 AI 披露。有缺图、损坏或署名不符时停止；它不通过像素检测来证明水印存在。
-
-故事名模式通过应用当前版本接口识别已有作品，跨版本编号和标题变化仍沿用原 ZIP 文件名。ZIP 输入模式按作品编号匹配；如果新版编号已改变，或要明确更新某个分享路径，用原文件路径：
-
-```bash
-pnpm export:story '/path/to/新版故事.zip' --output '../awesome-shiqu/works/yysun/原文件名.zip'
-```
-
-脚本与浏览器下载共用 `lib/reader-zip-content.ts` 的文件命名、JSON/Markdown 与署名序列化，以及 `lib/story-webp-metadata.ts` 的哈希和 XMP 校验；图片编码与可见水印仍由浏览器原流程生成。相邻 `awesome-shiqu` 存在时，保存前后会调用它的真实 ZIP 解析器检查兼容性。脚本不生成新剧情或插图，不改写制作稿，不提交或发布作品；浏览器打开故事会正常记录阅读进度。
-
-## 使用前了解
-
-- **生成费用**：Codex 文本和图片共用订阅额度，图片可能消耗得更快；OpenAI API 与 Gemini 按各自 API 项目计费，不使用 Codex 订阅额度。拾趣不另设生成次数配额，实际可用性取决于提供方权限与额度；连接检查成功不代表有生成配额。
-- **联网与内容**：生成会向所选提供方发送必要的原文、提示词和参考图片。故事和插图为 AI 改编，不能当作原典或学术校勘结果。
-- **共享与密钥**：所有可连接设备共享书架和生成权限，局域网仅限可信网络。CLI 和桌面共用的 API 密钥以明文保存在独立设置数据库中，由本机文件权限保护；环境变量不会自动写入数据库。
-- **数据与备份**：故事保存在本地；更换数据目录只会切换书架，不会搬移文件。升级到 0.6.5 前先停服并备份数据库与图片，CLI 与桌面版保持同版，升级后刷新浏览器。[升级说明](.docs/user-guide.md#升级到-065) · [更新记录](CHANGELOG.md)。
-
-连接失败、端口占用、CLI 书库选择等问题见[常见问题](.docs/user-guide.md#常见问题)。
+[使用指南](.docs/user-guide.md) · [使用前了解](.docs/user-guide.md#使用前了解) · [升级到 0.7.0](.docs/user-guide.md#升级到-070) · [书库说明](data/README.md) · [画风](.docs/user-guide.md#画风) · [手机阅读](.docs/user-guide.md#在手机上阅读) · [发布作品](.docs/user-guide.md#发布你的拾趣作品) · [常见问题](.docs/user-guide.md#常见问题)
 
 ## 开发者
 
-Codex 可通过[无服务 CLI 与技能](.docs/user-guide.md#无服务-cli-与-codex-技能)完成选题、制作、编辑、离线预览与导出。源码目录运行 `pnpm cli help --json`；不带子命令仍启动原有浏览器服务。书库维护与诊断见[备份、恢复与诊断](.docs/user-guide.md#书库维护命令)。
-
-React + Vite、Node REST API、SQLite 与本地媒体目录，无需独立数据库。使用 **Node 24.22.1** 与 **pnpm 11.25.0**：
+React + Vite 前端、Node REST API 与生产核心、SQLite 与本地媒体目录，无需独立数据库。源码开发使用 **Node 24.22.1** 与 **pnpm 11.25.0**：
 
 ```bash
 nvm install
@@ -207,16 +79,12 @@ pnpm run setup
 pnpm dev
 ```
 
-配置、检查命令和生成机制见[开发指南](.docs/development.md)；桌面开发与打包见[桌面文档](desktop/README.md)。
+桌面 UI 预览用 `pnpm desktop:preview`，CLI 命令用 `pnpm cli help --json`。配置与检查见[开发指南](.docs/development.md)，桌面开发与打包见[桌面文档](desktop/README.md)。[更新记录](CHANGELOG.md)
 
 ## 许可
 
 项目原创代码与文档采用 [Apache License 2.0](LICENSE)，允许商业使用、修改与再分发，具体条件见许可全文及 [NOTICE](NOTICE)。
 
-古典原文的来源版本、注释及其他第三方资料遵循各自适用的权利要求，见[来源说明](data/library/source-notices.md)和[书目清单](data/library/catalog.json)。
+古典原文与第三方资料遵循各自适用的权利要求，见[来源说明](data/library/source-notices.md)和[书目清单](data/library/catalog.json)。
 
-拾趣不主张用户生成的故事或插图的著作权；其权利归属取决于适用法律，用户仍须遵守素材权利要求和 AI 生成服务条款。生成内容不会自动适用项目代码的 Apache-2.0 许可。
-
-导出只有一份 ZIP，包含阅读站需要的 JSON、分镜、原文和 WebP，以及制作与验收要求、画面提示词和已留存的完整调用提示词。署名、作品链接、联系方式、来源许可与转载条件也会随文件公开；请在分享前检查整个存档。
-
-WebP 保留右下角可调字号的署名与 AI 标识；XMP 保存公开说明和原图/图片载荷哈希，JSON 保存最终文件哈希。这些信息可被移除或修改，用于署名和完整性核对，不能单独证明作者、权利归属或授权。公版原文、来源转录、制作贡献和程序代码分别适用各自权利与许可。
+拾趣不主张用户生成的故事或插图的著作权；其权利归属取决于适用法律，用户仍须遵守素材权利要求和 AI 生成服务条款。生成内容不会自动适用项目代码的 Apache-2.0 许可。分享前请检查[署名与转载说明](.docs/user-guide.md#署名与转载)及 [ZIP 内容](.docs/user-guide.md#zip-内容与提示词分享)。

@@ -2,6 +2,8 @@
 
 [返回 README](../README.md) · [通过 SKILL 使用：完整示例](use-as-skill.md) · [开发指南](development.md)
 
+- [前后端架构](#前后端架构)
+- [如何选择后端](#如何选择后端)
 - [如何选择](#如何选择)
 - [CLI 启动](#cli-启动)
 - [无服务 CLI 与 Codex 技能](#无服务-cli-与-codex-技能)
@@ -17,12 +19,65 @@
   - [阅读和导出](#阅读和导出)
   - [署名与转载](#署名与转载)
   - [ZIP 内容与提示词分享](#zip-内容与提示词分享)
+- [发布你的拾趣作品](#发布你的拾趣作品)
+- [使用前了解](#使用前了解)
 - [数据与备份](#数据与备份)
   - [升级到 0.6.5](#升级到-065)
+  - [升级到 0.7.0](#升级到-070)
   - [书库维护命令](#书库维护命令)
 - [常见问题](#常见问题)
 - [书库与画风说明](#书库与画风说明)
 - [每本书的星标参考图](#每本书的星标参考图)
+
+## 前后端架构
+
+拾趣由**浏览器前端、本地生产核心和 AI 生成后端**组成。本地 Node 核心管理书架和生成队列，调用所选的 Codex、OpenAI API 或 Gemini 生成文字与插图。桌面版或不带子命令的 CLI 启动 HTTP 服务，供电脑和手机浏览器访问；CLI 子命令直接调用同一生产核心，供 Codex 或脚本操作，无需监听端口。
+
+```mermaid
+flowchart TB
+    browser["浏览器前端 · React<br/>电脑 / 手机"]
+
+    subgraph local["你的电脑"]
+        desktop["拾趣桌面版<br/>内置 Node 运行环境"]
+        cli["拾趣 CLI<br/>自行安装 Node 24"]
+        agent["Codex 代理 / 脚本"]
+        server["拾趣生产核心 · Node<br/>书架 / 生成队列 / AI 后端选择"]
+        storage[("本地书库<br/>SQLite + 图片文件")]
+        codexCli["Codex CLI<br/>另行安装并登录"]
+        desktop -.->|启动与配置| server
+        agent -->|调用命令| cli
+        cli -.->|无子命令：启动 HTTP 服务| server
+        cli -->|子命令：进程内调用| server
+        server <-->|读取与保存| storage
+        server <-->|选择 Codex| codexCli
+    end
+
+    subgraph cloud["云端 AI 生成服务 · 按配置选择一种"]
+        codex["Codex 服务<br/>订阅额度"]
+        openai["OpenAI API<br/>API 密钥 · 单独计费"]
+        gemini["Gemini API<br/>API 密钥 · 单独计费"]
+    end
+
+    browser <-->|HTTP / REST API| server
+    codexCli <--> codex
+    server <-->|选择 OpenAI API| openai
+    server <-->|选择 Gemini| gemini
+```
+
+手机连接电脑上的拾趣服务，共享同一书架和生成后端，无需在手机上安装 Node、Codex CLI 或配置 API 密钥。故事、插图和阅读进度保存在电脑上；生成时所需的原文、提示词和参考图片会发送给所选 AI 服务。**只读模式**保留本地阅读与整理，不调用云端生成服务。
+
+## 如何选择后端
+
+根据已有的订阅、API 密钥和运行平台选择 AI 生成后端。桌面版和拾趣 CLI 都支持以下选择：
+
+| AI 生成后端 | 适合什么情况 | 如何接入 | 平台与费用 |
+| --- | --- | --- | --- |
+| **Codex** | 已有 Codex 订阅，想使用剩余额度 | 另行安装并登录 Codex CLI，在拾趣中选择 Codex | macOS / Linux；使用订阅额度 |
+| **OpenAI API** | 想通过 API 使用 OpenAI 的文本与图片模型 | 选择 OpenAI API，填写 API 密钥及文本、图片模型 | macOS / Linux / Windows；API 单独计费 |
+| **Gemini** | 使用 Gemini 生成，或需要从网页 URL 选题 | 选择 Gemini，填写 API 密钥及文本、图片模型 | macOS / Linux / Windows；按 Gemini API 项目计费 |
+| **只读** | 只阅读、整理已有书库 | 选择只读，无需登录或密钥 | macOS / Linux / Windows；不产生生成费用 |
+
+**在哪里选：** 桌面版在「设置」中选择服务并保存，再启动服务；CLI 首次运行会询问，也可运行 `pnpm dlx @apprun/shiqu --configure` 修改，完成后重新启动。两种入口共用已保存的服务配置；切换后端前先停止服务，新选择在下次启动时生效。详见[首次配置与修改服务](#首次配置与修改服务)。
 
 ## 如何选择
 
@@ -238,6 +293,8 @@ JSON/Markdown 可导出中间稿；ZIP/PDF/PNG要求当前版本全部图片完�
 
 ## 桌面版入门
 
+![拾趣桌面概览：书库统计、生成队列与本机服务控制](assets/desktop-overview.jpg)
+
 桌面版统一内置 Node 24，无需另装 Node。已有 Node 并习惯终端的用户可选择上面的 CLI。旧 Lite 用户换装当前桌面版后继续使用原设置和书库；旧 Node 路径不再影响运行时。
 
 桌面版仍不包含 Codex CLI；使用 Codex 需另行安装并登录。macOS 支持 Codex、OpenAI API、Gemini 与只读；Windows 可使用 OpenAI API、Gemini 或只读。
@@ -410,6 +467,43 @@ WebP 内嵌 XMP 公开信息，以及原图和图像载荷的 SHA-256；最终 W
 **分享或向 [awesome-shiqu](https://github.com/yysun/awesome-shiqu) 投稿前，请检查整个存档，尤其是原文与自定义要求。** 阅读网站不展示提示词，不代表包内内容保密。包内引用减少重复，但不保证任意输入或大量不同历史规则都能低于阅读网站每个文本文件 1 MiB 的限制。
 
 参考图仅保留记录中的路径，不另打包参考图文件；不会额外导出服务配置凭据、供应商请求 ID 或原始计费回执。ZIP 用于作品分享，不代替完整书库备份。
+
+## 发布你的拾趣作品
+
+想让更多人读到你的拾趣作品？欢迎到 [awesome-shiqu · 拾趣好故事](https://github.com/yysun/awesome-shiqu) 投稿发布。在拾趣中下载「分镜与图片 ZIP」，按[贡献指南](https://github.com/yysun/awesome-shiqu/blob/main/CONTRIBUTING.md)提交 PR；审核通过后，作品会收录到公开作品集，供大家在手机或电脑的浏览器中阅读。
+
+ZIP 中的提示词等附带文件也会随投稿公开，即使阅读页不展示。包内引用能减少重复，但并不保证所有文本文件都低于阅读网站的 1 MiB 限制。
+
+要导出与作品集《官渡之战》相同的公开 ZIP 格式，先启动拾趣，再运行：
+
+```bash
+pnpm export:story '鲁提辖拳打镇关西'
+# 应用使用其他地址时：
+pnpm export:story '吴用智取生辰纲' --url http://localhost:3000
+# 也支持处理手动下载的完整 ZIP：
+pnpm export:story '/path/to/拾趣下载的故事.zip'
+```
+
+故事名或作品 ID 模式会启动独立的无头 Playwright 浏览器，选择当前书架版本，点击应用自己的「下载 ZIP」，再转换为公开格式。首次运行先执行 `pnpm exec playwright install chromium --only-shell` 安装浏览器。找不到故事、重名、当前版缺图或未制作完成时停止；重名时可改用作品 ID，不退回旧版。应用需已启动并可直接访问，完整故事在浏览器临时目录中下载，处理完成或失败后自动清理。请先在拾趣中设置本篇或默认制作署名；未署名的交互确认仍须在应用内完成，再以 ZIP 输入模式转换。
+
+脚本默认保存到 `../awesome-shiqu/works/yysun`，仅包含 `故事.json`、`分镜.md`、`署名与转载.txt` 和 `图片/01.webp` 等连续编号图片。保留原文、出处、模型记录、署名与 AI 披露；移除制作/验收要求、逐幅提示词及内部调用记录。浏览器导出时已生成的 WebP、可见签名水印和 XMP 原样保留，不重新编码；脚本检查完整幅数、WebP 结构/尺寸、文件与像素载荷哈希，以及 XMP 中的作者、作品编号、版本、幅号和 AI 披露。有缺图、损坏或署名不符时停止；它不通过像素检测来证明水印存在。
+
+故事名模式通过应用当前版本接口识别已有作品，跨版本编号和标题变化仍沿用原 ZIP 文件名。ZIP 输入模式按作品编号匹配；如果新版编号已改变，或要明确更新某个分享路径，用原文件路径：
+
+```bash
+pnpm export:story '/path/to/新版故事.zip' --output '../awesome-shiqu/works/yysun/原文件名.zip'
+```
+
+脚本与浏览器下载共用 `lib/reader-zip-content.ts` 的文件命名、JSON/Markdown 与署名序列化，以及 `lib/story-webp-metadata.ts` 的哈希和 XMP 校验；图片编码与可见水印仍由浏览器原流程生成。相邻 `awesome-shiqu` 存在时，保存前后会调用它的真实 ZIP 解析器检查兼容性。脚本不生成新剧情或插图，不改写制作稿，不提交或发布作品；浏览器打开故事会正常记录阅读进度。
+
+## 使用前了解
+
+- **生成费用**：Codex 文本和图片共用订阅额度，图片可能消耗得更快；OpenAI API 与 Gemini 按各自 API 项目计费，不使用 Codex 订阅额度。拾趣不另设生成次数配额，实际可用性取决于提供方权限与额度；连接检查成功不代表有生成配额。
+- **联网与内容**：生成会向所选提供方发送必要的原文、提示词和参考图片。故事和插图为 AI 改编，不能当作原典或学术校勘结果。
+- **共享与密钥**：所有可连接设备共享书架和生成权限，局域网仅限可信网络。CLI 和桌面共用的 API 密钥以明文保存在独立设置数据库中，由本机文件权限保护；环境变量不会自动写入数据库。
+- **数据与备份**：故事保存在本地；更换数据目录只会切换书架，不会搬移文件。升级到 0.6.5 前先停服并备份数据库与图片，CLI 与桌面版保持同版，升级后刷新浏览器。[升级说明](#升级到-065) · [更新记录](../CHANGELOG.md)。
+
+连接失败、端口占用、CLI 书库选择等问题见[常见问题](#常见问题)。
 
 ## 数据与备份
 
