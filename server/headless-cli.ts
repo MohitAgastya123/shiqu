@@ -15,7 +15,7 @@ import {effectiveProviderVariables} from './cli-setup.ts';
 import {installDiagnostics} from './diagnostics.ts';
 import {diagnosticReport} from './diagnostics.ts';
 import {createLibraryBackup,restoreLibraryBackup,verifyLibraryBackup,containsPath} from './library-backup.ts';
-import {bundledSkill,installSkill} from './cli-skill.ts';
+import {bundledSkill,installSkill,checkSkill,updateSkill} from './cli-skill.ts';
 import {stopCodexProcesses} from './codex-runner.ts';
 import {readerBooks} from '../lib/reader-books.ts';
 import {artStyles,artStyleGroups} from '../lib/reader-styles.ts';
@@ -27,7 +27,7 @@ import type {LocalBooks} from './local-books.ts';
 
 const commandNames=new Set(['skill','help','init','status','catalog','books','themes','styles','stories','run','preview','export','backup','restore','verify-backup','diagnostics','config','api']);
 const commands=[
- ['skill show|install','Read the bundled skill or install a copy with explicit --scope project|global.','skill install --scope project'],
+ ['skill show|install|check|update','Install with explicit --scope project|global; check auto-discovers copies and caches npm latest for 24h. --refresh retries; check --auto-update on|off saves consent. update copies only this CLI bundle, never local edits or downgrades.','skill check --auto-update on'],
  ['init','Optional: create the library directory and database at --data-dir (shiqu.sqlite plus media). Does not change the saved default; library commands also initialize automatically.','init --data-dir /private/library'],
  ['status','Library integrity/counts and runtime metadata; no cloud readiness request.','status'],
  ['catalog','Books, themes and styles. books contents BOOK --query words reads local sources.','books contents zhuangzi'],
@@ -60,10 +60,10 @@ const inputs={
  frameCount:{command:'api POST reader/sessions/ID/frame-count --input count.json',input:{count:8}},
  config:{command:'config set --input settings.json',input:{settings:{provider:'codex',providerConfigured:true},expectedRevision:'from config get'},key:'For API providers only: key:{provider:"openai"|"gemini",value:"secret"|null}; never pass a key in argv.'},
 };
-type Context={cwd?:string;home?:string;generation?:ReaderProvider;localBooks?:LocalBooks;variables?:Record<string,string|undefined>;input?:unknown;signal?:AbortSignal};
+type Context={cwd?:string;home?:string;generation?:ReaderProvider;localBooks?:LocalBooks;variables?:Record<string,string|undefined>;input?:unknown;signal?:AbortSignal;skill?:{transport?:typeof fetch;now?:()=>number}};
 function parse(args:string[]){return parseArgs({args,allowPositionals:true,strict:true,options:Object.fromEntries([
- ...['data-dir','input','output','format','until','timeout','title','request-id','query','batch','index','scope','generation'].map(k=>[k,{type:'string'}]),
- ...['json','help','allow-unsigned','include-prompts','no-intake'].map(k=>[k,{type:'boolean'}]),
+ ...['data-dir','input','output','format','until','timeout','title','request-id','query','batch','index','scope','generation','auto-update'].map(k=>[k,{type:'string'}]),
+ ...['json','help','allow-unsigned','include-prompts','no-intake','refresh','automatic'].map(k=>[k,{type:'boolean'}]),
  ]) as Record<string,{type:'string'|'boolean'}>});}
 async function readInput(filename?:string){
  if(!filename)return {};
@@ -92,7 +92,15 @@ export async function executeHeadless(root:string,args:string[],context:Context=
  }
  if(command==='skill'){
   if(action==='show')return {appVersion,text:await bundledSkill(root)};
-  const scope=value('scope');need(action==='install'&&['project','global'].includes(scope||''),'SKILL_SCOPE_REQUIRED','Use skill show or skill install --scope project|global.');
+  const scope=value('scope');need(scope===undefined||['project','global'].includes(scope),'SKILL_SCOPE_REQUIRED','Use --scope project|global.');
+  need(['install','check','update'].includes(action),'UNKNOWN_COMMAND','Use skill show|install|check|update.');
+  need(action==='check'||value('auto-update')===undefined&&!v.refresh,'INVALID_INPUT','--auto-update and --refresh apply only to skill check.');
+  need(!v.automatic||action==='update','INVALID_INPUT','--automatic applies only to skill update.');
+  const preference=value('auto-update');need(preference===undefined||['on','off'].includes(preference),'INVALID_INPUT','Use --auto-update on|off.');
+  const skillContext={cwd:context.cwd,home:context.home,variables:context.variables||process.env,...context.skill};
+  if(action==='check')return checkSkill(root,scope,{autoUpdate:preference===undefined?undefined:preference==='on',refresh:!!v.refresh},skillContext);
+  need(scope,'SKILL_SCOPE_REQUIRED','Install/update requires --scope project|global.');
+  if(action==='update')return updateSkill(root,scope,skillContext,!!v.automatic);
   return {appVersion,scope,...await installSkill(root,scope==='global'?context.home||os.homedir():context.cwd)};
  }
  const input=context.input??await readInput(value('input'));need(input&&typeof input==='object'&&!Array.isArray(input),'INVALID_INPUT','JSON input must be an object.');
@@ -205,7 +213,7 @@ export async function routeHeadless(root:string,args:string[]){
  console.log=console.info=console.warn=(...values:unknown[])=>console.error(...values);
  try{const data=await executeHeadless(root,args[0]?.startsWith('-')?['help',...args]:args);process.stdout.write(args[0]==='skill'&&args[1]==='show'&&!args.includes('--json')?(data as {text:string}).text:JSON.stringify({schemaVersion:1,ok:true,data})+'\n');}
  catch(error){
-  const known=error instanceof CliCommandError,code=known?error.code:(error as NodeJS.ErrnoException)?.code==='EEXIST'?'TARGET_EXISTS':(error as Error)?.message==='DATA_BUSY'?'LIBRARY_BUSY':(error as Error)?.name==='ZodError'?'INVALID_INPUT':'COMMAND_FAILED';
+  const known=error instanceof CliCommandError,skillCode=(error as NodeJS.ErrnoException)?.code,code=known?error.code:typeof skillCode==='string'&&/^SKILL_[A-Z_]+$/.test(skillCode)?skillCode:(error as NodeJS.ErrnoException)?.code==='EEXIST'?'TARGET_EXISTS':(error as Error)?.message==='DATA_BUSY'?'LIBRARY_BUSY':(error as Error)?.name==='ZodError'?'INVALID_INPUT':'COMMAND_FAILED';
   const message=known?error.message:code==='TARGET_EXISTS'?'Output already exists.':code==='LIBRARY_BUSY'?'Stop all services using this library and retry.':code==='INVALID_INPUT'?'Input does not match the production schema.':/^(EXPORT_|BACKUP_|SKILL_)/.test((error as Error)?.message||'')?(error as Error).message:'Command failed; check paths, provider configuration and diagnostics.';
   process.stdout.write(JSON.stringify({schemaVersion:1,ok:false,error:{code,message,...(known&&error.details?{details:error.details}:{})}})+'\n');process.exitCode=known?error.exitCode:1;
  }finally{Object.assign(console,saved);}return true;

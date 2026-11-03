@@ -128,7 +128,7 @@ CLI 优先寻找桌面版保存的书库目录，目录不存在时自动创建�
 npx @apprun/shiqu skill install --scope global
 ```
 
-技能安装到 `~/.agents/skills/shiqu/SKILL.md`。只想在一个项目使用时，在该目录运行 `skill install --scope project`，目标为当前目录的 `.agents/skills/shiqu/SKILL.md`。两种方式都复制独立文件，同内容重复安装无变化，已有不同内容时拒绝覆盖。
+技能安装到 `~/.agents/skills/shiqu/SKILL.md`。只想在一个项目使用时，在该目录运行 `skill install --scope project`，目标为当前目录的 `.agents/skills/shiqu/SKILL.md`。两种方式都复制独立文件，并记录包版本和内容哈希；同内容重复安装无变化，已有不同内容时拒绝覆盖。
 
 在 Codex 中调用 `$shiqu`，例如：
 
@@ -136,6 +136,8 @@ npx @apprun/shiqu skill install --scope global
 $shiqu 从《庄子》中找一个关于善意与误解的故事，用水墨写意。
 先给我候选和制作方案，确认后再生成插图，完成后导出离线预览和公开 ZIP。
 ```
+
+技能使用时检查 npm 正式发布版本，结果缓存 24 小时；默认提示、不覆盖。可以用自然语言要求“开启拾趣技能自动更新”，Codex 会保存偏好，之后仅更新未经本地修改的副本，并使用配套版本 CLI。项目或用户锁定的版本优先；离线继续使用现有版本。旧安装缺少记录时，需用内容匹配的版本重新安装一次；不同内容须人工合并。检查与更新由 CLI 执行，技能本身没有后台进程。
 
 Codex 按技能读取 `help --json` 并执行命令；文字与图片使用拾趣已配置的生成后端和书库。首次访问书库时自动建立数据库，与桌面/服务使用同一开库和迁移逻辑，无需先运行 init。只有显式 `run` 执行生成，查看、保存、编辑和导出不启动后台制作。无子命令的 `npx @apprun/shiqu` 仍启动浏览器服务；子命令不需要服务器、桌面或前端运行。共用书库前先停止占用它的服务。
 
