@@ -70,7 +70,8 @@ for(const provider of ['codex','gemini'])test(`${provider}: ending-only repair i
  const doc=await document(f,id);
  assert.deepEqual(doc.plan,{...before,reflection:ending});assert.equal(f.control.repairs.length,0);
  assert.equal(f.control.reflectionRepairs.length,1);assert.equal(f.control.reviews.length,2);
- assert.deepEqual(doc.visualReview.history[0],{round:1,requested:[0],changes:[],reflection:ending});
+ const saved=doc.visualReview.history[0];assert.ok(Number.isFinite(Date.parse(saved.recordedAt)));
+ assert.deepEqual(saved,{step:'repair:1:0',recordedAt:saved.recordedAt,changed:true,round:1,requested:[0],changes:[],previousReflection:before.reflection,reflection:ending});
  assert.equal(doc.visualReview.status,'passed');
 });
 

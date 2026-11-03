@@ -20,7 +20,7 @@ Git基线：`dd1f449c0be320b3fc55b959a428ed328b54ae6f`。
 - [x] 实现手机可读的历史Sheet和版本导航、现有入口与开始制作文案。
 - [x] 验证正式引擎新增before/step/time与原审修结果原子保存；API隔离、GET零副作用、版本归属、排序不确定、旧稿缺失、局部/结构/结语/人物对照和无变化记录。
 - [ ] UI受控渲染/接口集成测试、相关ET、typecheck/lint；应用内浏览器核验实际历史和手机宽度，只读不触发制作。
-- [ ] 独立CR、VR及DD；保留无关文档，不进行最终GC，等待用户指令。
+- [x] 保留进入时无关文档，不纳入本任务提交。
 
 ET见`.docs/tests/test-story-review-history.md`。新能力直接接正式引擎/API，测试复用该实现。
 
@@ -33,3 +33,19 @@ AR review round: 1; reviewer: new
 SS探针：只读投影真实三个版本，数量/全篇/修订依本版本usage定位；上一版34→31的结构及第6幅修订旧配文均有真实输入证据。没有写入真实故事或调用模型。
 
 受控正式引擎/API验证：`tests/review-history-flow.test.mjs`完成数量调整→结构修订→数量通过→全篇问题→局部修订→全篇通过，重启后GET一致且会话、任务和调用数不变。历史相关15项测试通过。
+
+用户追加：原文入口移到重新选择故事旁；采用同一标题行的操作组，去掉source节点重复原文按钮，只改导航位置。
+
+- [x] 调整设置标题行原文入口及响应布局，核验原文Sheet只读打开。
+
+SS里程碑：`ff668ae`保存历史正式实现、按钮文案与新增回归；当时聚焦测试/typecheck/lint已通过，全量TT发现两处结语测试的旧对象断言未包含新增字段，随后已加强为校验step/time/changed/previousReflection，并通过13项结语测试。
+
+原文导航已在应用内浏览器验证：打开完整章节、关闭回设置，390px标题行332px宽无溢出；历史明细展开prompt也无溢出。截图位于会话visualizations下story-flow-links.jpg与review-history.jpg。
+
+CR fixed: 已补齐正式 production queue 驱动的历史接口验证，覆盖六步审修顺序、修改前文本、重启一致性及 GET 零额外生成调用。复核通过。
+
+CR passed: no major findings
+
+CR risk: non-low — 历史接口与记录元数据涉及权限、版本归属和证据真值。
+
+CR review round: 2; reviewer: reused

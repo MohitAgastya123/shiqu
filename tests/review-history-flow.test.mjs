@@ -1,11 +1,10 @@
 // Follow the production engine through count, repair and recheck, then read the same saved history API.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {advanceStory} from '../lib/reader-engine.ts';
 import {ReaderRepository} from '../lib/reader-repository.ts';
 import {selectionSchema} from '../lib/reader-model.ts';
 import {newReview} from '../lib/reader-review.ts';
-import {productionFixture,makePlan,selection} from './fixtures/production.mjs';
+import {productionFixture,makePlan,selection,until} from './fixtures/production.mjs';
 test('formal review flow persists ordered history and before text without affecting generation on read',async t=>{
  const f=await productionFixture(t),owner='docker-local-owner',id=crypto.randomUUID();
  const repo=()=>new ReaderRepository(f.app.services.database),plan=makePlan(3);
@@ -16,9 +15,10 @@ test('formal review flow persists ordered history and before text without affect
   if(kind==='structure')return {edits:[{from:2,to:2,pages:[]}]};
   if(kind==='review'&&f.control.reviews.length===1)return {issues:[{page:1,category:'caption',problem:'指代不清。',instruction:'写明听者。',requiresReplan:false}]};
  };
- for(let i=0;i<6;i++)await advanceStory(repo(),f.generation.generator(),owner,id,0,false);
+ f.control.hold=false;await f.demand(id);await until(async()=>(await repo().get(id,owner)).state==='completed');
+ await f.app.services.production.queue.settle();
  const before=await repo().get(id,owner),doc=JSON.parse(before.document),jobs=await f.app.services.production.queue.jobs(id,owner),calls=doc.usage.length;
- assert.equal(doc.visualReview.status,'passed');assert.equal(f.control.calls.length,0);
+ assert.equal(doc.visualReview.status,'passed');const mediaCalls=f.control.calls.length;assert.ok(mediaCalls>0);
  assert.deepEqual(doc.visualReview.history[1].before,[{page:1,...plan.pages[0]}]);
  for(const record of [...doc.visualReview.frameCountReports,...doc.visualReview.reports,...doc.visualReview.history]){assert.ok(record.step);assert.ok(Number.isFinite(Date.parse(record.recordedAt)));}
  const history=await f.json(`sessions/${id}/review-history`);
@@ -27,5 +27,5 @@ test('formal review flow persists ordered history and before text without affect
  assert.equal(history.entries[1].repair.structure.before,3);assert.equal(history.entries[1].repair.structure.after,2);
  assert.deepEqual(history.entries[4].repair.pages[0].before,plan.pages[0]);assert.match(history.entries[4].repair.pages[0].after.prompt,/Revised staging/);
  await f.restart();assert.deepEqual(await f.json(`sessions/${id}/review-history`),history);
- assert.deepEqual(await repo().get(id,owner),before);assert.deepEqual(await f.app.services.production.queue.jobs(id,owner),jobs);assert.equal(JSON.parse((await repo().get(id,owner)).document).usage.length,calls);assert.equal(f.control.calls.length,0);
+ assert.deepEqual(await repo().get(id,owner),before);assert.deepEqual(await f.app.services.production.queue.jobs(id,owner),jobs);assert.equal(JSON.parse((await repo().get(id,owner)).document).usage.length,calls);assert.equal(f.control.calls.length,mediaCalls);
 });
