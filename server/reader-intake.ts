@@ -2,6 +2,7 @@
 // Search and setting drafts use targeted writes: neither replaces the selection or a running step's lock.
 import {directBookChoice,selectedChapterScope} from './local-book-contents.ts';
 import type {LocalBooks} from './local-books.ts';
+import {localBookId} from './local-books.ts';
 import {createHash} from 'node:crypto';
 import {emptyDocument,selectionSchema,ReaderError} from '../lib/reader-model.ts';
 import type {Document,Selection,SessionRow} from '../lib/reader-model.ts';
@@ -51,13 +52,32 @@ export async function changeIntake(repo:ReaderRepository,id:string,uid:string,ac
  const row=await repo.get(id,uid),doc=JSON.parse(row.document) as Document,intake=doc.intake,selection=selectionSchema.parse(JSON.parse(row.selection));
  const fingerprint=hash(action),receipt=await commandReceipt(repo.db,uid,action.requestId,fingerprint);
  if(receipt){if(receipt.action!=='setup'||receipt.session_id!==id)throw new ReaderError(409,'这个操作编号已用于其他内容。');return row;}
- if(doc.reselection&&action.action!=='more')throw new ReaderError(409,'请在替换选题窗口提交选择；草稿不能开始制作。');
+ if(doc.reselection&&!['more','search'].includes(action.action))throw new ReaderError(409,'请在替换选题窗口提交选择；草稿不能开始制作。');
  if(!intake)throw new ReaderError(409,'这篇故事使用旧制作流程，请继续原来的步骤。');
  intake.phase=effectiveIntakePhase(doc,selection)!;
  if(action.action==='more')return requestSearch(repo,row,doc,action.requestId,fingerprint,action.automatic);
  if(intake.lastAction?.id===action.requestId){if(intake.lastAction.hash!==fingerprint)throw new ReaderError(409,'此操作编号已用于其他内容。');return row;}
  if(intake.generation!==action.generation)throw new ReaderError(409,'制作内容已由另一次操作更新，请重新打开后继续。');
  if(doc.plan||intake.phase==='confirmed')throw new ReaderError(409,'制作已确认；需要调整时请创建修订版本。');
+ if(action.action==='search'){
+  if(intake.selected||!['discovering','choosing'].includes(intake.phase))throw new ReaderError(409,'这篇故事已经选定，请在重选草稿中修改提取标题。');
+  if(row.state==='running'&&row.lock_until>Date.now())throw new ReaderError(409,'当前任务正在保存，请稍后再修改提取标题。');
+  if(action.title&&!localBookId(selection))throw new ReaderError(400,'按标题提取需要可核对原文的本地书籍。');
+  const discovery=action.title?{mode:'title' as const,title:action.title}:{mode:'auto' as const},search=intakeSearch(intake);
+  if(search.state==='searching'&&JSON.stringify(selection.discovery)===JSON.stringify(discovery)){
+   await recordNoop(repo.db,uid,id,action.requestId,'setup',fingerprint);return row;
+  }
+  // The new round fences old paid results; the generation also fences stale candidate choices.
+  selection.discovery=discovery;delete selection.storyTitle;delete selection.source;selection.length='auto';
+  intake.phase='discovering';intake.generation++;intake.batches=[];
+  intake.search={round:search.round+1,state:'searching',requestId:action.requestId,commandHash:fingerprint,cycleId:action.requestId};
+  delete doc.original;delete doc.frameRecommendation;doc.frameCountConfirmed=false;
+  const result=await repo.db.prepare(`UPDATE reader_sessions SET selection=?,document=?,state='idle',error=NULL,lock_token=NULL,lock_until=0,step_key=NULL,step_attempts=0,updated_at=?
+   WHERE id=? AND user_id=? AND document=? AND selection=? AND state=? AND ${visible}`)
+   .bind(JSON.stringify(selection),JSON.stringify(doc),new Date().toISOString(),id,uid,row.document,row.selection,row.state).run();
+  if(!result.meta.changes){if(attempt<3)return changeIntake(repo,id,uid,action,attempt+1);throw new ReaderError(409,'查找条件已更新，请重新打开后继续。');}
+  return repo.get(id,uid);
+ }
  const manual=(artStyle:Selection['artStyle'])=>artStyle!==selection.artStyle||!!intake.manualArt;
  if(action.action==='draft'){
   // The running step keeps its lock and its input version; confirming applies these settings.

@@ -20,6 +20,7 @@ export type IntakeView=Omit<StoryIntake,'creationHash'|'lastAction'|'search'>&{s
 export function intakeSearch(intake:StoryIntake):IntakeSearch{return intake.search||{round:0,state:intake.phase==='discovering'?'searching':'idle'};}
 const common={requestId:z.string().uuid(),generation:z.number().int().min(0)};
 export const intakeActionSchema=z.discriminatedUnion('action',[
+ z.object({...common,action:z.literal('search'),title:z.string().trim().max(100).regex(/^[^\r\n]*$/,'故事标题请写在一行内。')}).strict(),
  z.object({...common,action:z.literal('choose'),settings:setupSettingsSchema.optional(),batch:z.number().int().min(0).max(39),index:z.number().int().min(0).max(4)}).strict(),
  z.object({...common,action:z.literal('more'),automatic:z.boolean().optional(),settings:setupSettingsSchema.optional()}).strict(),
  z.object({...common,action:z.literal('recommend'),settings:setupSettingsSchema}).strict(),

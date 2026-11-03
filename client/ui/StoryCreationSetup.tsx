@@ -17,6 +17,7 @@ import StorySource from './StorySource';
 import StoryGenerationStatus from './StoryGenerationStatus';
 import StoryGenerationControl from './StoryGenerationControl';
 import StoryRetry from './StoryRetry';
+import StoryExtractionSearch from './StoryExtractionSearch';
 import './story-revision.css';
 type SetupTab=Exclude<StoryEditorTab,'script'>;
 type Props={session:SessionView;book:string;busy:boolean;onAction:(command:IntakeCommand)=>Promise<void>;progress:Omit<ComponentProps<typeof StoryGenerationStatus>,'session'|'timeline'|'stages'|'children'|'compact'>};
@@ -48,10 +49,10 @@ export default function StoryCreationSetup({session,book,busy,onAction,progress,
  const preferences={artStyle:settings.artStyle,productionPrompt:settings.productionPrompt,...(settings.acceptancePrompt!==undefined?{acceptancePrompt:settings.acceptancePrompt}:{}),narrativeDetail:settings.narrativeDetail};
  async function act(command:IntakeCommand){
   setError('');
-  if(command.action==='more')setFinding(true);else own.current=true;
+  if(command.action==='more'||command.action==='search')setFinding(true);else own.current=true;
   try{await onAction(command);return true;}
   catch(e){own.current=false;setError(e instanceof Error?e.message:'操作暂未保存，请重试。');return false;}
-  finally{if(command.action==='more')setFinding(false);}
+  finally{if(command.action==='more'||command.action==='search')setFinding(false);}
  }
  const isSelected=(batchIndex:number,index:number)=>intake.selected?.batch===batchIndex&&intake.selected.index===index;
  async function select(batchIndex:number,index:number){
@@ -79,7 +80,8 @@ export default function StoryCreationSetup({session,book,busy,onAction,progress,
  });
  return <section className="yu-creation-setup" aria-label={selected?'故事流程':'选择故事'}>
   <p className="yu-sheet-intro">《{book}》 · {session.selection.theme==='原典故事'?'不限定主题':`主题：${session.selection.theme}`}{session.selection.discoverySources?.length?` · 已选 ${session.selection.discoverySources.length} 段原文`:''}</p>
-  {targetTitle&&<p className="yu-sheet-intro">提取标题：{targetTitle} · 主题仅影响讲述重点</p>}
+  {!selected&&<StoryExtractionSearch sessionId={session.id} title={targetTitle} local={session.selection.bookId!=='other'} busy={busy} searching={searching} onSearch={title=>act({action:'search',title})}/>}
+  {targetTitle&&<p className="yu-sheet-intro">当前提取标题：{targetTitle} · 主题仅影响讲述重点</p>}
   {selected?<div className="yu-batch-heading"><h3>{session.selection.storyTitle}</h3></div>:<p className="yu-count-help">找到一篇就显示一篇，选中或离开后停止查找。已找到的故事会保留，重开后可继续。</p>}
   {search.state==='searching'&&(paused?<p role="status">查找已暂停，恢复生成后继续。已找到的故事都保留。</p>:<p role="status">正在寻找更多故事，找到后逐篇显示，已有故事可以直接选择。{intake.progress?.currentChapters?.length?`正在翻阅：${readingChapterLabel(intake.progress.currentChapters)}`:''}{intake.progress?.completedChars?`已读 ${intake.progress.completedChars.toLocaleString('zh-CN')} 字。`:''}</p>)}
   {search.state==='failed'&&<div className="yu-batch-error" role="alert"><p>这次查找未完成。{search.error}</p><p>已找到的故事和已选内容都保留，可以重试查找，也可以直接继续。</p>{selected&&findMore}</div>}
