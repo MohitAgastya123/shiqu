@@ -14,6 +14,10 @@ import {commandReceipt,recordNoop} from './reader-commands.ts';
 const hash=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const visible='NOT EXISTS(SELECT 1 FROM library_deletions WHERE story_id=reader_sessions.id AND user_id=reader_sessions.user_id)';
 export async function createIntake(repo:ReaderRepository,id:string,uid:string,input:Selection,books?:LocalBooks,reselection?:ReselectionDraft){
+ if(input.discovery?.mode==='title'){
+  if(input.source)throw new ReaderError(400,'请填写目标标题并选择章节范围，不要同时直接选择另一篇故事。');
+  if(!books||!await books.book(input))throw new ReaderError(400,'按标题提取需要可核对原文的本地书籍，请选择书库中的书。');
+ }
  if(input.source&&input.discoverySources)throw new ReaderError(400,'请选择章节提取或直接故事，不能混用。');
  if((input.source||input.discoverySources)&&!books)throw new ReaderError(503,'本地书库暂不可用');
  const local=input.discoverySources?await books!.book(input):null;

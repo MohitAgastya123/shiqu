@@ -43,14 +43,18 @@ export async function directBookChoice(books:LocalBooks,selection:Selection){
  return {entry,original:books.resolve(book,entry.source)};
 }
 
-// Canonical chapter scopes retain book order and edition; callers cannot supply arbitrary source slices.
+// Canonical scopes allow whole chapters or one catalog story, never arbitrary slices or gaps within a chapter.
 export function selectedChapterScope(books:LocalBooks,book:LocalBook,references:NonNullable<Selection['discoverySources']>){
  const requested=new Set(references.map(localSourceKey));
  if(!references.length||references.length>24||requested.size!==references.length)throw new ReaderError(400,'请选择1–24个不重复的章节。');
- const entries=indexBookContents(books,book).entries.filter(entry=>entry.kind==='chapter'&&entry.source&&requested.has(localSourceKey(entry.source)));
+ const entries=indexBookContents(books,book).entries.filter(entry=>entry.source&&requested.has(localSourceKey(entry.source)));
  if(entries.length!==references.length)throw new ReaderError(400,'章节范围已失效，请重新选择同一本书的章节。');
+ if(entries.some(entry=>entry.kind==='story')&&entries.length!==1)throw new ReaderError(400,'已有故事段落请单选；跨章故事请选择完整章节。');
  const discoverySources=entries.map(entry=>entry.source!),ids=new Set(discoverySources.map(source=>source.sectionId));
- const sections=book.sections.filter(section=>ids.has(section.id));
+ const sections=book.sections.filter(section=>ids.has(section.id)).map(section=>{
+  const source=discoverySources.find(source=>source.sectionId===section.id)!;
+  return {...section,units:section.units.slice(section.units.findIndex(unit=>unit.id===source.firstUnit),section.units.findIndex(unit=>unit.id===source.lastUnit)+1)};
+ });
  const text=sections.map(section=>`篇章 ${section.id}：${section.title}\n`+section.units.map(unit=>`[${unit.id}]\n${unit.text}`).join('\n\n')).join('\n\n');
  return {discoverySources,book:{...book,sections,input:{...book.input,text}}};
 }

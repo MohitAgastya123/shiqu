@@ -25,6 +25,7 @@ export function storyCreationTitle(session:SessionView){return session.intake?(s
 const savedSettings=(session:SessionView)=>session.intake!.draft||{artStyle:session.selection.artStyle,productionPrompt:session.selection.productionPrompt,...(session.selection.acceptancePrompt!==undefined?{acceptancePrompt:session.selection.acceptancePrompt}:{}),narrativeDetail:session.selection.narrativeDetail||'balanced' as const,length:'auto' as const};
 export default function StoryCreationSetup({session,book,busy,onAction,progress,onReplace}:Props&{onReplace?:(batch:number,index:number,settings:ProductionSettings)=>Promise<void>}){
  const intake=session.intake!,saved={...savedSettings(session),length:'auto' as const},savedKey=JSON.stringify(saved);
+ const targetTitle=session.selection.discovery?.mode==='title'?session.selection.discovery.title:undefined;
  const [error,setError]=useState('');
  const [finding,setFinding]=useState(false);
  const [editing,setEditing]=useState<SetupTab|null>(null),[choosing,setChoosing]=useState(false),[sourceOpen,setSourceOpen]=useState(false);
@@ -63,7 +64,7 @@ export default function StoryCreationSetup({session,book,busy,onAction,progress,
  function adoptRemote(){baseline.current=savedKey;setSettings({...saved,length:'auto'});setRemote(false);}
  function keepEdits(){baseline.current=savedKey;setRemote(false);void act({action:'draft',settings});}
  const remoteChoice=remote&&<div className="yu-revision-conflict-note" role="status"><p>另一台设备更新了制作内容。你的修改还没有保存。</p><div className="yu-revision-buttons"><button type="button" disabled={busy} onClick={adoptRemote}>采用最新内容</button><button type="button" disabled={busy} onClick={keepEdits}>保留我的修改</button></div></div>;
- const findMore=<button type="button" className="yu-refresh-batch" aria-busy={searching&&!paused} disabled={busy||searching||intake.batches.length>=40} onClick={()=>void act({action:'more'})}>{searching&&!paused&&<Loader2 size={14} className="spin" aria-hidden="true"/>}{searching?(paused?'恢复后继续查找':'正在查找…'):search.state==='failed'?'重试查找':'继续找故事'}</button>;
+ const findMore=(!targetTitle||search.state==='failed')&&<button type="button" className="yu-refresh-batch" aria-busy={searching&&!paused} disabled={busy||searching||intake.batches.length>=40} onClick={()=>void act({action:'more'})}>{searching&&!paused&&<Loader2 size={14} className="spin" aria-hidden="true"/>}{searching?(paused?'恢复后继续查找':'正在查找…'):search.state==='failed'?'重试查找':'继续找故事'}</button>;
  const terminalBatch=intake.batches.at(-1),terminalNote=terminalBatch?.stories.length===0?terminalBatch.note:'';
  const candidateList=<>
   <div className="yu-batch-heading"><h3>已找到 {candidates.length} 篇故事</h3>{findMore}</div>
@@ -77,7 +78,8 @@ export default function StoryCreationSetup({session,book,busy,onAction,progress,
   return step;
  });
  return <section className="yu-creation-setup" aria-label={selected?'故事流程':'选择故事'}>
-  <p className="yu-sheet-intro">《{book}》 · {session.selection.theme}{session.selection.discoverySources?.length?` · 已选 ${session.selection.discoverySources.length} 章`:''}</p>
+  <p className="yu-sheet-intro">《{book}》 · {session.selection.theme==='原典故事'?'不限定主题':`主题：${session.selection.theme}`}{session.selection.discoverySources?.length?` · 已选 ${session.selection.discoverySources.length} 段原文`:''}</p>
+  {targetTitle&&<p className="yu-sheet-intro">提取标题：{targetTitle} · 主题仅影响讲述重点</p>}
   {selected?<div className="yu-batch-heading"><h3>{session.selection.storyTitle}</h3></div>:<p className="yu-count-help">找到一篇就显示一篇，选中或离开后停止查找。已找到的故事会保留，重开后可继续。</p>}
   {search.state==='searching'&&(paused?<p role="status">查找已暂停，恢复生成后继续。已找到的故事都保留。</p>:<p role="status">正在寻找更多故事，找到后逐篇显示，已有故事可以直接选择。{intake.progress?.currentChapters?.length?`正在翻阅：${readingChapterLabel(intake.progress.currentChapters)}`:''}{intake.progress?.completedChars?`已读 ${intake.progress.completedChars.toLocaleString('zh-CN')} 字。`:''}</p>)}
   {search.state==='failed'&&<div className="yu-batch-error" role="alert"><p>这次查找未完成。{search.error}</p><p>已找到的故事和已选内容都保留，可以重试查找，也可以直接继续。</p>{selected&&findMore}</div>}

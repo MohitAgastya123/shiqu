@@ -40,9 +40,11 @@ export function withLocalBooks(provider:ReaderProvider,books:LocalBooks,media:Me
    reading?.signal.throwIfAborted();
    const book=await books.book(selection);
    reading?.signal.throwIfAborted();
-   if(!book){if(selection.discoverySources)throw new ReaderError(400,'章节提取只支持本地书库。');return provider.suggestions(selection,excluded,undefined,reading,excludedSources);}
+   if(!book){if(selection.discoverySources||selection.discovery?.mode==='title')throw new ReaderError(400,'章节或标题提取只支持本地书库。');return provider.suggestions(selection,excluded,undefined,reading,excludedSources);}
    const scope=selection.discoverySources?selectedChapterScope(books,book,selection.discoverySources):null;
-   return discoverLocalStories(provider,books,cache,scope?.book||book,scope?{...selection,discoverySources:scope.discoverySources}:selection,excluded,reading,excludedSources);
+   const result=await discoverLocalStories(provider,books,cache,scope?.book||book,scope?{...selection,discoverySources:scope.discoverySources}:selection,excluded,reading,excludedSources);
+   // A single-story scope has sliced units; display paragraph positions from the full original.
+   return scope?{...result,stories:result.stories.map(story=>({...story,sourceLabel:books.resolve(book,story.source!).title.slice(0,150)}))}:result;
   },
   recommendArt,
   generator(){

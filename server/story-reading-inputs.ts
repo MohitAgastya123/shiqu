@@ -1,5 +1,6 @@
 // Persist stable reading boundaries and token counts, sharing original text across themes.
 // Manifests contain references only; hydration verifies exhaustive, ordered unit coverage.
+// Explicit chapter selections use the full request budget to preserve their shared main event.
 import {z} from 'zod';
 import {localRangeSchema,localScanJson,localReadingPrompt,legacyLocalScanJson,legacyLocalReadingPrompt} from '../lib/reader-local-contract.ts';
 import type {WholeBookInput} from '../lib/reader-local-contract.ts';
@@ -27,11 +28,11 @@ export function hydrateReadingPlan(book:LocalBook,manifest:ReadingManifest):Read
  if(JSON.stringify(seen)!==JSON.stringify(expected)||manifest.mode==='whole'&&blocks.length!==1)throw Error('Reading manifest does not cover original');
  return blocks;
 }
-export function buildReadingPlan(book:LocalBook,provider:string,limits=defaultReadingLimits):ReadingManifest{
- const input:WholeBookInput={...book.input,purpose:'scan',scan:{maxStories:5,excludedSources:[],pendingEvents:[],contextText:''}};
+export function buildReadingPlan(book:LocalBook,provider:string,limits=defaultReadingLimits,selectedChapters=false,targetStoryTitle?:string):ReadingManifest{
+ const input:WholeBookInput={...book.input,purpose:selectedChapters||targetStoryTitle?'catalog':'scan',scan:{maxStories:selectedChapters||targetStoryTitle?1:5,excludedSources:[],pendingEvents:[],contextText:'',...(targetStoryTitle?{targetStoryTitle}:selectedChapters?{chapterStoryLevel:'main' as const}:{})}};
  const all=book.sections.flatMap(section=>section.units.map(unit=>({section,unit})));
  const total=requestTokens(input,'题'.repeat(100),[],provider);
- if(book.sections.length<=2&&total<=Math.min(limits.whole,limits.chapter))return {mode:'whole',blocks:[{ranges:ranges(all),tokens:total}]};
+ if(selectedChapters?total<=limits.whole:book.sections.length<=2&&total<=Math.min(limits.whole,limits.chapter))return {mode:'whole',blocks:[{ranges:ranges(all),tokens:total}]};
  const blocks:z.infer<typeof blockSchema>[]=[];let rows:Row[]=[],size=0;
  const flush=()=>{if(rows.length){const text=render(rows),tokens=readingTokens(text,provider);if(tokens>limits.chapter)throw Error('Reading block exceeded budget');blocks.push({ranges:ranges(rows),tokens});rows=[];size=0;}};
  for(const section of book.sections){
@@ -41,11 +42,11 @@ export function buildReadingPlan(book:LocalBook,provider:string,limits=defaultRe
  }
  flush();return {mode:'chapters',blocks};
 }
-export function readingPlanKey(book:LocalBook,provider:string,limits=defaultReadingLimits){return discoveryHash(['reading-plan-v4',book.id,book.edition,discoveryHash(book.input.text),provider,limits,localReadingPrompt({...book.input,purpose:'scan'}),localScanJson]);}
+export function readingPlanKey(book:LocalBook,provider:string,limits=defaultReadingLimits,selectedChapters=false,targetStoryTitle?:string){return discoveryHash(['reading-plan-v4',book.id,book.edition,discoveryHash(book.input.text),provider,limits,localReadingPrompt({...book.input,purpose:'scan'}),localScanJson,...(selectedChapters||targetStoryTitle?['selected-chapters-v1',selectedChapters,localReadingPrompt({...book.input,purpose:'catalog',scan:{maxStories:1,excludedSources:[],pendingEvents:[],contextText:'',...(targetStoryTitle?{targetStoryTitle}:{chapterStoryLevel:'main' as const})}})]:[])]);}
 export function legacyReadingPlanKey(book:LocalBook,provider:string,limits=legacyReadingLimits){return discoveryHash(['reading-plan-v2',book.id,book.edition,discoveryHash(book.input.text),provider,limits,legacyLocalReadingPrompt({...book.input,purpose:'scan'}),legacyLocalScanJson]);}
-export async function readingPlan(book:LocalBook,provider:string,cache:StoryDiscoveryCache,limits=defaultReadingLimits){
- const key=`${readingPlanKey(book,provider,limits)}/blocks`;
+export async function readingPlan(book:LocalBook,provider:string,cache:StoryDiscoveryCache,limits=defaultReadingLimits,selectedChapters=false,targetStoryTitle?:string){
+ const key=`${readingPlanKey(book,provider,limits,selectedChapters,targetStoryTitle)}/blocks`;
  let manifest=await cache.read(key,manifestSchema,value=>{hydrateReadingPlan(book,value);return true;});
- if(!manifest){manifest=buildReadingPlan(book,provider,limits);await cache.write(key,manifest);}
+ if(!manifest){manifest=buildReadingPlan(book,provider,limits,selectedChapters,targetStoryTitle);await cache.write(key,manifest);}
  return {key,manifest,blocks:hydrateReadingPlan(book,manifest)};
 }

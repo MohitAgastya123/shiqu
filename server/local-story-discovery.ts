@@ -6,7 +6,7 @@ import {z} from 'zod';
 import {randomUUID} from 'node:crypto';
 import {previousReadingPlanKey,previousDiscoveryNamespace,previousSummaryNamespace} from './story-discovery-legacy.ts';
 import {discoveryMeasurement} from './story-discovery-metrics.ts';
-import {localSourceSchema,localSourceKey,localReadingPrompt,localCatalogJson,legacyLocalReadingPrompt,legacyLocalScanJson,localChapterStoriesPrompt,catalogStoryLimit} from '../lib/reader-local-contract.ts';
+import {localSourceSchema,localSourceKey,localReadingPrompt,localCatalogJson,legacyLocalReadingPrompt,legacyLocalScanJson,localChapterStoriesPrompt,localTitleStoriesPrompt,catalogStoryLimit} from '../lib/reader-local-contract.ts';
 import type {LocalSourceReference,PendingEvent,WholeBookInput} from '../lib/reader-local-contract.ts';
 import {suggestionBatchSchema,titleKey} from '../lib/reader-suggestions.ts';
 import type {SuggestionBatch} from '../lib/reader-suggestions.ts';
@@ -78,13 +78,16 @@ function mergePending(books:LocalBooks,book:LocalBook,old:PendingEvent[],updates
 export async function discoverLocalStories(provider:ReaderProvider,books:LocalBooks,cache:StoryDiscoveryCache,book:LocalBook,selection:Selection,excluded:string[],observer?:ReadingObserver,excludedSources:LocalSourceReference[]=[],limits:ReadingLimits=defaultReadingLimits):Promise<SuggestionBatch>{
  observer={signal:observer?.signal||new AbortController().signal,onProgress:observer?.onProgress||(()=>{}),...observer,cycleId:observer?.cycleId||randomUUID()};
  const batchLimit=observer.maxStories||4;
- const status=await provider.status(),plan=await readingPlan(book,status.provider,cache,limits);
- const chapterStories=!!selection.discoverySources;
- const scope=selection.discoverySources?'/scope/'+discoveryHash(selection.discoverySources.map(localSourceKey))+'/main-first/'+discoveryHash(localChapterStoriesPrompt):'';
+ const targetTitle=selection.discovery?.mode==='title'?selection.discovery.title:undefined;
+ // Old tasks retain main-first behavior; new automatic searches discover independent events.
+ const chapterStories=!!selection.discoverySources&&!selection.discovery;
+ const status=await provider.status(),plan=await readingPlan(book,status.provider,cache,limits,!!selection.discoverySources&&(chapterStories||!!targetTitle),targetTitle);
+ const scope=(selection.discoverySources?'/scope/'+discoveryHash(selection.discoverySources.map(localSourceKey))+(chapterStories?'/selected-chapters-v1/main-first/'+discoveryHash(localChapterStoriesPrompt):'/auto-v1'):'')+(targetTitle?'/title/'+discoveryHash([titleKey(targetTitle),localTitleStoriesPrompt]):'');
  const namespace=discoveryNamespace(book,status.provider,status.models.text,limits,status.taskReasoningEfforts?.suggest)+scope;
  const oldNamespace=previousDiscoveryNamespace(book,status.provider,status.models.text,limits,status.taskReasoningEfforts?.suggest)+scope;
  const legacyNamespace=legacySummaryDiscoveryNamespace(book,status.provider,status.models.text,limits,status.taskReasoningEfforts?.suggest)+scope;
- const theme=selection.theme.normalize('NFKC').trim(),key=namespace+'/library';
+ // A requested title fixes the event. Theme remains an editorial preference for production.
+ const theme=targetTitle?'原典故事':selection.theme.normalize('NFKC').trim(),key=namespace+'/library';
  const totalChars=plan.blocks.reduce((n,block)=>n+block.chars,0),excludedKeys=new Set(excludedSources.length?[]:excluded.map(titleKey));
  const validExclusions=excludedSources.filter(source=>{try{qualified(books,book,source);return true;}catch{return false;}});
  const sameRange=(a:LocalSourceReference,b:LocalSourceReference)=>sourceCovers(book,a,b)&&sourceCovers(book,b,a);
@@ -131,7 +134,7 @@ export async function discoverLocalStories(provider:ReaderProvider,books:LocalBo
   const completed=current.stories.filter(story=>current.pendingEvents.some(event=>sourceCovers(book,story.source,event.source)));
   if(completed.length)context.push('已保存完整故事，可在重新确认对应旧事件及全部证据后通过resolvedEventIds收束，不重复输出故事：'+JSON.stringify(completed.map(story=>({title:story.title,source:story.source}))));
   const chapterStoryLevel=chapterStories?(relevant.length?'episodes':'main'):undefined;
-  const input:WholeBookInput={title:book.title,edition:book.edition,text:block.text,purpose:'catalog',scan:{maxStories:chapterStoryLevel==='main'?1:maxStories,excludedSources:relevant.map(story=>story.source),pendingEvents:current.pendingEvents,contextText:context.join('\n\n'),...(chapterStoryLevel?{chapterStoryLevel}:{})}};
+  const input:WholeBookInput={title:book.title,edition:book.edition,text:block.text,purpose:'catalog',scan:{maxStories:targetTitle||chapterStoryLevel==='main'?1:maxStories,excludedSources:relevant.map(story=>story.source),pendingEvents:current.pendingEvents,contextText:context.join('\n\n'),...(chapterStoryLevel?{chapterStoryLevel}:{}),...(targetTitle?{targetStoryTitle:targetTitle}:{})}};
   return {input,titles:relevant.map(story=>story.title),visible};
  };
  const progress=(current:State,stage:'reading'|'checking'|'selecting'='reading',reading:ReadingObserver|undefined=observer,block:ReadingBlock|undefined=plan.blocks[current.cursor])=>reading?.onProgress({completed:current.cursor,total:plan.blocks.length,completedChars:plan.blocks.slice(0,current.cursor).reduce((n,block)=>n+block.chars,0),totalChars,stage,mode:plan.manifest.mode,currentChapters:block?.chapters||[]});
@@ -162,7 +165,7 @@ export async function discoverLocalStories(provider:ReaderProvider,books:LocalBo
  const response=async(state:State,stories:Story[],hit:boolean):Promise<SuggestionBatch>=>{
   const unknown=await hasUnknownJudgments(provider,cache,book.id,theme,state.stories,status.provider);
   await measurement.finish(stories.length?'matched':unknown?'incomplete':'none');
-  const note=(hit?'已复用本地故事库及主题判断缓存。':chapterStories?'已按先总故事、后小故事的顺序收录，再匹配主题。':'已逐篇收录原文故事并匹配主题。')+(state.rejected?'部分返回出处未能完整核对，已保留当前进度，可继续重试。':'')+(!stories.length&&state.exhausted?(unknown?'原文已读完，但有未能判断的故事，主题检查尚不完整。':'已检查完所给原文，暂时没有更多符合主题的故事。'):'')+(state.exhausted&&state.pendingEvents.length?'部分跨章线索尚未确认完整，未作为故事推荐。':'');
+  const note=(targetTitle?(stories.length?'已核对指定故事的完整原文，主题保留为制作时的叙述重点。':state.exhausted?(state.stories.length?'指定故事已列出，请选择已找到的结果。':`未能在当前原文范围核对“${targetTitle}”的完整经过，请补选相关章节或核对标题；不会以局部故事替代。`):'正在按标题核对原文。'):hit?'已复用本地故事库及主题判断缓存。':chapterStories?'已按先总故事、后小故事的顺序收录，再匹配主题。':'已逐篇收录原文故事并匹配主题。')+(state.rejected?'部分返回出处未能完整核对，已保留当前进度，可继续重试。':'')+(!targetTitle&&!stories.length&&state.exhausted?(unknown?'原文已读完，但有未能判断的故事，主题检查尚不完整。':'已检查完所给原文，暂时没有更多符合主题的故事。'):'')+(!targetTitle&&state.exhausted&&state.pendingEvents.length?'部分跨章线索尚未确认完整，未作为故事推荐。':'');
   // Discovery returns ranges and a short match reason; preparation creates the synopsis after selection.
   return suggestionBatchSchema.parse({stories:stories.slice(0,batchLimit),note:note.slice(0,300)});
  };
@@ -201,9 +204,9 @@ export async function discoverLocalStories(provider:ReaderProvider,books:LocalBo
      }catch{rejections.push(rejectedStory('invalid-source',raw));}
     }
     let pending:PendingEvent[];
-    try{if(result.scan.invalid)throw failed();pending=mergePending(books,book,current.pendingEvents,result.scan.pendingEvents,result.scan.resolvedEventIds,[...current.stories,...accepted],visible);}
+    try{if(result.scan.invalid)throw failed();pending=mergePending(books,book,current.pendingEvents,result.scan.pendingEvents,result.scan.resolvedEventIds,[...current.stories,...accepted],visible);if(targetTitle&&accepted.length&&pending.length)throw failed();}
     catch{
-     const independent=accepted.filter(story=>!story.continuedFrom?.length||sourceUnitIds(book,story.source).some(id=>!initialCovered.has(id)));
+     const independent=targetTitle?[]:accepted.filter(story=>!story.continuedFrom?.length||sourceUnitIds(book,story.source).some(id=>!initialCovered.has(id)));
      const lastRejection={code:'pending-resolution' as const};
      await cache.write(key,{...current,stories:[...current.stories,...independent.map(({continuedFrom,...story})=>{void continuedFrom;return story;})],lastRejection});
      if(independent.length){await measurement.stored();break;}
@@ -213,6 +216,7 @@ export async function discoverLocalStories(provider:ReaderProvider,books:LocalBo
     const next:State={...current,stories:[...current.stories,...accepted],pendingEvents:pending,rejected,lastRejection,overlapDiagnostics};
     // A full response is not proof that all stories in this block have been catalogued.
     if(rejections.every(reason=>reason.code==='duplicate')&&result.stories.length<input.scan!.maxStories&&result.scan.blockComplete)next.cursor++;
+    if(targetTitle&&accepted.length&&!pending.length)next.cursor=plan.blocks.length;
     next.readThrough=next.cursor;next.exhausted=next.cursor===plan.blocks.length;
     const advanced=next.cursor>current.cursor||pending.length<current.pendingEvents.length;
     await cache.write(key,next);if(accepted.length)await measurement.stored();current=next;progress(current,'reading',reading);

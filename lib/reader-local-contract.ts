@@ -12,7 +12,7 @@ export type LocalPassage=z.infer<typeof localPassageSchema>;
 export {sourceRanges,localSourceKey} from './reader-source-key.ts';
 const pendingSchema=z.object({id:z.string().max(64),title:z.string().min(1).max(100),summary:z.string().min(1).max(1000),source:localPassageSchema});
 export type PendingEvent=Omit<z.infer<typeof pendingSchema>,'source'|'summary'>&{source:LocalSourceReference;summary?:string};
-export type ScanContext={maxStories:number;excludedSources:LocalSourceReference[];pendingEvents:PendingEvent[];contextText:string;chapterStoryLevel?:'main'|'episodes'};
+export type ScanContext={maxStories:number;excludedSources:LocalSourceReference[];pendingEvents:PendingEvent[];contextText:string;chapterStoryLevel?:'main'|'episodes';targetStoryTitle?:string};
 export type WholeBookInput={title:string;edition:string;text:string;purpose?:'scan'|'catalog';scan?:ScanContext};
 export const localChoicesSchema=z.object({stories:z.array(z.object({title:z.string().min(1).max(100),description:z.string().min(1).max(180),source:localPassageSchema,artRecommendation:artRecommendationSchema.optional()})).max(5),note:z.string().max(300)});
 export const localScanSchema=localChoicesSchema.extend({scan:z.object({blockComplete:z.boolean(),pendingEvents:z.array(pendingSchema).max(16),resolvedEventIds:z.array(z.string().min(1).max(64)).max(16)})});
@@ -51,13 +51,18 @@ export const localSuggestionPrompt=promptSections(
  ['正文与异常','带“版式”的表格列号/跨度、小字标记及字形图占位是阅读辅助，不是正文。夹注、集解、索隱、正義保留注释身份，异说不混入正文事件。原则上不选含私用字、□、缺字代号、组字占位、异常替代字或明确缺文标记的范围，不猜补原字；仅适用已核对例外。']);
 export function legacyLocalReadingPrompt(book:WholeBookInput){return book.purpose==='scan'?legacyLocalReadingTexts.scan:legacyLocalReadingTexts.selection;}
 export const localChapterStoriesPrompt=promptSections(
- ['章节主故事','先通读所选章节，识别贯穿的主事件，不从局部情节起步，也不只改写回目。scan.chapterStoryLevel=main 时只返回一个完整因果且自然收束的总故事，description 概括核心冲突、关键转折与结果。例如三国第三十回“战官渡本初败绩，劫乌巢孟德烧粮”先识别“官渡之战”，而非“许攸献计”或“火烧乌巢”；示例只说明粒度，事实与出处仍以所给原文为准。未结束主事件用 pendingEvents 续查，不用记忆补齐。source 覆盖同一主线的起因、发展、转折与收束，可含多个情节或相邻章节，不机械圈整章或合并无关事件。'],
+ ['章节主故事','先通读本次提供的全部所选章节，再识别贯穿的主事件，不从局部情节起步，也不只改写回目。scan.chapterStoryLevel=main 时只返回一个完整因果且自然收束的总故事；多章连续讲述同一场战事或同一事件时，先识别覆盖各阶段的总故事，不能在第一次局部胜负处提前返回。description 概括核心冲突、关键转折与结果。例如三国第三十回“战官渡本初败绩，劫乌巢孟德烧粮”先识别“官渡之战”，而非“许攸献计”或“火烧乌巢”；水浒第七十八至八十回连续讲述三次交锋时，先识别“宋公明三败高俅”，而非只取“一败高俅”。示例只说明粒度，事实与出处仍以所给原文为准。未结束主事件用 pendingEvents 续查，不用记忆补齐。source 覆盖同一主线的起因、发展、转折与收束，可含多个情节或相邻章节，不机械圈整章或合并无关事件；所选章节互不相关时不强行合成一个故事。'],
  ['章节小故事','scan.chapterStoryLevel=episodes 时，总故事已在 excludeTitles 和 scan.excludedSources 中；寻找其中可独立讲述的小故事，或本块其他独立主事件，description 不剧透。总故事与子故事范围可严格包含；完全相同、仅改名、交叉重叠且互不包含的片段仍排除。已排除总故事不等于排除全部子故事，也不能只缩短范围再推荐同一故事。没有独立完整的小故事时少列或空，不强拆、不凑数。']);
-export function localReadingPrompt(book:WholeBookInput){if(book.purpose==='catalog')return promptSections(['通用故事识别',localCatalogPrompt],['章节粒度',book.scan?.chapterStoryLevel?localChapterStoriesPrompt:''],['已核对例外',localReviewedSourcePrompt],['输入与输出',inputBoundaryDirection]);return promptSections(
+export const localTitleStoriesPrompt=promptSections(
+ ['指定故事','scan.targetStoryTitle 是要核对的故事标题，与主题、回目、制作完成后显示的作品名不同。它优先于一般按顺序发现故事的任务：只找这个故事，不推荐其他事件、子故事或相似标题替代品。标题允许常见异名和繁简差异，但必须是同一事件、同一完整范围。只根据所给text/contextText核对，不用记忆补情节。'],
+ ['完整边界','先通读本次提供的全部原文，再核对指定标题的起因、各阶段发展与自然结局。标题涉及多次行动、几次胜负或多个阶段时，每一阶段都须有原文支持，不能只取第一次胜负、局部事件，或把局部事件换名成目标标题。只读到开始或中段时用pendingEvents保留同一目标的证据，blockComplete=true以续读下一块；新事件id为空，续读复制旧id。目标不在本块且无新线索时stories为空、blockComplete=true继续读取，不收录无关未完事件。'],
+ ['范围不足','原文不足以核对目标的完整经过，或通读后没有这个故事时，stories必须为空，在note说明缺少哪段或无法确认；不可降低标题要求、只输出局部或扩写原文补齐。找到完整目标时最多返回一篇，source覆盖全部关键阶段，resolvedEventIds收束目标的旧证据；不继续提取子故事。']);
+export function localReadingPrompt(book:WholeBookInput){if(book.purpose==='catalog')return promptSections(['通用故事识别',localCatalogPrompt],['章节粒度',book.scan?.chapterStoryLevel?localChapterStoriesPrompt:''],['按标题提取',book.scan?.targetStoryTitle?localTitleStoriesPrompt:''],['已核对例外',localReviewedSourcePrompt],['输入与输出',inputBoundaryDirection]);return promptSections(
  ['任务',book.purpose==='scan'?'从所给本地原文按需扫描完整故事。':'从所给本地原文按主题推荐至多5个独立完整故事。'],
  ['共同选题标准',localSuggestionPrompt],
  ['扫描规则',book.purpose==='scan'?localScanPrompt:''],
  ['章节粒度',book.purpose==='scan'&&book.scan?.chapterStoryLevel?localChapterStoriesPrompt:''],
+ ['按标题提取',book.scan?.targetStoryTitle?localTitleStoriesPrompt:''],
  ['已核对例外',localReviewedSourcePrompt],
  ['画风推荐',book.purpose==='scan'?'':artRecommendationInstructions],
  ['输入与输出',inputBoundaryDirection]);}
