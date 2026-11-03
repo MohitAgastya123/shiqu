@@ -20,7 +20,8 @@ import {stopCodexProcesses} from './codex-runner.ts';
 import {readerBooks} from '../lib/reader-books.ts';
 import {artStyles,artStyleGroups} from '../lib/reader-styles.ts';
 import {themes} from '../lib/content.ts';
-import {selectionSchema} from '../lib/reader-model.ts';
+import {emptyPublication} from '../lib/story-publication.ts';
+import {selectionSchema,reviewPassed} from '../lib/reader-model.ts';
 import type {ReaderProvider} from '../lib/reader-provider.ts';
 import type {LocalBooks} from './local-books.ts';
 
@@ -32,10 +33,10 @@ const commands=[
  ['catalog','Books, themes and styles. books contents BOOK --query words reads local sources.','books contents zhuangzi'],
  ['stories list|get|current','Inspect saved stories and current-family versions.','stories get STORY_ID'],
  ['stories create','Save intake intent; input is a selection or {selection,intake:true,requestId}.','stories create --input selection.json --request-id UUID'],
- ['stories setup|search|choose|confirm','Persist selection actions using saved generation/CAS; inference requires run.','stories choose ID --batch 0 --index 0'],
+ ['stories setup|search|choose|confirm','Persist intake actions with explicit --generation or input.generation; inference requires run.','stories choose ID --batch 0 --index 0 --generation N'],
  ['run / stories run','Run only one current story to candidates, prepared, reviewed or completed; never resumes a pause/fault implicitly.','run ID --until reviewed --timeout 900'],
  ['stories edit','Commit a revision using production token/changes validation; does not generate.','stories edit ID --input revision.json --request-id UUID'],
- ['stories pause|resume|stop|retry|override','Control or explicitly recover the current fault; use input faultId when ambiguous.','stories retry ID --input recovery.json --request-id UUID'],
+ ['stories pause|resume|stop|retry|override','Control or explicitly recover the current fault; input faultId is required for retry/override.','stories retry ID --input recovery.json --request-id UUID'],
  ['stories rename|delete|restore|favorite|reference','Shared library actions; reference input is {page,starred,token?}.','stories rename ID --title 新标题'],
  ['stories revisions|prompts|review-history|source','Read saved production checkpoints and history.','stories review-history ID'],
  ['stories reselect|replace|cancel-reselection','Replace a choice within the same family using production draft/generation contracts.','stories replace ID DRAFT_ID --input replacement.json'],
@@ -51,9 +52,17 @@ export class CliCommandError extends Error{
 }
 function need(ok:unknown,code:string,message:string):asserts ok{if(!ok)throw new CliCommandError(code,message);}
 const uuid=(s:string)=>/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(s);
+const inputs={
+ setup:{note:'stories setup ID accepts an action; requestId defaults to a new UUID; generation is required from stories get ID. Keep both fixed for replay.',examples:[{action:'conditions',conditions:{bookId:'zhuangzi',theme:'善意与误解',productionPrompt:''}},{action:'more'},{action:'draft',settings:{artStyle:'ink-pencil',productionPrompt:'',acceptancePrompt:'',narrativeDetail:'balanced',length:'auto'}}]},
+ confirm:{settings:{productionPrompt:'保留关键行动',acceptancePrompt:'人物回应落实到画面'}},
+ retry:{faultId:'current fault UUID from stories get'},favorite:{saved:true},reference:{page:0,starred:true},replace:{batch:0,index:0},
+ publication:{get:'api GET reader/publication-defaults',set:'api POST reader/publication-defaults --input publication.json',input:{publication:{...emptyPublication,author:'你的署名',watermarkFontSize:24},expected:'Use the exact publication object (or null) returned by GET.'}},
+ frameCount:{command:'api POST reader/sessions/ID/frame-count --input count.json',input:{count:8}},
+ config:{command:'config set --input settings.json',input:{settings:{provider:'codex',providerConfigured:true},expectedRevision:'from config get'},key:'For API providers only: key:{provider:"openai"|"gemini",value:"secret"|null}; never pass a key in argv.'},
+};
 type Context={cwd?:string;home?:string;generation?:ReaderProvider;localBooks?:LocalBooks;variables?:Record<string,string|undefined>;input?:unknown;signal?:AbortSignal};
 function parse(args:string[]){return parseArgs({args,allowPositionals:true,strict:true,options:Object.fromEntries([
- ...['data-dir','input','output','format','until','timeout','title','request-id','query','batch','index','scope'].map(k=>[k,{type:'string'}]),
+ ...['data-dir','input','output','format','until','timeout','title','request-id','query','batch','index','scope','generation'].map(k=>[k,{type:'string'}]),
  ...['json','help','allow-unsigned','include-prompts','no-intake'].map(k=>[k,{type:'boolean'}]),
  ]) as Record<string,{type:'string'|'boolean'}>});}
 async function readInput(filename?:string){
@@ -77,7 +86,7 @@ export async function executeHeadless(root:string,args:string[],context:Context=
  const {values:v,positionals:p}=parse(args);const command=p[0]||'help',action=p[1],id=p[2],value=(name:string)=>typeof v[name]==='string'?v[name] as string:undefined;
  need(commandNames.has(command),'UNKNOWN_COMMAND','Use help --json for available commands.');
  const appVersion=JSON.parse(await readFile(path.join(root,'package.json'),'utf8')).version||'unknown';
- if(command==='help'||v.help)return {schemaVersion:1,appVersion,default:'No subcommand starts the existing browser service.',commands,options:{'--data-dir':'Private library, otherwise saved desktop/CLI location.','--input':'JSON file or - for stdin.','--output':'New output path; never overwrites.','--request-id':'Stable UUID for safe mutation replay.','--until':'candidates|prepared|reviewed|completed (default completed).','--timeout':'Explicit run timeout in seconds, default 900, max 86400.','--allow-unsigned':'Explicitly permit an unsigned export.','--json':'Subcommands always return one JSON receipt on stdout.'},selectionExample:{bookId:'zhuangzi',theme:'原典故事',artStyle:'ink-pencil',narrativeDetail:'balanced'},editExample:{token:'from stories revisions ID',changes:{productionPrompt:'保留关键人物回应'}},execution:'Only explicit run performs inference. All other commands save or inspect local state.'};
+ if(command==='help'||v.help)return {schemaVersion:1,appVersion,default:'No subcommand starts the existing browser service.',commands,inputs,options:{'--data-dir':'Private library, otherwise saved desktop/CLI location.','--input':'JSON file or - for stdin.','--output':'New output path; never overwrites.','--request-id':'Stable UUID for mutation replay; retain original generation/token/faultId and input.','--generation':'Required intake generation from stories get ID for setup/search/choose/confirm.','--until':'candidates|prepared|reviewed|completed (default completed).','--timeout':'Explicit run timeout in seconds, default 900, max 86400.','--allow-unsigned':'Explicitly permit an unsigned export.','--json':'Subcommands always return one JSON receipt on stdout.'},selectionExample:{bookId:'zhuangzi',theme:'原典故事',artStyle:'ink-pencil',narrativeDetail:'balanced'},editExample:{token:'from stories revisions ID',changes:{productionPrompt:'保留关键人物回应'}},runResults:['completed','candidates','prepared','choice','frame_count_required','already_prepared','already_selected','reviewed','paused','blocked','superseded'],execution:'Only explicit run performs inference. All other commands save or inspect local state.'};
  if(command==='catalog'||command==='themes'||command==='styles'||command==='books'&&action!=='contents'){
   return command==='books'?readerBooks:command==='themes'?themes:command==='styles'?artStyles.map(({prompt,...style})=>style):{books:readerBooks,themes,styles:artStyles.map(({prompt,...style})=>style),styleGroups:artStyleGroups};
  }
@@ -139,6 +148,10 @@ export async function executeHeadless(root:string,args:string[],context:Context=
    const current=await api(app,'GET',`sessions/${target}/current`);const initial=await api(app,'GET',`sessions/${target}`);need(current.id===target&&!initial.superseded,'SUPERSEDED_VERSION','Use the current family version.');
    if(initial.generationControl!=='active')return {reason:'paused',session:initial};
    if(initial.state==='failed')return {reason:'blocked',session:initial};
+   const boundary=(snapshot:any)=>snapshot.state==='completed'?'completed':snapshot.awaitingFrameCount?'frame_count_required':until==='prepared'&&snapshot.intake?.phase==='confirmed'?'already_prepared':until==='prepared'&&snapshot.frameRecommendation?'prepared':until==='candidates'&&snapshot.intake?.selected?'already_selected':null;
+   const reached=boundary(initial);if(reached)return {reason:reached,session:initial};
+   if(until==='candidates')need(initial.intake,'BOUNDARY_UNAVAILABLE','Candidates require an intake story.');
+   if(until==='prepared'&&!initial.intake)need(initial.selection.narrativeDetail&&initial.selection.length!=='auto','BOUNDARY_UNAVAILABLE','This legacy story has no preparation gate; use --until reviewed or completed.');
    process.once('SIGINT',interrupt);process.once('SIGTERM',interrupt);context.signal?.addEventListener('abort',interrupt,{once:true});
    if(context.signal?.aborted)interrupt();
    timer=setTimeout(()=>{timedOut=true;interrupt();},timeout*1000);
@@ -147,7 +160,7 @@ export async function executeHeadless(root:string,args:string[],context:Context=
     while(!abort.signal.aborted){
      snapshot=await app.services.production!.request(app.services.ownerId,target!,viewerId,0,false);
      const intake=snapshot.intake,doc=await app.services.database.prepare('SELECT document FROM reader_sessions WHERE id=?').bind(target).first<{document:string}>(),saved=JSON.parse(doc!.document);
-     const reason=snapshot.superseded?'superseded':snapshot.state==='failed'?'blocked':snapshot.generationControl!=='active'?'paused':snapshot.state==='completed'?'completed':until==='candidates'&&intake?.batches.some((batch:any)=>batch.stories.length)?'candidates':intake?.phase==='confirming'?'prepared':intake?.phase==='choosing'&&intake.search.state!=='searching'?'choice':until==='reviewed'&&saved.visualReview?.status==='passed'?'reviewed':null;
+     const reason=snapshot.superseded?'superseded':snapshot.state==='failed'?'blocked':snapshot.generationControl!=='active'?'paused':boundary(snapshot)|| (until==='candidates'&&intake?.batches.some((batch:any)=>batch.stories.length)?'candidates':intake?.phase==='confirming'?'prepared':intake?.phase==='choosing'&&intake.search.state!=='searching'?'choice':until==='reviewed'&&saved.plan&&reviewPassed(saved)?'reviewed':null);
      if(reason)return {reason,session:snapshot};await delay(80,undefined,{signal:abort.signal}).catch(()=>{});
     }
     throw new CliCommandError(timedOut?'TIMEOUT':'INTERRUPTED',timedOut?'Run timed out; saved checkpoints are retained.':'Run interrupted; saved checkpoints are retained.',timedOut?5:130,{session:snapshot});
@@ -165,7 +178,7 @@ export async function executeHeadless(root:string,args:string[],context:Context=
   if(['restore','favorite','reference'].includes(action))return await api(app,'POST',`library/${id}/${action}`,data);
   if(['pause','resume','stop'].includes(action))return {requestId,session:await api(app,'POST',route+'/production-control',{requestId,action})};
   if(['retry','override'].includes(action)){
-   const session=await api(app,'GET',route),faults=session.faults?.filter((f:any)=>f.retryAllowed)||[];const faultId=data.faultId||(faults.length===1?faults[0].id:undefined);
+   const faultId=data.faultId;
    need(faultId,'FAULT_ID_REQUIRED','Choose a current faultId from stories get.');return {requestId,session:await api(app,'POST',route+(action==='retry'?'/recover':'/review-override'),{requestId,faultId})};
   }
   if(action==='edit'){
@@ -174,9 +187,10 @@ export async function executeHeadless(root:string,args:string[],context:Context=
   if(action==='reselect')return {requestId,session:await api(app,'POST',route+'/reselection',{requestId})};
   if(['replace','cancel-reselection'].includes(action)){need(p[3]&&uuid(p[3]),'DRAFT_ID_REQUIRED','Specify a reselection draft UUID.');return await api(app,action==='replace'?'POST':'DELETE',route+'/reselection/'+p[3],action==='replace'?{...data,requestId}:undefined);}
   if(['setup','search','choose','confirm'].includes(action)){
-   const session=await api(app,'GET',route);const settings={artStyle:session.selection.artStyle,productionPrompt:session.selection.productionPrompt||'',acceptancePrompt:session.selection.acceptancePrompt||'',narrativeDetail:session.selection.narrativeDetail||'balanced',length:session.selection.length};
-   const change=action==='setup'?data:action==='search'?{action:'search',title:value('title')||data.title||''}:action==='choose'?{action:'choose',batch:Number(value('batch')??data.batch??0),index:Number(value('index')??data.index??0)}:{action:'confirm',settings:{...settings,...(data.settings||data)}};
-   return {requestId,session:await api(app,'POST',route+'/setup',{...change,requestId,generation:data.generation??session.intake?.generation})};
+   const generation=data.generation??(value('generation')===undefined?undefined:Number(value('generation')));need(Number.isInteger(generation)&&generation>=0,'GENERATION_REQUIRED','Read stories get ID and retain its intake.generation for this request and replay.');
+   const session=await api(app,'GET',route);const settings={artStyle:session.selection.artStyle,productionPrompt:session.selection.productionPrompt||'',acceptancePrompt:session.selection.acceptancePrompt||'',narrativeDetail:session.selection.narrativeDetail||'balanced',length:session.selection.length,...(session.intake?.draft||{})};
+   const change=action==='setup'?data:action==='search'?{action:'search',title:value('title')||data.title||''}:action==='choose'?{action:'choose',batch:Number(value('batch')??data.batch??0),index:Number(value('index')??data.index??0),...(data.settings?{settings:data.settings}:{})}:{action:'confirm',settings:{...settings,...(data.settings||Object.fromEntries(Object.entries(data).filter(([key])=>!['generation','requestId'].includes(key))))}};
+   return {requestId,session:await api(app,'POST',route+'/setup',{...change,requestId,generation})};
   }
   throw new CliCommandError('UNKNOWN_COMMAND','Use help --json for available commands.');
  }finally{

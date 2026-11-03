@@ -17,8 +17,8 @@
 - [x] H2：实现命令目录、JSON协议、解析与默认服务兼容；提供 in-process API 和初始化/状态/目录/故事动作。
 - [x] H3：实现 dormant/target/stage 调度与 bounded run、需求/信号清理；验证不支付其他故事，不损坏幂等和故障协议。
 - [x] H4：抽取导出环境适配器，共享现有 ZIP/PDF/PNG 和署名规则；实现离线预览及输出。
-- [ ] H5：增加完整 CLI 正式流程验收、npm资源探针与agent使用文档；对并行UI改动只修必要测试定位，不纳入其产品实现。
-- [ ] H6：CR、TT、ET、VR，更新DD。按最新 `!!` 停在DD，不执行最终GC；SS独立里程碑仍本地提交，不推送。
+- [x] H5：增加完整 CLI 正式流程验收、npm资源探针与agent使用文档；对并行UI改动只修必要测试定位，不纳入其产品实现。
+- [ ] H6：最终适用单元/集成、现有E2E、CLI流程与安装产物复验通过。按最新范围停在DD；SS独立里程碑本地提交，不推送。
 
 AR risk: non-low — 无服务生产命令、付费调度隔离、私有数据恢复、共享导出和原生依赖分发。
 AR review round: 4; reviewer: reused
@@ -27,7 +27,7 @@ AR passed: no blocking architecture flaws
 
 追加技能分发（R18）：npm files 包含 `skills/shiqu/SKILL.md`，新增 `skill show` 原文输出和 `skill install --scope project` 私有目录复制；同内容幂等，不同内容拒绝覆盖，拒绝符号链接。安装仅写显式 scope 对应目录，不做 postinstall。JSON 命令保留既有信封，show 默认原文便于代理直接读取，`--json` 返回正文及包版本。由 skill-creator 编写自包含操作指导，命令示例引用同版本 help，不把 npm 缓存路径写入技能。
 
-- [ ] H7：实现技能随包分发、读取/项目安装、隔离测试与使用文档；不自动安装到用户工作区。
+- [x] H7：实现技能随包分发、读取/项目安装、隔离测试与使用文档；不自动安装到用户工作区。
 
 AR risk: non-low — 项目技能安装与工作目录写入。
 AR review round: 5; reviewer: reused
@@ -57,7 +57,7 @@ Git base: `f753d3a5ae2233900a1b7edbb6ee8ce7f2a59de1`。本轮开始已有 client
 - [x] S3：接入维护 CLI 和统一服务锁，维护命令拒绝冲突选项与非新恢复路径；加入真实 CLI 子进程集成测试。
 - [x] S4：实现私有有界白名单诊断、服务启动/停止/错误记录和 CLI 导出；测试轮换、敏感内容、异常库和桌面生命周期入口。
 - [x] S5：隔离 C007 的真实开发启动探针，再接入发布 E2E，更新故障阻断和发布入口测试；更新 README、使用/开发/桌面/测试文档。
-- [ ] S6：完成全套适用单元/集成、typecheck、lint、cargo fmt（若更改 Rust）、本轮及现有生命周期 E2E；保存输出证据，不打包。
+- [ ] S6：完成全套适用单元/集成、typecheck、lint、cargo fmt（若更改 Rust）、本轮及现有生命周期 E2E；保存输出证据，仅构建获准的npm验证产物，不打包桌面/Docker。
 
 ## 验证
 
@@ -78,6 +78,18 @@ AR passed: no blocking architecture flaws
 - Node24.22.1 / pnpm11.25.0：native WebP 编码/解码与 Noto CJK 绘制探针通过；字体 SHA-256 固定校验。
 - `/tmp/shiqu-headless-focused.log`：6项CLI/技能测试通过（正式状态机、幂等/CAS、目标隔离含已排队任务、故障/timeout、共享导出、无监听子进程与技能路径）。
 - `/tmp/shiqu-cli-package.log`：本地 npm tarball 构建通过，仅用于实际产物验证，无发布。
-- `/tmp/shiqu-cli-smoke.log`：安装后原生ZIP/PDF/PNG、默认HTTP服务、持久化与维护通过；全局技能范围追加后重验中。
+- `/tmp/shiqu-cli-smoke.log`：安装后原生ZIP/PDF/PNG、默认HTTP服务、持久化与维护通过；全局技能范围在隔离HOME追加重验通过。
 - `/tmp/shiqu-cli-e2e.log`：现有79项E2E通过，证据 `.data/e2e/2026-11-03T14-56-13-597Z-8f8ffb2a`。
 - 已存在的并行生产流程改动由 `ad9f253` 单独提交，非本story。本轮并行选题条件UI/服务改动仍不纳入；`lib/reader-api.ts` 仅 commandOnly guard 属于本轮。
+
+- `c4fde96`：无服务CLI、共享导出、Codex技能分发（项目/全局显式范围）与发布E2E门禁里程碑；聚焦6项、类型/lint、本地npm安装冒烟通过。SS实现已完成，进入独立CR；全套TT仍运行中。
+
+CR发现与修复：命令从当前状态补 generation/faultId 会改变同请求重放的身份，改为 intake 操作显式 generation、retry/override 显式 faultId；编辑沿用原 token。新增 search/choose/confirm/控制重放与过期generation验证，帮助/技能同步。TT首次1147项中3处旧测试适配失败：SQL计时字段改变故障注入匹配，组件CSS引入需静态测试loader；修复测试适配后31项通过，重跑完整suite。
+
+CR阶段边界修复：等待旧画幅确认立即返回 frame_count_required；已确认故事的 prepared 返回 already_prepared；不适用的旧模式边界 BOUNDARY_UNAVAILABLE，不再等待超时。CLI复用reviewPassed判断历史已审核计划，正常coordinator行为不改。聚焦验收含上述三种情形。
+
+CR risk: non-low — 涉及数据恢复、锁、诊断隐私、生产调度与发布契约。
+CR review round: 2; reviewer: reused
+CR fixed: 幂等身份及阶段停止边界问题已修复；rerun result passed。
+
+TT：1151/1151通过（/tmp/shiqu-cli-unit-final.log）；CLI最终边界聚焦6/6（/tmp/shiqu-headless-boundaries.log），新增修改限CLI，既有全面证据与最新聚焦合并使用。类型/lint通过（/tmp/shiqu-cli-types-reviewed.log、/tmp/shiqu-cli-lint-reviewed.log），技能验证通过。最终ET及tarball复验执行中。

@@ -7,20 +7,23 @@ description: 使用拾趣 CLI 从本地书籍选题、制作或编辑图文故�
 
 用 CLI 操作拾趣的正式生产流程。带子命令时无需启动 HTTP 服务、桌面或前端；不带子命令会启动浏览器服务。
 
-先运行 `npx @apprun/shiqu help --json`，读取当前版本命令、输入示例与停止边界。使用随本技能安装的 CLI 版本；可固定为 `npx @apprun/shiqu@<version>`。项目若已锁定包版本，沿用其包管理器入口。不要猜测参数，查当前 help。命令返回单个 JSON 信封，检查 `ok` 和 `error.code`，不要把进程退出视为故事已经完成。
+先运行 `npx @apprun/shiqu help --json`，读取当前版本命令、输入示例与停止边界。技能副本不会固定 npx 运行版本；先查看 help 返回的 appVersion。需要固定版本时使用 `npx @apprun/shiqu@<version>`，并核对该版本的 help。项目若已锁定包版本，沿用其包管理器入口。不要猜测参数，查当前 help。命令返回单个 JSON 信封，检查 `ok` 和 `error.code`，不要把进程退出视为故事已经完成。
 
 ## 建库与选题
 
 1. 按用户指定书库传 `--data-dir <directory>`；否则使用拾趣已保存的位置。`status` 检查，缺库时用 `init`。初始化不配置模型。
 2. 用 `books`、`themes`、`styles` 查目录，`books contents <bookId>` 查本地章节。将选书、主题、画风、制作/验收要求保存为 JSON，`stories create --input <file> --request-id <UUID>`。默认创建选题流程。
-3. `stories search <id>` 保存提取意图，`run <id> --until candidates` 执行；根据用户目标选择候选，用 `stories choose <id> --batch <n> --index <n>`。
-4. `run <id> --until prepared` 准备摘要、原文和制作建议。检查返回内容，按用户授权确认或调整，`stories confirm <id>` 保存确认。缺少影响制作结果的用户选择时再询问。
+3. `stories get <id>` 读取 `intake.generation`；`stories search <id> --generation <n>` 保存提取意图，`run <id> --until candidates` 执行；根据用户目标选择候选，用 `stories choose <id> --batch <n> --index <n> --generation <当前代数>`。
+4. `run <id> --until prepared` 准备摘要、原文和制作建议。检查返回内容，按用户授权确认或调整，`stories confirm <id> --generation <当前代数>` 保存确认。缺少影响制作结果的用户选择时再询问。
 
 ## 制作与编辑
 
 - 保存动作不调用模型；只有显式 `run <id>` 执行生产任务，可能产生提供方费用。`--until reviewed` 在审核通过后、生图前停下；默认完成整篇。`--timeout <seconds>` 限制执行时间。
+- search/choose/confirm/setup 必须携带读取时的 generation；同一请求重放沿用原代数，不能重新取当前值。跨步骤先重新读取。
+
+- `frame_count_required` 表示旧故事等待画幅确认，按 help 的 frameCount 输入保存后继续；`already_prepared` / `already_selected` 表示阶段已越过，改用下一步，不能循环同一停止边界。
 - 每次检查 `reason` 和 `session`：需要选择/确认时完成对应动作；暂停保持暂停；失败先读 `stories get <id>` 的 faults，不要循环重试。只有用户授权恢复时，针对当前 `faultId` 用 `stories retry`；审核越过需要明确的 override 意图。
-- 修改已制作故事：先 `stories revisions <id>` 读取 `token`，再提交 `{ "token": "...", "changes": { ... } }` 给 `stories edit <id> --input <file> --request-id <UUID>`。沿用同一 requestId 和同一输入重放，避免重复建版。发生 CONFLICT 时重新读取状态，不自动换 requestId 掩盖冲突。
+- 修改已制作故事：先 `stories revisions <id>` 读取 `token`，再提交 `{ "token": "...", "changes": { ... } }` 给 `stories edit <id> --input <file> --request-id <UUID>`。沿用同一 requestId 和同一输入（generation/token/faultId）重放，避免重复建版。发生 CONFLICT 时重新读取状态，不自动换 requestId 掩盖冲突。
 - 编辑和重选会创建版本；后续操作使用返回的新 id，或 `stories current <id>` 查当前版本。旧版不可继续制作或完整导出。
 - `stories prompts`、`stories review-history`、`stories source` 可检查已保存依据。`api` 只开放持久化/观察白名单，不能绕过 run 发起推理。按 help 使用其现有协议。
 

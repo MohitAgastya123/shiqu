@@ -220,7 +220,7 @@ test('a queued text job for an unreadable document makes no paid plan call',asyn
 test('a failed success write is not a provider failure and recovers as an interruption',async t=>{
  const logs=t.mock.method(console,'error',()=>{});
  const f=await productionFixture(t),q=production(f).queue,id=await f.create(2);await until(()=>f.control.calls.length===1);
- const job=await imageJob(f,id);failWrites(q,"SET state='succeeded'",1);
+ const job=await imageJob(f,id);failWrites(q,"state='succeeded',result=?",1);
  f.control.calls[0].resolve();await until(()=>logs.mock.calls.some(call=>call.arguments[0]==='production_job_unsaved'));
  const unsaved=await q.job(job.id);assert.equal(unsaved.state,'running');assert.equal(unsaved.error,null);
  const other=await f.create(2);f.control.hold=false;
@@ -233,7 +233,7 @@ test('a failed success write is not a provider failure and recovers as an interr
 test('a failed failure write does not stop the queue or report a provider failure',async t=>{
  const logs=t.mock.method(console,'error',()=>{});
  const f=await productionFixture(t),p=production(f),q=p.queue,id=await f.create(2);await until(()=>f.control.calls.length===1);
- const job=await imageJob(f,id);failWrites(q,"SET state='failed',error=?",1);
+ const job=await imageJob(f,id);failWrites(q,"state='failed',error=?",1);
  f.control.calls[0].reject(Error('provider failure'));await until(()=>logs.mock.calls.some(call=>call.arguments[0]==='production_job_unsaved'));
  assert.equal((await q.job(job.id)).state,'running');
  const other=await f.create(2);f.control.hold=false;

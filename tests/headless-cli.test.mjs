@@ -34,12 +34,14 @@ test('in-process CLI saves intent without inference, runs bounded discovery/prep
  const created=await call(['stories','create','--request-id',requestId],{bookId:'zhuangzi',theme:'原典故事'}),id=created.session.id;
  assert.equal((await call(['stories','create','--request-id',requestId],{bookId:'zhuangzi',theme:'原典故事'})).session.id,id);
  assert.equal(library.calls.catalog.length,0);assert.equal(f.control.plans.length,0);
- await call(['stories','search',id]);assert.equal(library.calls.catalog.length,0);
+ await assert.rejects(call(['stories','search',id]),error=>error.code==='GENERATION_REQUIRED');
+ const searchId=crypto.randomUUID(),searchInput={generation:created.session.intake.generation};await call(['stories','search',id,'--request-id',searchId],searchInput);await call(['stories','search',id,'--request-id',searchId],searchInput);assert.equal(library.calls.catalog.length,0);
  const candidates=await call(['run',id,'--until','candidates','--timeout','10']);assert.equal(candidates.reason,'candidates');assert.ok(candidates.session.intake.batches[0].stories.length);
- await call(['stories','choose',id]);assert.equal(f.control.recommendations.length,0);
+ const chooseId=crypto.randomUUID(),chooseInput={generation:candidates.session.intake.generation};await call(['stories','choose',id,'--request-id',chooseId],chooseInput);await call(['stories','choose',id,'--request-id',chooseId],chooseInput);assert.equal(f.control.recommendations.length,0);
+ await assert.rejects(call(['stories','choose',id],chooseInput),error=>error.code==='CONFLICT');
  const prepared=await call(['run',id,'--until','prepared','--timeout','10']);assert.equal(prepared.reason,'prepared');assert.equal(f.control.plans.length,0);
- await call(['stories','confirm',id]);assert.equal(f.control.plans.length,0);
- await call(['stories','pause',id]);assert.equal((await call(['run',id,'--timeout','1'])).reason,'paused');assert.equal(f.control.plans.length,0);
+ const confirmId=crypto.randomUUID(),confirmInput={generation:prepared.session.intake.generation};await call(['stories','confirm',id,'--request-id',confirmId],confirmInput);await call(['stories','confirm',id,'--request-id',confirmId],confirmInput);assert.equal((await call(['run',id,'--until','prepared','--timeout','1'])).reason,'already_prepared');assert.equal(f.control.plans.length,0);
+ const pauseId=crypto.randomUUID();await call(['stories','pause',id,'--request-id',pauseId]);await call(['stories','pause',id,'--request-id',pauseId]);assert.equal((await call(['run',id,'--timeout','1'])).reason,'paused');assert.equal(f.control.plans.length,0);
  await call(['stories','resume',id]);const reviewed=await call(['run',id,'--until','reviewed','--timeout','10']);assert.equal(reviewed.reason,'reviewed');assert.equal(f.control.calls.length,0);
  const completed=await call(['run',id,'--timeout','10']);assert.equal(completed.reason,'completed');assert.equal(f.control.calls.length,3);
  const before=f.control.plans.length;
@@ -60,6 +62,8 @@ test('targeted run cannot dispatch another active story and direct-inference API
  const beforeDb=inspect(),beforeJobs=beforeDb.prepare('SELECT * FROM production_jobs WHERE session_id=? ORDER BY id').all(second.session.id);beforeDb.close();assert.ok(beforeJobs.length);
  assert.equal(f.control.plans.length,0);const result=await call(['run',first.session.id,'--timeout','10']);assert.equal(result.reason,'completed',JSON.stringify(result.session));
  const db=inspect();assert.deepEqual(db.prepare('SELECT * FROM production_jobs WHERE session_id=? ORDER BY id').all(second.session.id),beforeJobs);db.close();
+ await assert.rejects(call(['run',second.session.id,'--until','prepared']),error=>error.code==='BOUNDARY_UNAVAILABLE');
+ const gate=await call(['stories','create','--no-intake'],{...localSelection,narrativeDetail:'balanced'});assert.equal((await call(['run',gate.session.id,'--until','prepared','--timeout','10'])).reason,'frame_count_required');
  const count=f.control.calls.length+f.control.plans.length;
  for(const [method,route]of [['POST','reader/suggestions'],['POST','reader/art-recommendation'],['POST',`reader/sessions/${first.session.id}/advance`],['POST','admin/generate'],['GET','reader/unknown']])await assert.rejects(call(['api',method,route]),error=>error.code==='EXECUTION_REQUIRED');
  assert.equal(f.control.calls.length+f.control.plans.length,count);
