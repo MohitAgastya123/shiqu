@@ -12,7 +12,7 @@
 
 CR passed: no major findings
 
-CR risk: non-low — 复用既有历史接口与持久化记录审查；最终增量涉及审核状态投影、提示归属及操作入口。  
+CR risk: non-low — 复用既有历史接口与持久化记录审查；最终增量涉及审核状态投影、提示归属及操作入口。
 CR review round: 3; reviewer: reused
 
 ### Final VR
@@ -35,7 +35,7 @@ AP实施项全部完成。ET七场景均有正式代码、受控验证或浏览�
 
 VR passed: all acceptance criteria complete
 
-VR risk: non-low — 历史真值与权限沿用已通过审查，最终显示投影和入口追加均已验证。  
+VR risk: non-low — 历史真值与权限沿用已通过审查，最终显示投影和入口追加均已验证。
 VR review round: 2; reviewer: reused
 
 ## Notes
