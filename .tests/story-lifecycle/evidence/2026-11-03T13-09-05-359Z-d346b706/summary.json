@@ -1,0 +1,128 @@
+{
+  "run": {
+    "runId": "2026-11-03T13-09-05-359Z-d346b706",
+    "build": "6c791fa60f121c0d1640cfe8c02bcd9001f79a4f+worktree.325f3651de21",
+    "commit": "6c791fa60f121c0d1640cfe8c02bcd9001f79a4f",
+    "startedAt": "2026-11-03T13:09:05.446Z",
+    "finishedAt": "2026-11-03T13:10:35.935Z",
+    "exitCode": 0,
+    "tests": [
+      "tests/development-local.e2e.mjs",
+      "tests/story-lifecycle.playwright.e2e.mjs",
+      "tests/story-discovery-modes.e2e.mjs",
+      "tests/story-generation-state-machine.e2e.mjs",
+      "tests/unified-story-review.e2e.mjs",
+      "tests/story-generation-state-machine-flow.test.mjs",
+      "tests/story-generation-state-machine-reselection.test.mjs",
+      "tests/story-flow-control.test.mjs"
+    ],
+    "model": "controlled production adapters; no live inference",
+    "databasePolicy": "isolated .data/e2e run stores; dev local startup probe uses .data/dev-local",
+    "browser": "independent Playwright Chromium"
+  },
+  "cases": {
+    "C001": {
+      "result": "PASS",
+      "artifacts": [
+        ".data/e2e/2026-11-03T13-09-05-359Z-d346b706/C001/result.json"
+      ],
+      "calls": [
+        {
+          "catalog": 1,
+          "plans": 1,
+          "images": 3,
+          "reviews": 1
+        }
+      ]
+    },
+    "C002": {
+      "result": "PASS",
+      "artifacts": [
+        ".data/e2e/2026-11-03T13-09-05-359Z-d346b706/C002/result.json"
+      ],
+      "calls": [
+        {
+          "catalog": 1,
+          "plans": 3,
+          "images": 13,
+          "reviews": 9
+        }
+      ]
+    },
+    "C003": {
+      "result": "PASS",
+      "artifacts": [
+        ".data/e2e/2026-11-03T13-09-05-359Z-d346b706/C003/result.json"
+      ],
+      "calls": [
+        {
+          "catalog": 1,
+          "plans": 1,
+          "images": 3,
+          "reviews": 1
+        }
+      ]
+    },
+    "C004": {
+      "result": "PASS",
+      "artifacts": [
+        ".data/e2e/2026-11-03T13-09-05-359Z-d346b706/C004/result.json",
+        ".data/e2e/2026-11-03T13-09-05-359Z-d346b706/C004-review-edit/result.json",
+        ".data/e2e/2026-11-03T13-09-05-359Z-d346b706/C004-review-override/result.json"
+      ],
+      "calls": [
+        {
+          "catalog": 1,
+          "plans": 1,
+          "images": 4,
+          "reviews": 1
+        },
+        {
+          "catalog": 2,
+          "plans": 1,
+          "images": 3,
+          "reviews": 2
+        },
+        {
+          "catalog": 2,
+          "plans": 1,
+          "images": 3,
+          "reviews": 1
+        }
+      ]
+    },
+    "C005": {
+      "result": "PASS",
+      "artifacts": [
+        ".data/e2e/2026-11-03T13-09-05-359Z-d346b706/C005/result.json"
+      ],
+      "calls": [
+        {
+          "catalog": 3,
+          "plans": 2,
+          "images": 6,
+          "reviews": 2
+        }
+      ]
+    },
+    "C006": {
+      "result": "PASS",
+      "artifacts": [],
+      "calls": []
+    },
+    "C007": {
+      "result": "PASS",
+      "artifacts": [
+        ".data/e2e/2026-11-03T13-09-05-359Z-d346b706/C007/result.json"
+      ],
+      "calls": [
+        null
+      ]
+    }
+  },
+  "totalTests": 79,
+  "passed": 79,
+  "unitTests": 1107,
+  "productDefects": [],
+  "testDefects": "../test-harness-triage.md"
+}

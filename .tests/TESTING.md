@@ -16,7 +16,7 @@ created: "2026-11-03"
 
 环境：Node24.22.1/pnpm11.25.0/Chromium/Vite，构建为Git hash加工作区diff标识；checkout独立开发数据，原文合成不含用户信息。时间用UTC留证，业务时区America/Toronto。
 
-数据：每运行独占`.data/e2e/<run>`，不清除失败证据或覆盖旧运行；不写生产或复用人工`.data/dev-local`。SQLite/trace留本地，摘要归.tests，不保存密钥。
+数据：每运行独占`.data/e2e/<run>`，不清除失败证据或覆盖旧运行；不写生产。生命周期测试不复用人工`.data/dev-local`；例外C007实际启动该开发目录，以readonly提供方禁用生成，允许正常初始化/迁移，不提交故事命令、不清空已有数据。SQLite/trace留本地，摘要归.tests，不保存密钥。
 
 Entry：用例READY、依赖可运行、独占目录、风险与oracle明确。Exit：全部7例有当前有效结果，P0/P1无未解决FAIL/BLOCKED；失败保留且重跑追加。Major阻断重要流程，Minor可绕过；不自动豁免，授权人UNDEFINED。
 

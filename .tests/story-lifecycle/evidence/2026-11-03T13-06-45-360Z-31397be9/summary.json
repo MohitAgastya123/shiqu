@@ -1,0 +1,45 @@
+{
+  "classification": "INVALID diagnostic build; test harness under active changes",
+  "rawResults": [
+    {
+      "path": ".data/e2e/2026-11-03T13-06-45-360Z-31397be9/C002/result.json",
+      "result": "PASS",
+      "failure": null
+    },
+    {
+      "path": ".data/e2e/2026-11-03T13-06-45-360Z-31397be9/C005/result.json",
+      "result": "PASS",
+      "failure": null
+    },
+    {
+      "path": ".data/e2e/2026-11-03T13-06-45-360Z-31397be9/C004/result.json",
+      "result": "PASS",
+      "failure": null
+    },
+    {
+      "path": ".data/e2e/2026-11-03T13-06-45-360Z-31397be9/C004-review-edit/result.json",
+      "result": "PASS",
+      "failure": null
+    },
+    {
+      "path": ".data/e2e/2026-11-03T13-06-45-360Z-31397be9/C004-review-override/result.json",
+      "result": "PASS",
+      "failure": null
+    },
+    {
+      "path": ".data/e2e/2026-11-03T13-06-45-360Z-31397be9/C003/result.json",
+      "result": "PASS",
+      "failure": null
+    },
+    {
+      "path": ".data/e2e/2026-11-03T13-06-45-360Z-31397be9/C001/result.json",
+      "result": "PASS",
+      "failure": null
+    },
+    {
+      "path": ".data/e2e/2026-11-03T13-06-45-360Z-31397be9/C007/result.json",
+      "result": "PASS",
+      "failure": null
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "classification": "INVALID diagnostic build; test harness under active changes",
+  "rawResults": [
+    {
+      "path": ".data/e2e/2026-11-03T13-04-11-451Z-70768/C007/result.json",
+      "result": "PASS",
+      "failure": null
+    }
+  ]
+}

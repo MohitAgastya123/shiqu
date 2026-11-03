@@ -28,6 +28,12 @@ CR risk: non-low — 标题任务、缓存与生产调用链。
 CR review round: 2; reviewer: reused
 CR fixed: 标题结果不再依赖主题判断，已移除无法恢复的空结果路径；rerun result passed
 
-实现里程碑：`a0f7ece`（初始实现，验证情况见上）；后续审查修复待保存。VR最终复核待完成。
+实现里程碑：`a0f7ece`（初始实现，验证情况见上）；后续审查修复：`1126892`。独立VR最终复核通过。
 
 证据：`/tmp/shiqu-modes-full-tests.log`、`/tmp/shiqu-modes-review-regression.log`、`/tmp/shiqu-modes-e2e.log`、`/tmp/shiqu-title-modes-live.log`、`/tmp/shiqu-title-passage-validation.log`。桌面/390px截图位于 `/tmp/shiqu-discovery-modes/`，来自独立测试浏览器。
+
+用户最后指出标题单独定位长书的性能问题。现实现仍为顺序读取：标题作为目标贯穿现有读取块，未新增检索层。后续宜先用回目/正文候选检索，再读取相邻章核对完整性；向量库不是当前实现依赖。本次不宣称长书仅标题快速定位已经完成。
+
+VR risk: non-low — 已核对生产实现、兼容性和运行证据。
+VR review round: 2; reviewer: reused
+VR passed: all acceptance criteria complete

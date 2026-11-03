@@ -1,0 +1,30 @@
+{
+  "classification": "INVALID diagnostic build; test harness under active changes",
+  "rawResults": [
+    {
+      "path": ".data/e2e/2026-11-03T13-03-26-947Z-70041/C002/result.json",
+      "result": "FAIL",
+      "failure": "locator.fill: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('dialog', { name: '修改故事', exact: true }).getByLabel('制作要求', { exact: true })\u001b[22m\n\n    at /Users/esun/Documents/Projects/shiqu-docker/tests/story-lifecycle.playwright.e2e.mjs:44:147\n    at async Object.execute (/Users/esun/Documents/Projects/shiqu-docker/tests/fixtures/story-browser.mjs:55:35)\n    at async TestContext.<anonymous> (/Users/esun/Documents/Projects/shiqu-docker/tests/story-lifecycle.playwright.e2e.mjs:39:39)"
+    },
+    {
+      "path": ".data/e2e/2026-11-03T13-03-26-947Z-70041/C005/result.json",
+      "result": "FAIL",
+      "failure": "locator.click: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('dialog', { name: '替换选题', exact: true }).getByRole('button').filter({ has: getByText('勇士护民', { exact: true }) })\u001b[22m\n\n    at /Users/esun/Documents/Projects/shiqu-docker/tests/story-lifecycle.playwright.e2e.mjs:91:86\n    at async Object.execute (/Users/esun/Documents/Projects/shiqu-docker/tests/fixtures/story-browser.mjs:55:35)\n    at async TestContext.<anonymous> (/Users/esun/Documents/Projects/shiqu-docker/tests/story-lifecycle.playwright.e2e.mjs:85:39)"
+    },
+    {
+      "path": ".data/e2e/2026-11-03T13-03-26-947Z-70041/C004/result.json",
+      "result": "FAIL",
+      "failure": "locator.waitFor: Error: strict mode violation: getByRole('button', { name: '重试生成', exact: true }) resolved to 2 elements:\n    1) <button type=\"button\" class=\"yu-generation-control\">重试生成</button> aka getByRole('group').getByRole('button', { name: '重试生成' })\n    2) <button type=\"button\" class=\"yu-primary\">重试生成</button> aka getByRole('dialog', { name: '故事流程' }).getByRole('button', { name: '重试生成' })\n\nCall log:\n\u001b[2m  - waiting for getByRole('button', { name: '重试生成', exact: true }) to be visible\u001b[22m\n\n    at /Users/esun/Documents/Projects/shiqu-docker/tests/story-lifecycle.playwright.e2e.mjs:80:79\n    at async Object.execute (/Users/esun/Documents/Projects/shiqu-docker/tests/fixtures/story-browser.mjs:55:35)\n    at async TestContext.<anonymous> (/Users/esun/Documents/Projects/shiqu-docker/tests/story-lifecycle.playwright.e2e.mjs:77:39)"
+    },
+    {
+      "path": ".data/e2e/2026-11-03T13-03-26-947Z-70041/C003/result.json",
+      "result": "FAIL",
+      "failure": "locator.click: Error: strict mode violation: getByRole('button', { name: '暂停生成', exact: true }) resolved to 2 elements:\n    1) <button type=\"button\" aria-busy=\"false\" class=\"yu-generation-control\">暂停生成</button> aka getByRole('group').getByRole('button', { name: '暂停生成' })\n    2) <button type=\"button\" aria-busy=\"false\" class=\"yu-generation-control\">暂停生成</button> aka getByRole('region', { name: '生成进展' }).getByRole('button', { name: '暂停生成' })\n\nCall log:\n\u001b[2m  - waiting for getByRole('button', { name: '暂停生成', exact: true })\u001b[22m\n\n    at /Users/esun/Documents/Projects/shiqu-docker/tests/story-lifecycle.playwright.e2e.mjs:71:59\n    at async Object.execute (/Users/esun/Documents/Projects/shiqu-docker/tests/fixtures/story-browser.mjs:55:35)\n    at async TestContext.<anonymous> (/Users/esun/Documents/Projects/shiqu-docker/tests/story-lifecycle.playwright.e2e.mjs:69:39)"
+    },
+    {
+      "path": ".data/e2e/2026-11-03T13-03-26-947Z-70041/C001/result.json",
+      "result": "FAIL",
+      "failure": "locator.fill: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('dialog', { name: '修改故事', exact: true }).getByLabel('制作要求', { exact: true })\u001b[22m\n\n    at /Users/esun/Documents/Projects/shiqu-docker/tests/story-lifecycle.playwright.e2e.mjs:22:48\n    at async Object.execute (/Users/esun/Documents/Projects/shiqu-docker/tests/fixtures/story-browser.mjs:55:35)\n    at async TestContext.<anonymous> (/Users/esun/Documents/Projects/shiqu-docker/tests/story-lifecycle.playwright.e2e.mjs:15:39)"
+    }
+  ]
+}

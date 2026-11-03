@@ -1,0 +1,15 @@
+{
+  "classification": "INVALID diagnostic build; test harness under active changes",
+  "rawResults": [
+    {
+      "path": ".data/e2e/2026-11-03T13-07-34-754Z-75696/C004-review-edit/result.json",
+      "result": "PASS",
+      "failure": null
+    },
+    {
+      "path": ".data/e2e/2026-11-03T13-07-34-754Z-75696/C004-review-override/result.json",
+      "result": "PASS",
+      "failure": null
+    }
+  ]
+}

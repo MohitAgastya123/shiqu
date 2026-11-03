@@ -258,4 +258,3 @@ local使用.data/dev-local；E2E每运行独占.data/e2e；原dev解析行为保
 ### Evidence Required
 
 Run ID、构建、数据库位置、实际状态序列及断言；UI例含截图和trace，协议例含日志和具体对象状态。失败保存异常及分类。
-

@@ -1,0 +1,10 @@
+{
+  "classification": "INVALID diagnostic build; test harness under active changes",
+  "rawResults": [
+    {
+      "path": ".data/e2e/2026-11-03T13-04-43-802Z-71428/C002/result.json",
+      "result": "FAIL",
+      "failure": "locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('dialog', { name: '修改故事', exact: true }).getByLabel('旁白', { exact: true })\u001b[22m\n\n    at Object.change (/Users/esun/Documents/Projects/shiqu-docker/tests/story-lifecycle.playwright.e2e.mjs:51:77)\n    at /Users/esun/Documents/Projects/shiqu-docker/tests/story-lifecycle.playwright.e2e.mjs:57:42\n    at async Object.execute (/Users/esun/Documents/Projects/shiqu-docker/tests/fixtures/story-browser.mjs:56:35)\n    at async TestContext.<anonymous> (/Users/esun/Documents/Projects/shiqu-docker/tests/story-lifecycle.playwright.e2e.mjs:39:39)"
+    }
+  ]
+}

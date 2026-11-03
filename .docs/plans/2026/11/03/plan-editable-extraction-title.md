@@ -24,4 +24,12 @@ AR passed: no blocking architecture flaws
 
 验证：Node24.22.1 / pnpm11.25.0。85项受影响unit/integration测试通过（含5项新提取标题回归），typecheck和lint通过。独立Playwright E2E通过8种标题/主题/范围组合、新建标题位置、24px按钮留白、自动文案、修改/清空标题、单篇段落和重选草稿修改后取消保持原版本。390px截图已检查，未见横向溢出。日志：`/tmp/shiqu-editable-title-checks.log`、`/tmp/shiqu-editable-title-e2e.log`；截图：`/tmp/shiqu-editable-title/`。
 
-实现里程碑待记录；CR/VR待完成。
+实现里程碑：`65938b7`。后续仅修正reader-intake模块说明，无功能变更。
+
+CR risk: non-low — 查询意图、异步写入、重放与重选草稿协同。
+CR review round: 1; reviewer: reused
+CR passed: no major findings
+
+VR risk: non-low — 已核对状态安全、兼容性及生产/界面证据。
+VR review round: 1; reviewer: reused
+VR passed: all acceptance criteria complete

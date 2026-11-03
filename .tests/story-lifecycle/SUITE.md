@@ -3,7 +3,7 @@ schema: test-manager/suite/v1
 suite: story-lifecycle
 title: 故事新建、编辑与状态机
 risk: HIGH
-state: ACTIVE
+state: COMPLETE
 owner: UNASSIGNED
 planned_start: UNPLANNED
 planned_end: UNPLANNED
@@ -14,7 +14,7 @@ planned_end: UNPLANNED
 
 依赖：Node24、pnpm、Playwright Chromium、生产SQLite/媒体和受控模型adapter；无外部账号/密钥。构建6c791fa起的工作区，实现完成后记录hash/diff。
 
-数据：独占`.data/e2e/<run>`，两段合成原文及控制图片；UI状态由真实命令生成，不直接伪造持久状态来证明UI路径。媒体丢失等故障只在协议场景注入。UTC记录时间。
+数据：独占`.data/e2e/<run>`，两段合成原文及控制图片；例外C007启动真实.data/dev-local，以readonly提供方禁用生成，允许正常初始化/迁移，不提交故事命令、不清空已有数据。UI状态由真实命令生成，不直接伪造持久状态来证明UI路径。媒体丢失等故障只在协议场景注入。UTC记录时间。
 
 Entry：7例READY，启动隔离探针通过。Exit：7例当前有效PASS，无P0/P1缺陷；无法执行的路径记录FAIL/BLOCKED并影响判定。复跑追加而非覆盖。用户未授权发布或真实库修改。
 
