@@ -14,19 +14,27 @@ test('both local publication gates require the production-backed lifecycle E2E',
   assert.equal((manifest.scripts[name].match(/pnpm (?:run )?test\b/g)||[]).length,1,'one combined test invocation per gate');
  }
  assert.match(manifest.scripts['test:e2e'],/scripts\/test-story-e2e\.mjs/);
- for(const filename of ['tests/story-lifecycle.playwright.e2e.mjs','tests/headless-cli.test.mjs','tests/cli-skill.test.mjs','tests/library-maintenance.test.mjs','tests/diagnostics.test.mjs','tests/system-settings.test.mjs','tests/settings-faults.test.mjs'])assert.ok(userFlowTests.includes(filename),filename+' must gate release tags');
+ for(const gate of ['release','npm']){
+  const selected=await selectTests(gate);
+  for(const filename of ['tests/release-smoke.playwright.e2e.mjs','tests/story-generation-state-machine.e2e.mjs','tests/headless-cli.test.mjs','tests/npm-cli.test.mjs','tests/system-settings.test.mjs','tests/settings-faults.test.mjs','tests/npm-publish.test.mjs'])assert.ok(selected.includes(filename),filename+' must gate '+gate);
+ }
 });
 
-test('release test selections preserve each gate coverage and execute every file once',async()=>{
+test('smoke gates stay focused while the explicit full selection preserves all regression coverage',async()=>{
  const manifest=JSON.parse(await readFile(new URL('../package.json',import.meta.url),'utf8'));
  const unitTests=(await readdir(new URL('./',import.meta.url))).filter(name=>name.endsWith('.test.mjs')).map(name=>'tests/'+name);
- const npmTests=[...manifest.scripts['test:startup'].matchAll(/tests\/[^ ]+\.test\.mjs/g),...manifest.scripts['test:pty'].matchAll(/tests\/[^ ]+\.test\.mjs/g)].map(match=>match[0]);
- npmTests.push('tests/npm-publish.test.mjs');
- for(const [gate,previousTests] of [['release',unitTests],['npm',npmTests]]){
+ assert.match(manifest.scripts['test:full'],/test:e2e --gate=full$/);
+ const full=await selectTests('full');
+ assert.equal(full.length,new Set(full).size);assert.deepEqual(new Set(full),new Set([...unitTests,...userFlowTests]));
+ for(const gate of ['release','npm']){
   const selected=await selectTests(gate);
   assert.equal(selected.length,new Set(selected).size);
-  assert.deepEqual(new Set(selected),new Set([...previousTests,...userFlowTests]));
+  assert.ok(selected.length<=8,'release gates must stay small');
+  for(const filename of ['tests/startup-matrix.test.mjs','tests/startup-pty.test.mjs','tests/frame-count-gate.test.mjs','tests/local-library-all-books.test.mjs','tests/story-lifecycle.playwright.e2e.mjs']){
+   assert.ok(!selected.includes(filename),filename+' belongs to the full suite');assert.ok(full.includes(filename));
+  }
  }
+ assert.ok((await selectTests('release')).includes('tests/release-pre-push.test.mjs'));
  assert.deepEqual(await selectTests(),userFlowTests,'standalone E2E keeps its existing scope');
  await assert.rejects(selectTests('typo'),/Usage:/);
 });
@@ -38,7 +46,7 @@ async function fixture(t,{failedFlow}={}){
  for(const file of ['scripts/pre-push.mjs','scripts/test-story-e2e.mjs','.githooks/pre-push'])await copyFile(new URL('../'+file,import.meta.url),path.join(checkout,file));
  // Only the release runner is under test here; disposable cases make its exit propagation observable.
  await mkdir(path.join(checkout,'tests'));
- for(const file of userFlowTests)await writeFile(path.join(checkout,file),`import test from 'node:test';\ntest('release flow probe',()=>{${file===failedFlow?"throw Error('CONTROLLED_USER_FLOW_FAILURE');":''}});\n`);
+ for(const file of new Set([...userFlowTests,...await selectTests('release')]))await writeFile(path.join(checkout,file),`import test from 'node:test';\ntest('release flow probe',()=>{${file===failedFlow?"throw Error('CONTROLLED_USER_FLOW_FAILURE');":''}});\n`);
  await chmod(path.join(checkout,'.githooks/pre-push'),0o755);
  await writeFile(path.join(checkout,'.nvmrc'),process.versions.node);
  await writeFile(path.join(checkout,'package.json'),JSON.stringify({packageManager:'pnpm@11.25.0'}));
@@ -50,7 +58,7 @@ if(args[0]==='--version'){console.log('11.25.0');process.exit(0);}
 fs.appendFileSync(process.env.PRE_PUSH_LOG,JSON.stringify({args,marker:fs.readFileSync('marker','utf8'),cwd:process.cwd(),gitDir:process.env.GIT_DIR})+'\\n');
 if(args[0]==='run'&&process.env.PRE_PUSH_FAIL==='1')process.exit(1);
 if(args[0]==='run'&&args[1]==='release:check'&&process.env.PRE_PUSH_REAL_FLOWS==='1'){
- const result=require('node:child_process').spawnSync(process.execPath,['scripts/test-story-e2e.mjs'],{env:process.env,stdio:'inherit'});
+ const result=require('node:child_process').spawnSync(process.execPath,['scripts/test-story-e2e.mjs','--gate=release'],{env:process.env,stdio:'inherit'});
  process.exit(result.status??1);
 }
 `);
@@ -86,7 +94,7 @@ test('release pushes check the tagged snapshot once for lightweight and annotate
  assert.equal((f.git(['worktree','list','--porcelain']).stdout.match(/^worktree /gm)||[]).length,1);
 });
 
-for(const failedFlow of ['tests/headless-cli.test.mjs','tests/cli-skill.test.mjs','tests/library-maintenance.test.mjs'])test('critical flow failure rejects a real v* tag push: '+failedFlow,{skip:process.platform==='win32'},async t=>{
+for(const failedFlow of ['tests/headless-cli.test.mjs','tests/release-smoke.playwright.e2e.mjs','tests/story-generation-state-machine.e2e.mjs'])test('critical flow failure rejects a real v* tag push: '+failedFlow,{skip:process.platform==='win32'},async t=>{
  const f=await fixture(t,{failedFlow});f.git(['tag','v0.0.4']);
  await writeFile(path.join(f.checkout,'marker'),'uncommitted content');
  const pushed=f.git(['push','origin','v0.0.4'],{PRE_PUSH_REAL_FLOWS:'1'},false);

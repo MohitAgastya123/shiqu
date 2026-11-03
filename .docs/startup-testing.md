@@ -41,11 +41,13 @@ Run the local release checks without building or publishing:
 pnpm run npm:check
 ```
 
-This runs typecheck, lint, the startup/database matrix, real PTY flows and release-gate regression tests. There is no hosted startup workflow. Local results establish behavior on the current OS; Windows/Linux native verification and live provider permissions/quota remain separate.
+This runs typecheck, lint and a critical release smoke selection. Local results establish behavior on the current OS; Windows/Linux native verification and live provider permissions/quota remain separate.
 
-Both gates use the shared `test:e2e` runner to execute each selected test file once: `release:check` passes `--gate=release` to combine all `tests/*.test.mjs` with user flows; `npm:check` passes `--gate=npm` to combine startup/database, PTY and npm publication regressions with those flows. Plain `pnpm test:e2e`, `pnpm test`, `test:startup` and `test:pty` retain their existing scopes.
+Both gates use the shared `test:e2e` runner to execute each selected test file once. `npm:check` selects seven files: one complete browser creation-to-reading flow, production recovery/replay, headless CLI (including export and backup/restore), CLI startup, system settings, settings faults and npm publication guards. `release:check` adds the Git pre-push regression file, for eight files. Typecheck/lint remain required; the tag gate also checks Rust formatting. The browser smoke reuses C001's implementation and assertions from the full lifecycle suite.
 
-User flows cover production-backed browser lifecycle, headless CLI, skill installation, backup/restore, diagnostics, system settings and settings faults. C007 launches the real dev command in its own copied source root, excluding `.env` and personal libraries, so local release checks cannot migrate the developer's `.data/dev-local`. CLI/configuration/maintenance tests use disposable libraries and homes. No live inference or real provider keys are required.
+Exhaustive provider/length matrices, all-book scans, PTY onboarding, additional browser edit/control cases, skill management and diagnostic edge cases remain available through `pnpm test:full`. That command combines every `tests/*.test.mjs` with all user-flow suites and deduplicates the selection. These checks no longer block every release. Plain `pnpm test:e2e`, `pnpm test`, `test:startup` and `test:pty` retain their existing scopes.
+
+All checks use isolated libraries and homes without live inference or real provider keys. In the full suite, C007 launches the real dev command in a disposable source root, excluding `.env` and personal libraries; it never migrates the developer's `.data/dev-local`.
 
 The installed pre-push hook invokes release:check in an isolated checkout of each distinct commit targeted by a pushed `v*` tag. A failed critical flow rejects the tag push and cleans up the worktree. Ordinary branches, non-v tags and tag deletions bypass the checks. Run `pnpm hooks:install` when setting up a new checkout; nothing is published or packaged by the hook.
 

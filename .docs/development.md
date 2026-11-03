@@ -104,7 +104,7 @@ pnpm lint
 
 `pre-push` 只对推送的 `refs/tags/v*` 执行发布检查：解析标签目标提交，在隔离 checkout 中验证 Node/pnpm 固定版本，安装锁定依赖，再运行 `pnpm release:check`。同一提交的多个发布标签只检查一次；普通分支、非 v 标签和删除标签不触发。可通过 `pnpm hooks:install` 为新 checkout 启用 hook。
 
-`release:check` 在类型、lint 检查后执行 `pnpm test:e2e --gate=release`，将全部单元/集成测试与用户流程合并去重，每个测试文件只运行一次；`npm:check` 使用 `--gate=npm`，合并启动、PTY、npm 发布回归与用户流程。用户流程覆盖浏览器故事生命周期、无服务 CLI 制作/编辑/导出、技能安装、备份恢复、脱敏诊断与提供方配置。任一流程失败即阻止标签推送；门禁只检查，不构建桌面/Docker或发布作品，平台 CI 保留安装包构建职责。C007 在一次性源码根目录启动真正的 `pnpm dev local`，不打开人工开发书库。
+`release:check` 在类型、lint 检查后执行 `pnpm test:e2e --gate=release`，只运行 8 个关键冒烟测试文件；`npm:check` 使用 `--gate=npm`，运行其中 7 个文件。冒烟覆盖一条完整浏览器制作与阅读流程、生产恢复与重放、无服务 CLI/导出/备份、CLI 启动、配置安全与发布门禁；标签门禁额外验证 Git pre-push。每个文件只运行一次，标签门禁仍检查 Rust 格式。完整矩阵、全书扫描、PTY、其他浏览器与 CLI 边界测试移至按需命令 `pnpm test:full`，不再阻塞每次发布。任一冒烟失败即阻止发布；门禁只检查，不构建桌面/Docker或发布作品，平台 CI 保留安装包构建职责。完整套件的 C007 在一次性源码根目录启动真正的 `pnpm dev local`，不打开人工开发书库。
 
 维护命令无需打包：`pnpm library:maintain --help`。备份/恢复/诊断入口复用正式 CLI 与服务实现；运行锁覆盖开发、CLI 和桌面。备份是私有数据，不能放入 `public`、`dist/client` 或公开作品集，详见[维护说明](user-guide.md#书库维护命令)。
 

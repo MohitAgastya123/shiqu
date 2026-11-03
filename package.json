@@ -33,6 +33,7 @@
     "lint": "eslint .",
     "db:generate": "drizzle-kit generate",
     "test": "node --experimental-strip-types --test tests/*.test.mjs",
+    "test:full": "pnpm test:e2e --gate=full",
     "test:startup": "node --experimental-strip-types --test --test-concurrency=2 tests/npm-cli.test.mjs tests/cli-library.test.mjs tests/system-settings.test.mjs tests/startup-matrix.test.mjs tests/settings-faults.test.mjs",
     "test:pty": "node --experimental-strip-types --test tests/startup-pty.test.mjs",
     "typecheck": "tsc --noEmit",

@@ -1,6 +1,5 @@
-// Gate release tags with production-backed browser, CLI, skill, configuration and recovery flows.
-// Release gates combine their regression suites with user flows, executing each file once and recording provenance.
-// Generation remains entirely in the production workflow; plain test:e2e still runs only user flows.
+// Release gates run critical production-backed smoke checks; full regressions remain an explicit selection.
+// Each file runs once with provenance; plain test:e2e retains the exhaustive user-flow selection.
 import path from 'node:path';
 import {randomUUID,createHash} from 'node:crypto';
 import {spawn,execFileSync} from 'node:child_process';
@@ -16,15 +15,21 @@ export const userFlowTests=[
  'tests/system-settings.test.mjs','tests/settings-faults.test.mjs',
 ];
 
+const releaseSmokeTests=[
+ 'tests/release-smoke.playwright.e2e.mjs','tests/story-generation-state-machine.e2e.mjs',
+ 'tests/headless-cli.test.mjs','tests/npm-cli.test.mjs','tests/system-settings.test.mjs',
+ 'tests/settings-faults.test.mjs','tests/npm-publish.test.mjs',
+];
+
 export async function selectTests(gate,root=process.cwd()){
- let regressionTests=[];
- if(gate==='release')regressionTests=(await readdir(path.join(root,'tests'))).filter(name=>name.endsWith('.test.mjs')).sort().map(name=>'tests/'+name);
- else if(gate==='npm')regressionTests=[
-  'tests/npm-cli.test.mjs','tests/cli-library.test.mjs','tests/system-settings.test.mjs',
-  'tests/startup-matrix.test.mjs','tests/settings-faults.test.mjs','tests/startup-pty.test.mjs','tests/npm-publish.test.mjs',
- ];
- else if(gate!==undefined)throw Error('Usage: pnpm test:e2e [--gate=release|--gate=npm]');
- return [...new Set([...regressionTests,...userFlowTests])];
+ if(gate==='release')return [...releaseSmokeTests,'tests/release-pre-push.test.mjs'];
+ if(gate==='npm')return [...releaseSmokeTests];
+ if(gate==='full'){
+  const regressionTests=(await readdir(path.join(root,'tests'))).filter(name=>name.endsWith('.test.mjs')).sort().map(name=>'tests/'+name);
+  return [...new Set([...regressionTests,...userFlowTests])];
+ }
+ if(gate!==undefined)throw Error('Usage: pnpm test:e2e [--gate=release|--gate=npm|--gate=full]');
+ return [...userFlowTests];
 }
 
 async function runUserFlows(gate){
@@ -51,6 +56,6 @@ async function runUserFlows(gate){
 
 if(process.argv[1]&&realpathSync(process.argv[1])===realpathSync(fileURLToPath(import.meta.url))){
  const args=process.argv.slice(2);
- if(args.length>1||(args.length&&!['--gate=release','--gate=npm'].includes(args[0])))throw Error('Usage: pnpm test:e2e [--gate=release|--gate=npm]');
+ if(args.length>1||(args.length&&!['--gate=release','--gate=npm','--gate=full'].includes(args[0])))throw Error('Usage: pnpm test:e2e [--gate=release|--gate=npm|--gate=full]');
  await runUserFlows(args[0]?.slice('--gate='.length));
 }
