@@ -1,17 +1,13 @@
-// Run Vite and the watched REST server together; both terminate with the parent.
+// Run Vite and the watched REST server together; local mode always uses a checkout-owned shelf.
 import {createServer} from 'vite';
 import {context} from 'esbuild';
 import {spawn} from 'node:child_process';
 import {printPhoneAccess,phoneUrls} from '../server/phone-access.ts';
 import {developmentLibraryDirectory} from '../server/library-directory.ts';
-import {developmentServerOptions,protectDevelopmentLibrary} from './development-server.mjs';
+import {developmentArguments,developmentServerOptions,protectDevelopmentLibrary} from './development-server.mjs';
 try{process.loadEnvFile('.env');}catch(error){if(error.code!=='ENOENT')throw error;}
-process.env.SHIQU_DATA_DIR=developmentLibraryDirectory();
-const args=process.argv.slice(2),portIndex=args.indexOf('--port'),port=Number(portIndex<0?3000:args[portIndex+1]);
-if(!Number.isInteger(port)||port<1||port>65535)throw Error('Invalid --port');
-const apiPort=Number(process.env.SHIQU_API_PORT||3002);
-if(!Number.isInteger(apiPort)||apiPort<1||apiPort>65535)throw Error('Invalid SHIQU_API_PORT');
-if(apiPort===port)throw Error('SHIQU_API_PORT must differ from the Vite port');
+const {port,apiPort,library}=developmentArguments(process.argv.slice(2));
+process.env.SHIQU_DATA_DIR=library||developmentLibraryDirectory();
 const build=await context({entryPoints:['server/index.ts'],outfile:'dist/dev/server.js',bundle:true,platform:'node',format:'esm',target:'node24',packages:'external',sourcemap:true});
 let stopping=false,backend,frontend;
 async function stop(code=0){if(stopping)return;stopping=true;backend?.kill('SIGTERM');await Promise.all([frontend?.close(),build.dispose()]);process.exitCode=code;}

@@ -58,10 +58,10 @@ stateDiagram-v2
     state "图片待核对" as Checking
     state "图片失效，等待明确重绘" as Missing
 
-    [*] --> Discovering: 按书籍、主题或章节创建
+    [*] --> Choosing: 保存书籍、主题和原文条件，等待按钮
     [*] --> Preparing: 直接选择独立故事
     Discovering --> Choosing: 保存候选或本轮查找结束
-    Choosing --> Discovering: 继续查找
+    Choosing --> Discovering: 点击提取或继续查找
     Choosing --> Preparing: 选择已保存候选
     Preparing --> Confirming: 原文、核对摘要、制作建议已保存
     Confirming --> Confirming: 保存设置草稿
@@ -97,10 +97,13 @@ stateDiagram-v2
 
 普通制作修订可以复用有效图片，直接进入缺失画幅的绘制或完成判定。**替换为另一选题不能复用旧故事的原文、分镜和图片作为新故事结果。** 通用失败和暂停逻辑见后文。
 
+新建未选定故事与重选草稿均从 `choosing + search.idle + round 0 + 空 batches` 开始。打开、轮询、观看需求和服务重启不授权提取。标题方式切换和输入只是本地草稿；点击“开始提取”或“按标题提取”才提交 `search`，保留主题和原文范围并建立新轮次。已经开始的搜索继续沿用原有连续发现逻辑，直接选择 `source` 仍进入准备。
+
 ### 创建阶段的转换条件
 
 | 当前阶段 | 事件或条件 | 下一阶段与副作用 |
 | --- | --- | --- |
+| 未选定的 `choosing` | 明确 `search` | `discovering`；保存标题条件、重置候选并增加 generation/round；重放沿用回执 |
 | `discovering` | 候选逐项保存；本轮查找收束 | 可进入 `choosing`；搜索另有独立状态，已有候选不必等搜索全部结束才选择 |
 | `choosing` | `choose` | `preparing`；绑定候选，清除旧原文和建议，停止当前搜索，递增 `intake.generation` |
 | 未确认制作 | `more` | 新一轮搜索；没有已选故事时进入 `discovering`，已有选择时保留当前准备阶段 |

@@ -2,6 +2,16 @@
 import path from 'node:path';
 import {existsSync,realpathSync,readdirSync,lstatSync} from 'node:fs';
 import {normalizePath,isFileServingAllowed} from 'vite';
+// Local development opts into a checkout-owned shelf; an unknown mode must never open a shared one.
+export function developmentArguments(args,variables=process.env,cwd=process.cwd()){
+ const remaining=[...args],local=remaining[0]==='local';if(local)remaining.shift();
+ let port=3000;
+ while(remaining.length){const option=remaining.shift();if(option!=='--port'||!remaining.length)throw Error('Usage: pnpm dev [local] [--port <port>]');port=Number(remaining.shift());}
+ const apiPort=Number(variables.SHIQU_API_PORT||3002);
+ for(const [name,value] of [['--port',port],['SHIQU_API_PORT',apiPort]])if(!Number.isInteger(value)||value<1||value>65535)throw Error(`Invalid ${name}`);
+ if(apiPort===port)throw Error('SHIQU_API_PORT must differ from the Vite port');
+ return {local,port,apiPort,...(local?{library:path.resolve(cwd,'.data/dev-local')}:{})};
+}
 function canonical(filename){
  let parent=path.resolve(filename),suffix=[];
  while(!existsSync(parent)){suffix.unshift(path.basename(parent));const next=path.dirname(parent);if(next===parent)break;parent=next;}

@@ -46,7 +46,8 @@
     "desktop:test": "cd src-tauri && cargo test --locked",
     "desktop:smoke": "node scripts/desktop-smoke.mjs",
     "eval:discovery": "node --experimental-strip-types scripts/eval-story-discovery.mjs",
-    "export:story": "node --experimental-strip-types scripts/export-story.mjs"
+    "export:story": "node --experimental-strip-types scripts/export-story.mjs",
+    "test:e2e": "node --experimental-strip-types scripts/test-story-e2e.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

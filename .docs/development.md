@@ -33,6 +33,16 @@ pnpm dev
 SHIQU_API_PORT=3003 pnpm dev --port 3001
 ```
 
+独立开发书库可用：
+
+```bash
+pnpm dev local
+# 与其他服务并行时
+SHIQU_API_PORT=3005 pnpm dev local --port 3004
+```
+
+`local` 强制使用当前 checkout 的 `.data/dev-local`（SQLite、媒体和缓存），忽略 `.env` 或环境变量里的 `SHIQU_DATA_DIR`；不读取桌面书库设置。普通 `pnpm dev` 仍保留共享书库规则。
+
 开发版从 `.env` 读取 AI 配置，**不读取桌面保存的密钥**。默认书架跟随桌面版的数据目录；可用 `SHIQU_DATA_DIR` 显式覆盖。两端共享书架时均需使用当前版本，两端均无需配对。私有书库及备份不得放入 Vite 的 `public` 目录。
 
 ## 生成服务配置
@@ -91,6 +101,15 @@ pnpm test
 pnpm typecheck
 pnpm lint
 ```
+
+故事流程 Playwright 验证：
+
+```bash
+pnpm exec playwright install chromium --only-shell
+pnpm test:e2e
+```
+
+命令运行真实 React/Vite、开发访问保护和生产 API/队列/SQLite，覆盖新建、各编辑入口、暂停/恢复、失败重试、重选与状态机协议边界。模型回执受控，不加载 `.env` 或桌面凭据进行推理。每次测试独占 `.data/e2e/<run>`，保存开发数据库、截图、trace.zip、状态转换和结果 JSON；不会重置人工使用的 `.data/dev-local`。可用 `pnpm exec playwright show-trace <trace.zip>` 查看独立测试浏览器的操作。测试范围和运行账本见[故事流程测试](../.tests/story-lifecycle/CASES.md)。
 
 测试使用模拟模型响应，不发起付费生成。桌面 UI 使用 Vite 开发服务器验证；只有需要打包时才运行构建命令。桌面开发、平台依赖和打包说明见 [desktop/README.md](../desktop/README.md)。主要代码位于 `client/`（界面）、`lib/`（业务逻辑）、`server/`（HTTP 与存储）、`db/` 与 `drizzle/`（数据库）、`desktop/` 与 `src-tauri/`（桌面版）。
 

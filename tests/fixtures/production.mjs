@@ -15,8 +15,10 @@ export const makeReflectionCandidates=first=>[first,'醒来之后，梦中的自
 export const turn=()=>new Promise(resolve=>setImmediate(resolve));
 export async function until(predicate,timeoutMs=5000){const end=Date.now()+timeoutMs;while(!await predicate()){assert.ok(Date.now()<end,'Timed out waiting for controlled production work');await turn();}}
 function deferred(){let resolve,reject;const promise=new Promise((yes,no)=>{resolve=yes;reject=no;});return {promise,resolve,reject};}
-export async function productionFixture(t,provider='codex',variables={}){
- const root=await mkdtemp(path.join(os.tmpdir(),'shiqu production ')),dataDirectory=path.join(root,'data');
+export async function productionFixture(t,provider='codex',variables={},storage={}){
+ // Browser runs may retain their own fresh checkout-local database; ordinary tests remain disposable.
+ const parent=storage.parentDirectory||os.tmpdir();await mkdir(parent,{recursive:true});
+ const root=await mkdtemp(path.join(parent,'shiqu production ')),dataDirectory=path.join(root,'data');
  await cp('drizzle',path.join(root,'drizzle'),{recursive:true});await mkdir(path.join(root,'docker'));await cp('docker/seed.sql',path.join(root,'docker/seed.sql'));
  const control={calls:[],plans:[],outlines:[],batches:[],reflections:[],reflectionRepairs:[],frameReviews:[],reviews:[],structures:[],repairs:[],recommendations:[],hold:true,autoLength:8,active:0,maxActive:0,beforeText:null};
  async function image(prompt,reference){
@@ -54,7 +56,7 @@ export async function productionFixture(t,provider='codex',variables={}){
  const options={root,dataDirectory,generation,transport,variables};let app=createApplication(options);
  async function stop(){control.hold=false;for(const call of control.calls)call.resolve();await app.close();}
  const coordinators=[];
- t?.after(async()=>{app.stopGeneration();for(const coordinator of coordinators)coordinator.stop();control.hold=false;for(const call of control.calls)call.resolve();for(const coordinator of coordinators)await coordinator.close();await stop();await rm(root,{recursive:true,force:true});});
+ t?.after(async()=>{app.stopGeneration();for(const coordinator of coordinators)coordinator.stop();control.hold=false;for(const call of control.calls)call.resolve();for(const coordinator of coordinators)await coordinator.close();await stop();if(!storage.retain)await rm(root,{recursive:true,force:true});});
  const overrides=new Map();
  async function request(suffix,method='GET',body,headers={}){
   // Helpers model explicit user commands; raw transport-contract tests can call app.handle directly.

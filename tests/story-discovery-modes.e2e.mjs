@@ -3,6 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdir} from 'node:fs/promises';
+import path from 'node:path';
 import {createServer} from 'vite';
 import {chromium} from 'playwright';
 import {createHttpServer} from '../server/http.ts';
@@ -10,6 +11,8 @@ import {withLocalBooks} from '../server/local-generation.ts';
 import {LocalBooks} from '../server/local-books.ts';
 import {libraryFixture} from './fixtures/story-library.mjs';
 import {productionFixture,until} from './fixtures/production.mjs';
+
+const evidenceDirectory=process.env.SHIQU_E2E_RUN_ID?path.resolve('.data/e2e',process.env.SHIQU_E2E_RUN_ID,'optional-conditions'):'/tmp/shiqu-editable-title';
 
 test('title, theme and original scope are independently optional in the creation UI', {timeout:120000},async t=>{
  const f=await productionFixture(t),library=libraryFixture();
@@ -58,9 +61,9 @@ test('title, theme and original scope are independently optional in the creation
   const gap=await sheet.getByRole('button',{name:'进入故事提取',exact:true}).evaluate(button=>button.getBoundingClientRect().top-button.previousElementSibling.getBoundingClientRect().bottom);
   assert.ok(gap>=23.5,`discovery button gap: ${gap}`);
   if(flags===0){
-   await mkdir('/tmp/shiqu-editable-title',{recursive:true});
+   await mkdir(evidenceDirectory,{recursive:true});
    await sheet.getByRole('button',{name:'进入故事提取',exact:true}).scrollIntoViewIfNeeded();
-   await page.screenshot({path:'/tmp/shiqu-editable-title/source-button-gap.png'});
+   await page.screenshot({path:path.join(evidenceDirectory,'source-button-gap.png')});
   }
   const response=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/reader/sessions'&&response.request().method()==='POST');
   await sheet.getByRole('button',{name:'进入故事提取',exact:true}).click();
@@ -104,13 +107,13 @@ test('title, theme and original scope are independently optional in the creation
    await page.setViewportSize({width:390,height:844});
    await extraction.getByRole('region',{name:'已选原文与主题'}).scrollIntoViewIfNeeded();
    assert.equal(await extraction.evaluate(element=>element.scrollWidth<=element.clientWidth),true);
-   await page.screenshot({path:'/tmp/shiqu-editable-title/extraction-auto-mobile.png'});
+   await page.screenshot({path:path.join(evidenceDirectory,'extraction-auto-mobile.png')});
    await page.setViewportSize({width:1280,height:900});
   }
   if(flags===7){
    await page.setViewportSize({width:390,height:844});
    assert.equal(await extraction.evaluate(element=>element.scrollWidth<=element.clientWidth),true);
-   await page.screenshot({path:'/tmp/shiqu-editable-title/extraction-mobile.png'});
+   await page.screenshot({path:path.join(evidenceDirectory,'extraction-mobile.png')});
    // Editing and clearing a target is an explicit new extraction, without returning to the first window.
    await extraction.getByLabel('故事标题',{exact:true}).fill('勇士护民');
    let response=page.waitForResponse(response=>response.url().endsWith(`/api/reader/sessions/${saved.id}/setup`)&&response.request().method()==='POST'&&response.request().postDataJSON().action==='search');
@@ -176,10 +179,10 @@ test('title, theme and original scope are independently optional in the creation
  await page.setViewportSize({width:390,height:844});
  assert.equal(await margin.evaluate(element=>element.scrollWidth<=element.clientWidth),true);
  await margin.locator('.yu-sheet').evaluate(element=>{element.scrollTop=0;});
- await page.screenshot({path:'/tmp/shiqu-editable-title/three-chapter-context-mobile.png'});
+ await page.screenshot({path:path.join(evidenceDirectory,'three-chapter-context-mobile.png')});
  await margin.getByRole('button',{name:'输入标题',exact:true}).click();
  await margin.getByLabel('故事标题',{exact:true}).fill('宋公明三败高俅');
- await page.screenshot({path:'/tmp/shiqu-editable-title/three-chapter-input-mobile.png'});
+ await page.screenshot({path:path.join(evidenceDirectory,'three-chapter-input-mobile.png')});
  await page.setViewportSize({width:1280,height:900});
  // The same editor is available inside a separate replacement draft; cancelling retains the parent.
  f.options.generation=f.generation;f.control.hold=false;
@@ -190,6 +193,7 @@ test('title, theme and original scope are independently optional in the creation
  await page.getByRole('button',{name:'故事设置',exact:true}).click();
  await page.getByRole('button',{name:'替换选题',exact:true}).click();
  const replacement=page.getByRole('dialog',{name:'替换选题',exact:true});
+ await replacement.getByRole('button',{name:'开始提取',exact:true}).waitFor();
  assert.ok((await replacement.textContent()).includes('点击按钮后开始提取'));
  await replacement.getByRole('button',{name:'输入标题',exact:true}).click();
  await replacement.getByLabel('故事标题',{exact:true}).fill('庄子的大葫芦');
