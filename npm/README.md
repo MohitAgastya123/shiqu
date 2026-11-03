@@ -2,37 +2,14 @@
 
 Turn Chinese classics into your own illustrated storybooks. Read in your browser, generate with a logged-in Codex CLI, OpenAI API, or Gemini, and keep stories, images, and reading progress on your computer.
 
-## CLI or desktop app?
+## Choose how to use Shiqu
 
-### Headless commands and Codex skill
-
-No subcommand starts the existing browser service. Subcommands operate directly on the production workflow without HTTP, desktop, or frontend:
-
-```bash
-npx @apprun/shiqu help --json
-npx @apprun/shiqu init --data-dir /private/shiqu-library
-npx @apprun/shiqu stories list --data-dir /private/shiqu-library
-npx @apprun/shiqu run STORY_ID --until reviewed --data-dir /private/shiqu-library
-npx @apprun/shiqu preview STORY_ID --output /private/preview.html
-npx @apprun/shiqu export STORY_ID --format zip --output /private/story.zip
-npx @apprun/shiqu skill show
-npx @apprun/shiqu skill install --scope project
-npx @apprun/shiqu skill install --scope global
-```
-
-Use `help --json` for command inputs and effects. Subcommands return one JSON receipt on stdout, logs on stderr, and nonzero exit codes on errors. Only explicit run invokes inference, only for the specified story. Saving, editing, confirmation, inspection and export do not start background generation. Read reason/session before continuing; pauses/faults require explicit control/recovery. Intake mutations require explicit `--generation N` or input.generation from stories get. Retry/override require explicit faultId. Reuse the same request UUID and original generation/token/faultId and input for mutation replay; edits require the token from `stories revisions ID`.
-
-Creation follows create → search → run until candidates → choose → run until prepared → confirm → run until reviewed or completed. Follow returned IDs and states. Complete ZIP/PDF/PNG exports require the current version and all images. Public ZIP is the default; internal prompts require `--include-prompts`. Unsigned export requires `--allow-unsigned`. Preview is escaped, self-contained HTML. Outputs must be new paths. Config reuses saved settings; keys go through input files/stdin, never argv.
-
-The bundled skill is versioned with the CLI. Show prints Markdown (`--json` returns version/body). Install with explicit project scope copies it into the **current directory's** `.agents/skills/shiqu/SKILL.md`; global scope copies to `~/.agents/skills/shiqu/SKILL.md` for use across projects; no scope means no installation. It rejects symlinks/different existing instructions, does not initialize a library, and is independent of npm cache retention. Codex can then discover `$shiqu`; npm cache contents alone are not automatically loaded skills. Keep CLI and skill versions matched; use `npx @apprun/shiqu@VERSION` to pin.
-
-Maintenance is shared with desktop libraries: `shiqu --backup <new-directory>`, `shiqu --verify-backup <backup>`, `shiqu --restore <backup> --data-dir <new-library>`, and `shiqu --diagnostics <new-json-file>`. Stop all services before backup; diagnostics can be exported while running. Restore never overwrites an existing directory or starts generation. Backups include private story/media data, not the separate provider credentials. Existing libraries receive a verified sibling `library-backups/pre-upgrade-*` snapshot before new migrations; keep these private and restore with a matching application version. Diagnostic exports contain bounded allowlisted metadata, not prompts, keys, story text or raw provider responses.
-
-**Choose the desktop app for everyday use; choose the CLI if you already have Node 24, prefer a terminal, or need scripted startup.**
+**Choose the desktop app for graphical use, the Codex skill to delegate tasks in natural language, or the CLI for direct commands and scripted startup.**
 
 | Your situation | Recommended entry point |
 | --- | --- |
 | You want graphical settings, library and queue management, and no separate Node installation | Desktop app: includes Node 24 and service controls |
+| You want Codex to create, edit, export, or maintain stories without a server | Install the Shiqu skill and invoke `$shiqu`; requires Node 24 |
 | You already have Node 24 and want one-command startup without installing a desktop app | CLI: `npx @apprun/shiqu`; keep the terminal running and press Ctrl+C to stop |
 | You want generation and reading access to continue after closing the control window | Desktop app: stays in the system tray until you stop the service or quit the app |
 | You need startup parameters, environment overrides, or non-interactive operation | CLI: prepare provider configuration and a library path in advance |
@@ -40,7 +17,7 @@ Maintenance is shared with desktop libraries: `shiqu --backup <new-directory>`, 
 | You want phone access on the same Wi-Fi | Both entries: CLI prints phone QR codes on startup; desktop shows them in its control window |
 | You need built-in internet tunnel controls | Desktop app: requires a separate cloudflared installation. CLI has no built-in internet tunnel |
 
-**Shared features:** Both entry points provide the same browser interface for story creation, production and acceptance requirements, generation queues, pause/resume, reading, library organization, and PDF / PNG / ZIP export. The desktop window adds library, queue, settings, and service controls; full reading and story creation happen in the browser. Both support OpenAI API, Gemini, and read-only mode. Codex generation is supported on macOS / Linux and requires a separately installed, logged-in Codex CLI; the Shiqu CLI and Codex CLI are different tools.
+**Shared features:** Both entry points provide the same browser interface for story creation, production and acceptance requirements, generation queues, pause/resume, reading, library organization, and PDF / PNG / ZIP export. The desktop window adds library, queue, settings, and service controls; interactive reading and story creation happen in the browser. The Codex skill uses CLI subcommands for production, editing, library maintenance, and offline exports without a running service. Both support OpenAI API, Gemini, and read-only mode. Codex generation is supported on macOS / Linux and requires a separately installed, logged-in Codex CLI; the Shiqu CLI and Codex CLI are different tools.
 
 **Shared settings and data:** Under the same local user account, both entry points reuse saved provider settings and API keys. With the same library directory, they share stories, images, and reading progress. Neither requires the other to be running.
 
@@ -51,6 +28,62 @@ Maintenance is shared with desktop libraries: `shiqu --backup <new-directory>`, 
 3. **Start the other entry point.** Saved provider settings and keys are reused. Changes to shared settings take effect in an already-running service only after it restarts.
 
 **Only one service can run against a library at a time, even on different ports.** Switching entry points needs no data copy. Choosing another directory opens another library; it does not move or merge data. Back up before upgrading or downgrading, as older versions may not read newer settings or data. See the [full user guide](https://github.com/yysun/shiqu/blob/main/.docs/user-guide.md).
+
+## Use Shiqu through Codex
+
+Install the bundled skill once, then ask Codex to perform Shiqu tasks in natural language:
+
+See the [prompt-only Use as SKILL guide](https://github.com/yysun/shiqu/blob/main/.docs/use-as-skill.md) for copyable requests covering setup, provider/model configuration, creation and editing, exports, batch tasks, recovery, and diagnostics.
+
+```bash
+npx @apprun/shiqu skill install --scope global
+```
+
+Global installation copies the skill to `~/.agents/skills/shiqu/SKILL.md` for use across projects. For one project, run `skill install --scope project` in that directory; it writes `.agents/skills/shiqu/SKILL.md` there. Both scopes copy independent files, reject symlinks and different existing instructions, and require an explicit scope. Installing a skill does not start a server, initialize or move a library, or globally install the CLI executable.
+
+In Codex, invoke the skill with a request such as:
+
+```text
+$shiqu Find a story about kindness and misunderstanding in Zhuangzi.
+Use Chinese ink painting and balanced narrative detail. Show candidates and a production plan first;
+wait for my confirmation before generating illustrations, then export an offline preview and public ZIP.
+```
+
+Specify the library, output directory, and author credit in your request. Codex follows the skill and queries the installed CLI's current help; Shiqu uses its saved generation provider and credentials. Library commands automatically create the directory and initialize the database on first access using the same startup/migration path as desktop and server; no separate init step is required. Configure a provider first if needed. Stop any service using the same library before running headless commands. Only explicit run performs inference; edits, inspection, preview and export do not start background generation.
+
+`skill show` prints the instructions without installing them. If a new skill does not appear in Codex, restart Codex. The copied skill does not pin the CLI runtime: use `npx @apprun/shiqu@VERSION` when a fixed version is required. To update an existing skill, compare the new skill show output and review it before replacing the local copy.
+
+### Direct headless commands
+
+With no subcommand, Shiqu starts the existing browser service. Subcommands operate directly on the production workflow without HTTP, desktop, or frontend:
+
+```bash
+npx @apprun/shiqu help --json
+npx @apprun/shiqu stories list --data-dir /private/shiqu-library
+npx @apprun/shiqu run STORY_ID --until reviewed --data-dir /private/shiqu-library
+npx @apprun/shiqu preview STORY_ID --data-dir /private/shiqu-library --output /private/preview.html
+npx @apprun/shiqu export STORY_ID --data-dir /private/shiqu-library --format zip --output /private/story.zip
+npx @apprun/shiqu skill show
+```
+
+Use `help --json` for command inputs and effects. Subcommands return one JSON receipt on stdout, logs on stderr, and nonzero exit codes on errors. The exception is skill show, which prints Markdown unless --json is supplied. Only explicit run invokes inference, only for the specified story. Saving, editing, confirmation, inspection and export do not start background generation. Read reason/session before continuing; pauses/faults require explicit control/recovery. Intake mutations require explicit `--generation N` or input.generation from stories get. Retry/override require explicit faultId. Reuse the same request UUID and original generation/token/faultId and input for mutation replay; edits require the token from `stories revisions ID`.
+
+Creation follows create → search → run until candidates → choose → run until prepared → confirm → run until reviewed or completed. Follow returned IDs and states. Complete ZIP/PDF/PNG exports require the current version and all images. Public ZIP is the default; internal prompts require `--include-prompts`. Unsigned export requires `--allow-unsigned`. Preview is escaped, self-contained HTML. Outputs must be new paths. Config reuses saved settings; keys go through input files/stdin, never argv.
+
+`init` remains optional for explicit early initialization. Database creation follows --data-dir, SHIQU_DATA_DIR, saved location, then the default library; it does not configure a provider or start generation. Corrupt databases fail instead of being rebuilt. Backup requires an existing database. Help, catalogs, skill installation and diagnostic export do not create a library; restore still requires a new target directory.
+
+To choose a database folder explicitly:
+
+```bash
+npx @apprun/shiqu init --data-dir /absolute/path/my-library
+npx @apprun/shiqu stories list --data-dir /absolute/path/my-library
+```
+
+The argument is a directory: Shiqu creates it if needed and stores `shiqu.sqlite` and `media/` there. Existing data is retained. The command returns the resolved absolute path. This does not change the saved desktop/CLI default; reuse --data-dir or set SHIQU_DATA_DIR for later commands.
+
+### Library maintenance
+
+Maintenance is shared with desktop libraries: `shiqu --backup <new-directory>`, `shiqu --verify-backup <backup>`, `shiqu --restore <backup> --data-dir <new-library>`, and `shiqu --diagnostics <new-json-file>`. Stop all services before backup; diagnostics can be exported while running. Restore never overwrites an existing directory or starts generation. Backups include private story/media data, not the separate provider credentials. Existing libraries receive a verified sibling `library-backups/pre-upgrade-*` snapshot before new migrations; keep these private and restore with a matching application version. Diagnostic exports contain bounded allowlisted metadata, not prompts, keys, story text or raw provider responses.
 
 ## Run
 

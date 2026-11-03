@@ -28,7 +28,7 @@ import type {LocalBooks} from './local-books.ts';
 const commandNames=new Set(['skill','help','init','status','catalog','books','themes','styles','stories','run','preview','export','backup','restore','verify-backup','diagnostics','config','api']);
 const commands=[
  ['skill show|install','Read the bundled skill or install a copy with explicit --scope project|global.','skill install --scope project'],
- ['init','Initialize a local database without configuring providers or starting work.','init --data-dir /private/library'],
+ ['init','Optional: create the library directory and database at --data-dir (shiqu.sqlite plus media). Does not change the saved default; library commands also initialize automatically.','init --data-dir /private/library'],
  ['status','Library integrity/counts and runtime metadata; no cloud readiness request.','status'],
  ['catalog','Books, themes and styles. books contents BOOK --query words reads local sources.','books contents zhuangzi'],
  ['stories list|get|current','Inspect saved stories and current-family versions.','stories get STORY_ID'],
@@ -113,7 +113,8 @@ export async function executeHeadless(root:string,args:string[],context:Context=
   const output=value('output')||action;need(output,'OUTPUT_REQUIRED','Specify --output NEW_FILE.');outputOutside(root,path.resolve(output));need(!containsPath(directory,path.resolve(output)),'PRIVATE_OUTPUT_REQUIRED','Diagnostic output must be outside the library.');
   await writeFile(path.resolve(output),JSON.stringify(diagnosticReport(directory,appVersion),null,2)+'\n',{flag:'wx',mode:0o600});return {path:path.resolve(output)};
  }
- if(command!=='init')need(existsSync(path.join(directory,'shiqu.sqlite')),'LIBRARY_NOT_FOUND','Library does not exist; run init --data-dir DIRECTORY.');
+ // Normal commands share desktop/server automatic initialization; backup must never create an empty source.
+ if(command==='backup')need(existsSync(path.join(directory,'shiqu.sqlite')),'LIBRARY_NOT_FOUND','Cannot back up a library without an existing database.');
  const release=await ownDesktopData(directory),removeDiagnostics=installDiagnostics(directory);let app:ReturnType<typeof createApplication>|undefined;
  const running=command==='run'||command==='stories'&&action==='run',target=command==='run'?action:id;
  const until=value('until')||'completed',timeout=Number(value('timeout')||900);let timer:ReturnType<typeof setTimeout>|undefined;

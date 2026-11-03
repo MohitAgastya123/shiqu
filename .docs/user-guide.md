@@ -1,9 +1,14 @@
 # 拾趣使用指南
 
-[返回 README](../README.md) · [开发指南](development.md)
+[返回 README](../README.md) · [通过 SKILL 使用：完整示例](use-as-skill.md) · [开发指南](development.md)
 
 - [如何选择](#如何选择)
 - [CLI 启动](#cli-启动)
+- [无服务 CLI 与 Codex 技能](#无服务-cli-与-codex-技能)
+  - [安装与调用技能](#安装与调用技能)
+  - [书库与生成配置](#书库与生成配置)
+  - [指定数据库目录](#指定数据库目录)
+  - [直接使用命令](#直接使用命令)
 - [桌面版入门](#桌面版入门)
 - [在手机上阅读](#在手机上阅读)
 - [制作与阅读故事](#制作与阅读故事)
@@ -14,18 +19,20 @@
   - [ZIP 内容与提示词分享](#zip-内容与提示词分享)
 - [数据与备份](#数据与备份)
   - [升级到 0.6.5](#升级到-065)
+  - [书库维护命令](#书库维护命令)
 - [常见问题](#常见问题)
 - [书库与画风说明](#书库与画风说明)
 - [每本书的星标参考图](#每本书的星标参考图)
 
 ## 如何选择
 
-**日常使用优先选桌面版；已有 Node 24、习惯终端或需要脚本启动时选 CLI。** 两者使用相同的浏览器阅读与制作界面，主要区别在运行环境、服务启停和手机访问管理。
+**希望通过图形界面制作和阅读，选桌面版；希望用自然语言委托任务，选 Codex 技能；需要直接调用命令，选 CLI。** 浏览器方式需要本机服务，Codex 和 CLI 子命令直接操作本地生产流程。
 
 | 使用场景 | 推荐入口与条件 |
 | --- | --- |
 | 希望安装后直接使用，通过图形界面配置服务、管理书架和查看队列 | 桌面版，内置 Node，无需另装运行环境 |
 | 已有 Node 24，想用一条命令启动，不安装桌面应用 | CLI：`npx @apprun/shiqu`；终端需保持运行，Ctrl+C 停服 |
+| 希望让 Codex 选题、制作、修改故事或批量导出、备份 | 安装拾趣技能，在 Codex 中调用 `$shiqu`；需要 Node 24，无需启动桌面、HTTP 服务或前端 |
 | 希望关闭控制窗口后仍继续生成和提供阅读服务 | 桌面版：关闭窗口后留在托盘，停止服务或退出拾趣才会停服 |
 | 需要脚本启动、自定义端口或目录、环境变量及非交互运行 | CLI：非交互时需提前准备服务配置与书库路径 |
 | 使用 Linux、Intel Mac 或 Windows ARM64 | CLI：目前没有对应桌面安装包，需自行安装 Node 24；Windows 使用 API 服务或只读 |
@@ -33,9 +40,9 @@
 
 ### 共同功能与配置
 
-- **制作与阅读：** 两种入口都支持直接选故事或按主题寻找、画风与叙事详略、制作与验收要求、生成队列、暂停与恢复、阅读和书架整理，以及 PDF / PNG / ZIP 导出。完整阅读与故事制作在浏览器中进行，桌面窗口另提供书架、队列、设置和服务控制。
+- **制作与阅读：** 桌面版和 CLI 服务模式提供相同的浏览器制作与阅读界面，桌面窗口另提供书架、队列、设置和服务控制。Codex 技能通过 CLI 子命令完成选题、制作、编辑、书架整理与导出，预览输出为可直接打开的离线 HTML。
 - **生成服务：** 两种入口都支持 OpenAI API、Gemini 与只读；Codex 生成在 macOS / Linux 可用，需另行安装并登录 Codex CLI，Windows 使用 API 服务或只读。这里的拾趣 CLI 与 Codex CLI 是两个不同工具。
-- **本地数据：** 同一本机用户下共用已保存的服务配置和 API 密钥；使用同一书库目录时，共享故事、图片与阅读进度。两种入口都不需要对方正在运行。
+- **本地数据：** 同一本机用户下共用已保存的服务配置和 API 密钥；使用同一书库目录时，共享故事、图片与阅读进度。各入口可独立使用；CLI 子命令操作同一书库前，先停止占用它的服务。
 
 ### 在 CLI 与桌面版之间切换
 
@@ -123,6 +130,94 @@ npx @apprun/shiqu --config /absolute/path/to/shiqu.env
 ```
 
 不自动读取当前目录的 `.env`；已有环境变量优先于显式配置文件，命令行参数优先于两者。非交互运行必须已有可用保存配置，或完整指定服务；不会等待终端输入。新环境也要显式提供书库路径。更多变量见 [.env.example](../.env.example)。
+
+## 无服务 CLI 与 Codex 技能
+
+让 Codex 按拾趣技能完成任务：你描述要读什么、怎样改编、何时确认和输出到哪里，Codex 调用 CLI，故事仍保存到本地书库。选题、制作、编辑版本、离线预览、导出与备份恢复均可通过这种方式完成。需要 Node 24，无需启动桌面、HTTP 服务或前端。
+
+可直接交给 Codex 的自然语言提示词见[通过 SKILL 使用拾趣](use-as-skill.md)，覆盖安装、配置、制作、修改、导出和维护。
+
+### 安装与调用技能
+
+先选择技能的使用范围：
+
+```bash
+# 当前用户的所有项目
+npx @apprun/shiqu skill install --scope global
+
+# 仅当前项目：在目标项目目录执行
+npx @apprun/shiqu skill install --scope project
+```
+
+| 范围 | 安装位置 | 适用情况 |
+| --- | --- | --- |
+| global | `~/.agents/skills/shiqu/SKILL.md` | 在多个项目中使用拾趣 |
+| project | 当前目录的 `.agents/skills/shiqu/SKILL.md` | 只在指定项目中提供技能 |
+
+必须显式指定范围；单独运行 `skill install` 不安装。安装复制独立文件，不依赖 npx 缓存。同内容重复安装无变化，不同内容或符号链接路径拒绝覆盖。升级技能时先用 `skill show` 查看新正文，审阅差异后自行更新已有副本。
+
+安装后在 Codex 中调用 `$shiqu`，例如：
+
+```text
+$shiqu 使用书库 /absolute/path/shiqu-library，从《庄子》中找一个关于善意与误解的故事。
+用水墨写意、适中的叙事详略，先给出候选、原文摘要和制作方案，等我确认后再生成插图。
+完成后署名“我的名字”，把离线预览和公开 ZIP 保存到 /absolute/path/output。
+```
+
+已有故事也可以直接委托：
+
+```text
+$shiqu 找到书库中的《故事名》，保留原文和可复用的图片，把验收要求改为“关键人物的回应必须落实到画面”。
+先说明修改影响，再按确认后的要求制作新版本。
+```
+
+Codex 读取技能后会查询当前 CLI 的 `help --json`，按保存状态推进流程。需要确认时停下，暂停或失败的故事不会隐式恢复。只想临时读取操作说明时可运行 `skill show`，让 Codex 读取其输出；npm 缓存中存在 SKILL.md 本身不会自动注册技能。新技能未出现时重启 Codex。
+
+若所用 npm 版本尚未包含新命令，可在源码目录运行 `pnpm cli skill install --scope global` 或 `--scope project`；同时告诉 Codex 在该源码目录使用 `pnpm cli`。技能副本不会固定 CLI 版本，需要固定时使用 `npx @apprun/shiqu@<版本号>` 并查看该版本的帮助。
+
+### 书库与生成配置
+
+Codex 负责调用命令，文字与插图由拾趣已配置的生成后端完成，可使用 Codex、OpenAI API 或 Gemini。沿用桌面/CLI 已保存的配置；尚未配置时，先按[首次配置与修改服务](#首次配置与修改服务)完成设置。安装技能、初始化书库、查看、编辑和导出均不调用模型，只有显式 run 执行生成。
+
+在任务中说明书库和输出目录。使用现有书库时先停止占用它的桌面、CLI 或开发服务；首次访问时自动创建目录和数据库，与桌面/服务共用开库与迁移逻辑，无需先运行 init。路径按显式 `--data-dir`、`SHIQU_DATA_DIR`、已保存位置、默认书库的顺序选择；自动建库不会配置模型或发起生成，init 保留为可选的显式建库命令。损坏的数据库报错，不自动重建。全局安装技能只改变 Codex 的技能可用范围，不会选择、迁移或复制书库，也不会安装一个永久的 shiqu 命令。
+
+### 指定数据库目录
+
+如需提前建库并指定存储目录，使用可选的 init：
+
+```bash
+pnpm cli init --data-dir /absolute/path/my-library
+pnpm cli stories list --data-dir /absolute/path/my-library
+```
+
+安装包使用 `npx @apprun/shiqu init --data-dir /absolute/path/my-library`。参数是**目录**，数据库文件为该目录下的 `shiqu.sqlite`，媒体保存在同一书库的 `media/` 下；目录不存在时自动创建。已有书库沿用原有数据和迁移流程，不会清空。命令返回解析后的绝对目录，不启动服务或生成。
+
+`--data-dir` 只影响本次调用，不改变桌面/CLI 已保存的默认书库。后续命令继续使用相同参数，或设置 `SHIQU_DATA_DIR` 指向该目录。
+
+### 直接使用命令
+
+CLI 不带子命令时启动原有浏览器服务。带子命令时直接使用同一数据库、正式制作队列和导出规则，无需服务、桌面或前端。源码目录使用 `pnpm cli`；安装包使用 `pnpm dlx @apprun/shiqu`。参数及输入示例以当前版本 `help --json` 为准。
+
+```bash
+pnpm cli help --json
+pnpm cli books
+pnpm cli stories create --input selection.json --data-dir /private/shiqu-library
+pnpm cli stories search STORY_ID --generation N --data-dir /private/shiqu-library
+pnpm cli run STORY_ID --until candidates --data-dir /private/shiqu-library
+pnpm cli stories choose STORY_ID --batch 0 --index 0 --generation N --data-dir /private/shiqu-library
+pnpm cli run STORY_ID --until prepared --data-dir /private/shiqu-library
+pnpm cli stories confirm STORY_ID --generation N --data-dir /private/shiqu-library
+pnpm cli run STORY_ID --until reviewed --data-dir /private/shiqu-library
+pnpm cli run STORY_ID --data-dir /private/shiqu-library
+pnpm cli preview STORY_ID --output /private/preview.html --data-dir /private/shiqu-library
+pnpm cli export STORY_ID --format zip --output /private/story.zip --data-dir /private/shiqu-library
+```
+
+selection.json 例如 `{"bookId":"zhuangzi","theme":"善意与误解","artStyle":"ink-pencil","narrativeDetail":"balanced"}`。保存、确认、查看不调用模型；只有显式 run 执行指定故事并可能付费，不顺带制作其他后台故事。run 默认最多900秒，可用 `--timeout` 调整；中断保留已保存检查点。读取返回的 reason/session，需要选择、确认、恢复或修改要求时完成对应动作后再运行。旧故事等待画幅数时返回 frame_count_required，使用 help 中的 frameCount API 保存；已确认的故事请求 prepared 返回 already_prepared，不再执行。不适用的旧故事阶段以 BOUNDARY_UNAVAILABLE 拒绝。
+
+子命令 stdout 为单个 `{schemaVersion,ok,data|error}` JSON，日志在 stderr；失败退出非零。skill show 默认输出 Markdown，增加 `--json` 才返回 JSON 信封。`--input file.json` 或 `--input -` 接受JSON。保存可固定 `--request-id UUID` 供重放。search/choose/confirm/setup 必须带 JSON generation 或 `--generation N`（由 stories get 返回的 intake.generation 取得）；同一请求重放沿用原代数。retry/override 必须带当前 faultId，不自动挑选。编辑先用 `stories revisions ID` 读取 token，再提交 `{"token":"...","changes":{"acceptancePrompt":"保留关键人物反应"}}`；返回的新 id 是后续制作对象。旧版本拒绝制作/完整导出，过期 token 或 faultId 返回冲突。config 复用桌面/CLI设置，密钥只通过输入文件/stdin传递，不放进命令参数。init/读取/导出不检查云端，run 未配置时明确报错。
+
+JSON/Markdown 可导出中间稿；ZIP/PDF/PNG要求当前版本全部图片完成。未署名需明确 `--allow-unsigned`；公开 ZIP 默认不含提示词，内部记录须加 `--include-prompts`。输出必须是新路径，导出不自动提交或发布。备份要求已有数据库；帮助、静态书籍/主题/画风列表、技能安装和诊断导出不会自动建立书库，恢复仍要求不存在的新目录。
 
 ## 桌面版入门
 
@@ -330,40 +425,6 @@ macOS 默认位置：
 4. 分享前重新检查 ZIP：0.6.5 默认附带制作要求及已留存的提示词，不再只包含成品与公开说明。缺少的历史提示词不会补造。
 
 旧版本可能无法读取升级后的数据库，降级时请恢复升级前备份，不要直接复用升级后的书库。[完整更新记录](../CHANGELOG.md)。
-
-### 无服务 CLI 与 Codex 技能
-
-CLI 不带子命令时启动原有浏览器服务。带子命令时直接使用同一数据库、正式制作队列和导出规则，无需服务、桌面或前端。源码目录使用 `pnpm cli`；安装包使用 `pnpm dlx @apprun/shiqu`。参数及输入示例以当前版本 `help --json` 为准。
-
-```bash
-pnpm cli help --json
-pnpm cli init --data-dir /private/shiqu-library
-pnpm cli books
-pnpm cli stories create --input selection.json --data-dir /private/shiqu-library
-pnpm cli stories search STORY_ID --generation N --data-dir /private/shiqu-library
-pnpm cli run STORY_ID --until candidates --data-dir /private/shiqu-library
-pnpm cli stories choose STORY_ID --batch 0 --index 0 --generation N --data-dir /private/shiqu-library
-pnpm cli run STORY_ID --until prepared --data-dir /private/shiqu-library
-pnpm cli stories confirm STORY_ID --generation N --data-dir /private/shiqu-library
-pnpm cli run STORY_ID --until reviewed --data-dir /private/shiqu-library
-pnpm cli run STORY_ID --data-dir /private/shiqu-library
-pnpm cli preview STORY_ID --output /private/preview.html --data-dir /private/shiqu-library
-pnpm cli export STORY_ID --format zip --output /private/story.zip --data-dir /private/shiqu-library
-```
-
-selection.json 例如 `{"bookId":"zhuangzi","theme":"善意与误解","artStyle":"ink-pencil","narrativeDetail":"balanced"}`。保存、确认、查看不调用模型；只有显式 run 执行指定故事并可能付费，不顺带制作其他后台故事。run 默认最多900秒，可用 `--timeout` 调整；中断保留已保存检查点。读取返回的 reason/session，需要选择、确认、恢复或修改要求时完成对应动作后再运行。旧故事等待画幅数时返回 frame_count_required，使用 help 中的 frameCount API 保存；已确认的故事请求 prepared 返回 already_prepared，不再执行。不适用的旧故事阶段以 BOUNDARY_UNAVAILABLE 拒绝。
-
-子命令 stdout 为单个 `{schemaVersion,ok,data|error}` JSON，日志在 stderr；失败退出非零。`--input file.json` 或 `--input -` 接受JSON。保存可固定 `--request-id UUID` 供重放。search/choose/confirm/setup 必须带 JSON generation 或 `--generation N`（由 stories get 返回的 intake.generation 取得）；同一请求重放沿用原代数。retry/override 必须带当前 faultId，不自动挑选。编辑先用 `stories revisions ID` 读取 token，再提交 `{"token":"...","changes":{"acceptancePrompt":"保留关键人物反应"}}`；返回的新 id 是后续制作对象。旧版本拒绝制作/完整导出，过期 token 或 faultId 返回冲突。config 复用桌面/CLI设置，密钥只通过输入文件/stdin传递，不放进命令参数。init/读取/导出不检查云端，run 未配置时明确报错。
-
-JSON/Markdown 可导出中间稿；ZIP/PDF/PNG要求当前版本全部图片完成。未署名需明确 `--allow-unsigned`；公开 ZIP 默认不含提示词，内部记录须加 `--include-prompts`。输出必须是新路径，导出不自动提交或发布。
-
-```bash
-pnpm dlx @apprun/shiqu skill show
-pnpm dlx @apprun/shiqu skill install --scope project
-pnpm dlx @apprun/shiqu skill install --scope global
-```
-
-包携带 `skills/shiqu/SKILL.md`。show 默认原文，`--json` 返回包版本和正文；Codex 可直接读取。install 将独立副本复制到**当前目录** `.agents/skills/shiqu/SKILL.md`，不依赖 npx 缓存。同内容重复安装无变化，不同内容拒绝覆盖，拒绝符号链接路径；安装不建库、不配置模型，不指定 scope 时不安装。global 安装到当前用户 `~/.agents/skills/shiqu/SKILL.md`，可跨项目发现，安全约束相同。Codex 可从项目技能目录发现 `$shiqu`，缓存里带文件本身不等于自动加载。CLI 与技能随包同版本，升级后比较正文、审阅并显式更新副本；新技能未出现时重启 Codex。
 
 ### 书库维护命令
 

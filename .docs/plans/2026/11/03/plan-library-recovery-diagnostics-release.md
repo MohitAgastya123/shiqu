@@ -18,7 +18,7 @@
 - [x] H3：实现 dormant/target/stage 调度与 bounded run、需求/信号清理；验证不支付其他故事，不损坏幂等和故障协议。
 - [x] H4：抽取导出环境适配器，共享现有 ZIP/PDF/PNG 和署名规则；实现离线预览及输出。
 - [x] H5：增加完整 CLI 正式流程验收、npm资源探针与agent使用文档；对并行UI改动只修必要测试定位，不纳入其产品实现。
-- [ ] H6：最终适用单元/集成、现有E2E、CLI流程与安装产物复验通过。按最新范围停在DD；SS独立里程碑本地提交，不推送。
+- [x] H6：最终适用单元/集成、现有E2E、CLI流程与安装产物复验通过。按最新范围停在DD；SS独立里程碑本地提交，不推送。
 
 AR risk: non-low — 无服务生产命令、付费调度隔离、私有数据恢复、共享导出和原生依赖分发。
 AR review round: 4; reviewer: reused
@@ -57,7 +57,7 @@ Git base: `f753d3a5ae2233900a1b7edbb6ee8ce7f2a59de1`。本轮开始已有 client
 - [x] S3：接入维护 CLI 和统一服务锁，维护命令拒绝冲突选项与非新恢复路径；加入真实 CLI 子进程集成测试。
 - [x] S4：实现私有有界白名单诊断、服务启动/停止/错误记录和 CLI 导出；测试轮换、敏感内容、异常库和桌面生命周期入口。
 - [x] S5：隔离 C007 的真实开发启动探针，再接入发布 E2E，更新故障阻断和发布入口测试；更新 README、使用/开发/桌面/测试文档。
-- [ ] S6：完成全套适用单元/集成、typecheck、lint、cargo fmt（若更改 Rust）、本轮及现有生命周期 E2E；保存输出证据，仅构建获准的npm验证产物，不打包桌面/Docker。
+- [x] S6：完成全套适用单元/集成、typecheck、lint、cargo fmt（若更改 Rust）、本轮及现有生命周期 E2E；保存输出证据，仅构建获准的npm验证产物，不打包桌面/Docker。
 
 ## 验证
 
@@ -93,3 +93,20 @@ CR review round: 2; reviewer: reused
 CR fixed: 幂等身份及阶段停止边界问题已修复；rerun result passed。
 
 TT：1151/1151通过（/tmp/shiqu-cli-unit-final.log）；CLI最终边界聚焦6/6（/tmp/shiqu-headless-boundaries.log），新增修改限CLI，既有全面证据与最新聚焦合并使用。类型/lint通过（/tmp/shiqu-cli-types-reviewed.log、/tmp/shiqu-cli-lint-reviewed.log），技能验证通过。最终ET及tarball复验执行中。
+
+## 最终验证证据
+
+- `4446067`：独立CR通过后的命令身份、阶段边界与测试适配修复里程碑；不包含并行UI/提取条件产品改动。
+- TT：1151/1151；最终CLI重放/阶段/技能聚焦6/6；typecheck、lint、skill quick_validate通过。完整TT后变更限CLI边界/说明，已重验受影响CLI流程与实际npm产物。
+- ET：79/79（.data/e2e/2026-11-03T15-06-40-372Z-9152e1e7），最终headless用同dispatcher的正式状态机/受控provider覆盖规格9–12、14–16。
+- npm产物 outputs/npm/apprun-shiqu-0.6.6.tgz：隔离离线安装到临时目录、24书籍1983文件、默认HTTP启动/存储/退出、无服务读取/预览/native ZIP-PDF-PNG/备份恢复/脱敏诊断、project/global技能安装均通过；未发布。
+- 持久化日志：.data/verification/library-recovery-diagnostics-release/{unit,headless,typecheck,lint,npm-build,npm-smoke,e2e}.log。Node24.22.1，pnpm11.25.0，macOS arm64；无真实AI、Windows/Linux原生运行或跨平台安装承诺。
+- 无Rust实现改动；未运行桌面/Docker打包。未修改真实书库、凭据或全局技能目录。
+
+VR risk: non-low — 数据恢复、生产执行隔离及发布契约。
+VR review round: 1; reviewer: reused
+VR passed: all acceptance criteria complete
+
+R1–R19全部完成，独立VR完整结论原样载入 `.docs/done/2026/11/03/library-recovery-diagnostics-release.md`。此前源码由三个SS里程碑保存，完成记录停在DD；本次按用户明确要求提交CLI、技能和文档的剩余改动，不推送、不发布。
+
+交付增量：普通书库命令自动初始化，init --data-dir 可指定新目录且不改默认位置；备份仍拒绝缺失数据库。32项聚焦和实际npm包冒烟通过，新增指定目录子进程回归通过。README/用户指南已补充技能入口；独立用户指南仅含35条自然语言提示词，安装提示词包含GitHub技能来源。上述增量经过低风险本地CR，未纳入并行界面或生成逻辑改动。

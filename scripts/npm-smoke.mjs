@@ -136,7 +136,7 @@ try {
   assert.ok(receipt(['help','--json']).commands.length>10);
   const skill=command(bin,['skill','show']);assert.equal(skill.status,0,skill.stderr);assert.equal(skill.stdout,await readFile(path.join(installed,'skills/shiqu/SKILL.md'),'utf8'));
   const skillInstall=receipt(['skill','install','--scope','project']);assert.equal(await readFile(skillInstall.path,'utf8'),skill.stdout);await rm(path.join(cwd,'.agents'),{recursive:true});const globalSkill=receipt(['skill','install','--scope','global']);assert.equal(globalSkill.path,path.join(home,'.agents/skills/shiqu/SKILL.md'));assert.equal(await readFile(globalSkill.path,'utf8'),skill.stdout);assert.equal(receipt(['skill','install','--scope','global']).unchanged,true);
-  const headless=path.join(temporary,'headless library');receipt(['init','--data-dir',headless]);assert.deepEqual(receipt(['stories','list','--data-dir',headless]),[]);
+  const headless=path.join(temporary,'headless library');assert.deepEqual(receipt(['stories','list','--data-dir',headless]),[]);await lstat(path.join(headless,'shiqu.sqlite'));receipt(['init','--data-dir',headless]);
   const fixture=await productionFixture();
   try{
     await fixture.stop();fixture.control.hold=false;const local=libraryFixture();

@@ -104,7 +104,24 @@ test('real CLI subcommands initialize/inspect/export diagnostics with one JSON s
   const code=`import net from 'node:net';net.Server.prototype.listen=()=>{throw Error('LISTEN_FORBIDDEN')};globalThis.fetch=async()=>{throw Error('NETWORK_FORBIDDEN')};const {runCli}=await import(${JSON.stringify(source)});await runCli(process.argv[1],process.argv.slice(2));`;
   const child=spawn(process.execPath,['--experimental-strip-types','--input-type=module','-e',code,f.root,...args],{cwd:f.root,env:f.env,stdio:['ignore','pipe','pipe']});let output='',errors='';child.stdout.on('data',c=>output+=c);child.stderr.on('data',c=>errors+=c);const [exit]=await once(child,'exit');return {exit,value:JSON.parse(output),errors};
  }
- for(const args of [['help','--json'],['catalog'],['init','--data-dir',directory],['stories','list','--data-dir',directory],['status','--data-dir',directory],['diagnostics','--data-dir',directory,'--output',path.join(f.root,'diagnostic.json')]]){const result=await cli(args);assert.equal(result.exit,0,result.errors);assert.equal(result.value.ok,true);assert.equal(result.value.schemaVersion,1);}
+ for(const args of [['help','--json'],['catalog']]){const result=await cli(args);assert.equal(result.exit,0,result.errors);assert.equal(result.value.ok,true);}
+ await assert.rejects(readFile(path.join(f.locations.library,'shiqu.sqlite')),{code:'ENOENT'});
+ const chosen=path.join(f.root,'chosen database folder'),initialized=await cli(['init','--data-dir',chosen]);
+ assert.equal(initialized.exit,0,initialized.errors);assert.equal(initialized.value.data.path,chosen);assert.equal(initialized.value.data.started,false);
+ assert.equal((await readFile(path.join(chosen,'shiqu.sqlite'))).subarray(0,16).toString(),'SQLite format 3\0');
+ await assert.rejects(readFile(path.join(f.locations.library,'shiqu.sqlite')),{code:'ENOENT'});
+ const listed=await cli(['stories','list','--data-dir',directory]);assert.equal(listed.exit,0,listed.errors);assert.deepEqual(listed.value.data,[]);
+ assert.equal((await readFile(path.join(directory,'shiqu.sqlite'))).subarray(0,16).toString(),'SQLite format 3\0');
+ for(const args of [['init','--data-dir',directory],['status','--data-dir',directory],['diagnostics','--data-dir',directory,'--output',path.join(f.root,'diagnostic.json')]]){const result=await cli(args);assert.equal(result.exit,0,result.errors);assert.equal(result.value.ok,true);assert.equal(result.value.schemaVersion,1);}
  const failure=await cli(['api','POST','reader/suggestions','--data-dir',directory]);assert.notEqual(failure.exit,0);assert.equal(failure.value.error.code,'EXECUTION_REQUIRED');
- const missing=await cli(['stories','list','--data-dir',path.join(f.root,'missing')]);assert.notEqual(missing.exit,0);assert.equal(missing.value.error.code,'LIBRARY_NOT_FOUND');
+ const fresh=path.join(f.root,'fresh-story'),input=path.join(f.root,'selection.json');await writeFile(input,JSON.stringify(selection));
+ const created=await cli(['stories','create','--no-intake','--input',input,'--data-dir',fresh]);assert.equal(created.exit,0,created.errors);const id=created.value.data.session.id;
+ assert.equal((await cli(['stories','get',id,'--data-dir',fresh])).value.data.id,id);
+ await cli(['init','--data-dir',fresh]);assert.equal((await cli(['stories','list','--data-dir',fresh])).value.data[0].id,id);
+ const defaultLibrary=await cli(['status']);assert.equal(defaultLibrary.exit,0,defaultLibrary.errors);await readFile(path.join(f.locations.library,'shiqu.sqlite'));
+ const saved=path.join(f.root,'saved-library'),store=f.store();store.save({dataDirectory:saved,libraryConfigured:true});store.close();
+ const automatic=await cli(['status']);assert.equal(automatic.exit,0,automatic.errors);assert.equal(automatic.value.ok,true);await readFile(path.join(saved,'shiqu.sqlite'));
+ const missing=path.join(f.root,'missing-backup-source');const backup=await cli(['backup',path.join(f.root,'unused-backup'),'--data-dir',missing]);assert.notEqual(backup.exit,0);assert.equal(backup.value.error.code,'LIBRARY_NOT_FOUND');await assert.rejects(readFile(path.join(missing,'shiqu.sqlite')),{code:'ENOENT'});
+ const corrupt=path.join(f.root,'corrupt');await mkdir(corrupt);const broken=Buffer.from('not a SQLite database');await writeFile(path.join(corrupt,'shiqu.sqlite'),broken);
+ assert.notEqual((await cli(['stories','list','--data-dir',corrupt])).exit,0);assert.deepEqual(await readFile(path.join(corrupt,'shiqu.sqlite')),broken);
 });

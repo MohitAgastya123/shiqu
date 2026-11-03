@@ -11,7 +11,7 @@ description: 使用拾趣 CLI 从本地书籍选题、制作或编辑图文故�
 
 ## 建库与选题
 
-1. 按用户指定书库传 `--data-dir <directory>`；否则使用拾趣已保存的位置。`status` 检查，缺库时用 `init`。初始化不配置模型。
+1. 按用户指定书库传 `--data-dir <directory>`；否则使用拾趣已保存的位置或默认书库。首次访问时自动建立数据库，与桌面/服务共用开库和迁移逻辑；直接用 `status`、`stories list` 或 `stories create` 即可，无需先运行 `init`。如需显式提前建库，用 `init --data-dir <directory>`，目录下保存 `shiqu.sqlite` 和媒体。该参数不更改已保存的默认书库，后续继续传相同目录或使用 `SHIQU_DATA_DIR`；不配置模型。
 2. 用 `books`、`themes`、`styles` 查目录，`books contents <bookId>` 查本地章节。将选书、主题、画风、制作/验收要求保存为 JSON，`stories create --input <file> --request-id <UUID>`。默认创建选题流程。
 3. `stories get <id>` 读取 `intake.generation`；`stories search <id> --generation <n>` 保存提取意图，`run <id> --until candidates` 执行；根据用户目标选择候选，用 `stories choose <id> --batch <n> --index <n> --generation <当前代数>`。
 4. `run <id> --until prepared` 准备摘要、原文和制作建议。检查返回内容，按用户授权确认或调整，`stories confirm <id> --generation <当前代数>` 保存确认。缺少影响制作结果的用户选择时再询问。

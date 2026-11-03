@@ -2,7 +2,7 @@
 
 **还有剩余的 Codex token？不妨用来读读故事。**
 
-把中国古典故事变成自己的插画故事书：直接选故事或按主题寻找，设置画风与叙事详略，在电脑或手机上阅读，也可以导出 PDF、PNG 长图或分镜与图片 ZIP。故事、图片和阅读进度保存在你的电脑上。
+把中国古典故事变成自己的插画故事书：直接选故事或按主题寻找，设置画风与叙事详略，在电脑或手机上阅读，也可以导出 PDF、PNG 长图或分镜与图片 ZIP。也可安装拾趣技能，让 Codex 通过 CLI 完成选题、制作、编辑和导出，无需启动桌面或浏览器服务。故事、图片和阅读进度保存在你的电脑上。
 
 首次运行从空书架开始，配置生成后端后创作第一篇故事。
 
@@ -23,11 +23,11 @@
 
 ![拾趣手机界面：发现、选题、制作、书架与阅读](.docs/assets/screenshots.png)
 
-[前后端架构](#前后端架构) · [如何选择后端](#如何选择后端) · [下载桌面版](#下载与快速开始) · [CLI 启动](#cli-启动) · [使用指南](.docs/user-guide.md) · [开发指南](.docs/development.md)
+[前后端架构](#前后端架构) · [如何选择后端](#如何选择后端) · [下载桌面版](#下载与快速开始) · [CLI 启动](#cli-启动) · [通过 SKILL 使用](#通过-skill-使用) · [使用指南](.docs/user-guide.md) · [开发指南](.docs/development.md)
 
 ## 前后端架构
 
-拾趣由**浏览器前端、本机服务端和 AI 生成后端**组成。电脑和手机通过浏览器选书、制作、阅读与导出；本机 Node 服务管理书架和生成队列，调用所选的 Codex、OpenAI API 或 Gemini 生成文字与插图。桌面版与拾趣 CLI 是启动、配置这套本机服务的两种方式。
+拾趣由**浏览器前端、本地生产核心和 AI 生成后端**组成。本地 Node 核心管理书架和生成队列，调用所选的 Codex、OpenAI API 或 Gemini 生成文字与插图。桌面版或不带子命令的 CLI 启动 HTTP 服务，供电脑和手机浏览器访问；CLI 子命令直接调用同一生产核心，供 Codex 或脚本操作，无需监听端口。
 
 ```mermaid
 flowchart TB
@@ -36,11 +36,14 @@ flowchart TB
     subgraph local["你的电脑"]
         desktop["拾趣桌面版<br/>内置 Node 运行环境"]
         cli["拾趣 CLI<br/>自行安装 Node 24"]
-        server["拾趣服务端 · Node REST API<br/>书架 / 生成队列 / AI 后端选择"]
+        agent["Codex 代理 / 脚本"]
+        server["拾趣生产核心 · Node<br/>书架 / 生成队列 / AI 后端选择"]
         storage[("本地书库<br/>SQLite + 图片文件")]
         codexCli["Codex CLI<br/>另行安装并登录"]
         desktop -.->|启动与配置| server
-        cli -.->|启动与配置| server
+        agent -->|调用命令| cli
+        cli -.->|无子命令：启动 HTTP 服务| server
+        cli -->|子命令：进程内调用| server
         server <-->|读取与保存| storage
         server <-->|选择 Codex| codexCli
     end
@@ -74,7 +77,7 @@ flowchart TB
 
 ## 下载与快速开始
 
-推荐使用桌面版，内置运行环境，安装即可使用。习惯终端，或使用 Linux、Intel Mac、Windows ARM64？可直接使用 [CLI 启动](#cli-启动)。两种方式都能制作、阅读和导出故事，也支持手机访问。
+推荐使用桌面版，内置运行环境，安装即可使用。习惯终端，或使用 Linux、Intel Mac、Windows ARM64？可直接使用 [CLI 启动](#cli-启动)。两种方式都能制作、阅读和导出故事，也支持手机访问。希望用自然语言委托制作或批量处理书库，可[通过 SKILL 使用](#通过-skill-使用)。
 
 桌面版内置 **Node 24**，无需自行配置运行环境；提供书库概览、生成队列、图形设置、托盘启停与手机访问入口。
 
@@ -113,6 +116,32 @@ npx @apprun/shiqu
 CLI 优先寻找桌面版保存的书库目录，目录不存在时自动创建；没有桌面设置时，先复用 CLI 已确认目录或已有桌面默认书库；仍未找到才询问，并记住选择。打开终端打印的网址即可阅读，按 Ctrl+C 停止。首次未配置时会询问 Codex / OpenAI API / Gemini / 只读，API 密钥输入隐藏。配置保存在与桌面版共用的设置数据库，之后无需再问；`--configure` 修改服务，`--reset-providers` 清除已保存服务配置。环境变量可仅覆盖本次运行。详见[CLI 使用说明](.docs/user-guide.md#cli-启动)。
 
 已有书库、想在桌面版与 CLI 之间切换？先停止原服务，再按[切换步骤](.docs/user-guide.md#在-cli-与桌面版之间切换)操作。
+
+## 通过 SKILL 使用
+
+安装拾趣技能后，在 Codex 中用自然语言提出任务，由 Codex 调用 CLI 完成选题、准备、制作、编辑版本、离线预览、导出及备份恢复。需要 Node 24；安装技能本身不创建书库或启动服务。
+
+[可直接复制的提示词示例](.docs/use-as-skill.md)：技能安装、书库与模型配置、故事制作与修改、署名导出、批量任务和备份恢复。
+
+```bash
+# 全局安装，供当前用户的各个项目使用
+npx @apprun/shiqu skill install --scope global
+```
+
+技能安装到 `~/.agents/skills/shiqu/SKILL.md`。只想在一个项目使用时，在该目录运行 `skill install --scope project`，目标为当前目录的 `.agents/skills/shiqu/SKILL.md`。两种方式都复制独立文件，同内容重复安装无变化，已有不同内容时拒绝覆盖。
+
+在 Codex 中调用 `$shiqu`，例如：
+
+```text
+$shiqu 从《庄子》中找一个关于善意与误解的故事，用水墨写意。
+先给我候选和制作方案，确认后再生成插图，完成后导出离线预览和公开 ZIP。
+```
+
+Codex 按技能读取 `help --json` 并执行命令；文字与图片使用拾趣已配置的生成后端和书库。首次访问书库时自动建立数据库，与桌面/服务使用同一开库和迁移逻辑，无需先运行 init。只有显式 `run` 执行生成，查看、保存、编辑和导出不启动后台制作。无子命令的 `npx @apprun/shiqu` 仍启动浏览器服务；子命令不需要服务器、桌面或前端运行。共用书库前先停止占用它的服务。
+
+如需提前指定数据库目录，运行 `npx @apprun/shiqu init --data-dir /absolute/path/my-library`；数据库为该目录下的 `shiqu.sqlite`，后续命令继续传相同的 `--data-dir`，或使用 `SHIQU_DATA_DIR`。[目录设置说明](.docs/user-guide.md#指定数据库目录)。
+
+若已发布版本尚未包含这些命令，可在源码目录运行 `pnpm cli skill install --scope global` 体验，并让 Codex 在该源码目录使用 `pnpm cli`。完整安装、配置及命令流程见[无服务 CLI 与 Codex 技能](.docs/user-guide.md#无服务-cli-与-codex-技能)。
 
 ## 手机阅读与导出
 
