@@ -6,6 +6,12 @@ import {mkdtemp,mkdir,writeFile,copyFile,chmod,readFile,rm} from 'node:fs/promis
 import os from 'node:os';
 import path from 'node:path';
 
+test('both local publication gates require the production-backed lifecycle E2E',async()=>{
+ const manifest=JSON.parse(await readFile(new URL('../package.json',import.meta.url),'utf8'));
+ for(const name of ['release:check','npm:check'])assert.match(manifest.scripts[name],/&& pnpm test:e2e(?: &&|$)/);
+ assert.match(manifest.scripts['test:e2e'],/scripts\/test-story-e2e\.mjs/);
+});
+
 async function fixture(t){
  const root=await mkdtemp(path.join(os.tmpdir(),'shiqu hook test '));t.after(()=>rm(root,{recursive:true,force:true}));
  const checkout=path.join(root,'checkout'),remote=path.join(root,'remote.git'),bin=path.join(root,'bin'),log=path.join(root,'checks.log');

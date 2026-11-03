@@ -7,10 +7,17 @@ import {desktopLibraryPaths} from './library-directory.ts';
 import {configureProvider,cliProviderConfiguration,providerReady} from './cli-setup.ts';
 import {parseCliOptions, cliConfiguration} from './cli-options.ts';
 import {maintainLibrary} from './library-maintenance.ts';
+import {routeHeadless} from './headless-cli.ts';
 
 const help = `Usage: shiqu [options]
 
 Start 拾趣 and open the printed URL in your browser. Requires Node 24.
+
+No subcommand starts the browser service. For serverless agent commands and JSON input examples:
+  shiqu help --json
+  shiqu init --data-dir <directory>
+  shiqu stories list --data-dir <directory>
+  shiqu run <story-id> --until reviewed --timeout 900
 
   --port <number>       HTTP port (PORT, default: 3000)
   --host <address>      Bind address (SHIQU_BIND_IP, default: 0.0.0.0)
@@ -33,6 +40,7 @@ Environment/config overrides apply to this invocation only and are never saved a
 `;
 
 export async function runCli(root:string, args = process.argv.slice(2)) {
+  if(await routeHeadless(root,args))return;
   const options = parseCliOptions(args);
   if (options.help) { console.log(help); return; }
   if (options.version) { console.log(JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8')).version); return; }

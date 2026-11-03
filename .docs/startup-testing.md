@@ -43,4 +43,6 @@ pnpm run npm:check
 
 This runs typecheck, lint, the startup/database matrix, real PTY flows and release-gate regression tests. There is no hosted startup workflow. Local results establish behavior on the current OS; Windows/Linux native verification and live provider permissions/quota remain separate.
 
+Both `npm:check` and `release:check` now also run the existing `test:e2e` production-backed lifecycle suites. C007 launches the real dev command in its own copied source root, excluding `.env` and personal libraries, so local release checks cannot migrate the developer's `.data/dev-local`. A failing E2E stops the command before publication. Maintenance tests cover real CLI backup/restore, migration snapshots, data ownership, bounded diagnostic logs and redacted exports using disposable libraries.
+
 For publication, use `pnpm run npm:publish`: it runs `npm:check`, builds a fresh tarball, smoke-tests that exact artifact, then publishes only if every step succeeds. `pnpm run npm:publish --dry-run` performs the same checks/build/smoke and passes `--dry-run` to the final publish command. See [npm release instructions](npm-publishing.md). The release wrapper remains in the private checkout; the consumer package has no release/install hooks.

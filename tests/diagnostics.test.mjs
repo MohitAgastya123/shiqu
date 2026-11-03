@@ -29,10 +29,10 @@ test('logging failures never throw and symlinks cannot write or leak outside the
  }
 });
 test('known console events are saved safely and capture is removed on shutdown',async t=>{
- const f=await startupFixture(t),directory=path.join(f.root,'library'),restore=installDiagnostics(directory),original=console.error;let calls=0;
+ const f=await startupFixture(t),directory=path.join(f.root,'library'),original=console.error,restore=installDiagnostics(directory);
  // Keep this test's expected console error out of the TAP error stream.
- const capture=console.error;try{capture('production_tick_failed',JSON.stringify({code:'SQLITE_BUSY',prompt:'do not store'}));calls++;}finally{restore();}
- assert.equal(diagnosticReport(directory,'0.6.6').events[0].code,'SQLITE_BUSY');assert.equal(calls,1);assert.notEqual(console.error,original);
+ const capture=console.error;try{capture('production_tick_failed',JSON.stringify({code:'SQLITE_BUSY',prompt:'do not store'}));}finally{restore();}
+ assert.equal(diagnosticReport(directory,'0.6.6').events[0].code,'SQLITE_BUSY');assert.equal(console.error,original);
 });
 test('real CLI saves lifecycle events and exports a new metadata-only report, including corrupt libraries',async t=>{
  const f=await startupFixture(t),directory=path.join(f.root,'library'),port=await freeStartupPort();

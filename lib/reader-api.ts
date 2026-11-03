@@ -39,7 +39,7 @@ export function shelfView(session:SessionView):SessionView{
 async function body(req:Request,maxLength=4096){const s=await req.text();if(s.length>maxLength)throw new ReaderError(413,'请求太长了');try{return JSON.parse(s);}catch{throw new ReaderError(400,'请求格式不正确');}}
 export function createReaderApi(services:Services){
 const provider=services.generation;
-async function requireProvider(){const status=await provider.status();if(!status.configured)throw new ReaderError(503,status.message||'即时生成服务还未接通，请检查服务配置。');}
+async function requireProvider(){if(services.commandOnly)return;const status=await provider.status();if(!status.configured)throw new ReaderError(503,status.message||'即时生成服务还未接通，请检查服务配置。');}
 return async function readerApi(req:Request,path:string[]):Promise<Response>{
  try{
   if(path.join('/')==='status'&&req.method==='GET')return json(await provider.status());

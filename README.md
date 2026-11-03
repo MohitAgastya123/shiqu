@@ -164,6 +164,8 @@ pnpm export:story '/path/to/新版故事.zip' --output '../awesome-shiqu/works/y
 
 ## 开发者
 
+Codex 可通过[无服务 CLI 与技能](.docs/user-guide.md#无服务-cli-与-codex-技能)完成选题、制作、编辑、离线预览与导出。源码目录运行 `pnpm cli help --json`；不带子命令仍启动原有浏览器服务。书库维护与诊断见[备份、恢复与诊断](.docs/user-guide.md#书库维护命令)。
+
 React + Vite、Node REST API、SQLite 与本地媒体目录，无需独立数据库。使用 **Node 24.22.1** 与 **pnpm 11.25.0**：
 
 ```bash

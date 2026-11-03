@@ -4,6 +4,30 @@ Turn Chinese classics into your own illustrated storybooks. Read in your browser
 
 ## CLI or desktop app?
 
+### Headless commands and Codex skill
+
+No subcommand starts the existing browser service. Subcommands operate directly on the production workflow without HTTP, desktop, or frontend:
+
+```bash
+npx @apprun/shiqu help --json
+npx @apprun/shiqu init --data-dir /private/shiqu-library
+npx @apprun/shiqu stories list --data-dir /private/shiqu-library
+npx @apprun/shiqu run STORY_ID --until reviewed --data-dir /private/shiqu-library
+npx @apprun/shiqu preview STORY_ID --output /private/preview.html
+npx @apprun/shiqu export STORY_ID --format zip --output /private/story.zip
+npx @apprun/shiqu skill show
+npx @apprun/shiqu skill install --scope project
+npx @apprun/shiqu skill install --scope global
+```
+
+Use `help --json` for command inputs and effects. Subcommands return one JSON receipt on stdout, logs on stderr, and nonzero exit codes on errors. Only explicit run invokes inference, only for the specified story. Saving, editing, confirmation, inspection and export do not start background generation. Read reason/session before continuing; pauses/faults require explicit control/recovery. Reuse the same request UUID and input for mutation replay; edits require the token from `stories revisions ID`.
+
+Creation follows create → search → run until candidates → choose → run until prepared → confirm → run until reviewed or completed. Follow returned IDs and states. Complete ZIP/PDF/PNG exports require the current version and all images. Public ZIP is the default; internal prompts require `--include-prompts`. Unsigned export requires `--allow-unsigned`. Preview is escaped, self-contained HTML. Outputs must be new paths. Config reuses saved settings; keys go through input files/stdin, never argv.
+
+The bundled skill is versioned with the CLI. Show prints Markdown (`--json` returns version/body). Install with explicit project scope copies it into the **current directory's** `.agents/skills/shiqu/SKILL.md`; global scope copies to `~/.agents/skills/shiqu/SKILL.md` for use across projects; no scope means no installation. It rejects symlinks/different existing instructions, does not initialize a library, and is independent of npm cache retention. Codex can then discover `$shiqu`; npm cache contents alone are not automatically loaded skills. Keep CLI and skill versions matched; use `npx @apprun/shiqu@VERSION` to pin.
+
+Maintenance is shared with desktop libraries: `shiqu --backup <new-directory>`, `shiqu --verify-backup <backup>`, `shiqu --restore <backup> --data-dir <new-library>`, and `shiqu --diagnostics <new-json-file>`. Stop all services before backup; diagnostics can be exported while running. Restore never overwrites an existing directory or starts generation. Backups include private story/media data, not the separate provider credentials. Existing libraries receive a verified sibling `library-backups/pre-upgrade-*` snapshot before new migrations; keep these private and restore with a matching application version. Diagnostic exports contain bounded allowlisted metadata, not prompts, keys, story text or raw provider responses.
+
 **Choose the desktop app for everyday use; choose the CLI if you already have Node 24, prefer a terminal, or need scripted startup.**
 
 | Your situation | Recommended entry point |

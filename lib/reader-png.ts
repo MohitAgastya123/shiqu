@@ -1,5 +1,6 @@
 // Render a complete story as a single contact sheet locally, preserving full frames and wrapped text.
 import type {Story} from './content';
+import {browserExportRuntime,type ExportRuntime} from './story-export-runtime.ts';
 import type {GeneratedStory} from './reader-model';
 import {readerBooks} from './reader-books.ts';
 import {historicalBookTitle} from './story-book.ts';
@@ -35,10 +36,10 @@ export function layoutStoryPng(story:Story,measure:(text:string,size:number)=>nu
  return {width,height,columns,title,subtitle,subtitleY,cells,footerY,reflection,credit};
 }
 
-export async function createStoryPng(story:Story,onProgress:(text:string)=>void=()=>{}){
+export async function createStoryPng(story:Story,onProgress:(text:string)=>void=()=>{},runtime:ExportRuntime=browserExportRuntime()){
  assertPngReady(story);
- await document.fonts.ready;
- const canvas=document.createElement('canvas'),context=canvas.getContext('2d');
+ await runtime.ready();
+ const canvas=runtime.canvas(),context=canvas.getContext('2d');
  if(!context)throw Error('当前浏览器暂不支持 PNG 导出，请换个浏览器试试。');
  const ctx:CanvasRenderingContext2D=context;
  const font=(size:number)=>{ctx.font=`${size}px ${family}`;ctx.textBaseline='top';};
@@ -53,18 +54,11 @@ export async function createStoryPng(story:Story,onProgress:(text:string)=>void=
   text(layout.subtitle,M,layout.subtitleY,26,40,'#6b7465');
   for(const cell of layout.cells){
    onProgress(`正在整理第 ${cell.index+1} / ${story.pages.length} 幅`);
-   const url=new URL(story.pages[cell.index].image,location.origin);
-   if(url.origin!==location.origin)throw Error('画面来源不可用，无法导出 PNG。');
-   const response=await fetch(url.href,{credentials:'same-origin',signal:AbortSignal.timeout(30000)});
-   if(!response.ok)throw Error(`第 ${cell.index+1} 幅读取失败，请保持联网后重试。`);
-   const blob=await response.blob();
-   if(!/^image\/(png|jpeg|webp)(;|$)/.test(blob.type))throw Error(`第 ${cell.index+1} 幅画面暂不可用。`);
-   const image=new Image(),objectUrl=URL.createObjectURL(blob);
-   try{
-    image.src=objectUrl;await image.decode();
-    const scale=Math.min(CARD/image.naturalWidth,ART/image.naturalHeight),w=image.naturalWidth*scale,h=image.naturalHeight*scale;
-    ctx.drawImage(image,cell.x+(CARD-w)/2,cell.y+(ART-h)/2,w,h);
-   }finally{image.src='';URL.revokeObjectURL(objectUrl);}
+   const blob=await runtime.read(story.pages[cell.index].image,cell.index);
+   await runtime.image(blob,image=>{
+    const scale=Math.min(CARD/image.width,ART/image.height),w=image.width*scale,h=image.height*scale;
+    ctx.drawImage(image.value,cell.x+(CARD-w)/2,cell.y+(ART-h)/2,w,h);
+   });
    text([String(cell.index+1).padStart(2,'0')],cell.x,cell.y+ART+14,28,40,'#263a2e');
    text(cell.caption,cell.x,cell.y+ART+58,26,LINE,'#4b5148');
   }

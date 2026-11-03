@@ -19,7 +19,7 @@ const dependencies = Object.fromEntries(names.map(name=>{
   if (!source.dependencies[name]) throw Error('Undeclared production dependency: ' + name);
   return [name, source.dependencies[name]];
 }));
-for (const file of ['bin/shiqu.mjs','data/library','drizzle','docker/seed.sql','LICENSE','NOTICE']) {
+for (const file of ['bin/shiqu.mjs','data/library','data/export-fonts','skills/shiqu','drizzle','docker/seed.sql','LICENSE','NOTICE']) {
   const target = path.join(stage, file);
   await mkdir(path.dirname(target), {recursive:true});
   await cp(path.join(root, file), target, {recursive:true});
@@ -30,7 +30,7 @@ await chmod(path.join(stage, 'bin/shiqu.mjs'), 0o755);
 const manifest = {
   name:source.publishConfig.name, version:source.version, description:source.description, license:source.license, author:source.author,
   repository:source.repository, homepage:source.homepage, bugs:source.bugs, type:'module', engines:source.engines,
-  bin:{shiqu:'bin/shiqu.mjs'}, files:['bin/shiqu.mjs','dist/client','dist/server/cli.js','data/library','drizzle/*.sql','docker/seed.sql','.env.example','LICENSE','NOTICE','README.md'],
+  bin:{shiqu:'bin/shiqu.mjs'}, files:['bin/shiqu.mjs','dist/client','dist/server/cli.js','data/library','data/export-fonts','skills/shiqu','drizzle/*.sql','docker/seed.sql','.env.example','LICENSE','NOTICE','README.md'],
   publishConfig:{access:'public',registry:'https://registry.npmjs.org/'}, dependencies,
 };
 await writeFile(path.join(stage, 'package.json'), JSON.stringify(manifest, null, 2) + '\n');

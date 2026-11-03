@@ -48,7 +48,7 @@ export async function startServer({root,variables=process.env,localAccess=false}
    await new Promise<void>(resolve=>server.close(()=>resolve()));
   }
   await listen(config.host);
- }catch(error){await closeApplication();throw error;}
+ }catch(error){recordDiagnostic(config.dataDirectory,'service_start_failed',{code:safeErrorCode(error)});await closeApplication();throw error;}
  for(const signal of ['SIGINT','SIGTERM'] as const)process.on(signal,stop);
  server.on('error',error=>{
   console.error('Server failed:',error.message);

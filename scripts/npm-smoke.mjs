@@ -5,7 +5,11 @@ import {createHash} from 'node:crypto';
 import {once} from 'node:events';
 import {createServer} from 'node:net';
 import {get} from 'node:http';
-import {lstat, mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile} from 'node:fs/promises';
+import {cp,lstat, mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile} from 'node:fs/promises';
+import {productionFixture,selection} from '../tests/fixtures/production.mjs';
+import {libraryFixture} from '../tests/fixtures/story-library.mjs';
+import {withLocalBooks} from '../server/local-generation.ts';
+import {executeHeadless} from '../server/headless-cli.ts';
 import os from 'node:os';
 import {SystemSettingsStore} from '../server/system-settings.ts';
 import path from 'node:path';
@@ -98,7 +102,7 @@ try {
   assert.deepEqual(manifest.engines, source.engines); assert.equal(manifest.bin.shiqu, 'bin/shiqu.mjs');
   assert.equal(manifest.scripts, undefined); assert.equal(manifest.devDependencies, undefined);
   for (const [file] of payload) {
-    assert.ok(['package.json','README.md','LICENSE','NOTICE','.env.example','bin/shiqu.mjs','dist/server/cli.js','docker/seed.sql'].includes(file) || /^(dist\/client|data\/library)\//.test(file) || /^drizzle\/[^/]+\.sql$/.test(file), 'File outside publication allowlist: ' + file);
+    assert.ok(['package.json','README.md','LICENSE','NOTICE','.env.example','bin/shiqu.mjs','dist/server/cli.js','docker/seed.sql'].includes(file) || /^(dist\/client|data\/library|data\/export-fonts|skills\/shiqu)\//.test(file) || /^drizzle\/[^/]+\.sql$/.test(file), 'File outside publication allowlist: ' + file);
     assert.ok(file === '.env.example' || !file.split('/').some(part=>part.startsWith('.')), 'Unexpected hidden file: ' + file);
     assert.ok(!/\.(sqlite(?:-wal|-shm)?|map|pem|tgz)$/.test(file), 'Unexpected private/build file: ' + file);
   }
@@ -127,6 +131,28 @@ try {
   }
   assert.deepEqual(await readdir(home), []);
   assert.deepEqual(await readdir(cwd), []);
+  // Exercise the installed bundle, not source wrappers, with a completed story from the production dispatcher.
+  function receipt(parameters){const result=command(bin,parameters);assert.equal(result.status,0,result.stderr+'\n'+result.stdout);const saved=JSON.parse(result.stdout);assert.equal(saved.ok,true);return saved.data;}
+  assert.ok(receipt(['help','--json']).commands.length>10);
+  const skill=command(bin,['skill','show']);assert.equal(skill.status,0,skill.stderr);assert.equal(skill.stdout,await readFile(path.join(installed,'skills/shiqu/SKILL.md'),'utf8'));
+  const skillInstall=receipt(['skill','install','--scope','project']);assert.equal(await readFile(skillInstall.path,'utf8'),skill.stdout);await rm(path.join(cwd,'.agents'),{recursive:true});const globalSkill=receipt(['skill','install','--scope','global']);assert.equal(globalSkill.path,path.join(home,'.agents/skills/shiqu/SKILL.md'));assert.equal(await readFile(globalSkill.path,'utf8'),skill.stdout);assert.equal(receipt(['skill','install','--scope','global']).unchanged,true);
+  const headless=path.join(temporary,'headless library');receipt(['init','--data-dir',headless]);assert.deepEqual(receipt(['stories','list','--data-dir',headless]),[]);
+  const fixture=await productionFixture();
+  try{
+    await fixture.stop();fixture.control.hold=false;const local=libraryFixture();
+    fixture.control.beforeText=async(kind)=>kind==='recommend'?{storySummary:local.stories[0].summary,storyMatchReason:'原文支持。'}:undefined;
+    const context={generation:withLocalBooks(fixture.generation,local.books,fixture.media),localBooks:local.books,variables:{}};
+    const call=(parameters,input)=>executeHeadless(root,[...parameters,'--data-dir',fixture.dataDirectory],{...context,input:input||{}});
+    const created=await call(['stories','create','--no-intake'],{...selection,length:3,source:local.stories[0].source,storyTitle:local.stories[0].title});
+    assert.equal((await call(['run',created.session.id,'--timeout','20'])).reason,'completed');
+    await rm(headless,{recursive:true});await cp(fixture.dataDirectory,headless,{recursive:true});
+    receipt(['stories','get',created.session.id,'--data-dir',headless]);
+    receipt(['preview',created.session.id,'--data-dir',headless,'--output',path.join(temporary,'preview.html')]);
+    for(const format of ['zip','pdf','png']){const result=receipt(['export',created.session.id,'--data-dir',headless,'--format',format,'--allow-unsigned','--output',path.join(temporary,'story.'+format)]);assert.ok(result.bytes>100);}
+    const backup=path.join(temporary,'headless backup');receipt(['backup',backup,'--data-dir',headless]);receipt(['verify-backup',backup]);receipt(['restore',backup,'--data-dir',path.join(temporary,'restored library')]);
+    receipt(['diagnostics','--data-dir',headless,'--output',path.join(temporary,'diagnostics.json')]);
+  }finally{await fixture.stop();await rm(fixture.root,{recursive:true,force:true});}
+  console.log('Installed headless init/production-state/read/preview/native ZIP-PDF-PNG/backup/restore/diagnostics/skill passed.');
   // An unrelated .env must never be discovered implicitly. Explicit flags beat the selected env file.
   await writeFile(path.join(cwd,'.env'), 'SHIQU_AI_PROVIDER=invalid\n');
   await writeFile(path.join(cwd,'selected.env'), 'PORT=1\nSHIQU_DATA_DIR=env library\nSHIQU_BIND_IP=invalid-host\n');

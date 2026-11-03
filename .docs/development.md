@@ -102,6 +102,10 @@ pnpm typecheck
 pnpm lint
 ```
 
+`pnpm release:check` 在上述检查后执行 `pnpm test:e2e`；`pnpm npm:check` 同样包含现有 E2E。tag pre-push 在待发布提交的隔离 checkout 检查，E2E 失败阻止后续发布；平台 CI 继续负责安装包，不重复完整回归。C007 在一次性源码根目录启动真正的 `pnpm dev local`，不再打开人工开发书库。
+
+维护命令无需打包：`pnpm library:maintain --help`。备份/恢复/诊断入口复用正式 CLI 与服务实现；运行锁覆盖开发、CLI 和桌面。备份是私有数据，不能放入 `public`、`dist/client` 或公开作品集，详见[维护说明](user-guide.md#书库维护命令)。
+
 故事流程 Playwright 验证：
 
 ```bash

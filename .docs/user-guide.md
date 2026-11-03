@@ -331,6 +331,69 @@ macOS 默认位置：
 
 旧版本可能无法读取升级后的数据库，降级时请恢复升级前备份，不要直接复用升级后的书库。[完整更新记录](../CHANGELOG.md)。
 
+### 无服务 CLI 与 Codex 技能
+
+CLI 不带子命令时启动原有浏览器服务。带子命令时直接使用同一数据库、正式制作队列和导出规则，无需服务、桌面或前端。源码目录使用 `pnpm cli`；安装包使用 `pnpm dlx @apprun/shiqu`。参数及输入示例以当前版本 `help --json` 为准。
+
+```bash
+pnpm cli help --json
+pnpm cli init --data-dir /private/shiqu-library
+pnpm cli books
+pnpm cli stories create --input selection.json --data-dir /private/shiqu-library
+pnpm cli stories search STORY_ID --data-dir /private/shiqu-library
+pnpm cli run STORY_ID --until candidates --data-dir /private/shiqu-library
+pnpm cli stories choose STORY_ID --batch 0 --index 0 --data-dir /private/shiqu-library
+pnpm cli run STORY_ID --until prepared --data-dir /private/shiqu-library
+pnpm cli stories confirm STORY_ID --data-dir /private/shiqu-library
+pnpm cli run STORY_ID --until reviewed --data-dir /private/shiqu-library
+pnpm cli run STORY_ID --data-dir /private/shiqu-library
+pnpm cli preview STORY_ID --output /private/preview.html --data-dir /private/shiqu-library
+pnpm cli export STORY_ID --format zip --output /private/story.zip --data-dir /private/shiqu-library
+```
+
+selection.json 例如 `{"bookId":"zhuangzi","theme":"善意与误解","artStyle":"ink-pencil","narrativeDetail":"balanced"}`。保存、确认、查看不调用模型；只有显式 run 执行指定故事并可能付费，不顺带制作其他后台故事。run 默认最多900秒，可用 `--timeout` 调整；中断保留已保存检查点。读取返回的 reason/session，需要选择、确认、恢复或修改要求时完成对应动作后再运行。
+
+子命令 stdout 为单个 `{schemaVersion,ok,data|error}` JSON，日志在 stderr；失败退出非零。`--input file.json` 或 `--input -` 接受JSON。保存可固定 `--request-id UUID` 供重放。编辑先用 `stories revisions ID` 读取 token，再提交 `{"token":"...","changes":{"acceptancePrompt":"保留关键人物反应"}}`；返回的新 id 是后续制作对象。旧版本拒绝制作/完整导出，过期 token 或 faultId 返回冲突。config 复用桌面/CLI设置，密钥只通过输入文件/stdin传递，不放进命令参数。init/读取/导出不检查云端，run 未配置时明确报错。
+
+JSON/Markdown 可导出中间稿；ZIP/PDF/PNG要求当前版本全部图片完成。未署名需明确 `--allow-unsigned`；公开 ZIP 默认不含提示词，内部记录须加 `--include-prompts`。输出必须是新路径，导出不自动提交或发布。
+
+```bash
+pnpm dlx @apprun/shiqu skill show
+pnpm dlx @apprun/shiqu skill install --scope project
+pnpm dlx @apprun/shiqu skill install --scope global
+```
+
+包携带 `skills/shiqu/SKILL.md`。show 默认原文，`--json` 返回包版本和正文；Codex 可直接读取。install 将独立副本复制到**当前目录** `.agents/skills/shiqu/SKILL.md`，不依赖 npx 缓存。同内容重复安装无变化，不同内容拒绝覆盖，拒绝符号链接路径；安装不建库、不配置模型，不指定 scope 时不安装。global 安装到当前用户 `~/.agents/skills/shiqu/SKILL.md`，可跨项目发现，安全约束相同。Codex 可从项目技能目录发现 `$shiqu`，缓存里带文件本身不等于自动加载。CLI 与技能随包同版本，升级后比较正文、审阅并显式更新副本；新技能未出现时重启 Codex。
+
+### 书库维护命令
+
+支持本功能的拾趣 CLI 提供 `--backup`、`--verify-backup`、`--restore` 和 `--diagnostics`。在源码目录直接用下面的 `pnpm library:maintain`，无需打包或启动应用；安装后的 `shiqu` 使用相同参数。不加载项目 `.env`，不询问或读取提供方密钥，不调用 AI。
+
+先停止桌面版、CLI 和开发服务。未指定 `--data-dir` 时，备份和诊断使用桌面/CLI 已保存的书库位置；指定后只操作该目录，不修改默认设置。
+
+```bash
+# 选择尚不存在的备份目录，校验数据库和全部文件
+pnpm library:maintain --backup /absolute/private-backups/shiqu-2026-11-03
+pnpm library:maintain --verify-backup /absolute/private-backups/shiqu-2026-11-03
+
+# 恢复只能写入不存在的新目录，原书库和备份都保留
+pnpm library:maintain --restore /absolute/private-backups/shiqu-2026-11-03 --data-dir /absolute/restored-library
+
+# 恢复后先以只读服务检查书架、图片和进度
+SHIQU_AI_PROVIDER=readonly SHIQU_DATA_DIR=/absolute/restored-library pnpm dev
+
+# 诊断可在运行中导出；输出文件必须不存在且位于书库之外
+pnpm library:maintain --diagnostics /absolute/private-output/shiqu-diagnostics.json
+```
+
+备份包含数据库、全部媒体/缓存及 SHA-256 清单，不包含运行锁、诊断日志及书库之外的 `desktop.sqlite`。它是私有书库备份，包含原文、制作内容和内部记录，不能作为公开作品 ZIP 分享。哈希用于发现缺失和损坏，不是防篡改签名。复制完成后再发布备份目录；校验失败不会产生可用恢复目录。不要把维护输出保存到应用静态目录或公开同步目录。
+
+恢复不改写默认目录、提供方配置或生成控制，也不启动服务。检查无误后，在桌面设置中明确选择恢复目录。原来处于暂停或失败的任务仍保持原状态；原来允许后台制作的任务，在正常启动生成服务后仍按既有规则继续。需要避免任何生成时，显式使用只读模式。降级时使用对应升级前备份，并运行与其匹配的应用版本。
+
+已有书库第一次执行新迁移前，会在同级 `<书库名>-backups/pre-upgrade-时间-编号` 保存并验证升级前快照；无待执行迁移时不重复备份，新空库不备份。备份失败会停止升级，既有备份不自动清理。大书库会增加启动等待和磁盘占用，请按需将旧备份移至私有存储。
+
+诊断只保留版本、运行环境、数据库检查/任务计数与近期白名单事件，不包含密钥、书名、正文、提示词、绝对路径和提供方原始响应。日志在书库 `.diagnostics` 中轮换，最多两份、每份128 KiB，导出最多500条事件；诊断写入失败不阻断制作。原始 stderr 不直接保存，CLI/桌面/开发服务会在输出前记录安全事件。没有日志或数据库损坏时仍可导出受限结果；诊断不代替书库备份。
+
 ## 常见问题
 
 **手机扫了码却打不开？** 确认电脑未休眠、服务仍运行。局域网链接要求设备处于同一网络且防火墙允许端口；访客 Wi-Fi 可能隔离设备。跨网络请选择互联网私密链接，重启后重新扫码。新公网域名可能需要等待 DNS 生效；隧道无法连接时检查电脑网络及 cloudflared 安装，也可关闭互联网访问继续使用局域网。

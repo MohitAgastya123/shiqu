@@ -42,7 +42,8 @@ type Lease={ownerId:string;token:string};
 type ActiveSearch={round:number;controller:AbortController;startedAt:number;progress?:SuggestionProgress};
 type RebuildKey={document:string;selection:string;state:string;demands:string};
 type PruneKey={document:string;selection:string;queued:number;failed:number};
-type Options={imageWorkers?:number;now?:()=>number;leaseMs?:number;tickMs?:number};
+export type ProductionOptions={imageWorkers?:number;now?:()=>number;leaseMs?:number;tickMs?:number;autoStart?:boolean;targetSessionId?:string;stopBeforeImages?:boolean};
+type Options=ProductionOptions;
 const sessionLeaseMs=180000;
 const maxAutomaticAttempts=3;
 const publicationYieldMs=15000;
@@ -69,7 +70,8 @@ export class ReaderProductionCoordinator implements ReaderProduction{
  private readonly leases=new Map<string,Lease>();
  private readonly searches=new Map<string,ActiveSearch>();
  private readonly clock:()=>number;
- private timer:ReturnType<typeof setInterval>;
+ private timer:ReturnType<typeof setInterval>|undefined;
+ private enabled=false;
  private scheduled:ReturnType<typeof setImmediate>|undefined;
  private ticking:Promise<void>|undefined;
  private stopping=false;
@@ -85,13 +87,15 @@ export class ReaderProductionCoordinator implements ReaderProduction{
  private media:MediaStore;
  private options:Options;
  constructor(database:Database,provider:ReaderProvider,media:MediaStore,options:Options={}){
+  if(options.targetSessionId&&!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(options.targetSessionId))throw Error('INVALID_TARGET_SESSION');
   this.database=database;this.provider=provider;this.media=media;this.options=options;
   this.clock=options.now||Date.now;this.repository=new ReaderRepository(database);
   this.queue=new ProductionQueue(database,{
+   targetSessionId:options.targetSessionId,
    limits:{search:1,text:1,image:options.imageWorkers??3,local:2},now:this.clock,leaseMs:options.leaseMs,
    canRun:job=>this.canRun(job),resumeInterrupted:job=>this.resumeInterrupted(job),onSettled:()=>this.wake(),
    candidateFilter:`j.kind='image-publish' OR NOT EXISTS(SELECT 1 FROM reader_sessions s WHERE s.id=j.session_id AND s.user_id=j.owner_id AND (s.generation_control!='active' OR (s.state='failed' AND NOT EXISTS(SELECT 1 FROM reader_faults f WHERE f.session_id=s.id AND f.owner_id=s.user_id AND f.state='recovering' AND (f.command_id=j.recovery_id OR f.kind='interrupted' AND f.job_id=j.id))) OR EXISTS(SELECT 1 FROM library_deletions d WHERE d.story_id=s.id AND d.user_id=s.user_id)))`,
-   skipCandidate:job=>job.kind!=='image-publish'&&this.supersededJobs.has(job.session_id),
+   skipCandidate:job=>!!options.targetSessionId&&job.session_id!==options.targetSessionId||!!options.stopBeforeImages&&['image','image-publish'].includes(job.kind)||job.kind!=='image-publish'&&this.supersededJobs.has(job.session_id),
    safeError:(error,job)=>error instanceof ReaderError?error.message:job.kind==='image-publish'?'图片已生成，暂时无法展开。请重试继续。':this.provider.safeError(error),
    terminal:error=>error instanceof ReaderError&&error.status<500,
    handlers:{
@@ -102,8 +106,9 @@ export class ReaderProductionCoordinator implements ReaderProduction{
     'image-publish':{pool:'local',drain:true,run:(job,context)=>this.publish(job,context.outputs)},
    },
   });
-  this.timer=setInterval(()=>this.wake(),options.tickMs||1000);this.timer.unref();this.wake();
+  if(options.autoStart!==false)this.start();
  }
+ start(){if(this.enabled||this.stopping||this.closed)return;this.enabled=true;this.timer=setInterval(()=>this.wake(),this.options.tickMs||1000);this.timer.unref();this.wake();}
  private async find(id:string,ownerId:string){return this.database.prepare('SELECT * FROM reader_sessions WHERE id=? AND user_id=?').bind(id,ownerId).first<SessionRow>();}
  private async raw(id:string,ownerId:string){
   const row=await this.find(id,ownerId);
@@ -137,6 +142,7 @@ export class ReaderProductionCoordinator implements ReaderProduction{
   return jobs.filter(job=>this.currentJob(row,job,inputs));
  }
  private async demands(id?:string){
+  id=this.options.targetSessionId||id;
   const viewers=(await this.database.prepare(`SELECT * FROM production_demand WHERE runtime_id=? AND expires_at>? AND NOT EXISTS(SELECT 1 FROM reader_sessions s WHERE s.id=production_demand.session_id AND s.user_id=production_demand.owner_id AND ${supersededSql('s')})${id?' AND session_id=?':''}`)
    .bind(this.runtimeId,this.clock(),...(id?[id]:[])).all<Demand>()).results;
   const background=(await this.database.prepare(`SELECT id,user_id FROM reader_sessions WHERE generation_mode='background' AND generation_control='active' AND state!='completed'
@@ -429,6 +435,7 @@ export class ReaderProductionCoordinator implements ReaderProduction{
   }
  }
  private async canRun(job:ProductionJob){
+  if(this.options.targetSessionId&&job.session_id!==this.options.targetSessionId||this.options.stopBeforeImages&&['image','image-publish'].includes(job.kind))return false;
   const row=await this.raw(job.session_id,job.owner_id);
   if(job.kind==='discover')return this.searchRunnable(row,searchRound(job));
   if(!this.readable(row)||!this.currentJob(row,job))return false;
@@ -543,6 +550,7 @@ export class ReaderProductionCoordinator implements ReaderProduction{
    ) j JOIN reader_sessions s ON s.id=j.session_id AND s.user_id=j.owner_id`).all<SessionRow&{queued_count:number;failed_count:number}>()).results;
   const seen=new Set<string>();
   for(const row of candidates){
+   if(this.options.targetSessionId&&row.id!==this.options.targetSessionId)continue;
    seen.add(row.id);
    const key={document:row.document,selection:row.selection,queued:row.queued_count,failed:row.failed_count},previous=this.pruneKeys.get(row.id);
    if(forceId!==row.id&&previous?.document===key.document&&previous.selection===key.selection&&previous.queued===key.queued&&previous.failed===key.failed||!this.readable(row))continue;
@@ -576,6 +584,7 @@ export class ReaderProductionCoordinator implements ReaderProduction{
  private async settleFailedSearches(){
   const failed=(await this.database.prepare("SELECT * FROM production_jobs WHERE kind='discover' AND state='failed'").all<ProductionJob>()).results;
   for(const job of failed){
+   if(this.options.targetSessionId&&job.session_id!==this.options.targetSessionId)continue;
    const row=await this.database.prepare('SELECT * FROM reader_sessions WHERE id=? AND user_id=?').bind(job.session_id,job.owner_id).first<SessionRow>(),round=searchRound(job);
    if(row&&!this.readable(row))continue;
    if(row&&round!==undefined&&this.searchCurrent(row,round)){
@@ -623,6 +632,8 @@ export class ReaderProductionCoordinator implements ReaderProduction{
   if(doc.draft)return {storyboardFrames:doc.draft.pages.length,reflectionPending:true};
   if(doc.storyboard&&!doc.plan)return {storyboardFrames:doc.storyboard.pages.length};
   if(job.kind==='prepare'&&doc.frameRecommendation&&!doc.plan)return {prepared:true};
+  // A retried legacy script may finish its saved summary before it can plan; keep the same grant.
+  if(job.kind==='script'&&!doc.plan&&doc.original?.storyBrief?.verified&&doc.frameRecommendation)throw new JobYield();
   if(!doc.plan||!doc.original)throw new ReaderError(503,'故事仍在更新，请重试继续。');
   return {pages:doc.plan.pages.length};
  }
@@ -668,7 +679,7 @@ export class ReaderProductionCoordinator implements ReaderProduction{
   return {value:result.value};
  }
  wake(){
-  if(this.closed||this.scheduled)return;
+  if(!this.enabled||this.closed||this.scheduled)return;
   this.scheduled=setImmediate(()=>{this.scheduled=undefined;void this.tick().then(()=>{this.tickFailing=false;},error=>this.tickFailed(error));});
  }
  async tick(){
@@ -681,12 +692,13 @@ export class ReaderProductionCoordinator implements ReaderProduction{
   // checkpoint cannot leave a healthy paused story waiting for an unrelated Resume command.
   const rows=(await this.database.prepare("SELECT * FROM reader_sessions WHERE state='idle' AND json_valid(document) AND json_type(document,'$.plan')='object' AND json_type(document,'$.original')='object' AND NOT EXISTS(SELECT 1 FROM reader_faults f WHERE f.session_id=reader_sessions.id AND f.owner_id=reader_sessions.user_id AND f.state IN ('pending','recovering'))").all<SessionRow>()).results;
   for(const row of rows){
+   if(this.options.targetSessionId&&row.id!==this.options.targetSessionId)continue;
    if(!this.readable(row)||!productionComplete(JSON.parse(row.document) as Document,selectionSchema.parse(JSON.parse(row.selection))))continue;
    await this.database.prepare("UPDATE reader_sessions SET state='completed',error=NULL WHERE id=? AND user_id=? AND state='idle' AND document=? AND NOT EXISTS(SELECT 1 FROM reader_faults f WHERE f.session_id=reader_sessions.id AND f.owner_id=reader_sessions.user_id AND f.state IN ('pending','recovering'))").bind(row.id,row.user_id,row.document).run();
   }
  }
  private async cycle(){
-  await this.database.prepare('DELETE FROM production_demand WHERE expires_at<=?').bind(this.clock()).run();
+  await this.database.prepare('DELETE FROM production_demand WHERE expires_at<=?'+(this.options.targetSessionId?' AND session_id=?':'')).bind(this.clock(),...(this.options.targetSessionId?[this.options.targetSessionId]:[])).run();
   await this.queue.renew();
   for(const [id,lease] of this.leases){
    const now=this.clock();
@@ -701,6 +713,7 @@ export class ReaderProductionCoordinator implements ReaderProduction{
    const expired=(await this.database.prepare(`SELECT * FROM reader_sessions WHERE state='running' AND lock_until<=? AND generation_mode='background'
     AND NOT EXISTS(SELECT 1 FROM library_deletions d WHERE d.story_id=reader_sessions.id AND d.user_id=reader_sessions.user_id)`).bind(this.clock()).all<SessionRow>()).results;
    for(const row of expired){
+    if(this.options.targetSessionId&&row.id!==this.options.targetSessionId)continue;
     if(!this.readable(row))continue;
     const jobs=await this.currentJobs(row);
     if(jobs.some(job=>job.state==='failed'&&!job.interrupted||job.state==='running'&&job.lease_until>this.clock()))continue;

@@ -12,6 +12,7 @@ export interface MediaStore {
  put(key:string,value:ArrayBuffer|Uint8Array,options:{contentType:string}):Promise<unknown>;
 }
 export interface Services {
+ commandOnly?:boolean;
  db:SqliteRemoteDatabase<typeof schema>;
  database:Database;
  media:MediaStore;

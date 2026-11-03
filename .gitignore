@@ -52,6 +52,7 @@ yarn-error.log*
 !/data/README.md
 !/data/library/
 !/data/evals/
+!/data/export-fonts/
 /data/evals/*
 !/data/evals/story-discovery/
 /.pnpm-store/

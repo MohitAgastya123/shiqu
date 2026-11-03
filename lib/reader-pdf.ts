@@ -1,5 +1,6 @@
 // Export saved stories with their original source labels, including historical ordinary records.
 import type {Story} from './content';
+import {browserExportRuntime,type ExportRuntime} from './story-export-runtime.ts';
 import {publicationCredit,publicationText} from './story-publication.ts';
 
 const W=900,H=1350,M=72;
@@ -27,12 +28,12 @@ export function wrapPdfText(text:string,width:number,measure:(text:string)=>numb
  }
  return lines;
 }
-export async function createStoryPdf(story:Story,onProgress:(text:string)=>void=()=>{}){
+export async function createStoryPdf(story:Story,onProgress:(text:string)=>void=()=>{},runtime:ExportRuntime=browserExportRuntime()){
  assertPdfReady(story);
  const {PDFDocument}=await import('pdf-lib');
- await document.fonts.ready;
+ await runtime.ready();
  const pdf=await PDFDocument.create();pdf.setTitle(story.title);pdf.setAuthor(story.publication?.author||'未署名');pdf.setSubject(story.theme);pdf.setCreator('拾趣故事阅读器');
- const canvas=document.createElement('canvas');canvas.width=W;canvas.height=H;
+ const canvas=runtime.canvas();canvas.width=W;canvas.height=H;
  const context=canvas.getContext('2d');if(!context)throw Error('当前浏览器暂不支持 PDF 导出，请换个浏览器试试。');
  const ctx:CanvasRenderingContext2D=context;
  const font=(size:number,family=serif)=>{ctx.font=`${size}px ${family}`;ctx.textBaseline='top';};
@@ -44,17 +45,11 @@ export async function createStoryPdf(story:Story,onProgress:(text:string)=>void=
  try{
   for(let i=0;i<story.pages.length;i++){
    onProgress(`正在整理第 ${i+1} / ${story.pages.length} 幅`);
-   const scene=story.pages[i],url=new URL(scene.image,location.origin);
-   if(url.origin!==location.origin)throw Error('画面来源不可用，无法导出 PDF。');
-   const response=await fetch(url.href,{credentials:'same-origin',signal:AbortSignal.timeout(30000)});
-   if(!response.ok)throw Error(`第 ${i+1} 幅读取失败，请保持联网后重试。`);
-   const blob=await response.blob();if(!/^image\/(png|jpeg|webp)(;|$)/.test(blob.type))throw Error(`第 ${i+1} 幅画面暂不可用。`);
-   const image=new Image(),objectUrl=URL.createObjectURL(blob);
-   try{
-    image.src=objectUrl;await image.decode();
-    const scale=Math.max(W/image.naturalWidth,H/image.naturalHeight),width=image.naturalWidth*scale,height=image.naturalHeight*scale;
-    ctx.clearRect(0,0,W,H);ctx.drawImage(image,(W-width)/2,(H-height)/2,width,height);
-   }finally{URL.revokeObjectURL(objectUrl);}
+   const scene=story.pages[i],blob=await runtime.read(scene.image,i);
+   await runtime.image(blob,image=>{
+    const scale=Math.max(W/image.width,H/image.height),width=image.width*scale,height=image.height*scale;
+    ctx.clearRect(0,0,W,H);ctx.drawImage(image.value,(W-width)/2,(H-height)/2,width,height);
+   });
    const top=ctx.createLinearGradient(0,0,0,260);top.addColorStop(0,'rgba(14,34,25,.72)');top.addColorStop(1,'rgba(14,34,25,0)');ctx.fillStyle=top;ctx.fillRect(0,0,W,260);
    font(27,sans);ctx.fillStyle='#f1efdf';lines(story.title,W-2*M-120).forEach((line,j)=>ctx.fillText(line,M,55+j*39));
    ctx.textAlign='right';ctx.fillText(`${String(i+1).padStart(2,'0')} / ${story.pages.length}`,W-M,55);ctx.textAlign='left';

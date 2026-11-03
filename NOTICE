@@ -17,6 +17,9 @@ upstream contributors are credited in the catalog and original downloads.
 Project Gutenberg downloads retain their own accompanying notices and terms.
 
 Third-party dependency license texts and notices remain applicable. The
+CLI offline exporter bundles Noto Sans CJK SC under the SIL Open Font License;
+see data/export-fonts/OFL.txt and data/export-fonts/README.md.
+The
 Standard desktop edition also includes the Node.js distribution's LICENSE
 alongside the bundled Node executable.
 

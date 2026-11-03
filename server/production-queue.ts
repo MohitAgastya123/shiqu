@@ -12,7 +12,7 @@ export type JobSpec={id:string;sessionId:string;ownerId:string;kind:string;pool:
 export type ProductionJob={id:string;session_id:string;owner_id:string;kind:string;pool:string;version:string;dependencies:string;payload:string;result:string|null;state:'queued'|'running'|'succeeded'|'failed';priority:number;attempts:number;lease_token:string|null;lease_until:number;error:string|null;interrupted:number;failure_id?:string|null;recovery_id?:string|null;created_at:number;updated_at:number};
 export type JobContext={outputs:Record<string,unknown>;isCurrent:()=>Promise<boolean>};
 export type JobHandler={pool:string;drain?:boolean;run:(job:ProductionJob,context:JobContext)=>Promise<unknown>};
-type Options={limits:Record<string,number>;handlers:Record<string,JobHandler>;candidateFilter?:string;skipCandidate?:(job:ProductionJob)=>boolean;canRun?:(job:ProductionJob)=>Promise<boolean>;onSettled?:()=>void;resumeInterrupted?:(job:ProductionJob)=>Promise<boolean>;safeError?:(error:unknown,job:ProductionJob)=>string;terminal?:(error:unknown,job:ProductionJob)=>boolean;now?:()=>number;leaseMs?:number};
+type Options={targetSessionId?:string;limits:Record<string,number>;handlers:Record<string,JobHandler>;candidateFilter?:string;skipCandidate?:(job:ProductionJob)=>boolean;canRun?:(job:ProductionJob)=>Promise<boolean>;onSettled?:()=>void;resumeInterrupted?:(job:ProductionJob)=>Promise<boolean>;safeError?:(error:unknown,job:ProductionJob)=>string;terminal?:(error:unknown,job:ProductionJob)=>boolean;now?:()=>number;leaseMs?:number};
 const interruptedMessage='上次生成已中断，已保留保存的结果。请重试继续。';
 // A handler that stopped without spending an attempt: the job waits in the queue for its next turn.
 export class JobYield extends Error{}
@@ -60,7 +60,7 @@ export class ProductionQueue{
  }
  async recoverExpired(){
   // Only explicitly opted-in background work can replay an uncertain remote attempt.
-  const expired=(await this.database.prepare("SELECT * FROM production_jobs WHERE (state='running' AND lease_until<=?) OR (state='failed' AND interrupted=1)").bind(this.clock()).all<ProductionJob>()).results;
+  const expired=(await this.database.prepare(`SELECT * FROM production_jobs WHERE ((state='running' AND lease_until<=?) OR (state='failed' AND interrupted=1))${this.options.targetSessionId?" AND session_id=?":""}`).bind(this.clock(),...(this.options.targetSessionId?[this.options.targetSessionId]:[])).all<ProductionJob>()).results;
   for(const job of expired){
    try{
    // This process is still running the attempt, so its clock jumped; the attempt is not abandoned.

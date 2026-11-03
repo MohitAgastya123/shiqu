@@ -10,3 +10,17 @@
 6. 正常/损坏/缺失数据库导出诊断：受限版本与计数可读，绝不复制Document、selection、错误原文或凭据；输出不覆盖已有文件。
 7. 本地发布门执行现有E2E，E2E失败会阻止后续发布；tag检查依旧针对发布提交，保留用户工作区。
 8. 执行现有 `pnpm test:e2e`，确认新增服务锁、迁移快照和诊断不改变新建/编辑/暂停/重试/替换的正式流程。C007 在一次性源码根目录运行真实 `pnpm dev local`，checkout 内人工 dev-local 与其占用服务均不受影响。
+
+## 无服务 CLI 验收（!!）
+
+15. 从本地 npm 包读取技能原文与 JSON；在隔离 cwd 安装技能，比较包内字节，重复安装幂等，不同内容/符号链接拒绝覆盖。全程禁止监听/网络，目录中无数据库与默认书库改变；包缓存移走后安装副本仍可读。技能所述命令与完整故事流程测试对应。
+
+16. skill install --scope global 使用隔离 HOME 落在其 .agents/skills/shiqu/SKILL.md；与调用 cwd 无关，可从另一项目读取。测试实际安装包入口与幂等，拒绝不同内容/符号链接，不写真实 home。project 与 global 共享安全约束，未指定范围拒绝。
+
+9. 实际 CLI 子进程在全新 home/data-dir 执行 help/catalog/init/status/list/get；stdout 可独立 JSON.parse，失败非零并有code；确认没有 HTTP 监听/浏览器/桌面进程，没有配置密钥问答和真实模型调用。无子命令仍按现有服务启动测试通过。
+10. 同一正式dispatcher+受控provider执行新建、按条件提取、选择、准备、确认、分镜审修、生图、暂停/恢复/重试及修改新版本；验证每次非run命令零生成，run只执行指定故事，其他背景故事未获得付费请求。
+11. 请求重放不多建版/多调用；旧generation/token/fault/版本拒绝；run遇暂停/失败/需要选择/确认/修订上限立即给出可操作结果。run timeout与中断保存/释放，后续显式run可继续且不重复保存结果。
+12. 完整故事通过共享导出实现生成公开ZIP/内部ZIP、PDF/PNG及HTML预览；验图片可读、WebP水印绘制/XMP/hash、原文署名、公开文件布局、原图不变。未署名无显式允许时拒绝；缺图/旧版本拒绝完整导出。恶意故事文本在HTML中仅为文字。
+13. npm本地包在隔离目录运行headless init/help/read/maintenance及native导出依赖加载，不发布。现有浏览器导出与测试复用共享核心后仍通过，不能用headless测试替代浏览器回归。
+
+14. 对 api suggestions/art-recommendation/advance、历史admin生成及未知路由注入计数provider，全部拒绝且调用数为0；普通保存/确认允许写状态但保持0调用，只有显式run执行。
