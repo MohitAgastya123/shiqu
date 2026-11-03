@@ -10,6 +10,7 @@ import {webpPayloadHash} from '../lib/story-webp-metadata.ts';
 const mockEncoded=readFileSync(new URL('./fixtures/images/publication.webp',import.meta.url));
 import {view} from '../lib/reader-model.ts';
 import {archivePromptHistory} from '../lib/reader-prompt-records.ts';
+import {publicStoryZip} from '../scripts/export-story.mjs';
 
 function browserImages(t){
  const previous={Image:globalThis.Image,document:globalThis.document},urls=new Map(),canvases=[],revoked=[];
@@ -242,4 +243,19 @@ test('ZIP applies the saved watermark size to WebP canvases and retains it in st
  const files=unzipSync(new Uint8Array(await blob.arrayBuffer())),saved=JSON.parse(strFromU8(files['故事.json']));
  assert.deepEqual(saved.publication,publication);assert.equal(browser.canvases.length,2);
  for(const canvas of browser.canvases){assert.match(canvas.labels[0].font,/300 40px /);assert.equal(canvas.labels[0].maxWidth,941*.94);assert.deepEqual(canvas.encodedSize,[941,1672]);}
+});
+
+test('collection export consumes the browser ZIP with its signed WebPs and shared public serialization',async t=>{
+ const browser=browserImages(t);globalThis.location={origin:'http://localhost:3000'};t.after(()=>{delete globalThis.location;});
+ t.mock.method(globalThis,'fetch',async()=>new Response(new Uint8Array([1,2,3]),{headers:{'Content-Type':'image/png'}}));
+ const story={...makeStory(2),generated:true,artStyleLabel:'水墨',publication:{author:'测试制作人',workUrl:'',contact:'',sourceNote:'公版',reuse:'署名转载',watermarkFontSize:40}};
+ const downloaded=new Uint8Array(await (await createStoryZip(story,promptHistory(story))).arrayBuffer()),full=unzipSync(downloaded);
+ const {bytes}=publicStoryZip(downloaded),files=unzipSync(bytes);
+ const data=JSON.parse(strFromU8(files['故事.json']));
+ assert.equal(data.author,story.publication.author);assert.equal(data.aiGenerated,true);assert.equal(data.sourceText,story.sourceText);
+ assert.ok(!('productionPrompt' in data));assert.ok(!('watermarkFontSize' in data.publication));
+ assert.ok(!strFromU8(files['分镜.md']).includes('画面提示词'));assert.ok(!files['提示词.json']);
+ assert.deepEqual(files['署名与转载.txt'],full['署名与转载.txt']);
+ for(const page of data.pages){assert.ok(!('prompt' in page));assert.deepEqual(files[page.image],full[page.image]);}
+ for(const canvas of browser.canvases)assert.match(canvas.labels[0].font,/300 40px /);
 });

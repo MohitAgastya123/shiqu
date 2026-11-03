@@ -4,6 +4,10 @@ import {bytesToHex} from '@noble/hashes/utils.js';
 import type {Story} from './content';
 import {imageDimensions} from './reader-image-dimensions.ts';
 import {aiDisclosure,publicationText} from './story-publication.ts';
+import type {PublicationStory} from './story-publication.ts';
+
+export type StoryImageHashes={sha256:string;originalSha256:string;imagePayloadSha256:string};
+type ImageMetadataStory=PublicationStory&Pick<Story,'id'|'title'|'revision'|'sourceUrl'>;
 
 const encoder=new TextEncoder(),decoder=new TextDecoder();
 export const payloadHashScope='RIFF ICCP/ALPH/VP8/VP8L chunks including headers and padding, in file order';
@@ -32,9 +36,25 @@ export function webpPayloadHash(bytes:Uint8Array){
 export function xmlText(value:string){
  return Array.from(value).filter(char=>{const n=char.codePointAt(0)!;return n===9||n===10||n===13||n>=32&&n<=0xd7ff||n>=0xe000&&n<=0xfffd||n>=0x10000&&n<=0x10ffff;}).join('').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;');
 }
-export function publicImageXmp(story:Story,page:number,originalHash:string,payloadHash:string){
+export function publicImageXmp(story:ImageMetadataStory,page:number,originalHash:string,payloadHash:string){
  const properties:Record<string,string>={StoryId:story.id,Revision:String(story.revision),Frame:String(page+1),AIGenerated:'generated'in story&&story.generated===true?'true':'unknown',OriginalFileSHA256:originalHash,ImagePayloadSHA256:payloadHash,HashScope:payloadHashScope,WorkURL:story.publication?.workUrl||'',SourceURL:story.sourceUrl,Contact:story.publication?.contact||'',SourceLicense:story.publication?.sourceNote||'',Reuse:story.publication?.reuse||''};
  return `<?xpacket begin="\uFEFF" id="W5M0MpCehiHzreSzNTczkc9d"?><x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:shiqu="https://github.com/yysun/shiqu/ns/1.0/" ${Object.entries(properties).map(([key,value])=>`shiqu:${key}="${xmlText(value)}"`).join(' ')}><dc:creator><rdf:Seq><rdf:li>${xmlText(story.publication?.author||'未署名')}</rdf:li></rdf:Seq></dc:creator><dc:title><rdf:Alt><rdf:li xml:lang="x-default">${xmlText(story.title)}</rdf:li></rdf:Alt></dc:title><dc:description>${xmlText(aiDisclosure(story))}</dc:description><dc:rights><rdf:Alt><rdf:li xml:lang="x-default">${xmlText(publicationText(story))}</rdf:li></rdf:Alt></dc:rights></rdf:Description></rdf:RDF></x:xmpmeta><?xpacket end="w"?>`;
+}
+// Validate the same hashes and XMP declarations the browser writes; retain historical title/rights text.
+export function assertStoryWebp(bytes:Uint8Array,story:ImageMetadataStory,page:number,hashes:StoryImageHashes){
+ const fail=(message:string)=>{throw Error(`第 ${page+1} 幅${message}`);};
+ if(!imageDimensions(bytes))fail(' WebP 图片结构或尺寸无效。');
+ for(const key of ['sha256','originalSha256','imagePayloadSha256'] as const)if(!/^[a-f0-9]{64}$/.test(hashes[key]))fail(`缺少有效的 ${key}。`);
+ if(sha256Hex(bytes)!==hashes.sha256)fail('图片 SHA-256 不符。');
+ if(webpPayloadHash(bytes)!==hashes.imagePayloadSha256)fail('图片像素载荷哈希不符。');
+ const records=chunks(bytes).filter(part=>part.tag==='XMP ');
+ if(records.length!==1)fail('缺少唯一的 XMP 署名；请重新从拾趣下载 ZIP。');
+ const actual=decoder.decode(records[0].data),expected=publicImageXmp(story,page,hashes.originalSha256,hashes.imagePayloadSha256);
+ for(const [attribute] of expected.matchAll(/shiqu:\w+="[^"]*"/g))if(!actual.includes(attribute))fail(` XMP ${attribute.split('=')[0]} 与故事不符；请重新从拾趣下载 ZIP。`);
+ for(const [tag,label] of [['creator','制作署名'],['description','AI 披露']]){
+  const value=expected.match(new RegExp(`<dc:${tag}>[\\s\\S]*?</dc:${tag}>`))![0];
+  if(!actual.includes(value))fail(` XMP ${label}不符。`);
+ }
 }
 export function withWebpXmp(bytes:Uint8Array,xmp:string){
  const dimensions=imageDimensions(bytes);if(!dimensions)throw Error('无效的静态 WebP 图片。');

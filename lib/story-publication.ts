@@ -11,6 +11,7 @@ export const publicationSchema=z.object({
  watermarkFontSize:z.number().int('水印字号请使用整数。').min(watermarkFontSize.min,'水印字号不能小于 12 px。').max(watermarkFontSize.max,'水印字号不能大于 48 px。').optional(),
 }).strict();
 export type StoryPublication=z.infer<typeof publicationSchema>;
+export type PublicationStory=Pick<Story,'publication'>&{generated?:boolean};
 export const emptyPublication:StoryPublication={author:'',workUrl:'',contact:'',sourceNote:'',reuse:''};
 export function hasPublicationAuthor(publication?:StoryPublication|null){const author=publication?.author.trim();return !!author&&author!=='未署名';}
 // Resolve display/export credits without rewriting snapshots; explicit fields win and samples keep their credits.
@@ -24,9 +25,9 @@ export function withPublicationDefaults(story:Story,defaults:StoryPublication|nu
  return {...story,publication};
 }
 export const rightsBoundary='代码开源许可不自动适用于作品内容。原作及来源版本遵循各自适用的权利和许可；本次改编中的受保护贡献，除另有许可或法律允许外，再使用请联系相应权利人。制作人的说明不能收紧公版材料或已有许可赋予的权利。';
-export function aiDisclosure(story:Story){return 'generated'in story&&story.generated===true?'本作品包含 AI 生成的画面与改编文字。':'创作方式请以制作人说明为准。';}
-export function publicationCredit(story:Story){return `制作：${story.publication?.author||'未署名'} · 拾趣`+('generated'in story&&story.generated===true?' · AI 生成':'');}
-export function publicationText(story:Story){
+export function aiDisclosure(story:PublicationStory){return 'generated'in story&&story.generated===true?'本作品包含 AI 生成的画面与改编文字。':'创作方式请以制作人说明为准。';}
+export function publicationCredit(story:PublicationStory){return `制作：${story.publication?.author||'未署名'} · 拾趣`+('generated'in story&&story.generated===true?' · AI 生成':'');}
+export function publicationText(story:PublicationStory){
  const p=story.publication||emptyPublication;
  return [publicationCredit(story),aiDisclosure(story),p.workUrl&&`作品链接：${p.workUrl}`,p.contact&&`联系：${p.contact}`,`来源与许可：${p.sourceNote||'请核对原作出处及实际使用版本的许可。'}`,`转载与再使用：${p.reuse||'未另行提供授权；请先核对来源许可，必要时联系相应权利人。'}`,rightsBoundary].filter(Boolean).join('\n\n');
 }

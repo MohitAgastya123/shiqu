@@ -31,8 +31,12 @@
 ## Story Export
 
 - When the user asks to output/export stories, default to ZIP archives saved in `../awesome-shiqu/works/yysun`.
+- When the user names a story to export, run `pnpm export:story '<story name>'` against the running app (default `http://localhost:3000`, override with `--url`). The script selects the latest bookshelf revision, clicks the app's Download ZIP button in headless Playwright, then converts and verifies the public archive in awesome-shiqu. It also accepts an already downloaded ZIP. Do not manually reconstruct the story or export images through an alternative renderer.
+- Match the public structure of `官渡之战.zip`: `故事.json`, `分镜.md`, `署名与转载.txt`, and numbered WebP files under `图片/`, with no production/acceptance prompts, per-frame prompts, or internal prompt-history files. Preserve the app-generated WebPs byte for byte, including their visible signature/watermark and XMP metadata; the script verifies image hashes and metadata.
+- Reuse the app's shared ZIP serialization, filename, credit, WebP hash and XMP helpers in export scripts. Keep browser image encoding/watermarking in the app; do not maintain a second implementation of those rules in a script.
 - Export the latest selected bookshelf revisions using the reader ZIP layout: `故事.json`, `分镜.md`, and all numbered WebP images under `图片/`. Include the saved original text and retain source, author, and AI disclosures.
 - Require every selected frame to have an image for a complete export. Report missing frames instead of silently omitting them or exporting an older revision.
 - Keep one ZIP per story in the output directory. For an updated work, replace its existing ZIP path and keep the filename to preserve sharing links, even if the story title changed. Use temporary backups during replacement, then remove temporary ZIPs and backups after verification; do not retain duplicate story exports elsewhere.
 - Verify frame counts, image readability, ZIP integrity, and compatibility with the destination collection's archive parser. Follow that repository's instructions for content validation.
+- Remove temporary app downloads and replacement backups after verification, retaining only the canonical story ZIP in the output directory. Story-name mode resolves existing archive IDs through the app's current-version API to preserve filenames across revisions and title changes. For ZIP-input mode with a changed story ID, use `--output` with the existing ZIP path.
 - Saving exports does not authorize Git commits, pushes, or publication.

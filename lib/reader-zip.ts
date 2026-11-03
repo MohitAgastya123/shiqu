@@ -5,15 +5,12 @@ import type {GeneratedStory} from './reader-model';
 import {request} from './reader-request.ts';
 import {archivePromptHistory,promptRecordText} from './reader-prompt-records.ts';
 import type {StoryPromptArchive,StoryPromptHistory} from './reader-prompt-records.ts';
-import {pdfFilename,storySourceReference} from './reader-pdf.ts';
-import {aiDisclosure,publicationText} from './story-publication.ts';
+import {zipFilename,zipImageFilename,assertZipReady,storyZipData,storyZipFiles} from './reader-zip-content.ts';
+export {zipFilename,assertZipReady} from './reader-zip-content.ts';
 import {drawStoryWatermarks} from './story-watermark.ts';
-import {sha256Hex,webpPayloadHash,publicImageXmp,withWebpXmp} from './story-webp-metadata.ts';
+import {sha256Hex,webpPayloadHash,publicImageXmp,withWebpXmp,assertStoryWebp} from './story-webp-metadata.ts';
+import type {StoryImageHashes} from './story-webp-metadata.ts';
 
-export function zipFilename(title:string){return pdfFilename(title).replace(/-拾趣\.pdf$/,'.zip');}
-export function assertZipReady(story:Story){
- if(!story.pages.length||story.pages.some(page=>!page.image))throw Error('等所有画面生成完成后，就能下载分镜与图片 ZIP。');
-}
 async function webpImage(blob:Blob,page:number,story:Story){
  const image=new Image(),url=URL.createObjectURL(blob);
  let canvas:HTMLCanvasElement|undefined;
@@ -30,19 +27,6 @@ async function webpImage(blob:Blob,page:number,story:Story){
   },'image/webp',.85));
  }catch{throw Error(`第 ${page+1} 幅画面转为 WebP 失败，请换用支持 WebP 导出的浏览器后重试。`);}
  finally{image.src='';URL.revokeObjectURL(url);if(canvas){canvas.width=0;canvas.height=0;}}
-}
-function storyboardText(story:Story,images:string[]){
- const generated='generated'in story&&story.generated===true?story as GeneratedStory:null;
- return [
-  `# ${story.title}`,story.summary,`主题：${story.theme}`,`出处：${storySourceReference(story)}`,
-  story.sourceUrl&&`出处链接：${story.sourceUrl}`,
-  generated?.artStyleLabel&&`画风：${generated.artStyleLabel}`,
-  `## 署名与转载\n\n${publicationText(story)}`,
-  ...story.pages.map((page,index)=>`## 第 ${index+1} 幅\n\n图片：${images[index]}\n\n### 旁白\n\n${page.caption}\n\n### 画面提示词\n\n${page.prompt||'未留存。'}`),
-  story.reflection&&`## 余味\n\n${story.reflection}`,
-  story.adaptationNote&&`## 改编说明\n\n${story.adaptationNote}`,
-  story.sourceText&&`## 保存的原文\n\n${story.sourceText}`,
- ].filter(Boolean).join('\n\n')+'\n';
 }
 function promptText(story:Story,history:StoryPromptArchive){
  const systems=new Map(history.systemPrompts.map(system=>[system.id,system]));
@@ -79,8 +63,7 @@ export async function createStoryZip(story:Story,history:StoryPromptHistory|null
  const generated='generated'in story&&story.generated===true?story as GeneratedStory:null;
  if(generated&&!history)throw Error('提示词记录未载入，无法打包 ZIP，请重试。');
  await document.fonts?.ready;
- const files:Record<string,Uint8Array>={},images:string[]=[],hashes:{sha256:string;originalSha256:string;imagePayloadSha256:string}[]=[];
- const digits=Math.max(2,String(story.pages.length).length);
+ const files:Record<string,Uint8Array>={},images:string[]=[],hashes:StoryImageHashes[]=[];
  for(const [index,page] of story.pages.entries()){
   onProgress(`正在打包第 ${index+1} / ${story.pages.length} 幅`);
   const url=new URL(page.image,location.origin);
@@ -90,32 +73,20 @@ export async function createStoryZip(story:Story,history:StoryPromptHistory|null
   const blob=await response.blob();
   const mime=blob.type.split(';')[0].trim().toLowerCase();
   if(!['image/png','image/jpeg','image/webp'].includes(mime)||!blob.size)throw Error(`第 ${index+1} 幅画面暂不可用，无法打包 ZIP。`);
-  const webp=await webpImage(blob,index,story),filename=`图片/${String(index+1).padStart(digits,'0')}.webp`;
+  const webp=await webpImage(blob,index,story),filename=zipImageFilename(index,story.pages.length);
   const encoded=new Uint8Array(await webp.arrayBuffer()),originalSha256=sha256Hex(new Uint8Array(await blob.arrayBuffer())),imagePayloadSha256=webpPayloadHash(encoded);
   const output=withWebpXmp(encoded,publicImageXmp(story,index,originalSha256,imagePayloadSha256));
-  images.push(filename);files[filename]=output;hashes.push({sha256:sha256Hex(output),originalSha256,imagePayloadSha256});
+  const imageHashes={sha256:sha256Hex(output),originalSha256,imagePayloadSha256};
+  assertStoryWebp(output,story,index,imageHashes);
+  images.push(filename);files[filename]=output;hashes.push(imageHashes);
  }
  onProgress('正在整理分镜与保存 ZIP');
  const archive=archivePromptHistory(history);
- files['分镜.md']=strToU8(storyboardText(story,images));
+ Object.assign(files,storyZipFiles(storyZipData(story,images,hashes,history)));
  files['提示词.md']=strToU8(promptText(story,archive));
  files['系统提示词.md']=strToU8(systemPromptText(story,archive));
  // Keep full call inputs outside the story metadata consumed by reading sites.
  files['提示词.json']=strToU8(JSON.stringify(archive,null,2)+'\n');
- files['故事.json']=strToU8(JSON.stringify({
-  id:story.id,title:story.title,summary:story.summary,bookId:story.bookId,theme:story.theme,
-  sourceReference:storySourceReference(story),sourceText:story.sourceText,sourceUrl:story.sourceUrl,
-  artStyleLabel:generated?.artStyleLabel??null,
-  author:story.publication?.author||'',publication:story.publication||null,
-  aiGenerated:generated?true:null,aiDisclosure:aiDisclosure(story),
-  generationModels:generated?.generationModels??[],
-  productionPrompt:history?.productionPrompt??null,acceptancePrompt:history?.acceptancePrompt??null,
-  promptHistoryFile:'提示词.json',
-  pages:story.pages.map((page,index)=>({caption:page.caption,prompt:page.prompt||null,image:images[index],...hashes[index]})),
-  reflection:story.reflection,adaptationNote:story.adaptationNote,
-  revision:story.revision,createdAt:story.createdAt,updatedAt:story.updatedAt,
- },null,2)+'\n');
- files['署名与转载.txt']=strToU8(`${story.title}\n\n${publicationText(story)}\n\n原作出处：${storySourceReference(story)}\n${story.sourceUrl}\n\n作品编号：${story.id}\n版本：${story.revision}\n保存时间：${story.updatedAt}\n`);
  // WebP is already compressed; avoid repeating compression while building the archive.
  return new Blob([zipSync(files,{level:0}) as BlobPart],{type:'application/zip'});
 }
