@@ -122,7 +122,7 @@ CLI 复用共享数据库中的书库目录，没有时可导入原 `cli-library
 pnpm run hooks:install
 ```
 
-推送 `v*` 标签时，hook 为每个不同的标签提交创建临时独立 worktree，使用该提交固定的 Node / pnpm 版本执行 `pnpm install --frozen-lockfile` 和 `pnpm run release:check`（typecheck → lint → 完整 JavaScript 测试 → Rust 格式检查）。同次推送的多个标签若指向同一提交只测一次；普通分支推送及标签删除不运行测试。任何检查失败都会阻止本次推送，临时 worktree 随后删除；本地未提交修改不会混入检查。标签所在提交必须包含 `release:check` 脚本。可单独运行 `pnpm run release:check` 检查当前目录，但发布 hook 始终重新核对实际标签提交。
+推送 `v*` 标签时，hook 为每个不同的标签提交创建临时独立 worktree，使用该提交固定的 Node / pnpm 版本执行 `pnpm install --frozen-lockfile` 和 `pnpm run release:check`（typecheck → lint → 完整 JavaScript 测试 → 关键用户流程 E2E → Rust 格式检查）。E2E 使用隔离书库，覆盖浏览器制作、无服务 CLI、技能、备份恢复、诊断和配置，不调用真实 AI。同次推送的多个标签若指向同一提交只测一次；普通分支推送及标签删除不运行测试。任何检查失败都会阻止本次推送，临时 worktree 随后删除；本地未提交修改不会混入检查。标签所在提交必须包含 `release:check` 脚本。可单独运行 `pnpm run release:check` 检查当前目录，但发布 hook 始终重新核对实际标签提交。
 
 hook 是每个克隆的本地配置，不能约束网页创建标签、其他未安装 hook 的克隆或 `git push --no-verify`。正式标签应从已启用 hook 的 Unix 开发环境推送；GitHub 不会补跑共享测试，仍检查两个平台的原生 Rust 测试与最终安装资源。
 
@@ -131,8 +131,8 @@ hook 是每个克隆的本地配置，不能约束网页创建标签、其他未
 发布前将 `package.json`、`src-tauri/tauri.conf.json` 和 `src-tauri/Cargo.toml` 的版本更新为同一个 `X.Y.Z`，同步 `src-tauri/Cargo.lock` 中的本应用版本，并提交源码。然后推送对应标签，例如当前版本：
 
 ```bash
-git tag v0.6.6
-git push origin v0.6.6
+git tag v0.7.0
+git push origin v0.7.0
 ```
 
 标签所在提交必须包含该工作流及要发布的源码；GitHub 不会打包未提交的本地修改。每个版本使用新的标签。README 的 `/releases/latest/download/` 链接依赖以下固定文件名：
