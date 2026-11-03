@@ -36,7 +36,7 @@ VR passed: all acceptance criteria complete
 
 这是按实际技能文本进行的指令推演，未执行上述命令或修改任何技能。
 
-VR risk: non-low — 涉及技能持久化、缓存信任、自动更新授权及版本兼容。  
+VR risk: non-low — 涉及技能持久化、缓存信任、自动更新授权及版本兼容。
 VR review round: 1; reviewer: reused
 
 VR passed: all acceptance criteria complete
