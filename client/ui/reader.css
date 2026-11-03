@@ -269,3 +269,31 @@ button.yu-swipe-surface{padding:0;border:0;background:transparent;cursor:default
 .yu-pdf-setting>.yu-publication-summary{padding-bottom:0}
 .yu-settings-flow{margin:12px 0;padding-top:8px;border-top:1px solid #dce3cf}
 .yu-story-name+.yu-settings-flow,.yu-pdf-setting+.yu-settings-flow{margin-top:0}
+
+
+/* Image cards share readable cover badges and independent overlay actions in both shelf layouts. */
+.yu-shelf-row-readable{display:grid;grid-template-columns:minmax(90px,34%) minmax(0,1fr);gap:16px;padding:14px;align-items:start}
+.yu-shelf-row-readable.yu-shelf-row-compact{display:flex;gap:0;padding:12px}
+.yu-shelf-cover-wrap{position:relative;min-width:0;width:100%;container-type:inline-size}
+.yu-shelf-cover{position:relative;overflow:hidden}
+.yu-shelf-cover-overlay{position:absolute;left:6px;right:6px;bottom:6px;z-index:2;display:flex;align-items:center;justify-content:space-between;gap:6px;min-width:0;pointer-events:none}
+.yu-shelf-book-badge{flex:0 1 auto;min-width:0;max-width:calc(100% - 70px);height:30px;padding:4px 6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#3a563f;font:inherit;font-size:12px;font-weight:500;line-height:20px;text-align:left}
+.yu-shelf-cover-wrap .yu-shelf-card-actions{position:static;display:flex;flex:none;gap:4px;margin:0;padding:0;pointer-events:auto}
+.yu-shelf-cover-wrap .yu-shelf-card-actions button{width:30px;height:30px;flex:none;padding:0;border-radius:6px;color:#3a563f}
+/* Plain translucent fills avoid separate backdrop-filter paint layers while cards scroll. */
+.yu-shelf-book-badge,.yu-shelf-cover-wrap .yu-shelf-card-actions button{border:1px solid #fff9;border-radius:6px;background:#faf9f1b3;box-shadow:0 2px 8px #15362118}
+.yu-shelf-cover-wrap .yu-shelf-card-actions button{background:#faf9f180;border-color:#ffffff70;border-radius:50%}
+.yu-shelf-cover-wrap .yu-shelf-card-actions button>svg{width:16px;height:16px}
+.yu-shelf-cover-wrap .yu-shelf-card-actions button:hover{background:#e7edddb3}
+.yu-shelf-cover-wrap .yu-shelf-favorite.is-saved{color:#34583d;background:#e1ebd480}
+/* Card feedback occupies the middle; reading progress and continuation share the fixed bottom row. */
+.yu-shelf-card-body{display:flex;flex-direction:column;flex:1;align-self:stretch;min-width:0;min-height:0}
+.yu-shelf-row-readable .yu-shelf-card-details{display:block;flex:none;min-width:0;width:100%;height:auto;padding:0;border-radius:0}
+.yu-shelf-row-readable .yu-shelf-card-details>div{height:auto;min-height:0}
+.yu-shelf-card-body>.yu-shelf-generation-progress{flex:none;flex-wrap:wrap;align-items:center;gap:4px 8px;margin:2px 0;padding:0}
+.yu-shelf-card-body>.yu-shelf-generation-progress>.yu-generation-control{min-height:28px;padding:2px 0}
+.yu-shelf-reading-footer{display:block;width:100%;min-height:40px;margin-top:auto;padding:6px 0 0;border:0;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.yu-shelf-reading-footer>.yu-shelf-reading-meta{margin:0}
+.yu-shelf-reading-footer:focus-visible{outline:2px solid #648354;outline-offset:2px;border-radius:4px}
+@container (max-width:110px){.yu-shelf-book-badge{max-width:calc(100% - 58px);height:28px;padding:3px}.yu-shelf-cover-wrap .yu-shelf-card-actions button{width:24px;height:24px}}
+@media(max-width:380px){.yu-shelf-row-readable{gap:12px;padding:12px}.yu-shelf-row-readable.yu-shelf-row-compact{padding:10px}}

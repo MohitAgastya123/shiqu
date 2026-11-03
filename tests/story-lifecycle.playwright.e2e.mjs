@@ -154,17 +154,16 @@ test('STORY-LIFECYCLE-C006: one workflow panel survives first artwork and is sha
  });
 });
 
-// Shelf settings and reader settings share the embedded workflow; the card itself keeps reading.
-test('STORY-LIFECYCLE-C007: shelf settings and the reader gear open one embedded workflow without generating',options,async t=>{
+// Shelf cards keep reading; story settings stay available in the reader.
+test('STORY-LIFECYCLE-C007: shelf cards keep reading and the reader gear opens the workflow without generating',options,async t=>{
  const b=await storyBrowser(t,'C007');await b.execute(async()=>{
   const {f,page}=b,saved=await b.create();await b.confirm();await b.completed(saved.id);await b.reader(saved.id);
   const before={images:f.control.calls.length,plans:f.control.plans.length,reviews:f.control.reviews.length},title=(await f.read(saved.id)).story.title;
   let settings=await b.settings();await settings.getByRole('list',{name:'完整审片流程'}).waitFor();assert.equal(await settings.getByText(title,{exact:true}).count(),1,'Settings names the story once');
   assert.equal(await page.getByRole('dialog').count(),1);assert.equal(await settings.getByRole('button',{name:'制作流程',exact:true}).count(),0);
   await settings.getByRole('link',{name:'返回书架',exact:true}).click();
-  await page.getByRole('button',{name:'《'+title+'》的故事设置',exact:true}).click();settings=dialog(page,'故事设置');
-  await settings.getByRole('list',{name:'完整审片流程'}).waitFor();await settings.getByRole('button',{name:'修改故事名',exact:true}).waitFor();await b.screenshot('shelf-settings-embedded');
-  await settings.getByRole('link',{name:'返回书架',exact:true}).click();await page.getByRole('button',{name:'继续阅读《'+title+'》',exact:true}).click();
+  assert.equal(await page.getByRole('button',{name:'《'+title+'》的故事设置',exact:true}).count(),0);
+  await page.getByRole('button',{name:'继续阅读《'+title+'》',exact:true}).click();
   assert.equal(await page.getByRole('dialog').count(),0);await page.getByRole('button',{name:'下一页',exact:true}).click();
   settings=await b.settings();await settings.getByRole('list',{name:'完整审片流程'}).waitFor();await settings.getByRole('button',{name:'关闭',exact:true}).click();
   await page.setViewportSize({width:390,height:844});settings=await b.settings();await settings.getByRole('list',{name:'完整审片流程'}).waitFor();
@@ -193,7 +192,7 @@ test('STORY-LIFECYCLE-C008: all shelf and reader entries share one settings layo
   }
   let panel=dialog(page,'故事设置');await downloads(panel,false);await panel.getByRole('button',{name:'开始提取',exact:true}).waitFor();
   await panel.getByRole('link',{name:'返回书架',exact:true}).click();
-  await page.getByRole('button',{name:'《等待选题的故事》的故事设置',exact:true}).click();panel=dialog(page,'故事设置');
+  await page.getByRole('button',{name:'提取故事《等待选题的故事》',exact:true}).click();panel=dialog(page,'故事设置');
   await panel.getByRole('button',{name:'开始提取',exact:true}).waitFor();await downloads(panel,false);assert.equal(f.control.calls.length,0);
   await b.extract(saved);f.control.hold=true;await b.confirm();await until(()=>f.control.calls.length===1,15000);
   panel=dialog(page,'故事设置');const title=(await f.read(saved.id)).story.title;await panel.getByText(title,{exact:true}).waitFor();await downloads(panel,false);
@@ -201,8 +200,7 @@ test('STORY-LIFECYCLE-C008: all shelf and reader entries share one settings layo
   await panel.getByRole('link',{name:'返回书架',exact:true}).click();
   await page.getByRole('button',{name:'查看进度《'+title+'》',exact:true}).click();panel=dialog(page,'故事设置');await panel.getByRole('list',{name:'完整审片流程'}).waitFor();
   assert.deepEqual(await layout(panel),expected);assert.equal(await panel.getByText(title,{exact:true}).count(),1);await downloads(panel,false);await b.screenshot('zero-artwork-card-shared-panel');
-  await panel.getByRole('link',{name:'返回书架',exact:true}).click();await page.getByRole('button',{name:'《'+title+'》的故事设置',exact:true}).click();
-  panel=dialog(page,'故事设置');await panel.getByRole('list',{name:'完整审片流程'}).waitFor();assert.deepEqual(await layout(panel),expected);await downloads(panel,false);assert.equal(f.control.calls.length,images);
+  await page.reload();panel=dialog(page,'故事设置');await panel.getByRole('list',{name:'完整审片流程'}).waitFor();assert.deepEqual(await layout(panel),expected);await downloads(panel,false);assert.equal(f.control.calls.length,images);
   f.control.calls[0].resolve();await until(async()=>(await f.read(saved.id)).ready===1);await until(()=>f.control.calls.length===3);
   await panel.getByText('1 / 3 幅画面已保存',{exact:true}).waitFor();await downloads(panel,false);
   await panel.getByRole('button',{name:'关闭',exact:true}).click();panel=await b.settings();await panel.getByRole('list',{name:'完整审片流程'}).waitFor();

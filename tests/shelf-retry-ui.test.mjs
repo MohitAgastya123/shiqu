@@ -12,7 +12,7 @@ const Shelf=compiled.exports.default,noop=()=>{};
 const story={id:'failed-story',bookId:'honglou',title:'雪日探钗，黛玉含酸',theme:'爱情与错过',artStyleLabel:'软萌 Q 版',pages:Array.from({length:30},(_,i)=>({image:i<16?'/saved.png':''}))};
 const failed={id:story.id,selection:{bookId:story.bookId,theme:story.theme,artStyle:'chibi'},state:'failed',error:'绘图失败',retryAllowed:true,generationControl:'active',ready:16,story,page:1};
 function props(session=failed,extra={}){
- return {stories:session.story?[story]:[],pending:session.story?[]:[session],sessions:[session],progress:[],loading:false,refreshing:false,error:'',tab:'recent',query:'',grouping:'none',bookName:()=> '红楼梦',controlBusy:'',favoriteBusy:'',onControl:noop,onRetry:noop,onRefresh:noop,onTab:noop,onQuery:noop,onGrouping:noop,onOpen:noop,onSettings:noop,onResume:noop,onDelete:noop,onFavorite:noop,onCreate:noop,onDiscover:noop,...extra};
+ return {stories:session.story?[story]:[],pending:session.story?[]:[session],sessions:[session],progress:[],loading:false,refreshing:false,error:'',tab:'recent',query:'',grouping:'none',bookName:()=> '红楼梦',controlBusy:'',favoriteBusy:'',onControl:noop,onRetry:noop,onRefresh:noop,onTab:noop,onQuery:noop,onGrouping:noop,onOpen:noop,onResume:noop,onDelete:noop,onFavorite:noop,onCreate:noop,onDiscover:noop,...extra};
 }
 function retryButton(node){
  if(!node||typeof node!=='object')return;
@@ -57,14 +57,20 @@ test('a failure with no retryable step does not offer pause or dispatch recovery
 });
 
 
-test('settings opens the selected story while card clicks keep reading',()=>{
- const opened=[],settings=[],options=props(failed,{onOpen:story=>opened.push(story),onSettings:story=>settings.push(story)});
- const tree=Shelf(options);
- function button(node,label){
-  if(!node||typeof node!=='object')return;
-  if(node.type==='button'&&node.props['aria-label']===label)return node;
-  for(const child of [node.props?.children].flat(Infinity)){const found=button(child,label);if(found)return found;}
+test('cover overlay actions are independent while the cover and title keep reading',()=>{
+ for(const grouping of ['none','book']){
+  const opened=[],favorites=[],deleted=[];
+  const options=props(failed,{grouping,onOpen:story=>opened.push(story),onFavorite:(...args)=>favorites.push(args),onDelete:(...args)=>deleted.push(args)});
+  const tree=Shelf(options);
+  function button(node,label){
+   if(!node||typeof node!=='object')return;
+   if(node.type==='button'&&node.props['aria-label']===label)return node;
+   for(const child of [node.props?.children].flat(Infinity)){const found=button(child,label);if(found)return found;}
+  }
+  assert.equal(button(tree,'《'+story.title+'》的故事设置'),undefined);
+  button(tree,'收藏《'+story.title+'》').props.onClick();button(tree,'删除《'+story.title+'》').props.onClick();
+  assert.deepEqual(favorites,[[story.id,true]]);assert.deepEqual(deleted,[[story.id,story.title]]);assert.deepEqual(opened,[]);
+  button(tree,'打开《'+story.title+'》').props.onClick();button(tree,'阅读《'+story.title+'》').props.onClick();button(tree,'继续阅读《'+story.title+'》').props.onClick();
+  assert.deepEqual(opened,[story,story,story]);
  }
- button(tree,'《'+story.title+'》的故事设置').props.onClick();assert.deepEqual(settings,[story.id]);assert.deepEqual(opened,[]);
- button(tree,'继续阅读《'+story.title+'》').props.onClick();assert.deepEqual(opened,[story]);assert.deepEqual(settings,[story.id]);
 });
