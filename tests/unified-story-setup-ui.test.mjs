@@ -79,7 +79,7 @@ test('discovery stays in the picker and selection opens one continuous story flo
  for(const label of ['制作要求','修改画风','修改叙事详略','重新选择故事'])assert.ok(pausedTimeline.includes(label),label);
  assert.equal((pausedWithoutPlan.match(/>恢复生成<\/button>/g)||[]).length,1);
  assert.match(pausedWithoutPlan,/<button type="button" class="yu-primary"[^>]*>恢复生成<\/button>/);
- assert.doesNotMatch(pausedWithoutPlan,/暂停后修改|开始制作新版|yu-review-tools/);
+ assert.doesNotMatch(pausedWithoutPlan,/暂停后修改|开始制作|yu-review-tools/);
  assert.equal(renderToStaticMarkup(createElement(Paused,{...pausedProps,session})), '');
  const opened=[],controls=[];
  const pausedSurface=Paused({...pausedProps,editor:{...pausedProps.editor,open:tab=>opened.push(tab)}});
@@ -91,7 +91,7 @@ test('discovery stays in the picker and selection opens one continuous story flo
  const shelfControl=renderToStaticMarkup(createElement(Control,{session:pausedProps.session,busy:false,onControl:noop}));
  assert.match(shelfControl,/class="yu-generation-control"/);assert.doesNotMatch(shelfControl,/class="yu-primary"/);
  const emptyPlanEditor=renderToStaticMarkup(createElement(Editor,{editor:{base:{selection:{...selection,length:5},plan:null,images:[]},changes:{},tab:'count',busy:false,loading:false,setTab:noop,setChanges:noop,impact:{changed:true,replan:true,total:5},submit:noop,discard:noop}}));
- assert.match(emptyPlanEditor,/叙事详略/);assert.doesNotMatch(emptyPlanEditor,/type="number"|type="range"/);assert.match(emptyPlanEditor,/开始制作新版/);assert.doesNotMatch(emptyPlanEditor,/保持暂停|恢复生成/);assert.doesNotMatch(emptyPlanEditor,/>分镜<|保存修改并加入队列/);
+ assert.match(emptyPlanEditor,/叙事详略/);assert.doesNotMatch(emptyPlanEditor,/type="number"|type="range"/);assert.match(emptyPlanEditor,/开始制作/);assert.doesNotMatch(emptyPlanEditor,/保持暂停|恢复生成/);assert.doesNotMatch(emptyPlanEditor,/>分镜<|保存修改并加入队列/);
  const targetedPlan={pages:Array.from({length:20},(_,i)=>({caption:`第 ${i+1} 幅已保存的旁白。`,prompt:`Saved scene ${i+1}.`})),characters:'已保存的人物设定。',reflection:'已保存的余味。'};
  const targetEditor={base:{selection,plan:targetedPlan,images:[]},changes:{},tab:'script',scriptPage:18,busy:false,loading:false,setTab:noop,setScriptPage:noop,setChanges:noop,impact:{changed:false,replan:false,total:20},submit:noop,discard:noop};
  const targetMarkup=renderToStaticMarkup(createElement(Editor,{editor:targetEditor}));
@@ -113,7 +113,7 @@ test('discovery stays in the picker and selection opens one continuous story flo
  // Review corrections submit immediately even from settings or a paused editor with onDone.
  for(const resuming of [false,true]){
   const saving=renderToStaticMarkup(createElement(Editor,{editor:{...targetEditor,impact:{...targetEditor.impact,changed:true}},reviewIssues,onDone:noop,resuming}));
-  assert.match(saving,/>保存并重新审核<\/button>/);assert.match(saving,/保存后自动重新审片，通过后继续绘图/);assert.doesNotMatch(saving,/>完成编辑<\/button>|>恢复生成<\/button>|>开始制作新版<\/button>/);
+  assert.match(saving,/>保存并重新审核<\/button>/);assert.match(saving,/保存后自动重新审片，通过后继续绘图/);assert.doesNotMatch(saving,/>完成编辑<\/button>|>恢复生成<\/button>|>开始制作<\/button>/);
  }
  let submitted=0,finished=0;
  const saveTree=Actions({editor:{...targetEditor,impact:{...targetEditor.impact,changed:true},submit:()=>{submitted++;}},reviewOnSave:true,onDone:()=>{finished++;}});
@@ -132,14 +132,14 @@ test('discovery stays in the picker and selection opens one continuous story flo
  // Settings edits return to a draft preview; only the explicit production action submits.
  const draftEditor={base:{selection:{...selection,length:5},plan:null,images:[]},changes:{length:'auto',narrativeDetail:'detailed',artStyle:'ink-pencil'},tab:'count',busy:false,loading:false,setTab:noop,setChanges:noop,impact:{changed:true,replan:true,total:30},submit:noop,discard:noop};
  const editing=renderToStaticMarkup(createElement(Editor,{editor:draftEditor,onDone:noop}));
- assert.match(editing,/>完成编辑<\/button>/);assert.doesNotMatch(editing,/>开始制作新版<\/button>|保持暂停|恢复生成/);
+ assert.match(editing,/>完成编辑<\/button>/);assert.doesNotMatch(editing,/>开始制作<\/button>|保持暂停|恢复生成/);
  const confirmation=renderToStaticMarkup(createElement(Actions,{editor:draftEditor}));
- assert.match(confirmation,/>开始制作新版<\/button>/);assert.doesNotMatch(confirmation,/>完成编辑<\/button>|保持暂停|恢复生成/);
+ assert.match(confirmation,/>开始制作<\/button>/);assert.doesNotMatch(confirmation,/>完成编辑<\/button>|保持暂停|恢复生成/);
  const pausedDraft=renderToStaticMarkup(createElement(Paused,{...pausedProps,editor:draftEditor}));
- assert.match(pausedDraft,/按叙事详略编排 · 审核后确定数量/);assert.doesNotMatch(pausedDraft,/开始制作新版|暂停后修改/);
+ assert.match(pausedDraft,/按叙事详略编排 · 审核后确定数量/);assert.doesNotMatch(pausedDraft,/开始制作|暂停后修改/);
  assert.equal((pausedDraft.match(/>恢复生成<\/button>/g)||[]).length,1);
  const pausedEditor=renderToStaticMarkup(createElement(Editor,{editor:draftEditor,onDone:noop,resuming:true}));
- assert.match(pausedEditor,/>完成编辑<\/button>/);assert.doesNotMatch(pausedEditor,/>恢复生成<\/button>|开始制作新版/);
+ assert.match(pausedEditor,/>完成编辑<\/button>/);assert.doesNotMatch(pausedEditor,/>恢复生成<\/button>|开始制作/);
  const pausedConflict=renderToStaticMarkup(createElement(Paused,{...pausedProps,editor:{...draftEditor,conflict:true}}));
  assert.match(pausedConflict,/<button type="button" class="yu-primary" disabled="">恢复生成<\/button>/);
  const draftSteps=revisionDraftSteps(draftEditor.base,draftEditor.changes);

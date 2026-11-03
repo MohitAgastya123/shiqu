@@ -7,6 +7,7 @@ import {acceptanceInput,acceptanceDirection,acceptanceCriteria} from './reader-a
 import {getArtStyle} from './reader-styles.ts';
 import {promptRecord} from './reader-prompt-records.ts';
 import type {StoryPromptHistory} from './reader-prompt-records.ts';
+import {storyReviewHistory} from './reader-review-history.ts';
 import {BookImageReferences,withBookReference} from '../server/book-image-reference.ts';
 import {events} from '../db/schema.ts';
 import type {Services} from './services.ts';
@@ -98,6 +99,7 @@ return async function readerApi(req:Request,path:string[]):Promise<Response>{
   }
   if(path[0]==='sessions'&&path[1]){
    const id=uuid.parse(path[1]);
+   if(path[2]==='review-history'&&path.length===3&&req.method==='GET')return json(storyReviewHistory(await repo.get(id,uid)));
    if(path[2]==='prompts'&&path.length===3&&req.method==='GET'){
     const row=await repo.get(id,uid),doc=JSON.parse(row.document) as Document,selection=selectionSchema.parse(JSON.parse(row.selection));
     const preferences={productionPrompt:selection.productionPrompt,...acceptanceInput(selection),artDirection:getArtStyle(selection.artStyle).prompt,narrativeDetail:selection.narrativeDetail||'balanced',exactPageCount:selection.length};

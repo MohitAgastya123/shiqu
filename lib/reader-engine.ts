@@ -138,7 +138,7 @@ export async function advanceStory(repo:ReaderRepository,generator:StoryGenerato
     const result=await generator.reviewFrameCount(selection,structuredClone(doc.plan!),doc.original!);
     const report=parseFrameCountReport(doc.plan!.pages.length,{frameCountReview:result.value.frameCountReview,requirements:result.value.requirements});
     validateEditorialCoverage(report.coverage,doc.original!);
-    (review.frameCountReports??=[]).push(report);review.issues=report.issues;review.repaired=[];
+    (review.frameCountReports??=[]).push({...report,step:step.key,recordedAt:new Date().toISOString()});review.issues=report.issues;review.repaired=[];
     review.phase=report.issues.length?'frames':'full';
     review.status=!report.issues.length?'pending':review.repairs>=readerMaxAutomaticRepairs?'blocked':'repair';
     if(review.status==='blocked')review.stopReason='limit';else delete review.stopReason;generated=result;
@@ -151,7 +151,7 @@ export async function advanceStory(repo:ReaderRepository,generator:StoryGenerato
     if(report.coverage)validateEditorialCoverage(report.coverage,doc.original!);
     const previousTitle=doc.plan!.title;doc.plan={...doc.plan!,title:report.titleReview.title};
     if(candidates&&report.reflectionChoice){doc.plan={...doc.plan!,reflection:candidates[report.reflectionChoice.index-1]};delete doc.reflectionCandidates;}
-    review.phase='full';review.reports.push({round:review.round,...(report.acceptanceResults?{acceptanceResults:report.acceptanceResults}:{}),issues:report.issues,...(report.coverage?{coverage:report.coverage}:{}),titleReview:{...report.titleReview,previousTitle},...(candidates&&report.reflectionChoice?{reflectionChoice:{...report.reflectionChoice,candidates}}:{})});review.round++;review.issues=report.issues;review.repaired=[];
+    review.phase='full';review.reports.push({step:step.key,recordedAt:new Date().toISOString(),round:review.round,...(report.acceptanceResults?{acceptanceResults:report.acceptanceResults}:{}),issues:report.issues,...(report.coverage?{coverage:report.coverage}:{}),titleReview:{...report.titleReview,previousTitle},...(candidates&&report.reflectionChoice?{reflectionChoice:{...report.reflectionChoice,candidates}}:{})});review.round++;review.issues=report.issues;review.repaired=[];
     const unknown=report.acceptanceResults?.some(result=>result.status==='unknown');
     const replan=report.issues.some(issue=>issue.requiresReplan);
     review.status=unknown?'blocked':!report.issues.length?'passed':replan&&selection.length!=='auto'||review.repairs>=readerMaxAutomaticRepairs?'blocked':'repair';if(review.status==='blocked')review.stopReason=unknown?'requirements':replan&&selection.length!=='auto'?'replan':'limit';else delete review.stopReason;generated=result;
@@ -164,7 +164,7 @@ export async function advanceStory(repo:ReaderRepository,generator:StoryGenerato
     const count=reviewPhase(review,selection)==='frames'?review.frameCountReports?.at(-1):undefined;
     const before=doc.plan!,result=await generator.restructure(selection,structuredClone(before),doc.original!,review.issues,count?.coverage||review.reports.at(-1)?.coverage,count?{frameCountReview:count.frameCountReview,requirements:count.requirements}:undefined);
     const edited=applyStructuralEdits(before,result.value);
-    (review.history??=[]).push({round:review.round,requested:review.issues.filter(issue=>issue.requiresReplan).map(issue=>issue.page),changes:[],structure:{edits:edited.edits,before:before.pages.length,after:edited.plan.pages.length,sourcePages:edited.sourcePages,removed:edited.removed,...(edited.characters?{characters:edited.characters,previousCharacters:edited.previousCharacters}:{}),...(doc.storyboard?{previousOutline:doc.storyboard.outline}:{})}});
+    (review.history??=[]).push({step:step.key,recordedAt:new Date().toISOString(),changed:edited.changed,round:review.round,requested:review.issues.filter(issue=>issue.requiresReplan).map(issue=>issue.page),changes:[],structure:{edits:edited.edits,before:before.pages.length,after:edited.plan.pages.length,sourcePages:edited.sourcePages,removed:edited.removed,...(edited.characters?{characters:edited.characters,previousCharacters:edited.previousCharacters}:{}),...(doc.storyboard?{previousOutline:doc.storyboard.outline}:{})}});
     generated=result;
     if(!edited.changed){review.status='blocked';review.stopReason='unchanged';}
     else{
@@ -176,7 +176,7 @@ export async function advanceStory(repo:ReaderRepository,generator:StoryGenerato
    }else if(requested[0]===0){
     const result=await generator.reflection(selection,structuredClone(doc.plan!),doc.original!,{reflection:doc.plan!.reflection,issues});
     const reflection=planSchema.shape.reflection.parse(result.value),changed=reflection!==doc.plan!.reflection;
-    (review.history??=[]).push({round:review.round,requested,changes:[],...(changed?{reflection}:{})});
+    (review.history??=[]).push({step:step.key,recordedAt:new Date().toISOString(),changed,round:review.round,requested,changes:[],previousReflection:doc.plan!.reflection,...(changed?{reflection}:{})});
     if(!changed){review.status='blocked';review.stopReason='unchanged';}
     else{doc.plan={...doc.plan!,reflection};review.repaired.push(0);review.status='pending';review.repairs++;}
     generated=result;
@@ -185,7 +185,7 @@ export async function advanceStory(repo:ReaderRepository,generator:StoryGenerato
     const result=await generator.repair(selection,structuredClone(doc.plan!),doc.original!,issues,doc.storyboard?.outline);
     const pages=repairOutputSchema(requested).parse({pages:result.value}).pages,updated=structuredClone(doc.plan!);
     const changed=pages.filter(({page,caption,prompt})=>caption!==doc.plan!.pages[page-1].caption||prompt!==doc.plan!.pages[page-1].prompt);
-    (review.history??=[]).push({round:review.round,requested:[...requested],changes:structuredClone(changed)});
+    (review.history??=[]).push({step:step.key,recordedAt:new Date().toISOString(),changed:!!changed.length,round:review.round,requested:[...requested],before:requested.map(page=>({page,...doc.plan!.pages[page-1]})),changes:structuredClone(changed)});
     for(const {page,caption,prompt} of pages)updated.pages[page-1]={caption,prompt};
     doc.images=reusableRevisionImages({selection,plan:doc.plan,images:doc.images},selection,updated,updated.pages.map((_,i)=>i));
     doc.plan=planSchema.parse(updated);if(doc.storyboard)doc.storyboard.pages=structuredClone(doc.plan.pages);
