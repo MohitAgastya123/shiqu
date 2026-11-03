@@ -2,17 +2,14 @@
 
 **还有剩余的 Codex token？不妨用来读读故事。**
 
-把中国古典故事变成自己的插画故事书。内置 24 部书籍、15 种画风，支持电脑与手机阅读，以及 PDF、PNG 长图和 ZIP 导出。故事、图片和阅读进度保存在你的电脑上。
-
-> 欢迎到 [awesome-shiqu · 拾趣好故事](https://github.com/yysun/awesome-shiqu) 阅读和分享拾趣连环画。
+用拾趣，把中国古典故事变成你自己的连环画。
 
 [![拾趣作品《黛玉葬花与宝黛释疑》第 15–18 幅：宝玉兜着落花走近花冢，黛玉葬花吟诗、掩面落泪](.docs/assets/hero-story.webp)](https://yysun.github.io/awesome-shiqu/)
 
 [在线阅读拾趣好故事 →](https://yysun.github.io/awesome-shiqu/)
 
-## 快速开始
 
-生成服务可选 Codex、OpenAI API 或 Gemini，也可选择只读。Codex 需另行安装并登录 Codex CLI，支持 macOS / Linux；OpenAI API 与 Gemini 使用各自 API 密钥并单独计费。[如何选择后端](.docs/user-guide.md#如何选择后端)
+## 快速开始制作
 
 三种方式，任选一种：
 
@@ -26,7 +23,7 @@ npx @apprun/shiqu
 
 按提示选择书库和生成服务，打开终端打印的网址即可使用。同一 Wi-Fi 下，手机可扫描终端二维码接着读；保持终端运行，按 Ctrl+C 停止。
 
-> 默认对局域网开放，所有可连接设备共享书架和生成权限，仅限可信网络使用；只允许本机访问时加 `--host 127.0.0.1`。API 密钥以明文保存在本机设置数据库中。详见[使用前了解](.docs/user-guide.md#使用前了解)。
+> 生成服务可选 Codex 订阅、OpenAI API 或 Gemini。Codex 订阅需 macOS 并安装和登录 Codex CLI；OpenAI API 与 Gemini 使用各自 API 密钥并单独计费。[如何选择后端](.docs/user-guide.md#如何选择后端)
 
 [CLI 使用说明](.docs/user-guide.md#cli-启动)
 
@@ -53,7 +50,9 @@ $shiqu 从《庄子》中找一个关于善意与误解的故事，用水墨写�
 先给我候选和制作方案，确认后再生成插图，完成后导出离线预览和公开 ZIP。
 ```
 
-无需启动桌面或浏览器服务。[更多提示词示例](.docs/use-as-skill.md) · [技能安装与配置](.docs/user-guide.md#无服务-cli-与-codex-技能)
+无需启动桌面或浏览器服务。[提示词示例](.docs/use-as-skill.md)
+
+
 
 ## 界面预览
 
