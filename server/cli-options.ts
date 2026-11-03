@@ -8,8 +8,8 @@ import {createInterface} from 'node:readline/promises';
 import {desktopLibraryPaths,savedDesktopLibraryDirectory} from './library-directory.ts';
 import type {LibraryLocationOptions} from './library-directory.ts';
 
-export type CliOptions = {configure?:boolean;resetProviders?:boolean;help?:boolean;version?:boolean;port?:string;host?:string;dataDirectory?:string;envFile?:string};
-const flags:Record<string,keyof CliOptions> = {'--port':'port','--host':'host','--data-dir':'dataDirectory','--config':'envFile'};
+export type CliOptions = {configure?:boolean;resetProviders?:boolean;help?:boolean;version?:boolean;port?:string;host?:string;dataDirectory?:string;envFile?:string;backup?:string;restore?:string;verifyBackup?:string;diagnostics?:string};
+const flags:Record<string,keyof CliOptions> = {'--port':'port','--host':'host','--data-dir':'dataDirectory','--config':'envFile','--backup':'backup','--restore':'restore','--verify-backup':'verifyBackup','--diagnostics':'diagnostics'};
 
 export function parseCliOptions(args:string[]):CliOptions {
   const options:CliOptions = {};
@@ -28,6 +28,8 @@ export function parseCliOptions(args:string[]):CliOptions {
     (options as Record<string,string|boolean>)[key] = value;
   }
   if(options.configure&&options.resetProviders)throw Error('Use --configure or --reset-providers separately.');
+  const maintenance=[options.backup,options.restore,options.verifyBackup,options.diagnostics].filter(Boolean);
+  if(maintenance.length>1||maintenance.length&&(options.configure||options.resetProviders||options.envFile||options.port||options.host))throw Error('维护命令不能组合，也不能与服务配置或启动选项混用。');
   return options;
 }
 

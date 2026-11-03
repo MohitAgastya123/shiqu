@@ -55,12 +55,12 @@ test('upgrade removes old fields from stories, drafts, outlines, revision bases 
  const response=await app.handle(new Request('http://localhost/api/stories/'+saved.id));const body=await response.json();assert.equal(response.status,200);assert.equal(body.summary,'旧文字原样保留。');assert.equal(body.hook,undefined);
 });
 
-test('a media migration failure rolls SQL back and a partially converted file retries safely',async t=>{
+test('an unsafe media backup blocks migration before writes and a repaired source retries safely',async t=>{
  const f=await fixture(t,{plan:legacyPlan(),images:[],audio:[],usage:[]});f.local.close();const folder=path.join(f.directory,'media/reader/test');await mkdir(folder,{recursive:true});
  const first=path.join(folder,'a.json'),outside=path.join(f.root,'outside.json'),link=path.join(folder,'z.json');await writeFile(first,'{"hook":"旧内容。"}');await writeFile(outside,'{"hook":"不得触碰。"}');await symlink(outside,link);
  assert.throws(()=>openDatabase(f.directory,process.cwd()),/symlink/);
  const db=new DatabaseSync(path.join(f.directory,'shiqu.sqlite'));assert.ok(db.prepare('PRAGMA table_info(stories)').all().some(col=>col.name==='hook'));assert.equal(db.prepare('SELECT name FROM app_migrations WHERE name=?').get(storySummaryMigration),undefined);db.close();
- assert.deepEqual(JSON.parse(await readFile(first,'utf8')),{summary:'旧内容。'});assert.equal(await readFile(outside,'utf8'),'{"hook":"不得触碰。"}');await rm(link);
+ assert.deepEqual(JSON.parse(await readFile(first,'utf8')),{hook:'旧内容。'});assert.equal(await readFile(outside,'utf8'),'{"hook":"不得触碰。"}');await rm(link);
  const local=openDatabase(f.directory,process.cwd());assert.ok(local.sqlite.prepare('PRAGMA table_info(stories)').all().some(col=>col.name==='summary'));local.close();
 });
 

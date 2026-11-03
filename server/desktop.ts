@@ -17,6 +17,7 @@ import {createReaderProvider} from './generation.ts';
 import {stopCodexProcesses} from './codex-runner.ts';
 import {FileMedia} from './media.ts';
 import {systemSettingsSchema,settingsVariables} from '../lib/system-settings.ts';
+import {installDiagnostics,recordDiagnostic,safeErrorCode} from './diagnostics.ts';
 
 export const desktopSettings=systemSettingsSchema;
 export type DesktopSettings=z.infer<typeof desktopSettings>;
@@ -41,11 +42,12 @@ export async function testDesktopProvider(settings:DesktopSettings,key:string,ro
 }
 export async function startDesktop(settings:DesktopSettings,key:string,root:string,options:{signal?:AbortSignal;onStatus?:(status:unknown)=>void}={}){
  const release=await ownDesktopData(settings.dataDirectory);
+ const removeDiagnostics=installDiagnostics(settings.dataDirectory);
  let app:ReturnType<typeof createApplication>|undefined,server:ReturnType<typeof createHttpServer>|undefined,remoteServer:ReturnType<typeof createHttpServer>|undefined,tunnel:Awaited<ReturnType<typeof startDesktopTunnel>>|undefined;
  let stopped:Promise<void>|undefined;
  const remote=desktopRemote(request=>app!.handle(request));
  async function close(listener:typeof server){if(!listener)return;await new Promise<void>(resolve=>{listener.close(()=>resolve());listener.closeAllConnections();});}
- function stop(){return stopped??=(async()=>{remote.revoke();await tunnel?.stop();app?.stopGeneration();await stopCodexProcesses();await Promise.all([close(remoteServer),close(server)]);await app?.close();await release();})();}
+ function stop(){return stopped??=(async()=>{try{remote.revoke();await tunnel?.stop();app?.stopGeneration();await stopCodexProcesses();await Promise.all([close(remoteServer),close(server)]);await app?.close();}finally{recordDiagnostic(settings.dataDirectory,'service_stopped');removeDiagnostics();await release();}})();}
  try{
   options.signal?.throwIfAborted();
   app=createApplication({root,dataDirectory:settings.dataDirectory,variables:desktopVariables(settings,key)});
@@ -75,8 +77,8 @@ export async function startDesktop(settings:DesktopSettings,key:string,root:stri
     status.internetError=(error instanceof TunnelError?error.message:'公网隧道启动失败。')+' 本机和局域网仍可使用，无需配对 ID。';
    }
   }
-  options.signal?.throwIfAborted();return {server,status,stop};
- }catch(error){await stop();throw error;}
+  options.signal?.throwIfAborted();recordDiagnostic(settings.dataDirectory,'service_started');return {server,status,stop};
+ }catch(error){recordDiagnostic(settings.dataDirectory,'service_start_failed',{code:safeErrorCode(error)});await stop();throw error;}
 }
 export function desktopFailure(error:unknown){
  if(error instanceof TunnelError)return error.message;

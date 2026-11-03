@@ -7,13 +7,15 @@ import {developmentAccess} from './development-access.ts';
 import {desktopAccess} from './desktop-access.ts';
 import {stopCodexProcesses} from './codex-runner.ts';
 import {ownDesktopData} from './desktop-owner.ts';
+import {installDiagnostics,recordDiagnostic,safeErrorCode} from './diagnostics.ts';
 
 export async function startServer({root,variables=process.env,localAccess=false}:{root:string;variables?:NodeJS.ProcessEnv;localAccess?:boolean}){
  const config=serverConfig(variables);
- const release=localAccess?await ownDesktopData(config.dataDirectory):async()=>{};
+ const release=await ownDesktopData(config.dataDirectory);
+ const removeDiagnostics=installDiagnostics(config.dataDirectory);
  let app:ReturnType<typeof createApplication>;
  try{app=createApplication({root,dataDirectory:config.dataDirectory,variables});}
- catch(error){await release();throw error;}
+ catch(error){recordDiagnostic(config.dataDirectory,'service_start_failed',{code:safeErrorCode(error)});removeDiagnostics();await release();throw error;}
  const urls=phoneUrls(config.host,config.port);
  const handle=localAccess?desktopAccess(app.handle,{hosts:[`localhost:${config.port}`,`127.0.0.1:${config.port}`,`[::1]:${config.port}`,...urls.map(url=>new URL(url).host)]}).handle:developmentAccess(app.handle,variables,config.port);
  const server=createHttpServer(handle);
@@ -22,7 +24,7 @@ export async function startServer({root,variables=process.env,localAccess=false}
   return closing??=(async()=>{
    app.stopGeneration();
    try{await stopCodexProcesses();await app.close();}
-   finally{await release();}
+   finally{recordDiagnostic(config.dataDirectory,'service_stopped');removeDiagnostics();await release();}
   })();
  }
  function listen(host:string){
@@ -57,5 +59,6 @@ export async function startServer({root,variables=process.env,localAccess=false}
  const host=browserHost.includes(':')?`[${browserHost}]`:browserHost;
  console.log(`拾趣: http://${host}:${config.port} — data: ${config.dataDirectory}`);
  printPhoneAccess(urls);
+ recordDiagnostic(config.dataDirectory,'service_started');
  return server;
 }

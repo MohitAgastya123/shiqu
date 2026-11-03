@@ -6,6 +6,7 @@ import {SystemSettingsStore} from './system-settings.ts';
 import {desktopLibraryPaths} from './library-directory.ts';
 import {configureProvider,cliProviderConfiguration,providerReady} from './cli-setup.ts';
 import {parseCliOptions, cliConfiguration} from './cli-options.ts';
+import {maintainLibrary} from './library-maintenance.ts';
 
 const help = `Usage: shiqu [options]
 
@@ -17,6 +18,10 @@ Start 拾趣 and open the printed URL in your browser. Requires Node 24.
   --config <env-file>   Load this env file; existing environment variables take precedence
   --configure          Select/edit the shared saved provider, then exit
   --reset-providers    Clear saved provider profiles/keys, reopen setup in a terminal
+  --backup <new-dir>    Back up a stopped library with verified file hashes
+  --verify-backup <dir> Verify a backup without starting or migrating it
+  --restore <dir>       Restore backup to a new, explicit --data-dir; never start it
+  --diagnostics <file>  Export bounded, redacted diagnostic metadata to a new JSON file
   -h, --help           Show help
   -v, --version        Show version
 
@@ -31,6 +36,7 @@ export async function runCli(root:string, args = process.argv.slice(2)) {
   const options = parseCliOptions(args);
   if (options.help) { console.log(help); return; }
   if (options.version) { console.log(JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8')).version); return; }
+  if(await maintainLibrary(root,options))return;
   if (options.envFile) {
     const variables = parseEnv(await readFile(path.resolve(options.envFile), 'utf8'));
     for (const [key, value] of Object.entries(variables)) if (!(key in process.env)) process.env[key] = value;

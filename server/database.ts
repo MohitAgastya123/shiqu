@@ -8,6 +8,7 @@ import type {Database} from '../lib/reader-repository.ts';
 import * as schema from '../db/schema.ts';
 import {storySummaryMigration,migrateStorySummary} from './story-summary-migration.ts';
 import {readerInputMigration,migrateReaderInputs,legacyInputFaultMigration,retainLegacyInputFaults} from './reader-input-migration.ts';
+import {backupBeforeMigration} from './library-backup.ts';
 
 export function migrate(sqlite:DatabaseSync,root:string,directory?:string){
  sqlite.exec('CREATE TABLE IF NOT EXISTS app_migrations(name TEXT PRIMARY KEY, applied_at TEXT NOT NULL)');
@@ -25,6 +26,7 @@ export function migrate(sqlite:DatabaseSync,root:string,directory?:string){
  }
 }
 export function openDatabase(directory:string,root:string){
+ backupBeforeMigration(directory,root);
  mkdirSync(directory,{recursive:true});
  const sqlite=new DatabaseSync(path.join(directory,'shiqu.sqlite'));
  try{
