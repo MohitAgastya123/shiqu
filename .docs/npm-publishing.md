@@ -34,7 +34,7 @@ Commit the release changes and use the configured publication branch (pnpm defau
 pnpm run npm:publish
 ```
 
-It runs `npm:check` (typecheck, lint, startup/database tests, PTY tests and release-gate regressions), builds a fresh tarball, smoke-tests that exact tarball, then publishes it. Any failure stops the sequence before publication. The tarball path comes from the current package name/version; an older manually selected artifact is not reused. The checks use temporary databases/homes and fake provider keys, never the user's existing library or settings. Python 3.9+ is needed for real terminal tests on Linux/macOS; POSIX PTY tests are explicitly skipped on Windows.
+It runs `npm:check` (typecheck, lint, startup/database tests, PTY tests, release-gate regressions and critical user flows), builds a fresh tarball, smoke-tests that exact tarball, then publishes it. The shared user-flow runner covers browser production, headless CLI, skill installation, backup/restore, diagnostics and provider configuration. Any failure stops the sequence before publication. The tarball path comes from the current package name/version; an older manually selected artifact is not reused. The checks use temporary databases/homes and fake provider keys, never the user's existing library or settings. Python 3.9+ is needed for real terminal tests on Linux/macOS; POSIX PTY tests are explicitly skipped on Windows.
 
 To run only the checks, without building or publishing:
 

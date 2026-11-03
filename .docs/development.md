@@ -102,7 +102,9 @@ pnpm typecheck
 pnpm lint
 ```
 
-`pnpm release:check` 在上述检查后执行 `pnpm test:e2e`；`pnpm npm:check` 同样包含现有 E2E。tag pre-push 在待发布提交的隔离 checkout 检查，E2E 失败阻止后续发布；平台 CI 继续负责安装包，不重复完整回归。C007 在一次性源码根目录启动真正的 `pnpm dev local`，不再打开人工开发书库。
+`pre-push` 只对推送的 `refs/tags/v*` 执行发布检查：解析标签目标提交，在隔离 checkout 中验证 Node/pnpm 固定版本，安装锁定依赖，再运行 `pnpm release:check`。同一提交的多个发布标签只检查一次；普通分支、非 v 标签和删除标签不触发。可通过 `pnpm hooks:install` 为新 checkout 启用 hook。
+
+`release:check` 在类型、lint、单元/集成检查后执行 `pnpm test:e2e`，覆盖浏览器故事生命周期、无服务 CLI 制作/编辑/导出、技能安装、备份恢复、脱敏诊断与提供方配置。任一流程失败即阻止标签推送；门禁只检查，不构建桌面/Docker或发布作品。`npm:check` 沿用同一流程入口，平台 CI 保留安装包构建职责。C007 在一次性源码根目录启动真正的 `pnpm dev local`，不打开人工开发书库。
 
 维护命令无需打包：`pnpm library:maintain --help`。备份/恢复/诊断入口复用正式 CLI 与服务实现；运行锁覆盖开发、CLI 和桌面。备份是私有数据，不能放入 `public`、`dist/client` 或公开作品集，详见[维护说明](user-guide.md#书库维护命令)。
 
@@ -113,7 +115,7 @@ pnpm exec playwright install chromium --only-shell
 pnpm test:e2e
 ```
 
-命令运行真实 React/Vite、开发访问保护和生产 API/队列/SQLite，覆盖新建、各编辑入口、暂停/恢复、失败重试、重选与状态机协议边界。模型回执受控，不加载 `.env` 或桌面凭据进行推理。每次测试独占 `.data/e2e/<run>`，保存开发数据库、截图、trace.zip、状态转换和结果 JSON；不会重置人工使用的 `.data/dev-local`。可用 `pnpm exec playwright show-trace <trace.zip>` 查看独立测试浏览器的操作。测试范围和运行账本见[故事流程测试](../.tests/story-lifecycle/CASES.md)。
+命令运行真实 React/Vite、开发访问保护和生产 API/队列/SQLite，覆盖新建、各编辑入口、暂停/恢复、失败重试、重选与状态机协议边界；并执行 headless-cli、cli-skill、library-maintenance、diagnostics、system-settings、settings-faults 套件。模型回执受控，不加载 `.env` 或桌面凭据进行推理。浏览器数据与日志位于 `.data/e2e/<run>`，CLI/配置/维护使用隔离临时书库和 home，不触碰人工数据。手工运行保留截图、trace.zip、状态转换和结果；标签 hook 的临时 checkout 检查后清理，失败原因输出到终端，可在本地重跑此命令保留证据。可用 `pnpm exec playwright show-trace <trace.zip>` 查看独立测试浏览器的操作。浏览器测试范围和运行账本见[故事流程测试](../.tests/story-lifecycle/CASES.md)。
 
 测试使用模拟模型响应，不发起付费生成。桌面 UI 使用 Vite 开发服务器验证；只有需要打包时才运行构建命令。桌面开发、平台依赖和打包说明见 [desktop/README.md](../desktop/README.md)。主要代码位于 `client/`（界面）、`lib/`（业务逻辑）、`server/`（HTTP 与存储）、`db/` 与 `drizzle/`（数据库）、`desktop/` 与 `src-tauri/`（桌面版）。
 
