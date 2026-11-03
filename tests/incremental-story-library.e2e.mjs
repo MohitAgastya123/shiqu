@@ -23,7 +23,7 @@ async function fixture(t){
 }
 async function create(f,theme){
  const saved=await f.json('sessions','POST',{requestId:crypto.randomUUID(),intake:true,selection:{...selection,theme,narrativeDetail:'balanced'}});
- await f.demand(saved.id,crypto.randomUUID());await until(async()=>(await f.read(saved.id)).intake.phase==='choosing');return f.read(saved.id);
+ await f.startDiscovery(saved.id);await f.demand(saved.id,crypto.randomUUID());await until(async()=>(await f.read(saved.id)).intake.phase==='choosing');return f.read(saved.id);
 }
 
 test('cold theme discovery retains rejected stories; restart and new themes reuse them; production receives originals',async t=>{
@@ -32,7 +32,7 @@ test('cold theme discovery retains rejected stories; restart and new themes reus
  assert.ok(first.intake.batches[0].stories[0].matchReason);assert.equal(first.intake.batches[0].stories[0].storyBrief,undefined);assert.equal(first.intake.batches[0].stories[0].summary,undefined);assert.equal(f.control.recommendations.length,0);
  for(const call of library.calls.matches)for(const story of call.stories){assert.ok(story.text);assert.equal(story.summary,undefined);}
  assert.ok(library.calls.catalog.every(call=>call.selection.theme===''&&call.input.purpose==='catalog'));
- const chosen=await f.json(`sessions/${first.id}/setup`,'POST',{requestId:crypto.randomUUID(),generation:0,action:'choose',batch:0,index:0});assert.equal(chosen.intake.search.state,'idle');
+ const chosen=await f.json(`sessions/${first.id}/setup`,'POST',{requestId:crypto.randomUUID(),generation:first.intake.generation,action:'choose',batch:0,index:0});assert.equal(chosen.intake.search.state,'idle');
  await until(async()=>(await f.read(first.id)).intake.phase==='confirming');
  const prepared=await f.read(first.id),original=(await f.json(`sessions/${first.id}/source`)).source;
  assert.equal(original.storyBrief.verified,true);assert.equal(original.storyBrief.summary,library.stories[1].summary);
@@ -74,7 +74,7 @@ for(const [theme,length] of [['勇气',2],['原典故事',21]])test(`${theme}: s
  f.control.beforeText=async(kind,payload)=>{
   if(kind==='recommend'){assert.equal(candidate.storyBrief,undefined);assert.equal(payload.storyBrief.summary,'尚未准备完整摘要，请依据已核原文生成。');assert.equal(payload.storyBrief.matchReason,candidate.matchReason);assert.ok(payload.verifiedOriginal.text);return {storySummary:complete,storyMatchReason:reason};}
  };
- await f.json(`sessions/${first.id}/setup`,'POST',{requestId:crypto.randomUUID(),generation:0,action:'choose',batch:0,index:0});
+ await f.json(`sessions/${first.id}/setup`,'POST',{requestId:crypto.randomUUID(),generation:first.intake.generation,action:'choose',batch:0,index:0});
  await until(async()=>(await f.read(first.id)).intake.phase==='confirming');
  let saved=await f.read(first.id);const source=(await f.json(`sessions/${first.id}/source`)).source;
  assert.deepEqual(source.storyBrief,{summary:complete,matchReason:reason,verified:true});assert.equal(saved.frameRecommendation.storySummary,complete);assert.equal(f.control.plans.length,0);
@@ -90,7 +90,7 @@ for(const [theme,length] of [['勇气',2],['原典故事',21]])test(`${theme}: s
 for(const omitted of ['storySummary','storyMatchReason'])test(`missing ${omitted} fails preparation, blocks confirmation, and retries with the same original`,async t=>{
  const {f,library}=await fixture(t),saved=await create(f,'勇气');let invalid=true;
  f.control.beforeText=async kind=>kind==='recommend'&&invalid?{[omitted]:undefined}:undefined;
- await f.json(`sessions/${saved.id}/setup`,'POST',{requestId:crypto.randomUUID(),generation:0,action:'choose',batch:0,index:0});await until(async()=>(await f.read(saved.id)).state==='failed');
+ await f.json(`sessions/${saved.id}/setup`,'POST',{requestId:crypto.randomUUID(),generation:saved.intake.generation,action:'choose',batch:0,index:0});await until(async()=>(await f.read(saved.id)).state==='failed');
  const before=(await f.json(`sessions/${saved.id}/source`)).source;assert.equal(before.storyBrief.verified,false);assert.equal(f.control.plans.length,0);
  const current=await f.read(saved.id),confirm={requestId:crypto.randomUUID(),generation:current.intake.generation,action:'confirm',settings:{artStyle:'ink-pencil',productionPrompt:'',narrativeDetail:'balanced',length:2}};
  assert.equal((await f.request(`sessions/${saved.id}/setup`,'POST',confirm)).status,409);
@@ -206,7 +206,7 @@ test('REST accepts a captured pending completion with shared old evidence and pr
  f.generation.suggestions=async(_s,_e,input)=>{assert.equal(++catalogs,1);return localChoices(receipt.receipt,input);};
  f.generation.matchStories=async(theme,stories)=>{matches++;return {matches:stories.map(story=>({id:story.id,verdict:theme==='everything'||story.title===receipt.receipt.stories[0].title?'yes':'no',reason:'受控核对跨章完整故事可参与主题匹配。'}))};};
  const restart=async()=>{f.options.generation=withLocalBooks(f.generation,books,f.media);await f.restart();f.app.services.localBooks=books;};await restart();
- const saved=await f.json('sessions','POST',{requestId:crypto.randomUUID(),intake:true,selection});await f.demand(saved.id,crypto.randomUUID());await until(async()=>(await f.read(saved.id)).intake.phase==='choosing');
+ const saved=await f.json('sessions','POST',{requestId:crypto.randomUUID(),intake:true,selection});await f.startDiscovery(saved.id);await f.demand(saved.id,crypto.randomUUID());await until(async()=>(await f.read(saved.id)).intake.phase==='choosing');
  const ready=await f.read(saved.id),candidate=ready.intake.batches[0].stories[0];assert.equal(candidate.title,receipt.receipt.stories[0].title);assert.equal(candidate.continuedFrom,undefined);assert.equal(candidate.storyBrief,undefined);assert.equal(ready.intake.search.state,'idle');assert.equal(catalogs,1);assert.equal(f.control.recommendations.length,0);assert.equal(f.control.calls.length,0);
  await restart();assert.equal((await f.read(saved.id)).intake.batches[0].stories[0].title,candidate.title);
  const before=matches,again=await f.json('suggestions','POST',selection);assert.equal(again.stories[0].title,candidate.title);assert.equal(matches,before);assert.equal(catalogs,1);

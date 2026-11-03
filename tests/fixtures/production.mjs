@@ -77,6 +77,8 @@ export async function productionFixture(t,provider='codex',variables={}){
   return json(`sessions/${id}/recover`,'POST',{requestId:crypto.randomUUID(),faultId:fault.id});
  };
  const read=id=>json(`sessions/${id}`);
+ // Model an explicit extraction-button click; requesting viewing demand never starts an idle intake.
+ const startDiscovery=async(id,title)=>{const saved=await read(id);return json(`sessions/${id}/setup`,'POST',{requestId:crypto.randomUUID(),generation:saved.intake.generation,action:'search',title:title??(saved.selection.discovery?.mode==='title'?saved.selection.discovery.title:'')});};
  const leave=(id,viewerId)=>json(`sessions/${id}/production`,'DELETE',{viewerId});
- return {root,dataDirectory,options,control,media,generation,request,json,create,createLegacyReader,demand,read,leave,stop,coordinators,get app(){return app;},async restart(){await stop();app=createApplication(options);}};
+ return {root,dataDirectory,options,control,media,generation,request,json,create,createLegacyReader,demand,startDiscovery,read,leave,stop,coordinators,get app(){return app;},async restart(){await stop();app=createApplication(options);}};
 }

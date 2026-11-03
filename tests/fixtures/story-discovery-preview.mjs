@@ -15,7 +15,7 @@ library.book.input.text=library.book.sections.map(s=>'篇章 '+s.id+'：'+s.titl
 let release;const gate=new Promise(resolve=>release=resolve),original=library.provider.suggestions;
 library.provider.suggestions=async(...args)=>{await gate;return original(...args);};
 library.provider.matchStories=async(theme,input)=>{if(input.some(s=>s.title==='故事0'))throw new DiscoveryFailure('refused');return {matches:input.map(s=>({id:s.id,verdict:theme==='多章进度演示'&&s.title==='故事15'?'yes':'no',reason:'受控原文依据，非真实模型质量结果。'}))};};
-const create=async theme=>(await f.json('sessions','POST',{requestId:randomUUID(),intake:true,selection:{...selection,theme,narrativeDetail:'balanced'}})).id;
+const create=async theme=>{const saved=await f.json('sessions','POST',{requestId:randomUUID(),intake:true,selection:{...selection,theme,narrativeDetail:'balanced'}});await f.startDiscovery(saved.id);return saved.id;};
 const progressId=await create('多章进度演示'),unknownId=await create('无匹配演示');
 const server=createHttpServer(async request=>{if(new URL(request.url).pathname==='/__test/release'){release();return Response.json({ok:true});}return f.app.handle(request);});
 await new Promise(resolve=>server.listen(3142,'127.0.0.1',resolve));

@@ -10,7 +10,7 @@ import {discoveryNamespace} from '../server/local-story-discovery.ts';
 import {DiscoveryFailure} from '../lib/reader-discovery-call.ts';
 const key=s=>discoveryNamespace(s.library.book,'codex','controlled',undefined,'medium')+'/library';
 const catalog=s=>({stories:s.library.stories,cursor:1,readThrough:1,pendingEvents:[],exhausted:true,rejected:false});
-async function create(s,theme='受控主题'){const row=await s.f.json('sessions','POST',{requestId:randomUUID(),intake:true,selection:{...selection,theme,narrativeDetail:'balanced'}});await s.f.demand(row.id);await until(async()=>['idle','failed'].includes((await s.f.read(row.id)).intake.search.state));return s.f.read(row.id);}
+async function create(s,theme='受控主题'){const row=await s.f.json('sessions','POST',{requestId:randomUUID(),intake:true,selection:{...selection,theme,narrativeDetail:'balanced'}});await s.f.startDiscovery(row.id);await s.f.demand(row.id);await until(async()=>['idle','failed'].includes((await s.f.read(row.id)).intake.search.state));return s.f.read(row.id);}
 async function more(s,id,automatic=true){const row=await s.f.read(id);await s.f.json(`sessions/${id}/setup`,'POST',{action:'more',automatic,requestId:randomUUID(),generation:row.intake.generation});await until(async()=>['idle','failed'].includes((await s.f.read(id)).intake.search.state));return s.f.read(id);}
 test('persistent bad stories do not block later originals; exhausted results disclose unknown judgments',async t=>{
  const s=await discoveryService(t,16);let bad=0;

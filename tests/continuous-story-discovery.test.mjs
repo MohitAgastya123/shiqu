@@ -6,8 +6,8 @@ import {observeStoryGeneration} from '../lib/reader-production-client.ts';
 import {createReaderProvider} from '../server/generation.ts';
 import {withLocalBooks} from '../server/local-generation.ts';
 const candidate=title=>({stories:[{title,description:'来自原书的完整故事。'}],note:''});
-const create=async f=>(await f.json('sessions','POST',{requestId:crypto.randomUUID(),intake:true,selection:{...selection,storyTitle:undefined,length:'auto',narrativeDetail:'balanced'}})).id;
-const choose=(f,id,generation=0)=>f.json(`sessions/${id}/setup`,'POST',{requestId:crypto.randomUUID(),generation,action:'choose',batch:0,index:0});
+const create=async f=>{const saved=await f.json('sessions','POST',{requestId:crypto.randomUUID(),intake:true,selection:{...selection,storyTitle:undefined,length:'auto',narrativeDetail:'balanced'}});await f.startDiscovery(saved.id);return saved.id;};
+const choose=async(f,id,generation)=>(f.json(`sessions/${id}/setup`,'POST',{requestId:crypto.randomUUID(),generation:generation??(await f.read(id)).intake.generation,action:'choose',batch:0,index:0}));
 test('Codex, Gemini and OpenAI custom-book adapters receive a one-story request and bound the returned batch',async()=>{
  const stories=[{title:'第一篇',description:'完整故事。',artRecommendation:{artStyle:'ink-pencil',reason:'符合故事。'}},{title:'第二篇',description:'另一篇。',artRecommendation:{artStyle:'ink-pencil',reason:'符合故事。'}}];
  for(const name of ['codex','gemini','openai']){

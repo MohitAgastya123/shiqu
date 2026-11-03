@@ -85,7 +85,7 @@ test('prompt export metadata identifies partially retained and inherited calls w
 test('confirmation drafts retain both requirements through restart and apply them only on explicit confirmation',async t=>{
  const f=await productionFixture(t);f.control.hold=false;f.generation.suggestions=async()=>({stories:[{title:'庄周梦蝶',description:'梦与醒的经历。'}],note:''});
  f.control.beforeText=async kind=>kind==='review'?{issues:[],acceptanceResults:results('passed')}:undefined;
- const created=await f.json('sessions','POST',{requestId:crypto.randomUUID(),intake:true,selection:{...selection,storyTitle:undefined,length:'auto',narrativeDetail:'balanced'}}),id=created.id;await f.demand(id);
+ const created=await f.json('sessions','POST',{requestId:crypto.randomUUID(),intake:true,selection:{...selection,storyTitle:undefined,length:'auto',narrativeDetail:'balanced'}}),id=created.id;await f.startDiscovery(id);await f.demand(id);
  await until(async()=>(await f.read(id)).intake.phase==='choosing');
  await f.json(`sessions/${id}/setup`,'POST',{requestId:crypto.randomUUID(),generation:(await f.read(id)).intake.generation,action:'choose',batch:0,index:0});await until(async()=>(await f.read(id)).intake.phase==='confirming');
  const settings={artStyle:'ink-pencil',productionPrompt:'保留关键对白，画面尽量复用。',acceptancePrompt:criteria,narrativeDetail:'balanced',length:'auto'};

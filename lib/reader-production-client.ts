@@ -1,7 +1,8 @@
 // Renew one viewer's demand while polling individual checkpoints; page changes never cancel
 // server work. Manual control ends demand; durable background work is observed without retries,
 // and tells the server which page is open only so that page is drawn first.
-// An open picker also owns discovery demand and requests the next single story after each receipt.
+// An explicitly started picker owns discovery demand and requests the next story after each receipt.
+// Opening an idle, empty picker only reads saved conditions; it cannot authorize extraction.
 import type {SessionView} from './reader-model.ts';
 import type {RecoveryRequest} from './reader-recovery.ts';
 import {maxSuggestionBatches} from './reader-suggestions.ts';
@@ -24,7 +25,7 @@ export async function observeStoryGeneration({sessionId,request,isActive,onSessi
     // A choice can wait on another device or a search, so an open page keeps following it.
     const choosing=!!session.intake&&['choosing','confirming'].includes(session.intake.phase);waiting=choosing&&watchChoices;
     if(session.state==='completed'||session.awaitingFrameCount||choosing&&!watchChoices&&session.intake?.search?.state!=='searching')return '';
-    const intake=session.intake,canDiscover=!!intake&&(intake.search.state==='searching'||watchChoices&&!intake.selected&&intake.phase==='choosing');
+    const intake=session.intake,canDiscover=!!intake&&(intake.search.state==='searching'||watchChoices&&!intake.selected&&intake.phase==='choosing'&&intake.batches.length>0);
     if(focus&&(canDiscover||!choosing&&session.generationMode==='background')&&session.generationControl==='active'&&session.state!=='failed'){
      // The reader's page can be left over from another story until this one has a first image.
      const pages=session.story?.pages,page=pages?.[0]?.image?Math.min(focus.page(),pages.length-1):0;

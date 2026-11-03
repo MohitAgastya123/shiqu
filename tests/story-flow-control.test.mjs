@@ -13,7 +13,7 @@ const owner='docker-local-owner';
 const batch={stories:[{title:'庄周梦蝶',description:'梦醒后的庄周思考自己的经历。',artRecommendation:{artStyle:'paper-cut',reason:'层次适合梦境。'}},{title:'大葫芦',description:'惠子与庄子谈论大葫芦的用处。',artRecommendation:{artStyle:'watercolor',reason:'适合。'}}],note:''};
 const settings={artStyle:'watercolor',productionPrompt:'my edits',narrativeDetail:'balanced'};
 async function fixture(t){const f=await productionFixture(t);f.control.hold=false;f.discoveries=[];f.generation.suggestions=async()=>{f.discoveries.push(1);return structuredClone(batch);};return f;}
-const create=async f=>{const s=await f.json('sessions','POST',{requestId:crypto.randomUUID(),intake:true,selection:{...selection,storyTitle:undefined,length:'auto',narrativeDetail:'balanced'}});await f.demand(s.id);return s.id;};
+const create=async f=>{const s=await f.json('sessions','POST',{requestId:crypto.randomUUID(),intake:true,selection:{...selection,storyTitle:undefined,length:'auto',narrativeDetail:'balanced'}});await f.startDiscovery(s.id);await f.demand(s.id);return s.id;};
 const setup=async(f,id,action,s)=>f.json(`sessions/${id}/setup`,'POST',{requestId:crypto.randomUUID(),generation:(s||await f.read(id)).intake.generation,...action});
 const setupStatus=async(f,id,action)=>(await f.request(`sessions/${id}/setup`,'POST',{requestId:crypto.randomUUID(),generation:(await f.read(id)).intake.generation,...action})).status;
 const phase=(f,id,value)=>until(async()=>{await f.app.services.production.tick();return (await f.read(id)).intake.phase===value;});
@@ -137,9 +137,9 @@ test('searching leaves preparation alone, and neither loses the other\'s saved s
  const generator=f.generation.generator.bind(f.generation);let release,started=false;
  f.generation.generator=()=>{const g=generator();return {...g,recommend:async(...args)=>{started=true;await new Promise(r=>release=r);return g.recommend(...args);}};};
  await setup(f,id,{action:'choose',batch:0,index:0});await until(()=>started);
- const running=await f.read(id);assert.equal(running.state,'running');assert.equal(running.intake.generation,1);
+ const running=await f.read(id);assert.equal(running.state,'running');assert.equal(running.intake.generation,2,'Explicit extraction and story choice have separate generations');
  await setup(f,id,{action:'more'},running);
- assert.equal((await f.read(id)).intake.generation,1,'A search is not a new selection');
+ assert.equal((await f.read(id)).intake.generation,running.intake.generation,'A continuation search is not a new selection');
  await setup(f,id,{action:'draft',settings:{...settings,length:5}},running);
  assert.equal((await f.read(id)).state,'running','A draft leaves the running step and its lock in place');
  release();await phase(f,id,'confirming');await searchIs(f,id,'idle');
@@ -277,7 +277,7 @@ test('saved settings survive a search and a restart, and reset only with the sto
 });
 
 for(const [name,stop] of [['pause',(f,id)=>f.json(`sessions/${id}/production-control`,'POST',{action:'pause'})],['delete',(f,id)=>f.json(`library/${id}`,'DELETE')]])test(`${name} stops a search between calls and frees the text slot`,async t=>{
- const f=await fixture(t),id=await create(f),original=heldSearch(f);await until(()=>original.reading);
+ const f=await fixture(t),original=heldSearch(f),id=await create(f);await until(()=>original.reading);
  await stop(f,id);await f.app.services.production.tick();
  assert.equal(original.reading.signal.aborted,true);
  await until(async()=>(await jobs(f,id,'discover'))[0].state==='queued');const [job]=await jobs(f,id,'discover');assert.equal(job.attempts,0,'A clean stop spends no attempt');
@@ -297,7 +297,7 @@ test('a paused search reads as waiting, not running',async t=>{
 });
 
 test('a clean stop between calls resumes after restart without spending an attempt',async t=>{
- const f=await fixture(t),id=await create(f),held=heldSearch(f);await until(()=>held.reading);
+ const f=await fixture(t),held=heldSearch(f),id=await create(f);await until(()=>held.reading);
  f.generation.suggestions=async()=>{f.discoveries.push(1);return structuredClone(batch);};
  f.app.services.production.stop();await until(async()=>(await jobs(f,id,'discover'))[0].state==='queued');
  assert.equal((await jobs(f,id,'discover'))[0].attempts,0);

@@ -1,3 +1,16 @@
 /* Separate discovery actions from source controls and keep the editable query beside its results. */
 .yu-discovery-submit{margin-top:24px}
 .yu-extraction-query{margin:20px 0 26px}
+.yu-scope-selection{margin-top:12px;padding:12px;border:1px solid #dce1d2;border-radius:10px;overflow-wrap:anywhere}
+.yu-scope-selection>summary{cursor:pointer;font-size:12px;line-height:1.8}
+.yu-scope-selection>summary>span{margin-left:8px;font-size:11px;color:#718260}
+.yu-scope-complete{margin-top:12px;min-height:44px;padding:9px 14px;border:1px solid #afbf9b;border-radius:8px;background:#e7eddf;color:#45643b;font-size:12px}
+.yu-extraction-context{margin:10px 0 20px;padding:14px;border:1px solid #dce1d2;border-radius:12px;background:#f6f6ec;font-size:12px;line-height:1.8;overflow-wrap:anywhere}
+.yu-extraction-book{margin:0 0 10px;font-size:14px;font-weight:600}
+.yu-extraction-context dl{display:grid;grid-template-columns:60px minmax(0,1fr);gap:12px 10px;margin:0}
+.yu-extraction-context dt{color:#718260}
+.yu-extraction-context dd{margin:0;min-width:0}
+.yu-extraction-context ul{margin:0;padding-left:16px}
+.yu-extraction-context li+li{margin-top:8px}
+.yu-extraction-context li p{margin:4px 0 0;color:#718260;font-size:11px}
+.yu-context-retry{padding:6px 0;border:0;background:none;color:#45643b;text-decoration:underline}

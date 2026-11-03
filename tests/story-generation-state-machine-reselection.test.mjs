@@ -17,7 +17,7 @@ async function fixture(t,held=false){
 }
 async function draft(f,id){
  const s=await f.json(`sessions/${id}/reselection`,'POST',{requestId:crypto.randomUUID()});
- await f.demand(s.id);await until(async()=>(await f.read(s.id)).intake.phase==='choosing');return f.read(s.id);
+ await f.startDiscovery(s.id);await f.demand(s.id);await until(async()=>(await f.read(s.id)).intake.phase==='choosing');return f.read(s.id);
 }
 const choose=(f,id,s,body={requestId:crypto.randomUUID(),batch:0,index:1,settings})=>f.json(`sessions/${id}/reselection/${s.id}`,'POST',body);
 test('opening and cancelling selection drafts never adds a shelf card; cancellation returns the current saved state',async t=>{

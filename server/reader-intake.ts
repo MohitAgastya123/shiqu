@@ -1,5 +1,6 @@
 // Save creation intent before extraction, and serialize each explicit choice independently of queue progress.
-// Search and setting drafts use targeted writes: neither replaces the selection or a running step's lock.
+// Continuation and setting drafts preserve the chosen story; title changes reset only unselected intake.
+// An explicit query keeps the original scope and controls, and never bypasses a production lock.
 import {directBookChoice,selectedChapterScope} from './local-book-contents.ts';
 import type {LocalBooks} from './local-books.ts';
 import {localBookId} from './local-books.ts';
@@ -27,7 +28,7 @@ export async function createIntake(repo:ReaderRepository,id:string,uid:string,in
  const choice=input.source?await directBookChoice(books!,input):null;
  const selection=selectionSchema.parse({...input,storyTitle:choice?.entry.title,source:choice?.entry.source,discoverySources:scope?.discoverySources,length:'auto',narrativeDetail:input.narrativeDetail||'balanced'});
  if(selection.bookId==='other'&&!selection.customBook?.trim())throw new ReaderError(400,'请先填写书名或 URL。');
- const creationHash=hash(selection),doc:Document={...emptyDocument(),intake:{phase:'discovering',generation:0,creationHash,batches:[],briefRequired:true,search:{round:1,state:'searching',cycleId:id}}};
+ const creationHash=hash(selection),doc:Document={...emptyDocument(),intake:{phase:'choosing',generation:0,creationHash,batches:[],briefRequired:true,search:{round:0,state:'idle'}}};
  if(choice){doc.original=choice.original;doc.intake!.phase='preparing';doc.intake!.search={round:0,state:'idle'};doc.intake!.selected={batch:0,index:0};doc.intake!.batches=[{stories:[{title:choice.entry.title,description:choice.entry.excerpt,source:choice.entry.source,sourceLabel:choice.original.title.slice(0,150)}],note:''}];}
  if(reselection){doc.reselection=reselection;doc.intake!.manualArt=true;}
  const row=await repo.create(id,uid,selection,doc);

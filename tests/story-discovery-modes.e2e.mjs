@@ -42,19 +42,28 @@ test('title, theme and original scope are independently optional in the creation
  }
  for(let flags=0;flags<8;flags++){
   const title=!!(flags&1),theme=!!(flags&2),scope=!!(flags&4),sheet=await open();
-  assert.equal(await sheet.getByLabel(/故事标题（可选）/).count(),0);
+  assert.equal(await sheet.getByLabel('故事标题',{exact:true}).count(),0);
   assert.equal(await sheet.getByRole('group',{name:'原文范围'}).getByRole('button',{name:'自动',exact:true}).count(),1);
+  const scopePosition=await sheet.getByRole('group',{name:'原文范围'}).boundingBox(),themePosition=await sheet.getByRole('group',{name:'故事主题'}).boundingBox();
+  assert.ok(scopePosition.y<themePosition.y,'Original scope should appear before theme');
   if(theme){await sheet.getByRole('group',{name:'故事主题'}).getByRole('button',{name:'其他',exact:true}).click();await sheet.getByLabel('写下想看的主题').fill('知恩图报');}
-  if(scope){await sheet.getByRole('group',{name:'原文范围'}).getByRole('button',{name:'选择章节或已有故事段落'}).click();await sheet.getByRole('checkbox',{name:'第一章',exact:true}).check();}
-  const gap=await sheet.getByRole('button',{name:'开始发现故事',exact:true}).evaluate(button=>button.getBoundingClientRect().top-button.previousElementSibling.getBoundingClientRect().bottom);
+  if(scope){
+   await sheet.getByRole('group',{name:'原文范围'}).getByRole('button',{name:'选择章节或已有故事段落'}).click();await sheet.getByRole('checkbox',{name:'第一章',exact:true}).check();
+   await sheet.getByRole('button',{name:'完成原文选择',exact:true}).click();
+   assert.equal(await sheet.getByLabel('搜索故事或章节').isVisible(),false);
+   await sheet.locator('.yu-scope-selection>summary').click();
+   assert.equal(await sheet.getByRole('checkbox',{name:'第一章',exact:true}).isChecked(),true);
+   await sheet.getByRole('button',{name:'完成原文选择',exact:true}).click();
+  }
+  const gap=await sheet.getByRole('button',{name:'进入故事提取',exact:true}).evaluate(button=>button.getBoundingClientRect().top-button.previousElementSibling.getBoundingClientRect().bottom);
   assert.ok(gap>=23.5,`discovery button gap: ${gap}`);
   if(flags===0){
    await mkdir('/tmp/shiqu-editable-title',{recursive:true});
-   await sheet.getByRole('button',{name:'开始发现故事',exact:true}).scrollIntoViewIfNeeded();
+   await sheet.getByRole('button',{name:'进入故事提取',exact:true}).scrollIntoViewIfNeeded();
    await page.screenshot({path:'/tmp/shiqu-editable-title/source-button-gap.png'});
   }
   const response=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/reader/sessions'&&response.request().method()==='POST');
-  await sheet.getByRole('button',{name:'开始发现故事',exact:true}).click();
+  await sheet.getByRole('button',{name:'进入故事提取',exact:true}).click();
   const created=await response;assert.equal(created.status(),201);
   const payload=created.request().postDataJSON().selection,saved=await created.json();
   assert.deepEqual(payload.discovery,{mode:'auto'});
@@ -62,32 +71,71 @@ test('title, theme and original scope are independently optional in the creation
   assert.equal(payload.discoverySources?.length,scope?1:undefined);
   assert.deepEqual(saved.selection.discovery,payload.discovery);assert.equal(saved.selection.theme,payload.theme);
   assert.equal(saved.selection.source,undefined);
+  assert.equal(saved.intake.search.state,'idle');assert.deepEqual(saved.intake.batches,[]);
   const extraction=page.getByRole('dialog',{name:'选择故事',exact:true});
-  await extraction.getByLabel(/故事标题（可选）/).waitFor();
+  await extraction.getByRole('group',{name:'标题方式'}).waitFor();
+  assert.equal(await extraction.getByRole('button',{name:'自动标题',exact:true}).getAttribute('aria-pressed'),'true');
+  assert.equal(await extraction.getByLabel('故事标题',{exact:true}).count(),0);
+  const context=extraction.getByRole('region',{name:'已选原文与主题'});
+  if(scope)await context.getByText('第一章',{exact:true}).waitFor();
+  else assert.ok((await context.textContent()).includes('自动（未限定章节或段落）'));
+  assert.ok((await context.textContent()).includes(theme?'知恩图报':'不限定主题'));
+  const contextPosition=await context.boundingBox(),modePosition=await extraction.getByRole('group',{name:'标题方式'}).boundingBox();
+  assert.ok(contextPosition.y<modePosition.y,'Selected originals and theme should precede title mode');
+  assert.equal((await f.app.services.production.queue.jobs(saved.id,'docker-local-owner')).filter(job=>job.kind==='discover').length,0);
+  assert.ok((await extraction.textContent()).includes('点击按钮后开始提取'));
+  if(flags===0)assert.equal(library.calls.catalog.length,0);
   if(title){
-   await extraction.getByLabel(/故事标题（可选）/).fill('乌龟报恩');
+   await extraction.getByRole('button',{name:'输入标题',exact:true}).click();
+   assert.equal(await extraction.getByRole('button',{name:'按标题提取',exact:true}).isDisabled(),true);
+   await extraction.getByLabel('故事标题',{exact:true}).fill('乌龟报恩');
    const search=page.waitForResponse(response=>response.url().endsWith(`/api/reader/sessions/${saved.id}/setup`)&&response.request().method()==='POST'&&response.request().postDataJSON().action==='search');
    await extraction.getByRole('button',{name:'按标题提取',exact:true}).click();
    const searched=await search;assert.equal(searched.status(),200);const changed=await searched.json();
    assert.deepEqual(changed.selection.discovery,{mode:'title',title:'乌龟报恩'});
    assert.equal(changed.selection.theme,payload.theme);assert.deepEqual(changed.selection.discoverySources,payload.discoverySources);
+  }else{
+   const search=page.waitForResponse(response=>response.url().endsWith(`/api/reader/sessions/${saved.id}/setup`)&&response.request().method()==='POST'&&response.request().postDataJSON().action==='search');
+   await extraction.getByRole('button',{name:'开始提取',exact:true}).click();
+   const started=await search;assert.equal(started.status(),200);assert.deepEqual((await started.json()).selection.discovery,{mode:'auto'});
+  }
+  await extraction.getByRole('button').filter({has:page.getByText('乌龟报恩',{exact:true})}).waitFor();
+  if(flags===6){
+   await page.setViewportSize({width:390,height:844});
+   await extraction.getByRole('region',{name:'已选原文与主题'}).scrollIntoViewIfNeeded();
+   assert.equal(await extraction.evaluate(element=>element.scrollWidth<=element.clientWidth),true);
+   await page.screenshot({path:'/tmp/shiqu-editable-title/extraction-auto-mobile.png'});
+   await page.setViewportSize({width:1280,height:900});
   }
   if(flags===7){
    await page.setViewportSize({width:390,height:844});
    assert.equal(await extraction.evaluate(element=>element.scrollWidth<=element.clientWidth),true);
    await page.screenshot({path:'/tmp/shiqu-editable-title/extraction-mobile.png'});
    // Editing and clearing a target is an explicit new extraction, without returning to the first window.
-   await extraction.getByLabel(/故事标题（可选）/).fill('勇士护民');
+   await extraction.getByLabel('故事标题',{exact:true}).fill('勇士护民');
    let response=page.waitForResponse(response=>response.url().endsWith(`/api/reader/sessions/${saved.id}/setup`)&&response.request().method()==='POST'&&response.request().postDataJSON().action==='search');
    await extraction.getByRole('button',{name:'按标题提取',exact:true}).click();
    assert.equal((await(await response).json()).selection.discovery.title,'勇士护民');
-   await extraction.getByLabel(/故事标题（可选）/).fill('');
+   await extraction.getByRole('button',{name:'自动标题',exact:true}).click();
+   assert.equal(await extraction.getByLabel('故事标题',{exact:true}).count(),0);
    response=page.waitForResponse(response=>response.url().endsWith(`/api/reader/sessions/${saved.id}/setup`)&&response.request().method()==='POST'&&response.request().postDataJSON().action==='search');
-   await extraction.getByRole('button',{name:'自动提取故事',exact:true}).click();
+   await extraction.getByRole('button',{name:'开始提取',exact:true}).click();
    assert.deepEqual((await(await response).json()).selection.discovery,{mode:'auto'});
    await page.setViewportSize({width:1280,height:900});
   }
  }
+ // Selecting a book is a preference immediately, even when creation is cancelled before submission.
+ let preference=await open();
+ await preference.getByRole('group',{name:'选择书籍'}).getByRole('button',{name:'水浒传',exact:true}).click();
+ await preference.getByRole('button',{name:'关闭',exact:true}).click();
+ await page.getByRole('button',{name:'新建故事',exact:true}).click();
+ preference=page.getByRole('dialog',{name:'这一篇，想怎样读？'});
+ assert.equal(await preference.getByRole('group',{name:'选择书籍'}).getByRole('button',{name:'水浒传',exact:true}).getAttribute('aria-pressed'),'true');
+ await preference.getByRole('button',{name:'关闭',exact:true}).click();
+ await page.reload();await page.getByRole('button',{name:'新建故事',exact:true}).click();
+ preference=page.getByRole('dialog',{name:'这一篇，想怎样读？'});
+ assert.equal(await preference.getByRole('group',{name:'选择书籍'}).getByRole('button',{name:'水浒传',exact:true}).getAttribute('aria-pressed'),'true');
+ await preference.getByRole('button',{name:'关闭',exact:true}).click();
  // A single catalog story can be a title-query scope, and clearing the title preserves that choice.
  const real=new LocalBooks(process.cwd());library.books.book=selection=>real.book(selection);
  let sheet=await open();
@@ -95,19 +143,44 @@ test('title, theme and original scope are independently optional in the creation
  await sheet.getByRole('group',{name:'原文范围'}).getByRole('button',{name:'选择章节或已有故事段落'}).click();
  await sheet.getByLabel('搜索故事或章节').fill('种梨');
  await sheet.getByRole('button').filter({has:page.getByText('種梨',{exact:true})}).click();
+ await sheet.getByRole('button',{name:'完成原文选择',exact:true}).click();
  await sheet.getByRole('group',{name:'故事主题'}).getByRole('button',{name:'欲望与代价',exact:true}).click();
  const request=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/reader/sessions'&&response.request().method()==='POST');
- await sheet.getByRole('button',{name:'开始发现故事',exact:true}).click();
+ await sheet.getByRole('button',{name:'进入故事提取',exact:true}).click();
  const submitted=await request;assert.equal(submitted.status(),201);const selected=submitted.request().postDataJSON().selection;
  assert.deepEqual(selected.discovery,{mode:'auto'});assert.equal(selected.theme,'欲望与代价');assert.equal(selected.discoverySources.length,1);assert.equal(selected.source,undefined);
  const created=await submitted.json(),extraction=page.getByRole('dialog',{name:'选择故事',exact:true});
- await extraction.getByLabel(/故事标题（可选）/).fill('种梨');
+ await extraction.getByRole('region',{name:'已选原文与主题'}).getByText('種梨',{exact:true}).waitFor();
+ await extraction.getByRole('button',{name:'输入标题',exact:true}).click();
+ await extraction.getByLabel('故事标题',{exact:true}).fill('种梨');
  const search=page.waitForResponse(response=>response.url().endsWith(`/api/reader/sessions/${created.id}/setup`)&&response.request().method()==='POST'&&response.request().postDataJSON().action==='search');
  await extraction.getByRole('button',{name:'按标题提取',exact:true}).click();
  const changed=await(await search).json();assert.equal(changed.selection.discovery.title,'种梨');assert.deepEqual(changed.selection.discoverySources,selected.discoverySources);
  sheet=await open();await sheet.getByRole('group',{name:'选择书籍'}).getByRole('button',{name:'其他',exact:true}).click();
- assert.equal(await sheet.getByLabel(/故事标题（可选）/).count(),0);
+ assert.equal(await sheet.getByLabel('故事标题',{exact:true}).count(),0);
  assert.equal(f.control.calls.length,0);assert.equal(f.control.plans.length,0);
+ // The actual three selected Water Margin chapters are listed, rather than just a range count.
+ sheet=await open();
+ await sheet.getByRole('group',{name:'选择书籍'}).getByRole('button',{name:'水浒传',exact:true}).click();
+ await sheet.getByRole('group',{name:'原文范围'}).getByRole('button',{name:'选择章节或已有故事段落'}).click();
+ await sheet.getByLabel('搜索故事或章节').fill('高太尉');
+ for(const chapter of ['第七十八回','第七十九回','第八十回'])await sheet.getByRole('checkbox',{name:new RegExp('^'+chapter+' ')}).check();
+ await sheet.getByRole('button',{name:'完成原文选择',exact:true}).click();
+ await sheet.getByRole('group',{name:'故事主题'}).getByRole('button',{name:'欲望与代价',exact:true}).click();
+ await sheet.getByRole('button',{name:'进入故事提取',exact:true}).click();
+ const margin=page.getByRole('dialog',{name:'选择故事',exact:true}),chosen=margin.getByRole('region',{name:'已选原文与主题'});
+ for(const chapter of ['第七十八回','第七十九回','第八十回'])await chosen.getByText(new RegExp('^'+chapter+' ')).waitFor();
+ assert.ok((await chosen.textContent()).includes('欲望与代价'));
+ assert.equal(await margin.getByRole('button',{name:'自动标题',exact:true}).getAttribute('aria-pressed'),'true');
+ assert.equal(await margin.getByLabel('故事标题',{exact:true}).count(),0);
+ await page.setViewportSize({width:390,height:844});
+ assert.equal(await margin.evaluate(element=>element.scrollWidth<=element.clientWidth),true);
+ await margin.locator('.yu-sheet').evaluate(element=>{element.scrollTop=0;});
+ await page.screenshot({path:'/tmp/shiqu-editable-title/three-chapter-context-mobile.png'});
+ await margin.getByRole('button',{name:'输入标题',exact:true}).click();
+ await margin.getByLabel('故事标题',{exact:true}).fill('宋公明三败高俅');
+ await page.screenshot({path:'/tmp/shiqu-editable-title/three-chapter-input-mobile.png'});
+ await page.setViewportSize({width:1280,height:900});
  // The same editor is available inside a separate replacement draft; cancelling retains the parent.
  f.options.generation=f.generation;f.control.hold=false;
  f.generation.suggestions=async selection=>({stories:[{title:selection.discovery?.mode==='title'?selection.discovery.title:'重选候选',description:'可独立讲述的完整事件。'}],note:''});
@@ -117,7 +190,9 @@ test('title, theme and original scope are independently optional in the creation
  await page.getByRole('button',{name:'故事设置',exact:true}).click();
  await page.getByRole('button',{name:'替换选题',exact:true}).click();
  const replacement=page.getByRole('dialog',{name:'替换选题',exact:true});
- await replacement.getByLabel(/故事标题（可选）/).fill('庄子的大葫芦');
+ assert.ok((await replacement.textContent()).includes('点击按钮后开始提取'));
+ await replacement.getByRole('button',{name:'输入标题',exact:true}).click();
+ await replacement.getByLabel('故事标题',{exact:true}).fill('庄子的大葫芦');
  const query=page.waitForResponse(response=>/\/api\/reader\/sessions\/[^/]+\/setup$/.test(new URL(response.url()).pathname)&&response.request().method()==='POST'&&response.request().postDataJSON().action==='search');
  await replacement.getByRole('button',{name:'按标题提取',exact:true}).click();
  const replacementQuery=await query;assert.equal(replacementQuery.status(),200);const draft=await replacementQuery.json();

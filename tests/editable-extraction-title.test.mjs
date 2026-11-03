@@ -13,7 +13,7 @@ test('changing the extraction title fences a late old result and persists the ne
   if(calls.length===1)await gate;
   return {stories:[{title:current.discovery?.mode==='title'?current.discovery.title:'旧自动故事',description:'原文中的完整事件。'}],note:''};
  };
- const id=crypto.randomUUID();await f.json('sessions','POST',{requestId:id,intake:true,selection:{...selection,storyTitle:undefined,discovery:{mode:'auto'},length:'auto'}});await f.demand(id);
+ const id=crypto.randomUUID();await f.json('sessions','POST',{requestId:id,intake:true,selection:{...selection,storyTitle:undefined,discovery:{mode:'auto'},length:'auto'}});await f.startDiscovery(id);await f.demand(id);
  try{
  await until(()=>calls.length===1);
  const before=await f.read(id),command={requestId:crypto.randomUUID(),generation:before.intake.generation,action:'search',title:'指定的新故事'};
@@ -48,7 +48,7 @@ test('query changes preserve canonical source scope, theme and paused control wi
 
 test('selected, preparing and confirmed stories reject a direct title reset',async t=>{
  const f=await productionFixture(t);f.generation.suggestions=async()=>({stories:[{title:'庄周梦蝶',description:'梦与醒的故事。'}],note:''});
- const created=await f.json('sessions','POST',{requestId:crypto.randomUUID(),intake:true,selection:{...selection,storyTitle:undefined}});await f.demand(created.id);
+ const created=await f.json('sessions','POST',{requestId:crypto.randomUUID(),intake:true,selection:{...selection,storyTitle:undefined}});await f.startDiscovery(created.id);await f.demand(created.id);
  await until(async()=>(await f.read(created.id)).intake.phase==='choosing');let saved=await f.read(created.id);
  await f.json(`sessions/${created.id}/setup`,'POST',{requestId:crypto.randomUUID(),generation:saved.intake.generation,action:'choose',batch:0,index:0});
  saved=await f.read(created.id);

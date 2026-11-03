@@ -15,7 +15,7 @@ async function prepared(t){
  const inputs=[];let outside=false;
  f.generation.suggestions=async(_s,_excluded,input)=>{inputs.push(input);return {stories:_excluded.includes('黄忠取定军山')?[]:[{title:'黄忠取定军山',description:'老将与法正筹划进取。',summary:'人物经历事件、作出行动，事情得到完整结果。',source:outside?{...source,sectionId:book.sections[0].id,firstUnit:book.sections[0].units[0].id,lastUnit:book.sections[0].units[3].id}:source}],note:'',scan:{blockComplete:true,pendingEvents:[],resolvedEventIds:[]}};};
  f.options.generation=withLocalBooks(f.generation,books,f.media);await f.restart();f.app.services.localBooks=books;
- const create=async(references=sources,id=crypto.randomUUID())=>{const s=await f.json('sessions','POST',{requestId:id,intake:true,selection:{...base,discoverySources:references}});await f.demand(s.id);return s;};
+ const create=async(references=sources,id=crypto.randomUUID())=>{const s=await f.json('sessions','POST',{requestId:id,intake:true,selection:{...base,discoverySources:references}});if(s.intake.search.state==='idle'&&!s.intake.batches.length)await f.startDiscovery(s.id);await f.demand(s.id);return f.read(s.id);};
  return {...f,get app(){return f.app;},book,sources,source,inputs,create,setOutside(value){outside=value;}};
 }
 
