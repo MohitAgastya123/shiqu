@@ -46,3 +46,8 @@ ol.production-timeline--horizontal{grid-template-columns:repeat(7,minmax(0,1fr))
 .production-stage-detail-action{display:inline-flex;align-items:center;min-height:24px;padding:0;border:0;background:none;color:inherit;font:inherit;text-decoration:underline;text-decoration-color:#aabb98;text-underline-offset:3px;cursor:pointer}.production-stage-detail-action:focus-visible{outline:2px solid #82996f;outline-offset:3px;border-radius:3px}
 
 .production-review-loop{margin:10px 0 0;color:#758468;font-size:11px;line-height:1.8}
+
+.production-review-history{text-align:right}
+
+/* Review blockers belong to the failed checkpoint, including their existing edit action. */
+.production-timeline>li.has-review-notice{flex-wrap:wrap}.production-stage-notice{flex-basis:100%;min-width:0;margin-left:34px;line-height:1.8}.production-acceptance-notice>strong{font-weight:600}.production-acceptance-notice>p{margin:6px 0}.production-acceptance-notice>button{min-height:40px}

@@ -24,8 +24,16 @@ test('prompt history distinguishes inherited/current records, previews and missi
  const missing=render(Details,{data:{...data,records:[],results:[]},kind:'acceptance',sessionId:'old',preferences:{}});assert.match(missing,/未留存/);assert.match(missing,/旧版本不会补造历史记录/);assert.match(missing,/尚无本篇验收条目的审核结果/);
 });
 test('an unknown criterion without fabricated frame issues still exposes the acceptance repair route',()=>{
- const html=render(Review,{session:{story:{pages:[{image:'saved'}],original:{}},reviewIssues:[],generationProgress:{reviewStopReason:'requirements'}},busy:false,error:'',onScript:noop,onRetry:noop,onDrawAnyway:noop,onAcceptance:noop});
- assert.match(html,/验收要求需要调整/);assert.match(html,/查看并修改验收要求/);assert.doesNotMatch(html,/继续自动修复/);
+ const session={id:'blocked',selection:{length:1},state:'failed',ready:1,story:{pages:[{image:'saved'}],original:{}},reviewIssues:[],generationProgress:{phase:'review',reviewStatus:'blocked',reviewStopReason:'requirements',reviewAudits:1}};
+ const tools=render(Review,{session,busy:false,error:'',onScript:noop,onRetry:noop,onDrawAnyway:noop});
+ assert.doesNotMatch(tools,/验收要求需要调整|查看并修改验收要求|继续自动修复/);
+ for(const audits of [1,2]){
+  const html=render(Status,{session:{...session,generationProgress:{...session.generationProgress,reviewAudits:audits}},busy:false,controlBusy:false,error:'',onControl:noop,onRetry:noop,onBack:noop,onAcceptance:noop});
+  const target=audits===1?'review':'recheck',stage=html.match(new RegExp(`<li[^>]*data-stage="${target}"[^>]*>(.*?)</li>`,'s'))?.[1];
+  assert.ok(stage);assert.match(stage,/验收要求需要调整/);assert.match(stage,/查看并修改验收要求/);assert.equal((html.match(/验收要求需要调整/g)||[]).length,1);assert.doesNotMatch(html,/继续自动修复/);
+  assert.doesNotMatch(html,/yu-generation-description/);
+  const other=html.match(new RegExp(`<li[^>]*data-stage="${audits===1?'recheck':'review'}"[^>]*>(.*?)</li>`,'s'))?.[1];assert.doesNotMatch(other,/验收要求需要调整/);
+ }
 });
 
 test('flow resume is primary, shelf return is secondary and all creation/status states retain an explicit exit',()=>{

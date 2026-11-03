@@ -11,7 +11,7 @@ Git基线：`dd1f449c0be320b3fc55b959a428ed328b54ae6f`。
 - 纯投影`lib/reader-review-history.ts`将现有记录组成事件。按本版本usage的step定位实际顺序；新元数据优先，旧记录按明确的round/step规则匹配，不能唯一定位就单列顺序未留存。局部旧前文可从对应留存请求JSON的plan恢复，仅作为实际输入证据，不用当前稿回填。继承originId不同的调用不计本版本。
 - `GET reader/sessions/:id/review-history`仅repo.get当前用户的可见故事，显式选择展示字段；不调用production、模型或写入。返回本版本信息、上一版ID、已保存事件、当前阻断/人工放行状态，不返回整份原文、usage原始载荷或密钥。
 - `StoryReviewHistory`按需加载，Sheet呈现事件、数量决策、问题、修法、验收结果与对照。上一版按钮只切换记录目标，不切换阅读页/书架版本；可返回当前版。未保存的时间/前文不推算。
-- Reader设置与StoryReviewTools接入同一入口；按钮文案改为“开始制作”，不改提交动作和图片复用。
+- Reader设置及无图制作流程均由ProductionTimeline接入同一历史入口；按钮文案改为“开始制作”，不改提交动作和图片复用。
 
 ## 实施
 
@@ -19,7 +19,7 @@ Git基线：`dd1f449c0be320b3fc55b959a428ed328b54ae6f`。
 - [x] 实现类型与engine最小记录增强、纯历史投影及GET接口。
 - [x] 实现手机可读的历史Sheet和版本导航、现有入口与开始制作文案。
 - [x] 验证正式引擎新增before/step/time与原审修结果原子保存；API隔离、GET零副作用、版本归属、排序不确定、旧稿缺失、局部/结构/结语/人物对照和无变化记录。
-- [ ] UI受控渲染/接口集成测试、相关ET、typecheck/lint；应用内浏览器核验实际历史和手机宽度，只读不触发制作。
+- [x] UI受控渲染/接口集成测试、相关ET、typecheck/lint；应用内浏览器核验实际历史和手机宽度，只读不触发制作。
 - [x] 保留进入时无关文档，不纳入本任务提交。
 
 ET见`.docs/tests/test-story-review-history.md`。新能力直接接正式引擎/API，测试复用该实现。
@@ -49,3 +49,32 @@ CR passed: no major findings
 CR risk: non-low — 历史接口与记录元数据涉及权限、版本归属和证据真值。
 
 CR review round: 2; reviewer: reused
+
+SS后续里程碑：`d9275ab`保存原文导航位置、正式队列ET及结语记录断言。
+
+TT：Node24.22.1/pnpm11.25.0，全量1045通过，0失败；日志`/tmp/shiqu-history-full-tests2.log`。typecheck与lint通过（`/tmp/shiqu-history-{typecheck,lint}-final2.log`）。
+
+ET：审核、数量、结构与人物设定相关4个既有E2E文件26项通过（`/tmp/shiqu-history-et.log`）。本任务正式队列flow/API/旧记录/UI证据见`tests/review-history*.test.mjs`及应用内浏览器。
+
+VR passed: all acceptance criteria complete
+
+VR risk: non-low — 历史接口与持久化记录涉及权限、版本归属及证据真值。
+
+VR review round: 1; reviewer: reused
+
+完整VR逐项结果见`.docs/done/2026/11/03/story-review-history.md`。用户已追加DD与GC，执行最终本地交付，不推送。
+
+## 最终界面收口
+
+- [x] 审核记录替代流程末尾说明并右对齐，去掉标题行与书架按钮下方的重复入口；制作标题行保留原文与重新选择故事。
+- [x] 移除重绘数量/预览说明，仅改展示，保留正式图片复用与暂停控制。
+- [x] 将验收unknown提示与原修改入口放入实际失败的审核/复核节点，复用同一ProductionTimeline；以实际报告数量区分初审和复核，保留已完成的修订。
+- [x] 45项相关回归、typecheck和lint通过，覆盖初审/复核归属、未留修订、旧原生/预览一致性；只读浏览器验证旧v2提示位于复核，390px无溢出，入口仍可打开验收编辑页。
+
+这些后续调整仅影响展示与只读状态投影，不新增持久化字段或改变正式队列执行条件。证据：`/tmp/shiqu-inline-acceptance-checks.log`及会话截图`acceptance-in-review-step.jpg`、`story-review-right-aligned.jpg`。
+
+## DD / GC最终核验
+
+最终代码全量1046/1046通过，types/lint通过；复用26项ET及45项显示回归。增量独立CR第3轮及VR第2轮通过，完整终结语和逐项结果记录于DD。
+
+用户已要求本地GC，提交本任务剩余界面、回归与交付文档，保留ff668ae及d9275ab里程碑和进入时其他三处文档。制作确认页与故事设置的重新选择入口位置差异已只读定位，未扩展本次设置页调整范围。

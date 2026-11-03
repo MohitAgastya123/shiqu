@@ -34,6 +34,14 @@ test('seven steps distinguish initial review, targeted repair, recheck, skipped 
  assert.equal(states({phase:'image',reviewStatus:'blocked',ready:45})[6],'pending');
  assert.equal(states({phase:'image',reviewStatus:'passed',reviewRound:2,ready:45})[6],'done');
 });
+test('acceptance blockers mark the audit that produced them without erasing completed repairs',()=>{
+ const blocked={...base,phase:'review',reviewStatus:'blocked',reviewStopReason:'requirements',repairTotal:0};
+ const initial=productionSteps({...blocked,reviewRound:5,reviewAudits:1,repairPasses:2});
+ assert.equal(initial[3].state,'failed');assert.equal(initial[4].state,'done');assert.equal(initial[5].state,'pending');
+ const recheck=productionSteps({...blocked,reviewRound:2,reviewAudits:2,repairPasses:1,repairBatches:1});
+ assert.deepEqual(recheck.slice(3).map(s=>s.state),['done','done','failed','pending']);assert.match(recheck[4].detail,/已完成 1 批/);assert.match(recheck[5].detail,/验收要求存在冲突或无法判断/);
+ const noRepair=productionSteps({...blocked,reviewRound:2,reviewAudits:2,repairPasses:0});assert.equal(noRepair[4].state,'skipped');assert.match(noRepair[4].detail,/未执行自动修订/);
+});
 test('native/preview SQL and reader show the same saved stages without exporting private content',()=>{
  const directory=mkdtempSync(path.join(tmpdir(),'shiqu-stages-'));
  try{
@@ -56,6 +64,7 @@ test('native/preview SQL and reader show the same saved stages without exporting
    {name:'blocked',state:'failed',doc:{original,plan,visualReview:review('blocked',2,{issues:[{page:2}]})}},
    {name:'replan',state:'failed',doc:{original,plan,visualReview:review('blocked',1,{stopReason:'replan',issues:[{page:45,requiresReplan:true}]})}},
    {name:'requirements',state:'failed',doc:{original,plan,visualReview:review('blocked',1,{stopReason:'requirements'})}},
+   {name:'requirements-recheck',state:'failed',doc:{original,plan,visualReview:review('blocked',2,{stopReason:'requirements',reports:[{},{}],history:[{}]})}},
    {name:'first-pass',doc:{original,plan,visualReview:review('passed',1)}},
    {name:'rechecked-pass',doc:{original,plan,visualReview:review('passed',2)}},
    {name:'legacy',doc:{original,plan}},
