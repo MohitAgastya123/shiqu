@@ -1,9 +1,12 @@
 // Add edge navigation around the scrollable conclusion without intercepting its
 // controls. Scrolls, drags and long presses must not become accidental edge taps.
+// The drag offset is subscribed here, so a swipe re-renders this surface but not Reader or its children.
 import {useRef,type ReactNode,type RefObject,type PointerEvent,type MouseEvent} from 'react';
 import {edgePageDirection} from '@/lib/reader-navigation';
+import {useDragOffset,type DragOffset} from './useDragOffset';
 
-export default function StoryEndingSurface({children,onTurn,onDrag,drag,surfaceRef}:{children:ReactNode;onTurn:(direction:number)=>void;onDrag:(distance:number)=>void;drag:number;surfaceRef:RefObject<HTMLElement|null>}){
+export default function StoryEndingSurface({children,onTurn,onDrag,drag:dragOffset,surfaceRef}:{children:ReactNode;onTurn:(direction:number)=>void;onDrag:(distance:number)=>void;drag:DragOffset;surfaceRef:RefObject<HTMLElement|null>}){
+ const drag=useDragOffset(dragOffset);
  const pointer=useRef<{id:number;x:number;y:number;startedAt:number;travel:number}|null>(null);
  const pointerType=useRef(''),suppressClick=useRef(false);
  const control=(target:EventTarget)=>target instanceof Element&&!!target.closest('button,a,input,textarea,select,[role="button"]');

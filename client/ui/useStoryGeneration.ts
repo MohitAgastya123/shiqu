@@ -1,12 +1,14 @@
 'use client';
 // Separate status inspection from viewer demand and publish saved artwork as it arrives.
 // An open story reports its page so that page is drawn first; that never starts or retries work.
+// Polls reuse unchanged session rows and the active snapshot, so idle polling does not re-render the reader.
 import type {StoryPublication} from '@/lib/story-publication';
 import {useEffect,useRef,useState} from 'react';
 import {randomId,request} from './shared';
 import {observeOnlyGeneration,observeStoryGeneration,runQueuedStoryGeneration} from '@/lib/reader-production-client';
 import type {IntakeCommand} from '@/lib/reader-intake';
 import {latestStoryVersions} from '@/lib/reader-versions';
+import {keepSnapshot,shareRows} from '@/lib/reader-snapshots';
 import type {GeneratedStory,Selection,SessionView,ProductionAction} from '@/lib/reader-model';
 import type {RecoveryRequest} from '@/lib/reader-recovery';
 type Callbacks={onStory:(story:GeneratedStory,initialPage?:number,saved?:boolean)=>void;onProgress:(rows:{storyId:string;page:number;saved:number;updatedAt?:string|null}[])=>void};
@@ -30,7 +32,7 @@ export function useStoryGeneration(page:number,callbacks:Callbacks,watchShelf=fa
  function collect(s:SessionView,submitted=false){
   // Only the list response or a new submission may add members; historical reads only update known cards.
   if(removed.current.has(s.id)||!submitted&&!librarySessions.current.some(row=>row.id===s.id))return;
-  libraryChanges.current++;librarySessions.current=latestStoryVersions([s,...librarySessions.current.filter(x=>x.id!==s.id)]);setSessions(librarySessions.current);
+  libraryChanges.current++;librarySessions.current=shareRows(librarySessions.current,latestStoryVersions([s,...librarySessions.current.filter(x=>x.id!==s.id)]),row=>row.id);setSessions(librarySessions.current);
  }
  useEffect(()=>{live.current=true;request('reader/status').then(s=>{if(live.current)setConnected(s.configured);}).catch(()=>{});refreshLibrary().catch(()=>{}).finally(()=>{if(live.current)setLibraryLoading(false);});return()=>{live.current=false;libraryRead.current++;id.current='';};},[]);
  async function start(selection:Selection,intake=false){
@@ -168,7 +170,7 @@ export function useStoryGeneration(page:number,callbacks:Callbacks,watchShelf=fa
    if(restored&&live.current&&read===libraryRead.current)removed.current.delete(restored.id);
    const visible=rows.filter(s=>!removed.current.has(s.id));
    if(live.current&&isCurrent()&&read===libraryRead.current&&changes===libraryChanges.current){
-    librarySessions.current=visible;setSessions(visible);setLibraryError('');
+    librarySessions.current=shareRows(librarySessions.current,visible,row=>row.id);setSessions(librarySessions.current);setLibraryError('');
     cb.current.onProgress(visible.map(s=>({storyId:s.id,page:s.page,saved:s.saved?1:0,updatedAt:s.lastReadAt||s.createdAt})));
    }
    return visible;
@@ -210,7 +212,7 @@ export function useStoryGeneration(page:number,callbacks:Callbacks,watchShelf=fa
    const onSession=(s:SessionView)=>{
     const generating=s.productionState?s.productionState==='running'||s.productionState==='queued':s.state==='running';
     if(s.generationMode==='background'||s.generationControl&&s.generationControl!=='active'){if(!inspecting){generationMode.current='observe';setWake(v=>v+1);}}
-    collect(s);setActive(s);setBusy(!inspecting&&(generating||s.state==='failed'));setError(s.state==='failed'?(s.error||'生成失败，请重试继续。'):'');
+    collect(s);setActive(old=>keepSnapshot(old,s));setBusy(!inspecting&&(generating||s.state==='failed'));setError(s.state==='failed'?(s.error||'生成失败，请重试继续。'):'');
     if(s.story?.pages[0]?.image){
      cb.current.onStory(s.story);
      if(inspecting&&!passive.current&&!observeOnlyGeneration(s)){generationMode.current='generate';setWake(v=>v+1);}

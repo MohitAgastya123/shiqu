@@ -1,12 +1,14 @@
 'use client';
 // Coordinate story discovery, resumable generation, and the reading sheets.
+// Swipe offsets live in a drag store and frames render through a memoized filmstrip, so pointer moves
+// do not re-render Reader. Identical poll snapshots keep their previous story and progress references.
 
 import StoryExportControl from './StoryExportControl';
 import StoryPublicationEditor,{StoryPublicationDetails,StoryPublicationDefaults} from './StoryPublication';
 import {storyExportKey} from '@/lib/story-publication';
 import BookReferenceStar from './BookReferenceStar';
 import {useBookReference} from '../useBookReference';
-import {useEffect, useRef, useState} from 'react';
+import {useCallback, useEffect, useRef, useState} from 'react';
 import {ArrowLeft, ArrowRight, Bookmark, BookOpen, Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Compass, Feather, Leaf, List, Moon, Play, RotateCcw, ImageDown, Settings2, Sparkles, UserRound, X, Loader2, FileDown, FileArchive, RefreshCw, Trash2} from 'lucide-react';
 import {randomId, request} from './shared';
 import type {Story} from '@/lib/content';
@@ -42,6 +44,9 @@ import StoryRetry from './StoryRetry';
 import StoryGenerationStatus from './StoryGenerationStatus';
 import StoryPageSurface from './StoryPageSurface';
 import StoryEndingSurface from './StoryEndingSurface';
+import StoryFilmstrip from './StoryFilmstrip';
+import {createDragOffset} from './useDragOffset';
+import {keepSnapshot,sameSnapshot,shareRows} from '@/lib/reader-snapshots';
 import {newWheelGesture,wheelPageDirection,swipePageDirection} from '@/lib/reader-navigation';
 import './reader.css';
 
@@ -100,7 +105,7 @@ export default function Reader(){
  useEffect(()=>()=>{if(pngDownload)URL.revokeObjectURL(pngDownload.url);},[pngDownload]);
  useEffect(()=>()=>{if(zipDownload)URL.revokeObjectURL(zipDownload.url);},[zipDownload]);
  const exportLock=useRef(false),reselectLock=useRef(false);
- const [drag,setDrag]=useState(0),[lastReadId,setLastReadId]=useState('');
+ const [drag]=useState(createDragOffset),setDrag=drag.set,[lastReadId,setLastReadId]=useState('');
  const [metadataVisible,setMetadataVisible]=useState(true);
  useEffect(()=>{setMetadataVisible(true);setImageIssues({});setImageReloads({});},[story?.id]);
  const readerRef=useRef<HTMLElement>(null),endingRef=useRef<HTMLElement>(null);
@@ -108,13 +113,14 @@ export default function Reader(){
  function acceptServerProgress(rows:Progress[]){
   authoritativeProgress.current=reconcileReadingProgress(authoritativeProgress.current,rows);
   setProgress(old=>{
-   let cached:Progress[]=[];try{cached=JSON.parse(localStorage.getItem('yiyu-reading')||'[]');}catch{}
-   const merged=reconcileReadingProgress(mergeReadingProgress(old,cached),authoritativeProgress.current).filter(p=>!deleted.current.has(p.storyId));
-   try{localStorage.setItem('yiyu-reading',JSON.stringify(merged));}catch{}
+   let raw='[]',cached:Progress[]=[];try{raw=localStorage.getItem('yiyu-reading')||'[]';cached=JSON.parse(raw);}catch{}
+   // Shelf polls repeat the same rows; keep the old array so Reader skips the render and the storage write.
+   const merged=shareRows(old,reconcileReadingProgress(mergeReadingProgress(old,cached),authoritativeProgress.current).filter(p=>!deleted.current.has(p.storyId)),p=>p.storyId);
+   const text=JSON.stringify(merged);if(text!==raw)try{localStorage.setItem('yiyu-reading',text);}catch{}
    return merged;
   });
  }
- const gen=useStoryGeneration(page,{onStory:(s,p,b)=>{if(deleted.current.has(s.id))return;setStory(s);setStories(old=>[s,...old.filter(x=>x.id!==s.id)]);if(p!==undefined){setPage(p);setSaved(!!b);}},onProgress:acceptServerProgress},tab==='shelf'&&!story&&!configure&&!favoriteBusy&&!deleting&&!restoring&&!shelfRefreshing);
+ const gen=useStoryGeneration(page,{onStory:(s,p,b)=>{if(deleted.current.has(s.id))return;setStory(old=>keepSnapshot(old,s));setStories(old=>old[0]&&sameSnapshot(old[0],s)?old:[s,...old.filter(x=>x.id!==s.id)]);if(p!==undefined){setPage(p);setSaved(!!b);}},onProgress:acceptServerProgress},tab==='shelf'&&!story&&!configure&&!favoriteBusy&&!deleting&&!restoring&&!shelfRefreshing);
  // Keep the same panel open when the first image arrives underneath it.
  useEffect(()=>{if(gen.active&&!story&&!configure&&!workflowTarget)setWorkflowTarget(gen.active.id);},[gen.active?.id,story?.id,configure,workflowTarget]);
  function openWorkflow(id:string){
@@ -140,7 +146,7 @@ export default function Reader(){
  useEffect(()=>{setReviewHistoryId(null);},[historyOwner]);
  const revision=useStoryRevision(story?(isGenerated(story)?story.id:undefined):gen.active&&(!gen.active.intake||gen.active.intake.phase==='confirmed')?gen.active.id:undefined,async next=>{await switchVersion(next.id);});
  async function switchVersion(id:string){
-  const previous={story,page,saved,ended,drag,motion,seen:seen.current,session:session.current,workflowTarget};setWorkflowTarget(id);setWorkflowError('');setSettings(false);setSource(false);setRequirements(false);setScript(false);revision.setTab(null);setStory(null);setPage(0);setEnded(false);setSaved(false);setDrag(0);setMotion('forward');seen.current=new Set();session.current=randomId();gen.leave();
+  const previous={story,page,saved,ended,drag:drag.get(),motion,seen:seen.current,session:session.current,workflowTarget};setWorkflowTarget(id);setWorkflowError('');setSettings(false);setSource(false);setRequirements(false);setScript(false);revision.setTab(null);setStory(null);setPage(0);setEnded(false);setSaved(false);setDrag(0);setMotion('forward');seen.current=new Set();session.current=randomId();gen.leave();
   try{await gen.resume(id,0,false,true);}catch{setPage(previous.page);setSaved(previous.saved);setEnded(previous.ended);setDrag(previous.drag);setMotion(previous.motion);seen.current=previous.seen;session.current=previous.session;setStory(previous.story);setWorkflowTarget(previous.workflowTarget);setWorkflowError('新版暂时无法打开，请重新加载制作流程。');void gen.refreshLibrary().catch(()=>{});notify('这个版本暂时无法打开，已保存的新版可从书架继续。');}
  }
  const visitor=useRef(''),session=useRef(''),seen=useRef(new Set<number>()),noticeTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
@@ -274,6 +280,11 @@ export default function Reader(){
    if(!fault&&reload)setImageReloads(old=>({...old,[image]:(old[image]||0)+1}));
   }catch(e){setImageIssues(old=>({...old,[image]:e instanceof Error?e.message:'暂时无法核对图片，请重试。'}));}
  }
+ // Memoized frames need stable handlers; the error handler reads the current story through a ref.
+ const frameError=useRef((_index:number,_image:string)=>{});
+ frameError.current=(index,image)=>{if(story&&isGenerated(story))void inspectImage(story.id,index,image);};
+ const onFrameError=useCallback((index:number,image:string)=>frameError.current(index,image),[]);
+ const onFrameLoad=useCallback((image:string)=>setImageIssues(old=>{if(!old[image])return old;const next={...old};delete next[image];return next;}),[]);
 
  async function deleteStory(){
   if(!deleteTarget||deleting)return;const target=deleteTarget;setDeleting(true);setDeleteError('');
@@ -375,7 +386,7 @@ export default function Reader(){
 
  return <div className={'yu-world'+(story?' yu-reading-world':'')}><div className={'yu-app'+(story?' yu-immersive':'')}>
  {story?<main className={'yu-reader'+(!metadataVisible&&!ended?' yu-metadata-hidden':'')} ref={readerRef} aria-label={'阅读'+story.title}>
- {!ended&&<div className="yu-filmstrip" style={{transform:`translateX(calc(${-page*100}% + ${drag}px))`,transition:drag?'none':undefined}}>{story.pages.map((p,i)=><div className="yu-film-frame" key={i}>{p.image&&<img key={p.image+'-'+(imageReloads[p.image]||0)} onError={()=>{if(isGenerated(story))void inspectImage(story.id,i,p.image);}} onLoad={()=>setImageIssues(old=>{if(!old[p.image])return old;const next={...old};delete next[p.image];return next;})} className={'yu-scene '+(i===page?'is-current':'')} src={p.image} alt={i===page?p.caption:''} draggable={false}/>}</div>)}</div>}
+ {!ended&&<StoryFilmstrip pages={story.pages} page={page} drag={drag} reloads={imageReloads} onImageError={onFrameError} onImageLoad={onFrameLoad}/>}
  {ended&&<div className="yu-scene-shade"/>}
  {!!readingSession?.reviewIssues?.length&&!settings&&<button type="button" className="yu-reader-review-notice" onClick={()=>openWorkflow(story.id)}>审片还有 {readingSession.reviewIssues.length} 处问题，已停止绘图。查看并处理</button>}
  {!ended&&!current?.image&&<div className="yu-drawing" role="status"><div className="yu-drawing-orbit"><Feather size={35} strokeWidth={1}/></div><span>{gen.error?'画笔暂停了一下':'这一幅，正在展开'}</span><small>{gen.error||gen.active?.stage||'正在为你绘制画面'}</small>{gen.error&&gen.active&&<StoryRetry session={gen.active} busy={gen.busy} onRetry={gen.retryStep}/>}</div>}
