@@ -61,7 +61,7 @@ test('failed preparation can be replaced, manual preferences survive reselect, a
  await setup(f,id,{action:'recommend',settings:{artStyle:'watercolor',productionPrompt:'My saved custom preferences.',narrativeDetail:'brief'}});await until(async()=>(await f.read(id)).intake.phase==='confirming');
  await setup(f,id,{action:'choose',batch:0,index:0});await until(async()=>(await f.read(id)).intake.phase==='confirming');const current=await f.read(id);assert.equal(current.selection.artStyle,'watercolor');assert.equal(current.selection.productionPrompt,'My saved custom preferences.');assert.equal(current.selection.narrativeDetail,'brief');assert.equal(f.discoveries.length,1);
  const repo=f.app.services.production.repository,row=await repo.get(id,'docker-local-owner'),doc=JSON.parse(row.document);
- await f.app.services.database.prepare("UPDATE reader_sessions SET state='running',lock_token='late-token',document=json_set(document,'$.intake.generation',?) WHERE id=?").bind(doc.intake.generation+1,id).run();
+ await f.app.services.database.prepare("UPDATE stories SET state='running',lock_token='late-token',document=json_set(document,'$.intake.generation',?) WHERE id=?").bind(doc.intake.generation+1,id).run();
  await assert.rejects(repo.save(row,'late-token',doc,false),/状态已更新/);await assert.rejects(repo.saveImageProgress(row,'late-token',doc),/状态已更新/);
 });
 
@@ -147,11 +147,11 @@ test('legacy prepared choice receipts read as confirming without writes or paid 
  const f=await fixture(t),id=await create(f);await until(async()=>(await f.read(id)).intake.phase==='choosing');
  await setup(f,id,{action:'choose',batch:0,index:0});await until(async()=>(await f.read(id)).intake.phase==='confirming');
  await f.app.services.production.queue.settle();await f.app.services.production.tick();
- await f.app.services.database.prepare("UPDATE reader_sessions SET document=json_set(document,'$.intake.phase','choosing') WHERE id=?").bind(id).run();
- const before=await f.app.services.database.prepare('SELECT document FROM reader_sessions WHERE id=?').bind(id).first();
+ await f.app.services.database.prepare("UPDATE stories SET document=json_set(document,'$.intake.phase','choosing') WHERE id=?").bind(id).run();
+ const before=await f.app.services.database.prepare('SELECT document FROM stories WHERE id=?').bind(id).first();
  const s=await f.read(id);assert.equal(s.intake.phase,'confirming');assert.equal(s.generationProgress.phase,'production-confirmation');assert.equal(shelfGenerationStatus(s).group,'待制作确认');
  const summary=readLibrarySummary(f.dataDirectory).stories.find(s=>s.id===id);assert.equal(summary.production.intakePhase,'confirming');assert.equal(summary.production.phase,'production-confirmation');
- assert.equal((await f.app.services.database.prepare('SELECT document FROM reader_sessions WHERE id=?').bind(id).first()).document,before.document,'Reading normalizes the view, never the stored record');
+ assert.equal((await f.app.services.database.prepare('SELECT document FROM stories WHERE id=?').bind(id).first()).document,before.document,'Reading normalizes the view, never the stored record');
  assert.equal(f.control.recommendations.length,1);assert.equal(f.control.plans.length,0);assert.equal(f.control.calls.length,0);
  await setup(f,id,{action:'confirm',settings:{artStyle:s.selection.artStyle,productionPrompt:s.selection.productionPrompt,narrativeDetail:'balanced',length:4}},s);
  await until(async()=>(await f.read(id)).state==='completed');assert.equal((await f.read(id)).ready,4);assert.equal(f.control.recommendations.length,1);
@@ -161,7 +161,7 @@ test('phase recovery compares local source ranges canonically and rejects partia
  const {readLibrarySummary}=await import('../desktop/library-preview.ts');
  const f=await fixture(t),id=await create(f);await until(async()=>(await f.read(id)).intake.phase==='choosing');
  await setup(f,id,{action:'choose',batch:0,index:0});await until(async()=>(await f.read(id)).intake.phase==='confirming');await f.app.services.production.queue.settle();await f.app.services.production.tick();
- const row=await f.app.services.database.prepare('SELECT document,selection FROM reader_sessions WHERE id=?').bind(id).first(),base=JSON.parse(row.document),selected=JSON.parse(row.selection);
+ const row=await f.app.services.database.prepare('SELECT document,selection FROM stories WHERE id=?').bind(id).first(),base=JSON.parse(row.document),selected=JSON.parse(row.selection);
  const source={sectionId:'s1',firstUnit:'u1',lastUnit:'u2',continuations:[{sectionId:'s2',firstUnit:'u3',lastUnit:'u4'}],edition:'a'.repeat(64)};
  base.intake.phase='choosing';base.intake.batches[0].stories[0].source=source;selected.source=source;
  base.original.localSource={edition:source.edition,continuations:[{lastUnit:'u4',firstUnit:'u3',sectionId:'s2'}],lastUnit:'u2',firstUnit:'u1',sectionId:'s1'};
@@ -173,7 +173,7 @@ test('phase recovery compares local source ranges canonically and rejects partia
   [doc=>{doc.intake.batches[0].stories[0].title='另一篇故事';},'choosing'],
   [doc=>{doc.original.localSource.continuations[0].lastUnit='other-unit';},'choosing'],
  ]){
-  const doc=structuredClone(base);mutate(doc);await f.app.services.database.prepare('UPDATE reader_sessions SET document=?,selection=? WHERE id=?').bind(JSON.stringify(doc),JSON.stringify(selected),id).run();
+  const doc=structuredClone(base);mutate(doc);await f.app.services.database.prepare('UPDATE stories SET document=?,selection=? WHERE id=?').bind(JSON.stringify(doc),JSON.stringify(selected),id).run();
   assert.equal((await f.read(id)).intake.phase,phase);
   const summary=readLibrarySummary(f.dataDirectory).stories.find(s=>s.id===id);assert.equal(summary.production.intakePhase,phase);
  }

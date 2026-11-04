@@ -55,11 +55,11 @@ test('a pause arriving after the picker opens is inherited at commit, and only e
 
 test('same source selection is a durable no-op, including replay after the draft is discarded',async t=>{
  const {f,id}=await fixture(t),source={edition:'a'.repeat(64),sectionId:'chapter',firstUnit:'u1',lastUnit:'u1'};
- await f.app.services.database.prepare("UPDATE reader_sessions SET selection=json_set(selection,'$.source',json(?)) WHERE id=?").bind(JSON.stringify(source),id).run();
+ await f.app.services.database.prepare("UPDATE stories SET selection=json_set(selection,'$.source',json(?)) WHERE id=?").bind(JSON.stringify(source),id).run();
  f.generation.suggestions=async()=>({stories:[{...candidates.stories[0],source}],note:''});
  const s=await draft(f,id),body={requestId:crypto.randomUUID(),batch:0,index:0,settings};
  assert.equal((await choose(f,id,s,body)).id,id);assert.equal((await choose(f,id,s,body)).id,id);assert.equal((await f.json('sessions')).length,1);assert.equal(f.control.calls.length,3);
- const children=await f.app.services.database.prepare("SELECT id FROM reader_sessions WHERE json_extract(document,'$.revision.rootId')=?").bind(id).all();assert.equal(children.results.length,0);
+ const children=await f.app.services.database.prepare("SELECT id FROM stories WHERE json_extract(document,'$.revision.rootId')=?").bind(id).all();assert.equal(children.results.length,0);
 });
 test('concurrent ordinary edit and replacement share one family CAS; stale choice remains inspectable',async t=>{
  const {f,id}=await fixture(t),s=await draft(f,id),base=await f.json(`sessions/${id}/revisions`),body={requestId:crypto.randomUUID(),batch:0,index:1,settings},plan=structuredClone(base.plan);plan.reflection='醒来后，仍能记住梦中的自由。';

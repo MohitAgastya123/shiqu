@@ -1,8 +1,10 @@
+// Hydrate the owner library once, preserve current reading caches, and coordinate reader actions.
 'use client';
 // Coordinate story discovery, resumable generation, and the reading sheets.
 // Swipe offsets live in a drag store and frames render through a memoized filmstrip, so pointer moves
 // do not re-render Reader. Identical poll snapshots keep their previous story and progress references.
 
+import {pruneReadingCaches,type LibraryInventory} from '../reading-cache.ts';
 import StoryExportControl from './StoryExportControl';
 import StoryPublicationEditor,{StoryPublicationDetails,StoryPublicationDefaults} from './StoryPublication';
 import {storyExportKey} from '@/lib/story-publication';
@@ -73,7 +75,7 @@ function initialReaderSelection():Selection{
 
 export default function Reader(){
  const [progress,setProgress]=useState<Progress[]>([]);
- const startupDeletions=useRef<Promise<DeletedStory[]>|null>(null);
+ const startupDeletions=useRef<Promise<LibraryInventory>|null>(null);
  const authoritativeProgress=useRef<Progress[]>([]);
  const [shelfQuery,setShelfQuery]=useState(()=>{try{return localStorage.getItem('shiqu-shelf-query')||'';}catch{return '';}}),[shelfGrouping,setShelfGrouping]=useState<ShelfGrouping>(()=>{
   try{const saved=localStorage.getItem('shiqu-shelf-grouping');return shelfGroupings.find(option=>option.value===saved)?.value||'book';}catch{return 'book';}
@@ -115,8 +117,9 @@ export default function Reader(){
   setProgress(old=>{
    let raw='[]',cached:Progress[]=[];try{raw=localStorage.getItem('yiyu-reading')||'[]';cached=JSON.parse(raw);}catch{}
    // Shelf polls repeat the same rows; keep the old array so Reader skips the render and the storage write.
-   const merged=shareRows(old,reconcileReadingProgress(mergeReadingProgress(old,cached),authoritativeProgress.current).filter(p=>!deleted.current.has(p.storyId)),p=>p.storyId);
-   const text=JSON.stringify(merged);if(text!==raw)try{localStorage.setItem('yiyu-reading',text);}catch{}
+   const retained=reconcileReadingProgress(mergeReadingProgress(old,cached),authoritativeProgress.current);
+   const merged=shareRows(old,retained.filter(p=>!deleted.current.has(p.storyId)),p=>p.storyId);
+   const text=JSON.stringify(retained);if(text!==raw)try{localStorage.setItem('yiyu-reading',text);}catch{}
    return merged;
   });
  }
@@ -178,13 +181,15 @@ export default function Reader(){
  function choose(bookId:Selection['bookId']=selection.bookId,theme:Selection['theme']='原典故事'){setDiscoveryTarget(null);setSelection(s=>({...s,bookId,theme,productionPrompt:promptAfterThemeChange(s.productionPrompt,s.theme,theme),discovery:{mode:'auto'},storyTitle:undefined,source:undefined,discoverySources:undefined}));setConfigure(true);setUnavailable('');}
  useEffect(()=>{visitor.current=localStorage.getItem('yiyu-visitor')||randomId();localStorage.setItem('yiyu-visitor',visitor.current);try{setLargeText(localStorage.getItem('yiyu-large-text')==='1');}catch{}const installHandler=(e:Event)=>{e.preventDefault();setInstall(e);};window.addEventListener('beforeinstallprompt',installHandler);if('serviceWorker'in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});
  let active=true;
- startupDeletions.current??=request('reader/deletions');
- startupDeletions.current.then(deletions=>{
+ startupDeletions.current??=request('reader/deletions?inventory=1');
+ startupDeletions.current.then(async inventory=>{
+  const cleaned=await pruneReadingCaches(inventory,localStorage,typeof caches==='undefined'?undefined:caches);
+  const {deletions}=cleaned;
   if(!active)return;
   setDeletedStories(deletions);deletions.forEach(item=>deleted.current.add(item.storyId));setDeletedIds([...deleted.current]);
-  let local:Progress[]=[];try{local=JSON.parse(localStorage.getItem('yiyu-reading')||'[]');setLastReadId(localStorage.getItem('shiqu-last-read')||local[0]?.storyId||'');}catch{}
-  const merged=reconcileReadingProgress(local,authoritativeProgress.current).filter(p=>!deleted.current.has(p.storyId));
-  setProgress(old=>reconcileReadingProgress(mergeReadingProgress(old,merged),authoritativeProgress.current).filter(p=>!deleted.current.has(p.storyId)));
+  const local=cleaned.progress;setLastReadId(cleaned.lastReadId);
+  const merged=reconcileReadingProgress(local,authoritativeProgress.current).filter(p=>cleaned.ids.has(p.storyId));
+  setProgress(old=>reconcileReadingProgress(mergeReadingProgress(old,merged),authoritativeProgress.current).filter(p=>cleaned.ids.has(p.storyId)&&!deleted.current.has(p.storyId)));
   try{localStorage.setItem('yiyu-reading',JSON.stringify(merged));}catch{}
   const id=new URLSearchParams(location.search).get('id');
   if(id&&!deleted.current.has(id))gen.resume(id).catch(()=>{if(active)setLoadError('这篇故事暂时无法打开。');});

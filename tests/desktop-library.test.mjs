@@ -12,7 +12,7 @@ test('desktop summaries include pending stories, counts and saved state, excludi
  try{
   const database=new DatabaseSync(path.join(directory,'shiqu.sqlite'));
   for(const file of readdirSync('drizzle').filter(file=>file.endsWith('.sql')).sort())database.exec(readFileSync(path.join('drizzle',file),'utf8'));
-  const insert=database.prepare(`INSERT INTO reader_sessions(id,user_id,selection,document,state,page,saved,created_at,updated_at) VALUES(?,?,?,?,?,0,1,?,?)`);
+  const insert=database.prepare(`INSERT INTO stories(id,user_id,selection,document,state,page,saved,created_at,updated_at) VALUES(?,?,?,?,?,0,1,?,?)`);
   const selection=JSON.stringify({bookId:'book',theme:'回味',artStyle:'watercolor',storyTitle:'还没展开'}),document=JSON.stringify({plan:{title:'真实故事',pages:[{},{}]},images:['/image.png',''],audio:[]}),now='2026-10-29T10:00:00Z';
   insert.run('visible','owner',selection,document,'running',now,now);
   insert.run('pending','owner',selection,JSON.stringify({plan:null,images:[],audio:[]}), 'idle',now,now);
@@ -43,9 +43,9 @@ test('desktop deletion hides the same story as the reader and undo restores it w
  try{
   const database=new DatabaseSync(path.join(directory,'shiqu.sqlite'));
   for(const file of readdirSync('drizzle').filter(file=>file.endsWith('.sql')).sort())database.exec(readFileSync(path.join('drizzle',file),'utf8'));
-  database.prepare(`INSERT INTO reader_sessions(id,user_id,selection,document,state,page,saved,created_at,updated_at) VALUES('one','owner','{"bookId":"book","theme":"人情冷暖"}','{"plan":{"title":"可恢复的故事","pages":[{}]},"images":["/kept.png"]}','completed',0,0,'2026-10-29','2026-10-29')`).run();
+  database.prepare(`INSERT INTO stories(id,user_id,selection,document,state,page,saved,created_at,updated_at) VALUES('one','owner','{"bookId":"book","theme":"人情冷暖"}','{"plan":{"title":"可恢复的故事","pages":[{}]},"images":["/kept.png"]}','completed',0,0,'2026-10-29','2026-10-29')`).run();
   database.prepare('INSERT INTO library_deletions VALUES(?,?,?,?)').run('other-owner','one','generated','2026-10-28');
-  const before=database.prepare('SELECT * FROM reader_sessions').all();
+  const before=database.prepare('SELECT * FROM stories').all();
   setLibraryStoryDeleted(directory,'one',true);
   assert.deepEqual(readLibrarySummary(directory),{stories:[]});
   const tombstone=database.prepare("SELECT * FROM library_deletions WHERE user_id='owner'").get();
@@ -54,10 +54,10 @@ test('desktop deletion hides the same story as the reader and undo restores it w
   assert.deepEqual(database.prepare("SELECT * FROM library_deletions WHERE user_id='owner'").get(),tombstone);
   setLibraryStoryDeleted(directory,'one',false);setLibraryStoryDeleted(directory,'one',false);
   assert.equal(readLibrarySummary(directory).stories[0].title,'可恢复的故事');
-  assert.deepEqual(database.prepare('SELECT * FROM reader_sessions').all(),before);
+  assert.deepEqual(database.prepare('SELECT * FROM stories').all(),before);
   assert.equal(database.prepare('SELECT count(*) AS count FROM library_deletions').get().count,1);
   assert.throws(()=>setLibraryStoryDeleted(directory,"' OR 1=1 --",true));
-  assert.deepEqual(database.prepare('SELECT * FROM reader_sessions').all(),before);
+  assert.deepEqual(database.prepare('SELECT * FROM stories').all(),before);
   database.close();
  }finally{rmSync(directory,{recursive:true,force:true});}
 });

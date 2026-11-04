@@ -10,14 +10,14 @@ import {transform} from 'esbuild';import {createRequire} from 'node:module';impo
 
 test('stars replace across stories, cancel with tokens, survive restart, and never alter story checkpoints',async t=>{
  const f=await productionFixture(t),a=await savedStory(f),b=await savedStory(f,{page:1,bytes:jpeg}),other=await savedStory(f,{bookId:'三国演义'});
- const before=(await f.app.services.database.prepare('SELECT * FROM reader_sessions ORDER BY id').all()).results;
+ const before=(await f.app.services.database.prepare('SELECT * FROM stories ORDER BY id').all()).results;
  assert.equal((await f.json(`library/${a.id}/reference`)).reference,null);
  const first=(await star(f,a.id)).reference;assert.equal((await f.json(`library/${b.id}/reference`)).reference.token,first.token);assert.equal((await f.json(`library/${other.id}/reference`)).reference,null);
  await star(f,b.id,1);const third=(await star(f,a.id)).reference;assert.notEqual(third.token,first.token);
  assert.equal((await unstar(f,a.id,first)).reference.token,third.token,'ABA stale cancellation preserves the new selection');
  await f.restart();assert.equal((await f.json(`library/${b.id}/reference`)).reference.token,third.token);
  assert.equal((await unstar(f,a.id,third)).reference,null);
- assert.deepEqual((await f.app.services.database.prepare('SELECT * FROM reader_sessions ORDER BY id').all()).results,before);assert.equal(f.control.calls.length,0);
+ assert.deepEqual((await f.app.services.database.prepare('SELECT * FROM stories ORDER BY id').all()).results,before);assert.equal(f.control.calls.length,0);
 });
 
 test('concurrent selection stays unique and source deletion clears it without restore resurrection',async t=>{

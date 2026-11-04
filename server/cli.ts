@@ -1,4 +1,5 @@
 // Start the installed browser app with explicit assets, opt-in env loading, and persistent user data.
+import {inspectLibrary} from './library-schema.ts';
 import path from 'node:path';
 import {readFile} from 'node:fs/promises';
 import {parseEnv} from 'node:util';
@@ -61,6 +62,7 @@ export async function runCli(root:string, args = process.argv.slice(2)) {
     }finally{store.close();}
   }
   const library=await cliConfiguration(options);
+  inspectLibrary(library.SHIQU_DATA_DIR!);
   if((options.dataDirectory||process.env.SHIQU_DATA_DIR)&&process.env.SHIQU_AI_PROVIDER&&providerReady(library)){
     const {startServer}=await import('./start.ts');return startServer({root,variables:library,localAccess:true});
   }

@@ -40,3 +40,10 @@
 - Verify frame counts, image readability, ZIP integrity, and compatibility with the destination collection's archive parser. Follow that repository's instructions for content validation.
 - Remove temporary exports/downloads and replacement backups after verification, retaining only the canonical story ZIP in the output directory. Story-name mode resolves existing archive IDs through the app's current-version API to preserve filenames across revisions and title changes. For ZIP-input mode with a changed story ID, use `--output` with the existing ZIP path.
 - Saving exports does not authorize Git commits, pushes, or publication.
+
+## Canonical Story Storage
+
+- `stories` stores the current production model and every revision for every owner. `production_jobs`, `books` and the other support tables retain their separate responsibilities. Keep reader API paths, Session types/modules and `session_id` columns stable.
+- Use `ensureLibraryReady()` through the production database initializer before accessing a library. Version checks precede ownership/diagnostic writes; desktop reads and mutations use the shared brief upgrade gate. Historical table names belong only to migration/import boundaries and explicit old-schema fixtures.
+- Upgrades require a verified whole-library safety backup. Keep its reported path; pending-journal recovery finishes before access. Never run migration tests or destructive probes against the user's library, and never restore an old backup directly into an active directory.
+- Consolidated libraries require desktop and CLI 0.8.0 or later. Older binaries are incompatible; rollback requires the pre-upgrade backup and its matching application.

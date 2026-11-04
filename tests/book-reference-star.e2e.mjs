@@ -4,9 +4,9 @@ import {productionFixture,until,makePlan} from './fixtures/production.mjs';impor
 const original={title:'测试原文',text:'人物采取行动，回应彼此，故事在实际结果处结束。',kind:'passage',url:'https://example.org/original',provider:'fixture',retrievedAt:'2026-11-01'};
 async function target(f,{bookId='红楼梦',length=3,images=[]}={}){
  const id=crypto.randomUUID(),doc={plan:makePlan(length),original,frameCountConfirmed:true,images,audio:[],usage:[]},now=new Date().toISOString();
- await f.app.services.database.prepare("INSERT INTO reader_sessions(id,user_id,selection,document,generation_mode,generation_control,state,created_at,updated_at) VALUES(?,?,?,?,'reader','active','idle',?,?)").bind(id,owner,JSON.stringify({bookId,theme:'原典故事',artStyle:'cartoon',length,voice:false,productionPrompt:''}),JSON.stringify(doc),now,now).run();return id;
+ await f.app.services.database.prepare("INSERT INTO stories(id,user_id,selection,document,generation_mode,generation_control,state,created_at,updated_at) VALUES(?,?,?,?,'reader','active','idle',?,?)").bind(id,owner,JSON.stringify({bookId,theme:'原典故事',artStyle:'cartoon',length,voice:false,productionPrompt:''}),JSON.stringify(doc),now,now).run();return id;
 }
-const doc=async(f,id)=>JSON.parse((await f.app.services.database.prepare('SELECT document FROM reader_sessions WHERE id=?').bind(id).first()).document);
+const doc=async(f,id)=>JSON.parse((await f.app.services.database.prepare('SELECT document FROM stories WHERE id=?').bind(id).first()).document);
 
 test('in-flight references stay fixed; new calls use replacement and cancellation restores own anchor without redrawing',async t=>{
  const f=await productionFixture(t,'codex',{SHIQU_IMAGE_WORKERS:'1'}),a=await savedStory(f),b=await savedStory(f,{bytes:jpeg}),id=await target(f);
@@ -33,7 +33,7 @@ test('restart keeps the selected bytes and legacy advance uses the same book ref
 
 test('a valid book reference can serve a later frame without loading its unused missing first-image file',async t=>{
  const f=await productionFixture(t),source=await savedStory(f,{bytes:jpeg});await star(f,source.id);const id=await target(f,{length:2});
- await f.app.services.database.prepare("UPDATE reader_sessions SET document=json_set(document,'$.images[0]',?) WHERE id=?").bind(`/api/reader/media/${id}/0.png`,id).run();
+ await f.app.services.database.prepare("UPDATE stories SET document=json_set(document,'$.images[0]',?) WHERE id=?").bind(`/api/reader/media/${id}/0.png`,id).run();
  await f.demand(id);await until(()=>f.control.calls.length===1);assert.equal(f.control.calls[0].page,1);assert.equal(f.control.calls[0].reference,Buffer.from(jpeg).toString('base64'));f.control.calls[0].resolve();await until(async()=>!!(await doc(f,id)).images[1]);
 });
 

@@ -1,5 +1,6 @@
 // Agent-facing local commands use production Requests and a dormant/scoped coordinator, never HTTP.
 // stdout is a versioned JSON receipt; only explicit run can invoke generation, all writes retain API guards.
+import {restoreAndUpgradeLibrary} from './library-upgrade.ts';
 import path from 'node:path';
 import os from 'node:os';
 import {parseArgs} from 'node:util';
@@ -14,7 +15,7 @@ import {SystemSettingsStore} from './system-settings.ts';
 import {effectiveProviderVariables} from './cli-setup.ts';
 import {installDiagnostics} from './diagnostics.ts';
 import {diagnosticReport} from './diagnostics.ts';
-import {createLibraryBackup,restoreLibraryBackup,verifyLibraryBackup,containsPath} from './library-backup.ts';
+import {createLibraryBackup,verifyLibraryBackup,containsPath} from './library-backup.ts';
 import {bundledSkill,installSkill,checkSkill,updateSkill} from './cli-skill.ts';
 import {stopCodexProcesses} from './codex-runner.ts';
 import {readerBooks} from '../lib/reader-books.ts';
@@ -116,7 +117,7 @@ export async function executeHeadless(root:string,args:string[],context:Context=
  }
  if(command==='verify-backup'){need(action,'BACKUP_PATH_REQUIRED','Specify a backup directory.');const verified=verifyLibraryBackup(path.resolve(action));return {verified:true,files:verified.files.length,createdAt:verified.createdAt};}
  const directory=path.resolve(value('data-dir')||variables.SHIQU_DATA_DIR||savedDesktopLibraryDirectory({variables})||locations.library);
- if(command==='restore'){need(action&&value('data-dir'),'RESTORE_TARGET_REQUIRED','restore BACKUP requires explicit --data-dir NEW_DIRECTORY.');outputOutside(root,directory);const manifest=restoreLibraryBackup(path.resolve(action),directory);return {restored:true,path:directory,files:manifest.files.length,started:false};}
+ if(command==='restore'){need(action&&value('data-dir'),'RESTORE_TARGET_REQUIRED','restore BACKUP requires explicit --data-dir NEW_DIRECTORY.');outputOutside(root,directory);const manifest=restoreAndUpgradeLibrary(path.resolve(action),directory,root);return {restored:true,path:directory,files:manifest.files.length,started:false};}
  if(command==='diagnostics'){
   const output=value('output')||action;need(output,'OUTPUT_REQUIRED','Specify --output NEW_FILE.');outputOutside(root,path.resolve(output));need(!containsPath(directory,path.resolve(output)),'PRIVATE_OUTPUT_REQUIRED','Diagnostic output must be outside the library.');
   await writeFile(path.resolve(output),JSON.stringify(diagnosticReport(directory,appVersion),null,2)+'\n',{flag:'wx',mode:0o600});return {path:path.resolve(output)};
@@ -168,7 +169,7 @@ export async function executeHeadless(root:string,args:string[],context:Context=
    try{
     while(!abort.signal.aborted){
      snapshot=await app.services.production!.request(app.services.ownerId,target!,viewerId,0,false);
-     const intake=snapshot.intake,doc=await app.services.database.prepare('SELECT document FROM reader_sessions WHERE id=?').bind(target).first<{document:string}>(),saved=JSON.parse(doc!.document);
+     const intake=snapshot.intake,doc=await app.services.database.prepare('SELECT document FROM stories WHERE id=?').bind(target).first<{document:string}>(),saved=JSON.parse(doc!.document);
      const reason=snapshot.superseded?'superseded':snapshot.state==='failed'?'blocked':snapshot.generationControl!=='active'?'paused':boundary(snapshot)|| (until==='candidates'&&intake?.batches.some((batch:any)=>batch.stories.length)?'candidates':intake?.phase==='confirming'?'prepared':intake?.phase==='choosing'&&intake.search.state!=='searching'?'choice':until==='reviewed'&&saved.plan&&reviewPassed(saved)?'reviewed':null);
      if(reason)return {reason,session:snapshot};await delay(80,undefined,{signal:abort.signal}).catch(()=>{});
     }

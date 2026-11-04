@@ -127,12 +127,12 @@ for(const action of ['pause','stop','reader'])test(`healthy restored files compl
  const f=await productionFixture(t);f.control.hold=false;const id=await f.create(2);await until(async()=>(await f.read(id)).state==='completed');
  const image=(await f.read(id)).story.pages[1].image,key=`reader/${id}/${image.split(`/media/${id}/`)[1]}`,asset=await f.media.get(key),bytes=new Uint8Array(await asset.arrayBuffer());await lose(f,id,1);
  await f.json(`sessions/${id}/production-control`,'POST',{action});await f.media.put(key,bytes,{contentType:asset.contentType});const checked=await f.json(`sessions/${id}/image-health`,'POST',{page:1,image});assert.equal(checked.state,'completed');assert.equal(checked.generationControl,action==='pause'?'paused':action==='stop'?'stopped':'active');assert.equal(f.control.calls.length,2);
- const raw=await f.app.services.database.prepare('SELECT state FROM reader_sessions WHERE id=?').bind(id).first();assert.equal(raw.state,'completed');
- await f.app.services.database.prepare("UPDATE reader_sessions SET state='idle' WHERE id=?").bind(id).run();await f.restart();await until(async()=>(await f.read(id)).state==='completed');assert.equal(f.control.calls.length,2);
+ const raw=await f.app.services.database.prepare('SELECT state FROM stories WHERE id=?').bind(id).first();assert.equal(raw.state,'completed');
+ await f.app.services.database.prepare("UPDATE stories SET state='idle' WHERE id=?").bind(id).run();await f.restart();await until(async()=>(await f.read(id)).state==='completed');assert.equal(f.control.calls.length,2);
 });
 test('a display-title change during publication cannot fail the already-paid image',async t=>{
  const f=await productionFixture(t),id=await f.create(2),database=f.app.services.database,prepare=database.prepare.bind(database);let renamed=false;
- database.prepare=sql=>{const statement=prepare(sql);if(!renamed&&sql.includes("UPDATE reader_sessions SET document=json_set(document,?, ?, '$.usage'")){const run=statement.run.bind(statement);statement.run=async()=>{renamed=true;await prepare("UPDATE reader_sessions SET selection=json_set(selection,'$.displayTitle','发布时改名') WHERE id=?").bind(id).run();return run();};}return statement;};
+ database.prepare=sql=>{const statement=prepare(sql);if(!renamed&&sql.includes("UPDATE stories SET document=json_set(document,?, ?, '$.usage'")){const run=statement.run.bind(statement);statement.run=async()=>{renamed=true;await prepare("UPDATE stories SET selection=json_set(selection,'$.displayTitle','发布时改名') WHERE id=?").bind(id).run();return run();};}return statement;};
  f.control.hold=false;await until(async()=>(await f.read(id)).state==='completed');assert.equal(renamed,true);assert.equal(f.control.calls.length,2);assert.equal((await f.read(id)).story.title,'发布时改名');assert.equal((await f.read(id)).faults,undefined);
 });
 
@@ -141,12 +141,12 @@ test('an old-name failed publication keeps and republishes its paid receipt afte
  const f=await productionFixture(t),id=await f.create(2),get=f.app.services.media.get.bind(f.app.services.media);
  f.app.services.media.get=async key=>key.startsWith(`reader/${id}/artifacts/1-`)?Promise.reject(Error('old publication read failed')):get(key);
  f.control.hold=false;await until(async()=>(await f.read(id)).state==='failed');assert.equal(f.control.calls.length,2);const oldFault=(await f.read(id)).faults[0];await f.stop();
- const db=new DatabaseSync(path.join(f.dataDirectory,'shiqu.sqlite')),row=db.prepare('SELECT * FROM reader_sessions WHERE id=?').get(id),doc=JSON.parse(row.document),selection=JSON.parse(row.selection),named={...selection,displayTitle:'A'};
+ const db=new DatabaseSync(path.join(f.dataDirectory,'shiqu.sqlite')),row=db.prepare('SELECT * FROM stories WHERE id=?').get(id),doc=JSON.parse(row.document),selection=JSON.parse(row.selection),named={...selection,displayTitle:'A'};
  const version=inputVersion({scriptVersion:inputVersion({selection:named}),plan:doc.plan,style:selection.artStyle,prompt:selection.productionPrompt}),jobs=db.prepare("SELECT * FROM production_jobs WHERE session_id=? AND kind IN ('image','image-publish') AND json_extract(payload,'$.page')=1").all(id),mapping=new Map();
  for(const job of jobs)mapping.set(job.id,productionJobId(id,job.kind,version,'1'));
  for(const job of jobs)db.prepare('UPDATE production_jobs SET id=?,version=?,dependencies=? WHERE id=?').run(mapping.get(job.id),version,JSON.stringify(JSON.parse(job.dependencies).map(id=>mapping.get(id)||id)),job.id);
  db.prepare('UPDATE reader_faults SET job_id=?,version=? WHERE id=?').run(mapping.get(jobs.find(j=>j.kind==='image-publish').id),version,oldFault.id);
- db.prepare("UPDATE reader_sessions SET selection=?,generation_control='paused' WHERE id=?").run(JSON.stringify({...selection,displayTitle:'B'}),id);
+ db.prepare("UPDATE stories SET selection=?,generation_control='paused' WHERE id=?").run(JSON.stringify({...selection,displayTitle:'B'}),id);
  db.prepare("DELETE FROM app_migrations WHERE name='0016_legacy_input_faults.sql'").run();db.close();
  await f.restart();let saved=await f.read(id);assert.equal(saved.faults[0].stage,'publication');await f.app.services.production.tick();assert.equal(f.control.calls.length,2);
  await f.json(`sessions/${id}/production-control`,'POST',{action:'resume'});await recover(f,id,saved.faults[0]);await until(async()=>(await f.read(id)).state==='completed');saved=await f.read(id);assert.equal(saved.story.title,'B');assert.equal(saved.ready,2);assert.equal(f.control.calls.length,2);assert.equal(saved.faults,undefined);

@@ -11,7 +11,7 @@ import {revisionBasis,replacementToken,familyEpoch,currentFamilyVersion} from '.
 import {commandFingerprint,commandReceipt,recordNoop} from './reader-commands.ts';
 
 export async function openReselection(repo:ReaderRepository,parentId:string,ownerId:string,requestId:string,books?:LocalBooks){
- const existing=await repo.db.prepare('SELECT * FROM reader_sessions WHERE id=?').bind(requestId).first<SessionRow>();
+ const existing=await repo.db.prepare('SELECT * FROM stories WHERE id=?').bind(requestId).first<SessionRow>();
  if(existing){
   const doc=JSON.parse(existing.document) as Document;
   if(existing.user_id!==ownerId||(doc.reselection?.parentId!==parentId&&!(doc.revision?.kind==='selection'&&doc.revision.parentId===parentId)))throw new ReaderError(409,'这个操作编号已用于其他内容。');
@@ -51,15 +51,15 @@ export async function commitReselection(repo:ReaderRepository,parentId:string,dr
  delete doc.intake.draft;
  doc.revision={kind:'selection',selectionRequest:choice.requestId,parentId,rootId:draft.rootId,number:draft.epoch+1,baseToken:draft.baseToken,requestHash:fingerprint,base:{selection,plan:null,images:[]}};
  const now=new Date().toISOString();
- const changed=await repo.db.prepare(`UPDATE reader_sessions AS d SET
+ const changed=await repo.db.prepare(`UPDATE stories AS d SET
   selection=?,document=json_patch(?,json_object('publication',json_extract(p.document,'$.publication'))),
   generation_mode=p.generation_mode,generation_control=p.generation_control,state='idle',error=NULL,
   step_key=NULL,step_attempts=0,lock_token=NULL,lock_until=0,page=0,saved=p.saved,last_read_at=NULL,updated_at=?
-  FROM reader_sessions p WHERE d.id=? AND d.user_id=? AND d.document=? AND p.id=? AND p.user_id=?
+  FROM stories p WHERE d.id=? AND d.user_id=? AND d.document=? AND p.id=? AND p.user_id=?
    AND ${currentFamilyVersion('p')} AND json_remove(p.selection,'$.displayTitle')=json_remove(?,'$.displayTitle')
    AND NOT EXISTS(SELECT 1 FROM library_deletions x WHERE x.story_id=d.id AND x.user_id=d.user_id)
    AND NOT EXISTS(SELECT 1 FROM reader_commands c WHERE c.owner_id=? AND c.request_id=?)
-   AND NOT EXISTS(SELECT 1 FROM reader_sessions occupied WHERE occupied.user_id=? AND occupied.id=?)
+   AND NOT EXISTS(SELECT 1 FROM stories occupied WHERE occupied.user_id=? AND occupied.id=?)
    AND (${familyEpoch.replace(' AS epoch','')})=?`)
   .bind(JSON.stringify(selection),JSON.stringify(doc),now,draftId,ownerId,row.document,parentId,ownerId,parent.selection,ownerId,choice.requestId,ownerId,choice.requestId,ownerId,draft.rootId,draft.rootId,draft.epoch).run();
  if(!changed.meta.changes){
@@ -71,7 +71,7 @@ export async function commitReselection(repo:ReaderRepository,parentId:string,dr
 }
 
 export async function cancelReselection(repo:ReaderRepository,parentId:string,draftId:string,ownerId:string){
- const row=await repo.db.prepare('SELECT document FROM reader_sessions WHERE id=? AND user_id=?').bind(draftId,ownerId).first<{document:string}>();
+ const row=await repo.db.prepare('SELECT document FROM stories WHERE id=? AND user_id=?').bind(draftId,ownerId).first<{document:string}>();
  if(!row)throw new ReaderError(404,'选题草稿不存在。');
  const doc=JSON.parse(row.document) as Document;
  if(doc.reselection?.parentId===parentId)await repo.remove(draftId,ownerId);

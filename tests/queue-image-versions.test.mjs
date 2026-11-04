@@ -7,7 +7,7 @@ import {readerImageAsset} from '../lib/reader-image-assets.ts';
 
 const owner='docker-local-owner';
 const jobs=(f,id)=>f.app.services.production.queue.jobs(id,owner);
-const row=(f,id)=>f.app.services.database.prepare('SELECT * FROM reader_sessions WHERE id=?').bind(id).first();
+const row=(f,id)=>f.app.services.database.prepare('SELECT * FROM stories WHERE id=?').bind(id).first();
 const document=async(f,id)=>JSON.parse((await row(f,id)).document);
 const settled=async f=>{for(let i=0;i<4;i++){await f.app.services.production.tick();await f.app.services.production.queue.settle();}};
 
@@ -20,7 +20,7 @@ test('explicit retry publishes the current paid result over a stale slot once, w
  handler.run=async(job,context)=>{
   if(inject&&JSON.parse(job.payload).page===0){
    inject=false;
-   await f.app.services.database.prepare("UPDATE reader_sessions SET document=json_set(document,'$.images[0]',?) WHERE id=?").bind(stale.url,id).run();
+   await f.app.services.database.prepare("UPDATE stories SET document=json_set(document,'$.images[0]',?) WHERE id=?").bind(stale.url,id).run();
    throw new ReaderError(409,'这幅图片已经更新，请重新打开故事。');
   }
   return publish(job,context);
@@ -45,7 +45,7 @@ test('an old in-flight image cannot publish late or start its queued siblings af
  const f=await productionFixture(t),id=await f.create(3);
  await until(()=>f.control.calls.length===1);
  const oldJobs=await jobs(f,id),old=oldJobs.find(job=>job.kind==='image'&&job.state==='running');
- await f.app.services.database.prepare("UPDATE reader_sessions SET document=json_set(document,'$.plan.title','新的标题') WHERE id=?").bind(id).run();
+ await f.app.services.database.prepare("UPDATE stories SET document=json_set(document,'$.plan.title','新的标题') WHERE id=?").bind(id).run();
  await f.demand(id);await until(()=>f.control.calls.length===2);
  const current=(await jobs(f,id)).find(job=>job.kind==='image'&&job.state==='running'&&job.version!==old.version);
  f.control.calls[1].resolve();await until(async()=>!!(await document(f,id)).images[0]);
@@ -68,7 +68,7 @@ test('publication rechecks its version after an awaited file read',async t=>{
  store.get=async key=>{if(!entered&&key.includes('/artifacts/0-')){entered=true;await gate;}return get(key);};
  f.control.calls[0].resolve();await until(()=>entered);
  const old=(await jobs(f,id)).find(job=>job.kind==='image-publish'&&job.state==='running');
- await f.app.services.database.prepare("UPDATE reader_sessions SET document=json_set(document,'$.plan.title','文件读取期间更新') WHERE id=?").bind(id).run();
+ await f.app.services.database.prepare("UPDATE stories SET document=json_set(document,'$.plan.title','文件读取期间更新') WHERE id=?").bind(id).run();
  await f.demand(id);await until(()=>f.control.calls.length===2);
  release();await until(async()=>(await f.app.services.production.queue.job(old.id)).state==='succeeded');
  assert.deepEqual(JSON.parse((await f.app.services.production.queue.job(old.id)).result),{obsolete:true});
@@ -87,7 +87,7 @@ test('a reference read cannot start paid drawing after the image inputs become o
   return get(key);
  };
  f.control.calls[0].resolve();await until(()=>entered);
- await f.app.services.database.prepare("UPDATE reader_sessions SET document=json_set(document,'$.plan.pages[1].prompt',json_extract(document,'$.plan.pages[1].prompt') || ' CURRENT_INPUT') WHERE id=?").bind(id).run();
+ await f.app.services.database.prepare("UPDATE stories SET document=json_set(document,'$.plan.pages[1].prompt',json_extract(document,'$.plan.pages[1].prompt') || ' CURRENT_INPUT') WHERE id=?").bind(id).run();
  await f.demand(id);release();await until(()=>f.control.calls.length===2);
  assert.match(f.control.calls[1].prompt,/CURRENT_INPUT/);
  f.control.hold=false;f.control.calls[1].resolve();await settled(f);
@@ -125,7 +125,7 @@ test('publication CAS rejects a plan change after its final read',async t=>{
    const run=statement.run.bind(statement);
    statement.run=async()=>{
     injected=true;
-    await prepare("UPDATE reader_sessions SET document=json_set(document,'$.plan.title','写入前更新') WHERE id=?").bind(id).run();
+    await prepare("UPDATE stories SET document=json_set(document,'$.plan.title','写入前更新') WHERE id=?").bind(id).run();
     const result=await run();fenced=result.meta.changes===0;return result;
    };
   }
@@ -144,7 +144,7 @@ test('obsolete cleanup preserves a real current failure and never retries it',as
  await until(()=>f.control.calls.length===1);
  const obsolete=(await jobs(f,id)).find(job=>job.kind==='image'&&JSON.parse(job.payload).page===1);
  await f.app.services.database.prepare("UPDATE production_jobs SET state='failed',error='旧版失败' WHERE id=?").bind(obsolete.id).run();
- await f.app.services.database.prepare("UPDATE reader_sessions SET document=json_set(document,'$.plan.title','当前分镜') WHERE id=?").bind(id).run();
+ await f.app.services.database.prepare("UPDATE stories SET document=json_set(document,'$.plan.title','当前分镜') WHERE id=?").bind(id).run();
  await f.demand(id);await until(()=>f.control.calls.length===2);
  f.control.calls[1].reject(Error('controlled current failure'));
  await until(async()=>(await f.read(id)).state==='failed');
@@ -162,7 +162,7 @@ for(const generationControl of ['active','paused','stopped'])test(`obsolete fail
  f.control.calls[0].resolve();await settled(f);
  const oldJobs=await jobs(f,id),obsolete=oldJobs.find(job=>job.kind==='image'&&JSON.parse(job.payload).page===1);
  await f.app.services.database.prepare("UPDATE production_jobs SET state='failed',error='旧版失败' WHERE id=?").bind(obsolete.id).run();
- await f.app.services.database.prepare("UPDATE reader_sessions SET document=json_set(document,'$.plan.title','新的标题'),state='failed',error='旧版失败',generation_control=? WHERE id=?").bind(generationControl,id).run();
+ await f.app.services.database.prepare("UPDATE stories SET document=json_set(document,'$.plan.title','新的标题'),state='failed',error='旧版失败',generation_control=? WHERE id=?").bind(generationControl,id).run();
  f.control.hold=false;await settled(f);
  const saved=await f.read(id);
  assert.notEqual(saved.state,'failed');assert.equal(saved.error,null);assert.equal(saved.generationControl,generationControl);

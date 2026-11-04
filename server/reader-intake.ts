@@ -15,7 +15,7 @@ import {maxSuggestionBatches} from '../lib/reader-suggestions.ts';
 import {storyBriefVerified} from '../lib/reader-story-brief.ts';
 import {commandReceipt,recordNoop} from './reader-commands.ts';
 const hash=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
-const visible='NOT EXISTS(SELECT 1 FROM library_deletions WHERE story_id=reader_sessions.id AND user_id=reader_sessions.user_id)';
+const visible='NOT EXISTS(SELECT 1 FROM library_deletions WHERE story_id=stories.id AND user_id=stories.user_id)';
 async function intakeSelection(input:Selection,books?:LocalBooks){
  if(input.discovery?.mode==='title'){
   if(input.source)throw new ReaderError(400,'请填写目标标题并选择章节范围，不要同时直接选择另一篇故事。');
@@ -47,7 +47,7 @@ async function requestSearch(repo:ReaderRepository,row:SessionRow,doc:Document,r
  if(doc.plan||intake.phase==='confirmed')throw new ReaderError(409,'制作已确认；需要调整时请创建修订版本。');
  if(intake.batches.length>=maxSuggestionBatches)throw new ReaderError(400,'已保存40批候选，请回看选择，或新建其他书籍与主题。');
  const next:IntakeSearch={round:search.round+1,state:'searching',requestId,commandHash:fingerprint,cycleId:automatic?(search.cycleId||hash([row.id,search.round])):requestId};
- const changed=await repo.db.prepare(`UPDATE reader_sessions SET document=json_set(document,'$.intake.search',json(?),'$.intake.phase',CASE WHEN json_type(document,'$.intake.selected')='object' THEN json_extract(document,'$.intake.phase') ELSE 'discovering' END),updated_at=?
+ const changed=await repo.db.prepare(`UPDATE stories SET document=json_set(document,'$.intake.search',json(?),'$.intake.phase',CASE WHEN json_type(document,'$.intake.selected')='object' THEN json_extract(document,'$.intake.phase') ELSE 'discovering' END),updated_at=?
   WHERE id=? AND user_id=? AND COALESCE(json_extract(document,'$.intake.search.round'),0)=? AND json_extract(document,'$.intake.phase')!='confirmed'${automatic?" AND json_type(document,'$.intake.selected') IS NOT 'object' AND json_extract(document,'$.intake.phase')='choosing' AND json_extract(document,'$.intake.search.state')='idle'":''} AND ${visible}`)
   .bind(JSON.stringify(next),new Date().toISOString(),row.id,row.user_id,search.round).run();
  // A command that lost the CAS was accepted as a no-op; later replay cannot start a new round.
@@ -76,7 +76,7 @@ export async function changeIntake(repo:ReaderRepository,id:string,uid:string,ac
   intake.phase='choosing';intake.generation++;intake.batches=[];
   intake.search={round,state:'idle'};intake.lastAction={id:action.requestId,hash:fingerprint};
   delete intake.draft;delete doc.original;delete doc.frameRecommendation;doc.frameCountConfirmed=false;
-  const result=await repo.db.prepare(`UPDATE reader_sessions SET selection=?,document=?,state='idle',error=NULL,lock_token=NULL,lock_until=0,step_key=NULL,step_attempts=0,updated_at=?
+  const result=await repo.db.prepare(`UPDATE stories SET selection=?,document=?,state='idle',error=NULL,lock_token=NULL,lock_until=0,step_key=NULL,step_attempts=0,updated_at=?
    WHERE id=? AND user_id=? AND document=? AND selection=? AND state=? AND ${visible}`)
    .bind(JSON.stringify(next),JSON.stringify(doc),new Date().toISOString(),id,uid,row.document,row.selection,row.state).run();
   if(!result.meta.changes){if(attempt<3)return changeIntake(repo,id,uid,action,books,attempt+1);throw new ReaderError(409,'提取条件已更新，请重新打开后继续。');}
@@ -95,7 +95,7 @@ export async function changeIntake(repo:ReaderRepository,id:string,uid:string,ac
   intake.phase='discovering';intake.generation++;intake.batches=[];
   intake.search={round:search.round+1,state:'searching',requestId:action.requestId,commandHash:fingerprint,cycleId:action.requestId};
   delete doc.original;delete doc.frameRecommendation;doc.frameCountConfirmed=false;
-  const result=await repo.db.prepare(`UPDATE reader_sessions SET selection=?,document=?,state='idle',error=NULL,lock_token=NULL,lock_until=0,step_key=NULL,step_attempts=0,updated_at=?
+  const result=await repo.db.prepare(`UPDATE stories SET selection=?,document=?,state='idle',error=NULL,lock_token=NULL,lock_until=0,step_key=NULL,step_attempts=0,updated_at=?
    WHERE id=? AND user_id=? AND document=? AND selection=? AND state=? AND ${visible}`)
    .bind(JSON.stringify(selection),JSON.stringify(doc),new Date().toISOString(),id,uid,row.document,row.selection,row.state).run();
   if(!result.meta.changes){if(attempt<3)return changeIntake(repo,id,uid,action,books,attempt+1);throw new ReaderError(409,'查找条件已更新，请重新打开后继续。');}
@@ -105,7 +105,7 @@ export async function changeIntake(repo:ReaderRepository,id:string,uid:string,ac
  if(action.action==='draft'){
   // The running step keeps its lock and its input version; confirming applies these settings.
   if(!['preparing','confirming'].includes(intake.phase))throw new ReaderError(409,'请先选择故事。');
-  await repo.db.prepare(`UPDATE reader_sessions SET document=json_set(document,'$.intake.draft',json(?),'$.intake.manualArt',json(?)),updated_at=? WHERE id=? AND user_id=? AND json_extract(document,'$.intake.generation')=? AND json_extract(document,'$.intake.phase')!='confirmed' AND ${visible}`)
+  await repo.db.prepare(`UPDATE stories SET document=json_set(document,'$.intake.draft',json(?),'$.intake.manualArt',json(?)),updated_at=? WHERE id=? AND user_id=? AND json_extract(document,'$.intake.generation')=? AND json_extract(document,'$.intake.phase')!='confirmed' AND ${visible}`)
    .bind(JSON.stringify(action.settings),JSON.stringify(manual(action.settings.artStyle)),new Date().toISOString(),id,uid,action.generation).run();
   return repo.get(id,uid);
  }
@@ -135,7 +135,7 @@ export async function changeIntake(repo:ReaderRepository,id:string,uid:string,ac
  }
  delete intake.draft;
  intake.generation++;intake.lastAction={id:action.requestId,hash:fingerprint};
- const result=await repo.db.prepare(`UPDATE reader_sessions SET selection=?,document=?,state='idle',error=NULL,lock_token=NULL,lock_until=0,step_key=NULL,step_attempts=0,updated_at=?${action.action==='confirm'?",generation_mode='background',generation_control='active'":''}
+ const result=await repo.db.prepare(`UPDATE stories SET selection=?,document=?,state='idle',error=NULL,lock_token=NULL,lock_until=0,step_key=NULL,step_attempts=0,updated_at=?${action.action==='confirm'?",generation_mode='background',generation_control='active'":''}
   WHERE id=? AND user_id=? AND document=? AND selection=? AND state=? AND ${visible}`)
   .bind(JSON.stringify(selection),JSON.stringify(doc),new Date().toISOString(),id,uid,row.document,row.selection,row.state).run();
  if(!result.meta.changes){

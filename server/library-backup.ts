@@ -80,19 +80,3 @@ export function restoreLibraryBackup(source:string,target:string){
   checkDatabase(path.join(stage,'shiqu.sqlite'));targets(source,target);renameSync(stage,target);return manifest;
  }finally{rmSync(stage,{recursive:true,force:true});}
 }
-// Read-only inspection precedes even app_migrations creation and WAL initialization.
-export function backupBeforeMigration(directoryName:string,root:string){
- const filename=path.join(directoryName,'shiqu.sqlite');if(!existsSync(filename)||lstatSync(filename).size===0)return;
- const db=new DatabaseSync(filename,{readOnly:true});let pending=false;
- try{
-  const tables=new Set(db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(r=>String(r.name)));
-  if(!tables.size)return;
-  const applied=new Set<string>();
-  for(const table of ['app_migrations','d1_migrations'])if(tables.has(table))for(const row of db.prepare(`SELECT name FROM ${table}`).all())applied.add(String(row.name));
-  pending=readdirSync(path.join(root,'drizzle')).some(n=>n.endsWith('.sql')&&!applied.has(n));
- }finally{db.close();}
- if(!pending)return;
- const output=path.join(path.dirname(directoryName),path.basename(directoryName)+'-backups','pre-upgrade-'+new Date().toISOString().replace(/[:.]/g,'-')+'-'+randomUUID().slice(0,8));
- let version='unknown';try{version=JSON.parse(readFileSync(path.join(root,'package.json'),'utf8')).version||version;}catch{/* Fixture/legacy root without a package manifest. */}
- console.warn('正在备份升级前书库，请等待。');createLibraryBackup(directoryName,output,version);console.warn('升级前备份已校验：'+output);
-}

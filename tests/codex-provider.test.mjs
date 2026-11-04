@@ -148,11 +148,11 @@ test('a real desktop quit during Codex work is recorded as an interruption, not 
  const dataDirectory=path.join(root,'library'),running=await startDesktop({nodePath:process.execPath,dataDirectory,port,internetEnabled:false,cloudflaredPath:'',provider:'codex',textModel:'gemini-3.8-flash',imageModel:'gemini-nano-banana-2.1',codexPath:fake.binary,codexModel:'',codexHome:path.join(root,'codex')},'',root);
  t.after(()=>running.stop());
  const id=crypto.randomUUID(),origin=new URL(running.status.url).origin,created=await fetch(origin+'/api/reader/sessions',{method:'POST',headers:{'Content-Type':'application/json',Origin:origin},body:JSON.stringify({requestId:id,selection:{...selection,bookId:'other',customBook:'一本未收录的书'}})});assert.equal(created.status,201);
- const seed=new DatabaseSync(path.join(dataDirectory,'shiqu.sqlite'));seed.prepare("UPDATE reader_sessions SET document=json_set(document,'$.original',json(?)),state='idle',error=NULL WHERE id=?").run(JSON.stringify({title:'《未收录书》选篇',text:'一个人在梦中经历变化，醒来后重新思考眼前的处境。',url:'https://example.org/pinned',kind:'passage',provider:'fixture',retrievedAt:'2026-11-01'}),id);seed.close();
+ const seed=new DatabaseSync(path.join(dataDirectory,'shiqu.sqlite'));seed.prepare("UPDATE stories SET document=json_set(document,'$.original',json(?)),state='idle',error=NULL WHERE id=?").run(JSON.stringify({title:'《未收录书》选篇',text:'一个人在梦中经历变化，醒来后重新思考眼前的处境。',url:'https://example.org/pinned',kind:'passage',provider:'fixture',retrievedAt:'2026-11-01'}),id);seed.close();
  const end=Date.now()+15000;while(!(await fake.log().catch(()=>[])).some(row=>row.method==='turn/start')){assert.ok(Date.now()<end,'Codex work never started: '+JSON.stringify(await(await fetch(origin+'/api/reader/sessions/'+id)).json()).slice(0,400));await new Promise(resolve=>setTimeout(resolve,20));}
  await running.stop();
  const saved=new DatabaseSync(path.join(dataDirectory,'shiqu.sqlite'));t.after(()=>saved.close());
- const job=saved.prepare('SELECT state,interrupted,error FROM production_jobs WHERE session_id=?').get(id),session=saved.prepare('SELECT state,error FROM reader_sessions WHERE id=?').get(id);
+ const job=saved.prepare('SELECT state,interrupted,error FROM production_jobs WHERE session_id=?').get(id),session=saved.prepare('SELECT state,error FROM stories WHERE id=?').get(id);
  assert.equal(job.state,'failed');assert.equal(job.interrupted,1,'A restart can resume this job');assert.doesNotMatch(job.error,/订阅|登录/);
  assert.equal(session.state,'idle');assert.equal(session.error,null);
 });
@@ -193,7 +193,7 @@ test('REST reports Codex readiness without a Gemini key and routes checkpoints t
  const request=(pathname,method='GET',value)=>app.handle(new Request('http://localhost/api/reader/'+pathname,{method,headers:{'Content-Type':'application/json'},body:value?JSON.stringify(value):undefined}));
  const status=await(await request('status')).json();assert.equal(status.provider,'codex');assert.equal(status.configured,true);
  const id=crypto.randomUUID();assert.equal((await request('sessions','POST',{requestId:id,selection})).status,201);
- await app.services.database.prepare("UPDATE reader_sessions SET generation_mode='reader' WHERE id=?").bind(id).run();
+ await app.services.database.prepare("UPDATE stories SET generation_mode='reader' WHERE id=?").bind(id).run();
  const result=await request(`sessions/${id}/advance`,'POST',{throughPage:0});assert.ok([200,202].includes(result.status));
  const deadline=Date.now()+5000;let row;
  do{row=await(await request(`sessions/${id}`)).json();if(row.story||row.state==='failed')break;assert.ok(Date.now()<deadline);await new Promise(resolve=>setImmediate(resolve));}while(!row?.story&&row?.state!=='failed');

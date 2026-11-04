@@ -8,7 +8,7 @@ import {makeStory} from './fixtures/story.mjs';
 
 const publication={author:'公开制作人',workUrl:'https://example.org/work',contact:'contact@example.org',sourceNote:'原文转录 CC BY-SA 4.0，保留来源。',reuse:'本次受保护贡献的商用请联系制作人。'};
 const save=(f,id,value=publication,expected=null)=>f.json(`sessions/${id}/publication`,'POST',{publication:value,expected});
-const row=(f,id)=>f.app.services.database.prepare('SELECT * FROM reader_sessions WHERE id=?').bind(id).first();
+const row=(f,id)=>f.app.services.database.prepare('SELECT * FROM stories WHERE id=?').bind(id).first();
 
 test('metadata survives late full checkpoints, queue completion, restart and revision inheritance without extra generation',async t=>{
  const f=await productionFixture(t),id=await f.create();await until(()=>f.control.calls.length>0);
@@ -49,9 +49,9 @@ test('stale, invalid, cross-origin, other-owner and deleted writes leave saved m
  }
  assert.equal((await f.request(`sessions/${id}/publication`,'POST',{publication,expected:publication},{origin:'https://other.example'})).status,403);
  assert.deepEqual(await row(f,id),before);
- await f.app.services.database.prepare('UPDATE reader_sessions SET user_id=? WHERE id=?').bind('other-owner',id).run();
+ await f.app.services.database.prepare('UPDATE stories SET user_id=? WHERE id=?').bind('other-owner',id).run();
  assert.equal((await f.request(`sessions/${id}/publication`,'POST',{publication,expected:publication})).status,404);
- await f.app.services.database.prepare('UPDATE reader_sessions SET user_id=? WHERE id=?').bind('docker-local-owner',id).run();
+ await f.app.services.database.prepare('UPDATE stories SET user_id=? WHERE id=?').bind('docker-local-owner',id).run();
  await f.json(`library/${id}`,'DELETE');
  assert.equal((await f.request(`sessions/${id}/publication`,'POST',{publication,expected:publication})).status,404);
 });

@@ -95,9 +95,9 @@ for(const omitted of ['storySummary','storyMatchReason'])test(`missing ${omitted
  const current=await f.read(saved.id),confirm={requestId:crypto.randomUUID(),generation:current.intake.generation,action:'confirm',settings:{artStyle:'ink-pencil',productionPrompt:'',narrativeDetail:'balanced',length:2}};
  assert.equal((await f.request(`sessions/${saved.id}/setup`,'POST',confirm)).status,409);
  // A stale count receipt cannot bypass the new source-bound synopsis gate either.
- await f.app.services.database.prepare("UPDATE reader_sessions SET document=json_set(document,'$.intake.phase','confirming','$.frameRecommendation',json(?)),state='idle' WHERE id=?").bind(JSON.stringify({count:2,reason:'旧建议'}),saved.id).run();
+ await f.app.services.database.prepare("UPDATE stories SET document=json_set(document,'$.intake.phase','confirming','$.frameRecommendation',json(?)),state='idle' WHERE id=?").bind(JSON.stringify({count:2,reason:'旧建议'}),saved.id).run();
  assert.equal((await f.request(`sessions/${saved.id}/setup`,'POST',{...confirm,requestId:crypto.randomUUID()})).status,409);
- await f.app.services.database.prepare("UPDATE reader_sessions SET document=json_remove(json_set(document,'$.intake.phase','preparing'),'$.frameRecommendation'),state='failed' WHERE id=?").bind(saved.id).run();
+ await f.app.services.database.prepare("UPDATE stories SET document=json_remove(json_set(document,'$.intake.phase','preparing'),'$.frameRecommendation'),state='failed' WHERE id=?").bind(saved.id).run();
  invalid=false;const scans=library.calls.catalog.length;await f.demand(saved.id,crypto.randomUUID(),0,true);await until(async()=>(await f.read(saved.id)).intake.phase==='confirming');
  const after=(await f.json(`sessions/${saved.id}/source`)).source;assert.equal(after.text,before.text);assert.equal(after.storyBrief.verified,true);assert.equal(library.calls.catalog.length,scans);assert.equal(f.control.recommendations.length,2);
 });
@@ -132,7 +132,7 @@ test('historical direct selections without a synopsis prepare one before any new
  const f=await productionFixture(t),books=new LocalBooks(process.cwd());f.options.generation=withLocalBooks(f.generation,books,f.media);await f.restart();f.app.services.localBooks=books;
  f.app.services.production.stop();const entry=(await bookContents(books,{bookId:'shishuo',theme:'原典故事'})).entries[0];
  const saved=await f.json('sessions','POST',{requestId:crypto.randomUUID(),intake:true,selection:{bookId:'shishuo',theme:'原典故事',source:entry.source,length:'auto',narrativeDetail:'balanced',artStyle:'ink-pencil',voice:false}});
- await f.app.services.database.prepare("UPDATE reader_sessions SET document=json_remove(document,'$.intake.briefRequired') WHERE id=?").bind(saved.id).run();
+ await f.app.services.database.prepare("UPDATE stories SET document=json_remove(document,'$.intake.briefRequired') WHERE id=?").bind(saved.id).run();
  await f.restart();f.app.services.localBooks=books;await until(async()=>(await f.read(saved.id)).intake.phase==='confirming');
  assert.equal((await f.json(`sessions/${saved.id}/source`)).source.storyBrief.verified,true);assert.ok(f.control.recommendations[0].storyBrief.summary);assert.equal(f.control.recommendations.length,1);assert.equal(f.control.plans.length,0);
 });
@@ -168,7 +168,7 @@ test('invalid missing-summary preparation blocks planning and retries with the s
 test('a confirmed legacy intake stays confirmed and keeps its selected frame count while a missing synopsis is prepared',async t=>{
  const f=await productionFixture(t),id=await f.createLegacyReader(2),repo=new ReaderRepository(f.app.services.database),row=await repo.get(id,'docker-local-owner'),doc=JSON.parse(row.document);
  doc.frameCountConfirmed=true;doc.intake={phase:'confirmed',generation:0,creationHash:'legacy',selected:{batch:0,index:0},batches:[{stories:[{title:'庄周梦蝶',description:'梦醒之后的追问。'}],note:''}],search:{round:0,state:'idle'}};
- await f.app.services.database.prepare('UPDATE reader_sessions SET document=? WHERE id=?').bind(JSON.stringify(doc),id).run();
+ await f.app.services.database.prepare('UPDATE stories SET document=? WHERE id=?').bind(JSON.stringify(doc),id).run();
  await advanceStory(repo,f.generation.generator(),'docker-local-owner',id,0);const result=await repo.get(id,'docker-local-owner'),saved=JSON.parse(result.document);
  assert.equal(saved.intake.phase,'confirmed');assert.equal(saved.original.storyBrief.verified,true);assert.equal(saved.draft.pages.length,2);assert.equal(JSON.parse(result.selection).length,2);assert.equal(saved.frameCountConfirmed,true);
 });
@@ -179,7 +179,7 @@ for(const unverified of [false,true])test(`saved outline batches resume after sy
  doc.original=(await generator.original(chosen,{sourceReference:plan.sourceReference},id)).source;
  if(unverified)doc.original.storyBrief={summary:'未经核对的摘要。',matchReason:'需要核对。',verified:false};
  doc.storyboard={outline:{...metadata,summary:unverified?'已有提纲摘要。':'',beats:pages.map((_,i)=>`第${i+1}幅的原有提纲。`)},pages:pages.slice(0,20)};
- await f.app.services.database.prepare('UPDATE reader_sessions SET document=? WHERE id=?').bind(JSON.stringify(doc),id).run();
+ await f.app.services.database.prepare('UPDATE stories SET document=? WHERE id=?').bind(JSON.stringify(doc),id).run();
  f.control.beforeText=async kind=>kind==='recommend'?{storySummary:plan.summary,storyMatchReason:'依据真实原文的完整主线。'}:undefined;
  await advanceStory(repo,generator,'docker-local-owner',id,0);if(unverified){assert.equal(f.control.batches.length,0);await advanceStory(repo,generator,'docker-local-owner',id,0);}
  const saved=JSON.parse((await repo.get(id,'docker-local-owner')).document);assert.equal(saved.draft.summary,plan.summary);assert.deepEqual(saved.storyboard.outline.beats,doc.storyboard.outline.beats);assert.deepEqual(saved.draft.pages.slice(0,20),pages.slice(0,20));

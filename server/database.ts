@@ -1,40 +1,18 @@
 // Own the local SQLite connection and apply each schema migration exactly once.
 import {DatabaseSync} from 'node:sqlite';
-import {mkdirSync,readFileSync,readdirSync} from 'node:fs';
 import path from 'node:path';
 import {drizzle} from 'drizzle-orm/sqlite-proxy';
 import type {SQLInputValue} from 'node:sqlite';
 import type {Database} from '../lib/reader-repository.ts';
 import * as schema from '../db/schema.ts';
-import {storySummaryMigration,migrateStorySummary} from './story-summary-migration.ts';
-import {readerInputMigration,migrateReaderInputs,legacyInputFaultMigration,retainLegacyInputFaults} from './reader-input-migration.ts';
-import {backupBeforeMigration} from './library-backup.ts';
+import {ensureLibraryReady} from './library-upgrade.ts';
+export {migrate} from './database-migrations.ts';
 
-export function migrate(sqlite:DatabaseSync,root:string,directory?:string){
- sqlite.exec('CREATE TABLE IF NOT EXISTS app_migrations(name TEXT PRIMARY KEY, applied_at TEXT NOT NULL)');
- for(const name of readdirSync(path.join(root,'drizzle')).filter(f=>f.endsWith('.sql')).sort()){
-  sqlite.exec('BEGIN IMMEDIATE');
-  try{
-   if(!sqlite.prepare('SELECT 1 FROM app_migrations WHERE name=?').get(name)){
-    const legacy=sqlite.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='d1_migrations'").get();
-    const applied=legacy&&sqlite.prepare('SELECT 1 FROM d1_migrations WHERE name=?').get(name);
-    if(!applied){const sql=readFileSync(path.join(root,'drizzle',name),'utf8');if(name===storySummaryMigration)migrateStorySummary(sqlite,sql,directory);else if(name===readerInputMigration)migrateReaderInputs(sqlite);else if(name===legacyInputFaultMigration)retainLegacyInputFaults(sqlite);else sqlite.exec(sql);}
-    sqlite.prepare('INSERT INTO app_migrations VALUES(?,?)').run(name,new Date().toISOString());
-   }
-   sqlite.exec('COMMIT');
-  }catch(error){sqlite.exec('ROLLBACK');throw error;}
- }
-}
 export function openDatabase(directory:string,root:string){
- backupBeforeMigration(directory,root);
- mkdirSync(directory,{recursive:true});
+ ensureLibraryReady(directory,root);
  const sqlite=new DatabaseSync(path.join(directory,'shiqu.sqlite'));
  try{
   sqlite.exec('PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON');
-  migrate(sqlite,root,directory);
-  sqlite.exec('BEGIN IMMEDIATE');
-  try{sqlite.exec(readFileSync(path.join(root,'docker/seed.sql'),'utf8'));sqlite.exec('COMMIT');}
-  catch(error){sqlite.exec('ROLLBACK');throw error;}
   const db=drizzle(async(query,params,method)=>{
    const statement=sqlite.prepare(query),values=params as SQLInputValue[];
    if(method==='run'){statement.run(...values);return {rows:[]};}

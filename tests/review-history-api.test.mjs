@@ -9,7 +9,7 @@ const owner='docker-local-owner';
 async function seed(f,uid=owner,extra={}){
  const id=crypto.randomUUID(),repo=new ReaderRepository(f.app.services.database);await repo.create(id,uid,selectionSchema.parse(selection));
  const doc={plan:makePlan(3),original:{title:'原文',text:'原文'},images:[],audio:[],usage:[],visualReview:newReview(),...extra};
- await f.app.services.database.prepare("UPDATE reader_sessions SET document=?,generation_control='paused' WHERE id=?").bind(JSON.stringify(doc),id).run();return id;
+ await f.app.services.database.prepare("UPDATE stories SET document=?,generation_control='paused' WHERE id=?").bind(JSON.stringify(doc),id).run();return id;
 }
 test('history is demand-loaded, read-only, owner scoped, and deleted stories stay hidden',async t=>{
  const f=await productionFixture(t),id=await seed(f),repo=new ReaderRepository(f.app.services.database);

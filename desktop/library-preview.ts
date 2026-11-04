@@ -3,31 +3,44 @@ import {DatabaseSync} from 'node:sqlite';
 import {existsSync,readFileSync} from 'node:fs';
 import path from 'node:path';
 import type {Plugin} from 'vite';
+import {ensureLibraryReady,libraryUpgradeBackup} from '../server/library-upgrade.ts';
+import {withLibraryGate,inspectLibrary} from '../server/library-schema.ts';
+import {fileURLToPath} from 'node:url';
 import {developmentLibraryDirectory} from '../server/library-directory.ts';
 
+const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const librarySummaryFile=new URL('./library.sql',import.meta.url);
 const deleteStorySql=readFileSync(new URL('./library-delete.sql',import.meta.url),'utf8');
 const restoreStorySql=readFileSync(new URL('./library-restore.sql',import.meta.url),'utf8');
 export function setLibraryStoryDeleted(directory:string,id:string,deleted:boolean){
+ ensureLibraryReady(directory,root);return withLibraryGate(directory,()=>setDeleted(directory,id,deleted));
+}
+function setDeleted(directory:string,id:string,deleted:boolean){
+ if(inspectLibrary(directory)!=='current')throw Error('LIBRARY_UPGRADE_REQUIRED');
  const filename=path.join(directory,'shiqu.sqlite');
  if(!existsSync(filename))throw Error('这篇故事不在书架里。');
  const database=new DatabaseSync(filename);
  try{
   database.exec('PRAGMA busy_timeout=5000; BEGIN IMMEDIATE');
-  if(!database.prepare('SELECT id FROM reader_sessions WHERE id=?').get(id))throw Error('这篇故事不在书架里。');
+  if(!database.prepare('SELECT id FROM stories WHERE id=?').get(id))throw Error('这篇故事不在书架里。');
   database.prepare(deleted?deleteStorySql:restoreStorySql).run(id);
   database.exec('COMMIT');
  }catch(error){if(database.isTransaction)database.exec('ROLLBACK');throw error;}
  finally{database.close();}
 }
 export function readLibrarySummary(directory:string){
+ if(inspectLibrary(directory)==='missing')return {stories:[]};
+ ensureLibraryReady(directory,root);return withLibraryGate(directory,()=>readSummary(directory));
+}
+function readSummary(directory:string){
+ if(inspectLibrary(directory)!=='current')throw Error('LIBRARY_UPGRADE_REQUIRED');
  const filename=path.join(directory,'shiqu.sqlite');
  if(!existsSync(filename))return {stories:[]};
  const database=new DatabaseSync(filename,{readOnly:true});
  try{
   database.exec('PRAGMA busy_timeout=1000');
   const row=database.prepare(readFileSync(librarySummaryFile,'utf8')).get() as Record<string,string>;
-  return JSON.parse(Object.values(row)[0]);
+  const result=JSON.parse(Object.values(row)[0]),backup=libraryUpgradeBackup(directory);return backup?{...result,upgradeBackup:backup}:result;
  }finally{database.close();}
 }
 export function desktopPreview():Plugin{

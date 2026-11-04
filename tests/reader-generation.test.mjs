@@ -59,7 +59,7 @@ test('transport outages are bounded and leaving a story stops automatic recovery
 });
 test('running checkpoints are polled and leaving during a poll issues no further requests',async()=>{
  const {repo,db}=setup(),id=crypto.randomUUID(),g=fake();await repo.create(id,'alice',selection);
- db.prepare("UPDATE reader_sessions SET state='running',lock_token='in-flight',lock_until=? WHERE id=?").run(Date.now()+60000,id);
+ db.prepare("UPDATE stories SET state='running',lock_token='in-flight',lock_until=? WHERE id=?").run(Date.now()+60000,id);
  let active=true;
  assert.equal(await runStoryGeneration(client(repo,g,id,{isActive:()=>active,sleep:async ms=>{assert.equal(ms,2000);active=false;}})),'');
  assert.deepEqual(g.calls,[]);assert.equal((await repo.get(id,'alice')).state,'running');
@@ -112,7 +112,7 @@ test('planning can recover after the former cap and only one concurrent retry ac
  assert.equal(result.retryAt,null);assert.deepEqual(g.calls,['plan']);
 });
 
-test('stale requests become explicit failures instead of silently issuing another call',async()=>{const {repo,db}=setup(),id=crypto.randomUUID(),g=fake();await repo.create(id,'alice',selection);db.prepare("UPDATE reader_sessions SET state='running',lock_token='expired',lock_until=1,step_key='plan',step_attempts=1 WHERE id=?").run(id);const s=await advanceStory(repo,g,'alice',id,0);assert.equal(s.state,'failed');assert.deepEqual(g.calls,[]);});
+test('stale requests become explicit failures instead of silently issuing another call',async()=>{const {repo,db}=setup(),id=crypto.randomUUID(),g=fake();await repo.create(id,'alice',selection);db.prepare("UPDATE stories SET state='running',lock_token='expired',lock_until=1,step_key='plan',step_attempts=1 WHERE id=?").run(id);const s=await advanceStory(repo,g,'alice',id,0);assert.equal(s.state,'failed');assert.deepEqual(g.calls,[]);});
 test('an outdated checkpoint cannot acquire the same completed step again',async()=>{const {repo}=setup(),id=crypto.randomUUID(),g=fake();const old=await repo.create(id,'alice',selection);await advanceStory(repo,g,'alice',id,0);assert.equal(await repo.acquire(old,{kind:'plan',page:0,key:'plan'}),null);});
 import {png,jpeg} from './fixtures/images.mjs';
 const b64=b=>Buffer.from(b).toString('base64');
@@ -143,12 +143,12 @@ test('unavailable original blocks summary and planning, and recovery saves each 
 test('legacy backfill preserves images and progress and rejects an outdated document or active generation',async()=>{
  const {repo,db}=setup(),id=crypto.randomUUID(),g=fake();await repo.create(id,'alice',selection);
  await advanceStory(repo,g,'alice',id,0);await advanceStory(repo,g,'alice',id,0);await advanceStory(repo,g,'alice',id,0);await advanceStory(repo,g,'alice',id,0);await repo.progress(id,'alice',0,true);
- db.prepare("UPDATE reader_sessions SET document=json_remove(document,'$.original') WHERE id=?").run(id);
+ db.prepare("UPDATE stories SET document=json_remove(document,'$.original') WHERE id=?").run(id);
  const old=await repo.get(id,'alice'),before=JSON.parse(old.document);
  const updated=await repo.saveOriginal(old,original);assert.equal(updated.page,old.page);assert.equal(updated.saved,1);
  assert.deepEqual(JSON.parse(updated.document),{...before,original});
  await assert.rejects(repo.saveOriginal(old,original),e=>e.status===409);
- db.prepare("UPDATE reader_sessions SET state='running' WHERE id=?").run(id);
+ db.prepare("UPDATE stories SET state='running' WHERE id=?").run(id);
  await assert.rejects(repo.saveOriginal(await repo.get(id,'alice'),original),e=>e.status===409);
 });
 test('saving a recovered original clears source failure while preserving an image failure for manual retry',async()=>{
@@ -158,7 +158,7 @@ test('saving a recovered original clears source failure while preserving an imag
  const recovered=await repo.saveOriginal(failed,original);
  assert.equal(recovered.state,'idle');assert.equal(recovered.error,null);assert.deepEqual(JSON.parse(recovered.document).plan,before.plan);assert.deepEqual(g.calls,[]);
  g.image=async()=>{throw Error('image failure');};await advanceStory(repo,g,'alice',id,0);await advanceStory(repo,g,'alice',id,0);await advanceStory(repo,g,'alice',id,0);await advanceStory(repo,g,'alice',id,0);
- db.prepare("UPDATE reader_sessions SET document=json_remove(document,'$.original') WHERE id=?").run(id);
+ db.prepare("UPDATE stories SET document=json_remove(document,'$.original') WHERE id=?").run(id);
  const imageFailed=await repo.get(id,'alice'),backfilled=await repo.saveOriginal(imageFailed,original);
  assert.equal(backfilled.state,'failed');assert.equal(backfilled.error,imageFailed.error);
 });
@@ -180,7 +180,7 @@ test('source recovery remains explicit after repeated outages and never repeats 
  await advanceStory(repo,g,'alice',id,0);await advanceStory(repo,g,'alice',id,0);assert.deepEqual(g.calls,['plan','image:0']);
  assert.equal(JSON.parse((await repo.get(id,'alice')).document).usage.filter(u=>u.step==='plan').length,1);
  // A source backfill must also unlock the next image after the old source cap was reached.
- db.prepare("UPDATE reader_sessions SET state='failed',step_key='source',step_attempts=2 WHERE id=?").run(id);
+ db.prepare("UPDATE stories SET state='failed',step_key='source',step_attempts=2 WHERE id=?").run(id);
  assert.equal(view(await repo.get(id,'alice')).retryAllowed,true);
 });
 function memoryAssets(){const stored=new Map();return {stored,async get(k){const entry=stored.get(k);return entry?{async arrayBuffer(){return entry.bytes.slice().buffer;}}:null;},async put(k,bytes,options){stored.set(k,{bytes,options});}};}
@@ -361,7 +361,7 @@ test('soft deletion is owner-scoped, durable and does not erase content or block
  await assert.rejects(repo.create(id,'alice',selection),e=>e.status===404);
  await assert.rejects(repo.progress(id,'alice',0,false),e=>e.status===404);
  await repo.create(crypto.randomUUID(),'alice',selection);assert.equal((await repo.list('alice')).length,10);
- const stored=db.prepare('SELECT * FROM reader_sessions WHERE id=?').get(id);assert.equal(stored.document,before.document);assert.equal(stored.saved,1);assert.equal(stored.last_read_at,before.last_read_at);
+ const stored=db.prepare('SELECT * FROM stories WHERE id=?').get(id);assert.equal(stored.document,before.document);assert.equal(stored.saved,1);assert.equal(stored.last_read_at,before.last_read_at);
  assert.equal((await repo.deletions('bob')).length,0);assert.equal((await repo.deletions('alice')).length,1);
  assert.equal(await repo.acquire(before,{kind:'image',page:1,key:'image:1'}),null);
 });
@@ -371,19 +371,17 @@ test('deleting during a paid step retains its result but cannot resume or resurr
  g.plan=async()=>{started();await hold;return {value:plan,model:'fake',requestId:'paid',usage:{tokens:10}};};
  const operation=advanceStory(repo,g,'alice',id,0);await ready;await repo.remove(id,'alice');release();
  await assert.rejects(operation,e=>e.status===404);
- const stored=db.prepare('SELECT document,state FROM reader_sessions WHERE id=?').get(id);assert.equal(JSON.parse(stored.document).draft.title,plan.title);assert.equal(JSON.parse(stored.document).usage.find(item=>item.step==='plan').requestId,'paid');assert.notEqual(stored.state,'running');
+ const stored=db.prepare('SELECT document,state FROM stories WHERE id=?').get(id);assert.equal(JSON.parse(stored.document).draft.title,plan.title);assert.equal(JSON.parse(stored.document).usage.find(item=>item.step==='plan').requestId,'paid');assert.notEqual(stored.state,'running');
  await assert.rejects(advanceStory(repo,g,'alice',id,0),e=>e.status===404);assert.equal((await repo.list('alice')).length,0);
 });
-test('retired studio records are retained on disk but cannot enter current reader library actions',async()=>{
- const {repo,db}=setup();db.prepare("INSERT INTO stories(id,title,summary,book_id,theme,status,pages,reflection,source_text,source_url,adaptation_note,checks,created_at,updated_at) VALUES('shared','样篇','','liaozhai','','published','[]','','','','','{}','2026-01-01','2026-01-01')").run();
- const before=db.prepare("SELECT * FROM stories WHERE id='shared'").get();
+test('unknown retired identities cannot enter current reader library actions',async()=>{
+ const {repo}=setup();
  for(const owner of ['alice','bob']){
   await assert.rejects(repo.remove('shared',owner),e=>e.status===404);
   await assert.rejects(repo.restore('shared',owner),e=>e.status===404);
   await assert.rejects(repo.favorite('shared',owner,true),e=>e.status===404);
   assert.deepEqual(await repo.list(owner),[]);assert.deepEqual(await repo.deletions(owner),[]);
  }
- assert.deepEqual(db.prepare("SELECT * FROM stories WHERE id='shared'").get(),before);
 });
 test('restoring preserves content and progress without reactivating deleted generation',async()=>{
  const {repo,db}=setup(),id=crypto.randomUUID(),g=fake();await repo.create(id,'alice',selection);
@@ -393,7 +391,7 @@ test('restoring preserves content and progress without reactivating deleted gene
  assert.deepEqual(await repo.restore(id,'alice'),{storyId:id,restored:true});assert.deepEqual({...await repo.get(id,'alice')},{...before,generation_control:'stopped'});
  assert.equal((await repo.list('alice')).some(s=>s.id===id),true);assert.equal((await repo.deletions('alice')).length,0);
  assert.deepEqual(await repo.restore(id,'alice'),{storyId:id,restored:false});assert.deepEqual(g.calls,['plan','image:0']);
- await repo.remove(id,'alice');db.prepare("UPDATE reader_sessions SET state='failed',error='原文暂时不可用' WHERE id=?").run(id);
+ await repo.remove(id,'alice');db.prepare("UPDATE stories SET state='failed',error='原文暂时不可用' WHERE id=?").run(id);
  await repo.restore(id,'alice');assert.equal((await repo.get(id,'alice')).state,'failed');assert.deepEqual(g.calls,['plan','image:0']);
  await assert.rejects(repo.restore(crypto.randomUUID(),'alice'),e=>e.status===404);
 });
@@ -413,10 +411,10 @@ async function artPreparation(){
  const chosen=selectionSchema.parse({...selection,storyTitle:'梦蝶',source,narrativeDetail:'balanced',length:'auto'});
  await repo.create(id,'alice',chosen);
  const doc={plan:null,images:[],audio:[],usage:[],original:{...original,localSource:source},intake:{phase:'preparing',generation:0,creationHash:'test',selected:{batch:0,index:0},search:{round:1,state:'idle'},batches:[{stories:[{title:'梦蝶',description:'梦与醒。',source},{title:'大葫芦',description:'器物与用处。',source:{...source,firstUnit:'u1',lastUnit:'u1'}}],note:''}]}};
- db.prepare('UPDATE reader_sessions SET document=? WHERE id=?').run(JSON.stringify(doc),id);
+ db.prepare('UPDATE stories SET document=? WHERE id=?').run(JSON.stringify(doc),id);
  g.prepareOriginal=async s=>({...original,localSource:s.source});
  g.recommend=async()=>({value:{count:7,reason:'保留完整因果。',storySummary:plan.summary,storyMatchReason:'按原典主线展开。'},model:'mock',requestId:'frames',usage:null});
- const read=()=>view(db.prepare('SELECT * FROM reader_sessions WHERE id=?').get(id));
+ const read=()=>view(db.prepare('SELECT * FROM stories WHERE id=?').get(id));
  const choose=async index=>{const current=read();await changeIntake(repo,id,'alice',{action:'choose',batch:0,index,generation:current.intake.generation,requestId:crypto.randomUUID(),settings:{artStyle:current.selection.artStyle,productionPrompt:'',narrativeDetail:'balanced'}});};
  return {repo,db,id,g,read,choose};
 }
@@ -441,7 +439,7 @@ test('an in-flight art result preserves a manual draft and concurrently appended
  const draft={artStyle:'cinematic',productionPrompt:'我的要求',narrativeDetail:'balanced',length:5};
  await changeIntake(f.repo,f.id,'alice',{action:'draft',settings:draft,generation:0,requestId:crypto.randomUUID()});
  const extra={stories:[{title:'追加的故事',description:'查找的新结果。'}],note:''};
- f.db.prepare("UPDATE reader_sessions SET document=json_insert(document,'$.intake.batches[#]',json(?)) WHERE id=?").run(JSON.stringify(extra),f.id);
+ f.db.prepare("UPDATE stories SET document=json_insert(document,'$.intake.batches[#]',json(?)) WHERE id=?").run(JSON.stringify(extra),f.id);
  release({artStyle:'paper-cut',reason:'纸影适合梦境。'});await work;
  const saved=f.read();assert.equal(saved.selection.artStyle,'ink-pencil','The saved draft owns the manual style until confirmation');assert.deepEqual(saved.intake.draft,draft);assert.deepEqual(saved.intake.batches[1],extra);assert.equal(saved.intake.batches[0].stories[0].artRecommendation.artStyle,'paper-cut');
  await changeIntake(f.repo,f.id,'alice',{action:'confirm',settings:draft,generation:0,requestId:crypto.randomUUID()});
@@ -450,7 +448,7 @@ test('an in-flight art result preserves a manual draft and concurrently appended
 
 test('a saved manual style survives later story recommendations',async()=>{
  const f=await artPreparation();
- f.db.prepare("UPDATE reader_sessions SET selection=json_set(selection,'$.artStyle','cinematic'),document=json_set(document,'$.intake.manualArt',json('true')) WHERE id=?").run(f.id);
+ f.db.prepare("UPDATE stories SET selection=json_set(selection,'$.artStyle','cinematic'),document=json_set(document,'$.intake.manualArt',json('true')) WHERE id=?").run(f.id);
  f.g.recommendArt=async()=>({artStyle:'paper-cut',reason:'纸影适合梦境。'});
  await advanceStory(f.repo,f.g,'alice',f.id,0);
  assert.equal(f.read().selection.artStyle,'cinematic');assert.equal(f.read().intake.batches[0].stories[0].artRecommendation.artStyle,'paper-cut');f.db.close();
@@ -470,7 +468,7 @@ test('frame recommendation retries reuse saved art and art failures never preten
 
 test('a replaced generation rejects an in-flight art result',async()=>{
  const f=await artPreparation();
- f.g.recommendArt=async()=>{f.db.prepare("UPDATE reader_sessions SET document=json_set(document,'$.intake.generation',1),lock_token=NULL,state='idle' WHERE id=?").run(f.id);return {artStyle:'paper-cut',reason:'纸影适合梦境。'};};
+ f.g.recommendArt=async()=>{f.db.prepare("UPDATE stories SET document=json_set(document,'$.intake.generation',1),lock_token=NULL,state='idle' WHERE id=?").run(f.id);return {artStyle:'paper-cut',reason:'纸影适合梦境。'};};
  await assert.rejects(advanceStory(f.repo,f.g,'alice',f.id,0),error=>error.status===409);
  assert.equal(f.read().selection.artStyle,'ink-pencil');assert.equal(f.read().intake.batches[0].stories[0].artRecommendation,undefined);f.db.close();
 });

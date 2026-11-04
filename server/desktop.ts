@@ -9,6 +9,7 @@ import {realpathSync} from 'node:fs';
 import {createApplication} from './app.ts';
 import {createHttpServer} from './http.ts';
 import {desktopAccess} from './desktop-access.ts';
+import {ensureLibraryReady,libraryUpgradeBackup} from './library-upgrade.ts';
 import {ownDesktopData} from './desktop-owner.ts';
 import {phoneUrls} from './phone-access.ts';
 import {desktopRemote} from './desktop-remote.ts';
@@ -84,6 +85,7 @@ export function desktopFailure(error:unknown){
  if(error instanceof TunnelError)return error.message;
  const code=(error as NodeJS.ErrnoException)?.code,message=(error as Error)?.message;
  if(code==='EADDRINUSE')return '端口已被占用，请更换端口或停止其他实例。';
+ if(message?.startsWith('LIBRARY_'))return message;
  if(message==='DATA_BUSY')return '此数据目录仍由另一个 CLI 或桌面服务使用，请等待它退出或选择其他目录。';
  if(code==='EACCES'||code==='EPERM')return '无法访问所选文件或数据目录，请检查权限。';
  return '服务启动失败。请确认 Node 24、应用资源和数据目录可用。';
@@ -105,8 +107,9 @@ async function main(){
   if(starting||closing)return;starting=true;
   void(async()=>{
    try{
-    const input=z.object({action:z.enum(['start','test']),settings:desktopSettings,key:z.string().max(4096).default('')}).strict().parse(JSON.parse(line));
+    const input=z.object({action:z.enum(['start','test','upgrade']),settings:desktopSettings,key:z.string().max(4096).default('')}).strict().parse(JSON.parse(line));
     const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
+    if(input.action==='upgrade'){ensureLibraryReady(input.settings.dataDirectory,root);send({upgraded:true,started:false,backup:libraryUpgradeBackup(input.settings.dataDirectory)});await stop();return;}
     if(input.action==='test'){send(await testDesktopProvider(input.settings,input.key,root));await stop();return;}
     runtime=await startDesktop(input.settings,input.key,root,{signal:abort.signal,onStatus:send});starting=false;
     if(inputClosed){await stop();return;}

@@ -10,7 +10,7 @@ const completeId=await f.create(3,{acceptancePrompt:criteria});await until(async
 await f.json(`sessions/${completeId}/title`,'POST',{title:'验收演示：已完成'});
 const historicalId=await f.create(3,{acceptancePrompt:criteria});await until(async()=>(await f.read(historicalId)).state==='completed');
 await f.json(`sessions/${historicalId}/title`,'POST',{title:'验收演示：未留存'});
-await f.app.services.database.prepare("UPDATE reader_sessions SET document=json_set(document,'$.usage',json('[]')) WHERE id=?").bind(historicalId).run();
+await f.app.services.database.prepare("UPDATE stories SET document=json_set(document,'$.usage',json('[]')) WHERE id=?").bind(historicalId).run();
 f.generation.suggestions=async()=>({stories:[{title:'庄周梦蝶',description:'梦与醒之间的追问。',artRecommendation:{artStyle:'ink-pencil',reason:'适合动作与反应。'}}],note:''});
 const setup=await f.json('sessions','POST',{requestId:crypto.randomUUID(),intake:true,selection:{...selection,storyTitle:undefined,length:'auto',narrativeDetail:'balanced'}}),setupId=setup.id;await f.startDiscovery(setupId);
 await f.demand(setupId);await until(async()=>(await f.read(setupId)).intake.phase==='choosing');

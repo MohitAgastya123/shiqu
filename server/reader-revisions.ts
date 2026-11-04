@@ -16,7 +16,7 @@ import {newReview} from '../lib/reader-review.ts';
 import {readerImageAsset,referenceImageKey} from '../lib/reader-image-assets.ts';
 import {mediaType,imageTypes} from '../lib/reader-generation-contract.ts';
 const hash=(value:string|Uint8Array)=>createHash('sha256').update(value).digest('hex');
-export const familyEpoch=`SELECT COALESCE(MAX(${familyNumber('reader_sessions')}),1) AS epoch FROM reader_sessions WHERE user_id=? AND (id=? OR ${familyRoot('reader_sessions')}=?)`;
+export const familyEpoch=`SELECT COALESCE(MAX(${familyNumber('stories')}),1) AS epoch FROM stories WHERE user_id=? AND (id=? OR ${familyRoot('stories')}=?)`;
 export const currentFamilyVersion=(alias='p')=>`NOT ${supersededSql(alias)} AND NOT EXISTS(SELECT 1 FROM library_deletions WHERE story_id=${alias}.id AND user_id=${alias}.user_id)`;
 export function editableSelection(selection:string){const {displayTitle:_,...value}=JSON.parse(selection);void _;return value;}
 export const replacementToken=(selection:string,epoch:number)=>hash(JSON.stringify([editableSelection(selection),epoch]));
@@ -39,7 +39,7 @@ export async function forkRevision(repo:ReaderRepository,media:MediaStore,ownerI
  // Preserve fingerprints of requests saved before explicit paused submissions were added.
  const requestHash=hash(JSON.stringify([parentId,token,changes,...(paused?[true]:[])]));
  const replay=async()=>{
-  const existing=await repo.db.prepare('SELECT * FROM reader_sessions WHERE id=?').bind(requestId).first<SessionRow>();
+  const existing=await repo.db.prepare('SELECT * FROM stories WHERE id=?').bind(requestId).first<SessionRow>();
   if(!existing)return null;
   const revision=(JSON.parse(existing.document) as Document).revision;
   if(existing.user_id!==ownerId||revision?.parentId!==parentId||revision.requestHash!==requestHash)throw new ReaderError(409,'这个提交编号已用于其他修改，请重新打开编辑。');
@@ -70,8 +70,8 @@ export async function forkRevision(repo:ReaderRepository,media:MediaStore,ownerI
  if(plan)document.images=reusableRevisionImages(base,selection,plan);
  if(impact.preserveScript){document.storyboard=doc.storyboard;document.draft=doc.draft;}
  const now=new Date().toISOString();
- const inserted=await repo.db.prepare(`INSERT INTO reader_sessions(id,user_id,selection,document,generation_mode,generation_control,state,step_attempts,lock_until,page,saved,last_read_at,created_at,updated_at)
-  SELECT ?,?,json_patch(?,CASE WHEN json_type(p.selection,'$.displayTitle')='text' THEN json_object('displayTitle',json_extract(p.selection,'$.displayTitle')) ELSE '{}' END),json_patch(?,json_object('publication',json_extract(p.document,'$.publication'))),'background',?,'idle',0,0,MIN(p.page,?),p.saved,p.last_read_at,?,? FROM reader_sessions p
+ const inserted=await repo.db.prepare(`INSERT INTO stories(id,user_id,selection,document,generation_mode,generation_control,state,step_attempts,lock_until,page,saved,last_read_at,created_at,updated_at)
+  SELECT ?,?,json_patch(?,CASE WHEN json_type(p.selection,'$.displayTitle')='text' THEN json_object('displayTitle',json_extract(p.selection,'$.displayTitle')) ELSE '{}' END),json_patch(?,json_object('publication',json_extract(p.document,'$.publication'))),'background',?,'idle',0,0,MIN(p.page,?),p.saved,p.last_read_at,?,? FROM stories p
   WHERE p.id=? AND p.user_id=? AND json_extract(p.document,'$.plan') IS json_extract(?,'$.plan') AND json_remove(p.selection,'$.displayTitle')=json_remove(?,'$.displayTitle')
   AND (json_extract(p.document,'$.plan') IS NOT NULL OR p.generation_control IN ('paused','stopped') OR ${supersededSql('p')})
   AND ${currentFamilyVersion('p')}

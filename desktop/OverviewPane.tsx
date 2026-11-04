@@ -25,6 +25,7 @@ export function OverviewPane({native,state,busy,configured,settings,previewUrl,o
   </section>
   <section className="overview-library" aria-labelledby="overview-library-title"><div className="overview-section-heading"><div><p className="overview-kicker">故事留在这里</p><h2 id="overview-library-title">书库一瞥</h2></div><span className="overview-data-note">本机生成记录 · 每 4 秒更新</span></div>
    <div className="overview-metrics">{metrics.map(({key,label,detail,Icon})=><div className={'overview-metric metric-'+key} key={key}><div><span>{label}</span><Icon size={17} strokeWidth={1.5} aria-hidden="true"/></div><strong>{stats?stats[key]:'—'}</strong><p>{detail}</p></div>)}</div>
+   {summary?.upgradeBackup&&<p className="help" role="status">升级前书库备份已校验：{summary.upgradeBackup}</p>}
    {error&&<div className="overview-summary-error" role="alert"><span>书库暂时无法读取，统计尚不可用。</span><button type="button" onClick={refresh}>重新读取<RefreshCw size={13}/></button><p>{error}</p></div>}
   </section>
   <div className="overview-details">

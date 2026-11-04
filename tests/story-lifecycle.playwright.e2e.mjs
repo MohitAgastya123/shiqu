@@ -88,7 +88,7 @@ for(const manual of [true,false])test(`STORY-LIFECYCLE-C004-${manual?'review-edi
    await dialog(page,'故事设置').getByRole('link',{name:'手动修改第 1 幅',exact:true}).click();const editor=dialog(page,'修改故事');await editor.getByLabel(/^旁白/).fill('渔夫俯身伸手，把岸上的乌龟轻轻放回水中。');blocked=false;
    const next=await revisionResponse(page,()=>editor.getByRole('button',{name:'保存并重新审核',exact:true}).click());await b.completed(next.id);await oneCard(f,next.id);assert.equal((await f.read(next.id)).story.pages[0].caption,'渔夫俯身伸手，把岸上的乌龟轻轻放回水中。');assert.equal((await f.read(saved.id)).state,'failed');await b.reader(next.id);
   }else{
-   await dialog(page,'故事设置').getByRole('link',{name:'跳过问题并绘图',exact:true}).click();await b.completed(saved.id);const row=await f.app.services.database.prepare('SELECT document FROM reader_sessions WHERE id=?').bind(saved.id).first();assert.equal(JSON.parse(row.document).visualReview.overridden,true);await b.reader(saved.id);
+   await dialog(page,'故事设置').getByRole('link',{name:'跳过问题并绘图',exact:true}).click();await b.completed(saved.id);const row=await f.app.services.database.prepare('SELECT document FROM stories WHERE id=?').bind(saved.id).first();assert.equal(JSON.parse(row.document).visualReview.overridden,true);await b.reader(saved.id);
   }
   assert.equal(f.control.calls.length,3);await b.screenshot('audit-explicit-resolution');
  });

@@ -13,7 +13,7 @@ import {FileMedia} from '../server/media.ts';
 import {ReaderRepository} from '../lib/reader-repository.ts';
 import {LocalBooks} from '../server/local-books.ts';
 import {importLegacy} from '../server/import-legacy.ts';
-import {stories} from '../db/schema.ts';
+import {historicalLibrary,insertStudio} from './fixtures/historical-library.mjs';
 import {makeStory,insertReaderStory} from './fixtures/story.mjs';
 
 async function fixture(t){
@@ -31,13 +31,13 @@ test('SQLite reopen preserves current reader checkpoints, media, owner identity 
  const options=await fixture(t);let app=createApplication(options);
  assert.deepEqual(await (await request(app,'/api/reader/sessions')).json(),[]);
  const sample=await insertReaderStory(app);
- await app.services.database.prepare("UPDATE reader_sessions SET selection=json_set(selection,'$.displayTitle','preserved title') WHERE id=?").bind(sample.id).run();
+ await app.services.database.prepare("UPDATE stories SET selection=json_set(selection,'$.displayTitle','preserved title') WHERE id=?").bind(sample.id).run();
  assert.equal((await request(app,'/api/reader/sessions/'+sample.id+'/progress','POST',{page:4,saved:true},{'oai-authenticated-user-id':'spoofed'})).status,200);
  await app.services.media.put(`reader/${sample.id}/source.json`,new TextEncoder().encode('{"title":"saved"}'),{contentType:'application/json'});
  app.close();app=createApplication(options);
  try{
   const row=(await (await request(app,'/api/reader/sessions')).json())[0];assert.equal(row.story.title,'preserved title');assert.equal(row.page,4);assert.equal(row.saved,true);
-  assert.equal((await app.services.database.prepare('SELECT user_id FROM reader_sessions WHERE id=?').bind(sample.id).first()).user_id,'docker-local-owner');
+  assert.equal((await app.services.database.prepare('SELECT user_id FROM stories WHERE id=?').bind(sample.id).first()).user_id,'docker-local-owner');
   assert.equal(new TextDecoder().decode((await app.services.media.get(`reader/${sample.id}/source.json`)).body),'{"title":"saved"}');
   assert.equal((await (await request(app,'/api/reader/status')).json()).configured,false);
   await request(app,'/api/reader/library/'+sample.id,'DELETE');assert.equal((await (await request(app,'/api/reader/sessions')).json()).length,0);
@@ -47,8 +47,7 @@ test('SQLite reopen preserves current reader checkpoints, media, owner identity 
 test('failed migrations roll back DDL and can retry after the migration is corrected',async t=>{
  const {root,dataDirectory}=await fixture(t);await writeFile(path.join(root,'drizzle/0003_test.sql'),'CREATE TABLE retry_probe(id TEXT); INVALID SQL;');
  assert.throws(()=>openDatabase(dataDirectory,root));
- const database=new DatabaseSync(path.join(dataDirectory,'shiqu.sqlite'));
- assert.equal(database.prepare("SELECT name FROM sqlite_master WHERE name='retry_probe'").get(),undefined);database.close();
+ assert.equal((await readdir(dataDirectory)).includes('shiqu.sqlite'),false);
  await writeFile(path.join(root,'drizzle/0003_test.sql'),'CREATE TABLE retry_probe(id TEXT);');
  const local=openDatabase(dataDirectory,root);assert.equal(local.sqlite.prepare('SELECT COUNT(*) AS n FROM app_migrations').get().n,(await readdir(path.join(root,'drizzle'))).filter(name=>name.endsWith('.sql')).length);local.close();
 });
@@ -83,10 +82,10 @@ test('real SQLite locks prevent duplicate paid requests through concurrent REST 
  await cp('data/library',path.join(options.root,'data/library'),{recursive:true});
  const book=await new LocalBooks(options.root).book({bookId:'zhuangzi'}),section=book.sections[1],unit=section.units.at(-1);
  const source={edition:book.edition,sectionId:section.id,firstUnit:unit.id,lastUnit:unit.id};
- options.variables={GEMINI_API_KEY:'mock-only'};options.transport=async(_url,init)=>{calls++;await hold;const body=JSON.parse(init.body),schema=body.generationConfig.responseFormat.text.schema;if(schema.properties.candidates)await app.services.database.prepare("UPDATE reader_sessions SET generation_control='paused' WHERE id=?").bind(id).run();const result=schema.properties.count?{count:8,reason:'按完整故事编排。',storySummary:plan.summary,storyMatchReason:'按原文主线展开。'}:schema.properties.candidates?{title:plan.title,candidates:[plan.reflection,'醒来之后，梦中的自在仍值得回味。','梦与醒的分界，也未必是心境的分界。']}:plan;return Response.json({candidates:[{finishReason:'STOP',content:{parts:[{text:JSON.stringify(result)}]}}]});};
+ options.variables={GEMINI_API_KEY:'mock-only'};options.transport=async(_url,init)=>{calls++;await hold;const body=JSON.parse(init.body),schema=body.generationConfig.responseFormat.text.schema;if(schema.properties.candidates)await app.services.database.prepare("UPDATE stories SET generation_control='paused' WHERE id=?").bind(id).run();const result=schema.properties.count?{count:8,reason:'按完整故事编排。',storySummary:plan.summary,storyMatchReason:'按原文主线展开。'}:schema.properties.candidates?{title:plan.title,candidates:[plan.reflection,'醒来之后，梦中的自在仍值得回味。','梦与醒的分界，也未必是心境的分界。']}:plan;return Response.json({candidates:[{finishReason:'STOP',content:{parts:[{text:JSON.stringify(result)}]}}]});};
  let app=createApplication(options);const id=crypto.randomUUID();
  await request(app,'/api/reader/sessions','POST',{requestId:id,selection:{bookId:'zhuangzi',storyTitle:'庄周梦蝶',source,theme:'放下执念',length:8,voice:false}});
- await app.services.database.prepare("UPDATE reader_sessions SET generation_mode='reader' WHERE id=?").bind(id).run();
+ await app.services.database.prepare("UPDATE stories SET generation_mode='reader' WHERE id=?").bind(id).run();
  const first=request(app,`/api/reader/sessions/${id}/advance`,'POST',{throughPage:0});
  while(!calls)await new Promise(resolve=>setImmediate(resolve));
  const duplicate=await request(app,`/api/reader/sessions/${id}/advance`,'POST',{throughPage:0});assert.equal(duplicate.status,202);assert.equal(calls,1);
@@ -98,9 +97,10 @@ test('real SQLite locks prevent duplicate paid requests through concurrent REST 
 async function legacyFixture(t){
  const options=await fixture(t),source=path.join(options.root,'legacy'),v3=path.join(source,'v3');
  await mkdir(path.join(v3,'d1/miniflare-D1DatabaseObject'),{recursive:true});await mkdir(path.join(v3,'r2/miniflare-R2BucketObject'),{recursive:true});await mkdir(path.join(v3,'r2/shiqu-media/blobs'),{recursive:true});
- const initial=openDatabase(options.dataDirectory,options.root);const saved=makeStory();saved.pages=saved.pages.map(p=>({...p,image:''}));await initial.db.insert(stories).values({...saved,pages:JSON.stringify(saved.pages),checks:JSON.stringify(saved.checks)});initial.sqlite.exec('PRAGMA wal_checkpoint(TRUNCATE)');initial.close();
+ const initial=historicalLibrary(options.dataDirectory,options.root);const saved=makeStory();saved.pages=saved.pages.map(p=>({...p,image:''}));insertStudio(initial,saved);
+ initial.prepare("INSERT INTO reader_sessions(id,user_id,selection,document,created_at,updated_at) VALUES('current','docker-local-owner','{\"bookId\":\"zhuangzi\",\"theme\":\"test\",\"length\":8,\"voice\":false,\"artStyle\":\"ink-pencil\",\"productionPrompt\":\"\"}','{\"images\":[],\"audio\":[]}', 'date','date')").run();initial.close();
  const databaseFile=path.join(v3,'d1/miniflare-D1DatabaseObject/database.sqlite');await cp(path.join(options.dataDirectory,'shiqu.sqlite'),databaseFile);
- const database=new DatabaseSync(databaseFile);database.exec("DROP TABLE app_migrations; CREATE TABLE d1_migrations(name TEXT);");for(const name of (await readdir('drizzle')).filter(f=>f.endsWith('.sql')))database.prepare('INSERT INTO d1_migrations VALUES(?)').run(name);
+ const database=new DatabaseSync(databaseFile);database.exec("DROP TABLE app_migrations; CREATE TABLE d1_migrations(name TEXT);");for(const name of (await readdir('drizzle')).filter(f=>f.endsWith('.sql')&&!f.startsWith('0018_')))database.prepare('INSERT INTO d1_migrations VALUES(?)').run(name);
  database.exec("UPDATE stories SET title='imported story'; INSERT INTO progress VALUES('docker-local-owner:test','docker-local-owner','test',3,1,'2026-10-27')");database.close();
  const metadataFile=path.join(v3,'r2/miniflare-R2BucketObject/bucket.sqlite'),metadata=new DatabaseSync(metadataFile);metadata.exec('CREATE TABLE _mf_objects(key TEXT,blob_id TEXT,size INTEGER,http_metadata TEXT)');
  const bytes=new Uint8Array([137,80,78,71]);metadata.prepare('INSERT INTO _mf_objects VALUES(?,?,?,?)').run('reader/story/0.png','blob-id',bytes.length,'{"contentType":"image/png"}');metadata.close();await writeFile(path.join(v3,'r2/shiqu-media/blobs/blob-id'),bytes);
@@ -111,7 +111,7 @@ test('offline importer preserves records, identities, media keys and source byte
  const result=await importLegacy(fixture.source,fixture.target,fixture.root);assert.equal(result.mediaObjects,1);
  assert.deepEqual(await readFile(fixture.databaseFile),before);assert.deepEqual(await readFile(fixture.metadataFile),metadataBefore);
  const app=createApplication({root:fixture.root,dataDirectory:fixture.target});
- try{assert.equal((await app.services.database.prepare('SELECT title FROM stories').first()).title,'imported story');assert.equal((await app.services.database.prepare('SELECT user_id FROM progress').first()).user_id,'docker-local-owner');assert.deepEqual((await app.services.media.get('reader/story/0.png')).body,fixture.bytes);assert.deepEqual(await (await request(app,'/api/reader/sessions')).json(),[]);}
+ try{assert.equal((await app.services.database.prepare('SELECT id FROM stories').first()).id,'current');assert.equal((await app.services.database.prepare("SELECT name FROM sqlite_schema WHERE name='progress'").first()),null);assert.deepEqual((await app.services.media.get('reader/story/0.png')).body,fixture.bytes);assert.equal((await (await request(app,'/api/reader/sessions')).json()).length,1);}
  finally{app.close();}
  await assert.rejects(importLegacy(fixture.source,fixture.target,fixture.root),/empty/);
 });
@@ -119,7 +119,7 @@ test('offline importer upgrades a pre-summary legacy database without requiring 
  const f=await legacyFixture(t),db=new DatabaseSync(f.databaseFile);
  db.exec("ALTER TABLE stories RENAME COLUMN summary TO hook; DROP TABLE book_image_references; DROP TRIGGER IF EXISTS book_image_reference_on_delete; DELETE FROM d1_migrations WHERE name IN('0009_story_summary.sql','0010_book_image_references.sql')");db.close();const before=await readFile(f.databaseFile);
  await importLegacy(f.source,f.target,f.root);assert.deepEqual(await readFile(f.databaseFile),before);
- const local=openDatabase(f.target,f.root);assert.ok(local.sqlite.prepare('PRAGMA table_info(stories)').all().some(column=>column.name==='summary'));assert.equal(local.sqlite.prepare('SELECT summary FROM stories').get().summary,makeStory().summary);assert.equal(local.sqlite.prepare('SELECT count(*) n FROM book_image_references').get().n,0);local.close();
+ const local=openDatabase(f.target,f.root);assert.ok(local.sqlite.prepare('PRAGMA table_info(stories)').all().some(column=>column.name==='document'));assert.equal(local.sqlite.prepare('SELECT id FROM stories').get().id,'current');assert.equal(local.sqlite.prepare('SELECT count(*) n FROM book_image_references').get().n,0);local.close();
 });
 test('import failure keeps destination absent and rejects live WAL, missing blobs and unsupported multipart objects',async t=>{
  for(const mode of ['wal','blob','multipart']){
@@ -132,15 +132,12 @@ test('import failure keeps destination absent and rejects live WAL, missing blob
  }
 });
 
-test('retired studio tables survive reopen but have no runtime editing or reading API',async t=>{
- const options=await fixture(t);let app=createApplication(options);t.after(()=>app.close());
- const initial={...makeStory(),status:'draft'};
- await app.services.db.insert(stories).values({...initial,actualCost:12.5,currency:'USD',pages:JSON.stringify(initial.pages),checks:JSON.stringify(initial.checks)});
- const before=await app.services.database.prepare('SELECT * FROM stories WHERE id=?').bind(initial.id).first();
+test('retired studio rows are discarded before reopen and have no runtime API',async t=>{
+ const options=await fixture(t),old=historicalLibrary(options.dataDirectory,options.root),initial=insertStudio(old);old.close();
+ const app=createApplication(options);t.after(()=>app.close());
  for(const [route,method] of [['/api/stories','GET'],['/api/admin/stories/'+initial.id,'GET'],['/api/admin/stories/'+initial.id,'PUT'],['/api/admin/stories','POST'],['/api/admin/generate','POST']])assert.equal((await request(app,route,method,method==='GET'?undefined:{})).status,404);
- app.close();app=createApplication(options);
- const after=await app.services.database.prepare('SELECT * FROM stories WHERE id=?').bind(initial.id).first();
- assert.deepEqual({...after},{...before});assert.deepEqual(await (await request(app,'/api/reader/sessions')).json(),[]);
+ assert.deepEqual(await (await request(app,'/api/reader/sessions')).json(),[]);
+ assert.equal(await app.services.database.prepare('SELECT * FROM stories WHERE id=?').bind(initial.id).first(),null);
 });
 test('single-owner shelf returns more than 80 stories and keeps hidden stories excluded',async t=>{
  const app=createApplication(await fixture(t));t.after(()=>app.close());const repo=new ReaderRepository(app.services.database),ids=[];

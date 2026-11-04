@@ -22,10 +22,10 @@ export class BookImageReferences{
  private database:Database;private media:MediaStore;private owner:string;
  constructor(database:Database,media:MediaStore,owner:string){this.database=database;this.media=media;this.owner=owner;}
  private async source(id:string,page=0):Promise<Source>{
-  const row=await this.database.prepare(`SELECT selection,document FROM reader_sessions WHERE id=? AND user_id=? AND ${visible}`).bind(id,this.owner,id,this.owner).first<{selection:string;document:string}>();
+  const row=await this.database.prepare(`SELECT selection,document FROM stories WHERE id=? AND user_id=? AND ${visible}`).bind(id,this.owner,id,this.owner).first<{selection:string;document:string}>();
   if(row){
    const selection=JSON.parse(row.selection),doc=JSON.parse(row.document),image=doc.plan?.pages[page]?doc.images[page]||'':'';
-   return {bookKey:bookKey(selection.bookId,selection.customBook),image,validPage:!!doc.plan?.pages[page],guard:`EXISTS(SELECT 1 FROM reader_sessions WHERE id=? AND user_id=? AND selection=? AND json_extract(document,?)=? AND ${visible})`,values:[id,this.owner,row.selection,`$.images[${page}]`,image,id,this.owner]};
+   return {bookKey:bookKey(selection.bookId,selection.customBook),image,validPage:!!doc.plan?.pages[page],guard:`EXISTS(SELECT 1 FROM stories WHERE id=? AND user_id=? AND selection=? AND json_extract(document,?)=? AND ${visible})`,values:[id,this.owner,row.selection,`$.images[${page}]`,image,id,this.owner]};
   }
   throw new ReaderError(404,'这篇故事不在你的书架里');
  }

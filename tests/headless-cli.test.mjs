@@ -50,7 +50,7 @@ test('in-process CLI saves intent without inference, runs bounded discovery/prep
  const edited=await call(['stories','edit',id,'--request-id',editId],changes);assert.notEqual(edited.session.id,id);assert.equal(f.control.plans.length,before);
  const replay=await call(['stories','edit',id,'--request-id',editId],changes);assert.equal(replay.session.id,edited.session.id);
  await assert.rejects(call(['run',id,'--timeout','1']),error=>error.code==='SUPERSEDED_VERSION');
- const db=inspect();assert.equal(db.prepare('SELECT count(*) AS n FROM reader_sessions').get().n,2);db.close();
+ const db=inspect();assert.equal(db.prepare('SELECT count(*) AS n FROM stories').get().n,2);db.close();
  const backup=path.join(f.root,'backup'),restored=path.join(f.root,'restored');await call(['backup',backup]);await call(['verify-backup',backup]);
  await executeHeadless(process.cwd(),['restore',backup,'--data-dir',restored],{variables:{}});
  const copied=await executeHeadless(process.cwd(),['stories','get',edited.session.id,'--data-dir',restored],{variables:{}});assert.equal(copied.id,edited.session.id);assert.equal(f.control.plans.length,before);

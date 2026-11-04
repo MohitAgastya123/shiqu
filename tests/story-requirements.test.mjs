@@ -43,7 +43,7 @@ for(const provider of ['codex','gemini'])test(`${provider}: saved per-story requ
  assert.equal(latest.acceptancePrompt,criteria+'\n结语不复述情节。');
  assert.equal((await f.read(id)).selection.acceptancePrompt,criteria);
  await f.restart();assert.deepEqual((await f.json(`sessions/${child.id}/prompts`)).results,latest.results);
- const database=f.app.services.database;await database.prepare('UPDATE reader_sessions SET user_id=? WHERE id=?').bind('other-owner',id).run();assert.equal((await f.request(`sessions/${id}/prompts`)).status,404);
+ const database=f.app.services.database;await database.prepare('UPDATE stories SET user_id=? WHERE id=?').bind('other-owner',id).run();assert.equal((await f.request(`sessions/${id}/prompts`)).status,404);
 });
 test('failed criteria enter existing targeted repair and must pass a fresh audit before drawing',async t=>{
  const f=await productionFixture(t);f.control.hold=false;
@@ -61,7 +61,7 @@ test('unknown/conflicting criteria stop immediately with evidence, no fabricated
 });
 test('historical rows have no invented capture history, and previews do not commission inference',async t=>{
  const f=await productionFixture(t),id=await f.createLegacyReader(3);f.app.stopGeneration();
- await f.app.services.database.prepare("UPDATE reader_sessions SET document=json_remove(document,'$.usage') WHERE id=?").bind(id).run();
+ await f.app.services.database.prepare("UPDATE stories SET document=json_remove(document,'$.usage') WHERE id=?").bind(id).run();
  const initial=await f.json(`sessions/${id}/prompts`);assert.deepEqual(initial.records,[]);assert.deepEqual(initial.results,[]);assert.ok(initial.previews.production.instructions.includes('本篇验收要求'));assert.equal(f.control.plans.length,0);
  assert.deepEqual(initial.missingRecords,[]);assert.equal(initial.productionPrompt,selection.productionPrompt);assert.equal(initial.acceptancePrompt,'');
 });
@@ -74,7 +74,7 @@ test('prompt export metadata identifies partially retained and inherited calls w
   {step:'image:0',model:'old-image',originId:'parent-version',requestId:'private-image-id',usage:null},
   {step:'review:0',model:'new-review',requestId:null,usage:null,promptRecord:record},
  ];
- await f.app.services.database.prepare("UPDATE reader_sessions SET document=json_set(document,'$.usage',json(?)) WHERE id=?").bind(JSON.stringify(usage),id).run();
+ await f.app.services.database.prepare("UPDATE stories SET document=json_set(document,'$.usage',json(?)) WHERE id=?").bind(JSON.stringify(usage),id).run();
  const history=await f.json(`sessions/${id}/prompts`);
  assert.deepEqual(history.records,[{step:'plan',model:'old-text',originId:'parent-version',index:0,record},{step:'review:0',model:'new-review',originId:id,index:2,record}]);
  assert.deepEqual(history.missingRecords,[{step:'image:0',model:'old-image',originId:'parent-version',index:1}]);

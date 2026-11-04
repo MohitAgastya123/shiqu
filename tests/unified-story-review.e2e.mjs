@@ -14,11 +14,11 @@ const reduction={frameCountReview:{decision:'reduce',proposedCount:3,reason:'移
 async function seed(f,{count=4,saved=0,candidates=false}={}){
  const id=crypto.randomUUID(),repo=new ReaderRepository(f.app.services.database),selection=selectionSchema.parse({...legacy,length:'auto'});
  await repo.create(id,owner,selection);
- await f.app.services.database.prepare("UPDATE reader_sessions SET generation_mode='background',generation_control='paused' WHERE id=?").bind(id).run();
+ await f.app.services.database.prepare("UPDATE stories SET generation_mode='background',generation_control='paused' WHERE id=?").bind(id).run();
  const images=Array(count).fill('');
  for(let page=0;page<saved;page++){const asset=readerImageAsset(id,page,'png');await f.media.put(asset.key,Buffer.from(encoded,'base64'),{contentType:'image/png'});images[page]=asset.url;}
  const doc={plan:makePlan(count),original:{title:'原文',text:'甲赠物，乙未接，后来二人和解。'},images,audio:[],usage:[],visualReview:newReview(),...(candidates?{reflectionCandidates:makeReflectionCandidates('原结语')}:{})};
- await f.app.services.database.prepare('UPDATE reader_sessions SET document=?,page=? WHERE id=?').bind(JSON.stringify(doc),Math.min(2,count-1),id).run();
+ await f.app.services.database.prepare('UPDATE stories SET document=?,page=? WHERE id=?').bind(JSON.stringify(doc),Math.min(2,count-1),id).run();
  return {id,selection,images,read:async()=>JSON.parse((await new ReaderRepository(f.app.services.database).get(id,owner)).document),resume:()=>f.json(`sessions/${id}/production-control`,'POST',{action:'resume'}),pause:()=>f.json(`sessions/${id}/production-control`,'POST',{action:'pause'})};
 }
 test('production queue survives old review keys, reduces with full requirements, and reuses bytes before missing-image dispatch',async t=>{
@@ -74,6 +74,6 @@ test('explicit draw-anyway remains marked, paused and idempotent when bypassing 
 for(const legacyReview of ['passed','absent'])test(`opening an old automatic plan with ${legacyReview} review does not add either audit`,async t=>{
  const f=await productionFixture(t),s=await seed(f),doc=await s.read();
  if(legacyReview==='passed')doc.visualReview={...newReview(),status:'passed'};else delete doc.visualReview;
- await f.app.services.database.prepare('UPDATE reader_sessions SET document=? WHERE id=?').bind(JSON.stringify(doc),s.id).run();
+ await f.app.services.database.prepare('UPDATE stories SET document=? WHERE id=?').bind(JSON.stringify(doc),s.id).run();
  await s.resume();await until(()=>f.control.calls.length===1);assert.equal(f.control.frameReviews.length,0);assert.equal(f.control.reviews.length,0);
 });

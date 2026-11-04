@@ -25,7 +25,7 @@ for(const provider of ['codex','gemini'])test(`${provider}: early demand, single
  f.control.hold=false;for(const call of f.control.calls)call.resolve();await until(async()=>(await f.read(id)).ready===7);
  assert.equal(f.control.calls.some(c=>c.page===7),false);assert.equal(f.control.maxActive,3);assert.equal(f.control.plans.length,1);
  await f.demand(id,viewer,1);await until(async()=>(await f.read(id)).state==='completed');assert.equal(f.control.calls.length,8);
- const stored=await f.app.services.database.prepare('SELECT document FROM reader_sessions WHERE id=?').bind(id).first();
+ const stored=await f.app.services.database.prepare('SELECT document FROM stories WHERE id=?').bind(id).first();
  const doc=JSON.parse(stored.document);assert.equal(doc.usage.filter(u=>u.step.startsWith('image:')).length,8);assert.ok(doc.original);
  assert.ok(f.control.calls.every(c=>c.prompt.includes('quiet narration')));
 });
@@ -59,7 +59,7 @@ test('expired viewer demand stops dispatch even if the browser never sends leave
 test('deletion hides a story immediately while retaining every in-flight image and receipt',async t=>{
  const f=await productionFixture(t),id=await f.createLegacyReader();await f.demand(id);await until(()=>f.control.calls.length===1);f.control.calls[0].resolve();await until(()=>f.control.calls.length===4);
  await f.json(`library/${id}`,'DELETE');for(const call of f.control.calls)call.resolve();
- await until(async()=>{const stored=await f.app.services.database.prepare('SELECT document,state FROM reader_sessions WHERE id=?').bind(id).first();return JSON.parse(stored.document).images.filter(Boolean).length===4&&stored.state!=='running';});
+ await until(async()=>{const stored=await f.app.services.database.prepare('SELECT document,state FROM stories WHERE id=?').bind(id).first();return JSON.parse(stored.document).images.filter(Boolean).length===4&&stored.state!=='running';});
  assert.equal((await f.request(`sessions/${id}`)).status,404);assert.equal((await f.request(`media/${id}/1.png`)).status,404);assert.equal(f.control.calls.length,4);
  assert.equal((await f.request(`sessions/${id}/production`,'POST',{viewerId:crypto.randomUUID(),page:0})).status,404);
  assert.equal((await f.app.services.production.queue.jobs(id,'docker-local-owner')).filter(j=>j.kind==='image'&&j.state==='succeeded').length,4);
@@ -75,7 +75,7 @@ test('local publication failure and legacy retry reuse the paid receipt and reco
  const failed=await f.read(id);assert.equal(failed.retryStage,'publication');assert.equal(failed.story.pages[1].image,'');
  blocked=false;f.control.hold=false;await f.demand(id,crypto.randomUUID(),0,true);
  await until(async()=>(await f.read(id)).ready===7);assert.equal(f.control.calls.filter(c=>c.page===1).length,1);
- const stored=await f.app.services.database.prepare('SELECT document FROM reader_sessions WHERE id=?').bind(id).first();assert.equal(JSON.parse(stored.document).usage.filter(u=>u.step==='image:1').length,1);
+ const stored=await f.app.services.database.prepare('SELECT document FROM stories WHERE id=?').bind(id).first();assert.equal(JSON.parse(stored.document).usage.filter(u=>u.step==='image:1').length,1);
 });
 
 test('paid failure stops refill, keeps sibling successes and retry only draws missing scenes',async t=>{
@@ -96,7 +96,7 @@ test('restart before viewer expiry never resumes paid work until a fresh viewer 
 
 test('session and job heartbeats fence legacy advances while slow images are still running',async t=>{
  const f=await productionFixture(t),id=await f.createLegacyReader();await f.demand(id);await until(()=>f.control.calls.length===1);
- await f.app.services.database.prepare('UPDATE reader_sessions SET lock_until=? WHERE id=?').bind(Date.now()+1000,id).run();
+ await f.app.services.database.prepare('UPDATE stories SET lock_until=? WHERE id=?').bind(Date.now()+1000,id).run();
  await f.app.services.database.prepare("UPDATE production_jobs SET lease_until=? WHERE state='running'").bind(Date.now()+1000).run();
  await f.app.services.production.tick();const row=await new ReaderRepository(f.app.services.database).get(id,'docker-local-owner');assert.ok(row.lock_until>Date.now()+100000);
  const duplicate=await advanceStory(new ReaderRepository(f.app.services.database),f.generation.generator(),'docker-local-owner',id,6,true);assert.equal(duplicate.state,'running');assert.equal(f.control.calls.length,1);
@@ -163,7 +163,7 @@ for(const provider of ['codex','gemini'])test(`${provider}: reordered story resu
   await f.media.put(asset.key,bytes,{contentType:'image/png'});images[page]=asset.url;
  }
  const doc={plan:makePlan(30),original:{title:'庄周梦蝶',text:'庄周梦为胡蝶。',url:'https://example.com/original',kind:'passage',provider:'fixture',retrievedAt:new Date().toISOString()},images,audio:[],usage:[]};
- await f.app.services.database.prepare("UPDATE reader_sessions SET document=?,state='failed',error='previous failure',page=10 WHERE id=?").bind(JSON.stringify(doc),id).run();
+ await f.app.services.database.prepare("UPDATE stories SET document=?,state='failed',error='previous failure',page=10 WHERE id=?").bind(JSON.stringify(doc),id).run();
  await f.restart();f.control.hold=true;
  assert.equal((await f.read(id)).ready,10);assert.equal(f.control.calls.length,0);
  const viewer=crypto.randomUUID();await f.demand(id,viewer,10,true);
@@ -175,7 +175,7 @@ for(const provider of ['codex','gemini'])test(`${provider}: reordered story resu
  assert.deepEqual(resumed.story.pages.slice(0,10).map(p=>p.image),images.slice(0,10));
  for(const image of images.slice(0,10))assert.deepEqual(Buffer.from((await f.media.get(referenceImageKey(id,image))).body),bytes);
  assert.equal(f.control.calls.length,1);assert.equal(f.control.plans.length,0);
- const stored=await f.app.services.database.prepare('SELECT document FROM reader_sessions WHERE id=?').bind(id).first();
+ const stored=await f.app.services.database.prepare('SELECT document FROM stories WHERE id=?').bind(id).first();
  assert.deepEqual(JSON.parse(stored.document).usage.map(u=>u.step),['image:10']);
 });
 
@@ -184,7 +184,7 @@ for(const provider of ['codex','gemini'])test(`${provider}: immutable attempts a
  await f.demand(id);await until(()=>f.control.calls.length===1);original.stop();
  // Simulate a crashed owner's expired claims while its remote result arrives late.
  await f.app.services.database.prepare("UPDATE production_jobs SET lease_until=1 WHERE state='running'").run();
- await f.app.services.database.prepare("UPDATE reader_sessions SET state='failed',lock_token=NULL,lock_until=0 WHERE id=?").bind(id).run();
+ await f.app.services.database.prepare("UPDATE stories SET state='failed',lock_token=NULL,lock_until=0 WHERE id=?").bind(id).run();
  const replacement=new ReaderProductionCoordinator(f.app.services.database,f.generation,f.app.services.media);
  f.coordinators.push(replacement);
  await replacement.request('docker-local-owner',id,crypto.randomUUID(),0,false);await replacement.queue.recoverExpired();const fault=(await replacement.snapshot('docker-local-owner',id)).faults[0];await replacement.recover('docker-local-owner',id,{requestId:crypto.randomUUID(),faultId:fault.id});await until(()=>f.control.calls.length===2);
@@ -195,7 +195,7 @@ for(const provider of ['codex','gemini'])test(`${provider}: immutable attempts a
  assert.deepEqual(Buffer.from(before),Buffer.from(f.control.calls[1].bytes,'base64'));assert.notDeepEqual(Buffer.from(before),Buffer.from(encoded,'base64'));
  f.control.calls[0].bytes=encoded;f.control.calls[0].resolve();await original.queue.settle();
  assert.equal((await replacement.snapshot('docker-local-owner',id)).story.pages[0].image,saved);assert.deepEqual((await f.media.get(key)).body,before);
- const row=await f.app.services.database.prepare('SELECT document FROM reader_sessions WHERE id=?').bind(id).first();assert.equal(JSON.parse(row.document).usage.filter(u=>u.step==='image:0').length,1);
+ const row=await f.app.services.database.prepare('SELECT document FROM stories WHERE id=?').bind(id).first();assert.equal(JSON.parse(row.document).usage.filter(u=>u.step==='image:0').length,1);
  for(const reference of [saved.replace(id,crypto.randomUUID()),saved.replace('/artifacts/','/artifacts/../'),saved.replace('/0-','/80-'),saved.replace('.png','.svg')]){
   assert.equal(referenceImageKey(id,reference),null);const count=f.control.calls.length;
   await assert.rejects(f.generation.generator().image(JSON.parse(row.document).plan,1,id,reference));assert.equal(f.control.calls.length,count);
@@ -213,7 +213,7 @@ test('publication must own its job token as well as the session token',async t=>
  await f.demand(id);await until(()=>f.control.calls.length===1);f.control.calls[0].resolve();await until(()=>entered);
  const job=(await f.app.services.production.queue.jobs(id,'docker-local-owner')).find(j=>j.kind==='image-publish'&&j.state==='running');
  await f.app.services.database.prepare("UPDATE production_jobs SET lease_token='replacement' WHERE id=?").bind(job.id).run();release();await f.app.services.production.queue.settle();
- const row=await f.app.services.database.prepare('SELECT document FROM reader_sessions WHERE id=?').bind(id).first();assert.equal(JSON.parse(row.document).images[0],'');assert.equal(JSON.parse(row.document).usage.filter(u=>u.step==='image:0').length,0);
+ const row=await f.app.services.database.prepare('SELECT document FROM stories WHERE id=?').bind(id).first();assert.equal(JSON.parse(row.document).images[0],'');assert.equal(JSON.parse(row.document).usage.filter(u=>u.step==='image:0').length,0);
  await f.app.services.database.prepare('UPDATE production_jobs SET lease_until=1 WHERE id=?').bind(job.id).run();
 });
 
@@ -238,7 +238,7 @@ test('slow script preparation renews its session lease and excludes a legacy pla
  t.after(()=>release());
  f.generation.generator=()=>{const value=generator();return {...value,async plan(...args){started=true;await gate;return value.plan(...args);}};};
  await f.demand(id);await until(()=>started);
- await f.app.services.database.prepare('UPDATE reader_sessions SET lock_until=? WHERE id=?').bind(Date.now()+1000,id).run();await f.app.services.production.tick();
+ await f.app.services.database.prepare('UPDATE stories SET lock_until=? WHERE id=?').bind(Date.now()+1000,id).run();await f.app.services.production.tick();
  const row=await new ReaderRepository(f.app.services.database).get(id,'docker-local-owner');assert.ok(row.lock_until>Date.now()+100000);
  const duplicate=await advanceStory(new ReaderRepository(f.app.services.database),generator(),'docker-local-owner',id,0,true);assert.equal(duplicate.state,'running');assert.equal(f.control.plans.length,0);
  release();await until(()=>f.control.calls.length===1);assert.equal(f.control.plans.length,1);
@@ -249,11 +249,11 @@ test('deleted pending publication with an expired pre-restart lease cannot poiso
  const jobs=await f.app.services.production.queue.jobs(id,'docker-local-owner'),publication=jobs.find(j=>j.kind==='image-publish'&&JSON.parse(j.payload).page===1);
  await f.json(`library/${id}`,'DELETE');await f.app.close();
  const db=new DatabaseSync(path.join(f.dataDirectory,'shiqu.sqlite'));
- db.prepare("UPDATE reader_sessions SET document=json_set(document,'$.images[1]',''),state='running',lock_token='dead-owner',lock_until=1 WHERE id=?").run(id);
+ db.prepare("UPDATE stories SET document=json_set(document,'$.images[1]',''),state='running',lock_token='dead-owner',lock_until=1 WHERE id=?").run(id);
  db.prepare("UPDATE production_jobs SET state='queued',result=NULL WHERE id=?").run(publication.id);db.close();
  await f.restart();const live=await f.createLegacyReader();await f.demand(live);
  await until(async()=>(await f.read(live)).ready===7);
- await until(async()=>{const row=await f.app.services.database.prepare('SELECT document FROM reader_sessions WHERE id=?').bind(id).first();return !!JSON.parse(row.document).images[1];});
+ await until(async()=>{const row=await f.app.services.database.prepare('SELECT document FROM stories WHERE id=?').bind(id).first();return !!JSON.parse(row.document).images[1];});
  assert.equal(f.control.calls.length,14);assert.equal((await f.request(`sessions/${id}`)).status,404);
 });
 

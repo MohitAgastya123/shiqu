@@ -1,5 +1,6 @@
 // Resolve CLI inputs without loading unrelated env files or changing the caller directory.
 // --config avoids Node's own --env-file option being consumed before the executable can validate it.
+import {inspectLibrary} from './library-schema.ts';
 import path from 'node:path';
 import {homedir} from 'node:os';
 import {existsSync,readFileSync} from 'node:fs';
@@ -54,6 +55,7 @@ export async function cliConfiguration(options:CliOptions,context:CliContext={})
       const saved=JSON.parse(readFileSync(locations.cliSelection,'utf8')) as {dataDirectory?:unknown};
       if(typeof saved.dataDirectory!=='string'||!paths.isAbsolute(saved.dataDirectory))throw Error();
       directory=paths.normalize(saved.dataDirectory);
+      inspectLibrary(directory);
       const store=new SystemSettingsStore(locations.settings,locations.library);
       try{store.save({dataDirectory:directory,libraryConfigured:true});}finally{store.close();}
     }catch{throw Error('无法读取 CLI 书库设置；请修复 cli-library.json，或使用 --data-dir 指定书库。');}
@@ -63,6 +65,7 @@ export async function cliConfiguration(options:CliOptions,context:CliContext={})
     const answer=(await ask(locations.library)).trim();
     const selected=answer==='~'?home:/^~[/\\]/.test(answer)?paths.join(home,answer.slice(2)):answer;
     directory=selected?paths.resolve(cwd,selected):locations.library;
+    inspectLibrary(directory);
     const store=new SystemSettingsStore(locations.settings,locations.library);
     try{store.save({dataDirectory:directory,libraryConfigured:true});}finally{store.close();}
   }

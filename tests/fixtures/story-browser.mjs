@@ -46,7 +46,7 @@ export async function storyBrowser(t,caseId){
  });
  const seen=new Map();let reading=false;
  async function sample(){if(reading||closed)return;reading=true;try{
-  const {results}=await f.app.services.database.prepare('SELECT id,state,generation_control,document FROM reader_sessions').all();
+  const {results}=await f.app.services.database.prepare('SELECT id,state,generation_control,document FROM stories').all();
   for(const row of results){const doc=JSON.parse(row.document),value={id:row.id,state:row.state,control:row.generation_control,intake:doc.intake?.phase,search:doc.intake?.search.state,review:doc.visualReview?.status,reviewPhase:doc.visualReview?.phase,ready:doc.images?.filter(Boolean).length||0,planned:doc.plan?.pages.length||doc.draft?.pages?.length||0};const key=JSON.stringify(value);if(seen.get(row.id)!==key){seen.set(row.id,key);transitions.push({at:new Date().toISOString(),...value});}}
  }finally{reading=false;}}
  const timer=setInterval(()=>void sample(),30);

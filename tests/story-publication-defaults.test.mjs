@@ -57,7 +57,7 @@ test('a per-story override stays independent of defaults and sibling stories, in
  await save(f);const first=await f.create(2),second=await f.create(2),row=await repo.get(first,owner);
  const original={title:'《庄子》测试原文',text:'昔者庄周梦为胡蝶。',url:'https://example.org/source',kind:'passage',provider:'controlled',retrievedAt:'2026-11-02T00:00:00Z'};
  const doc={...JSON.parse(row.document),plan:makePlan(2),original};
- await f.app.services.database.prepare('UPDATE reader_sessions SET document=? WHERE id=?').bind(JSON.stringify(doc),first).run();
+ await f.app.services.database.prepare('UPDATE stories SET document=? WHERE id=?').bind(JSON.stringify(doc),first).run();
  const custom={...defaults,author:'本篇制作人',watermarkFontSize:16};
  assert.deepEqual((await f.json(`sessions/${first}/publication`,'POST',{publication:custom,expected:defaults})).story.publication,custom);
  assert.deepEqual(await f.json('publication-defaults'),{publication:defaults});
@@ -90,9 +90,9 @@ test('the additive defaults migration preserves an existing library and is safe 
  await mkdir(path.join(root,'drizzle'));
  for(const name of readdirSync('drizzle').filter(name=>name.endsWith('.sql')&&!name.startsWith('0011_')))await copyFile(path.join('drizzle',name),path.join(root,'drizzle',name));
  const db=new DatabaseSync(':memory:');t.after(()=>db.close());migrate(db,root);
- db.prepare("INSERT INTO reader_sessions(id,user_id,selection,document,created_at,updated_at) VALUES(?,?,?,?,?,?)").run('existing','owner',JSON.stringify(selection),JSON.stringify({publication:defaults,plan:makePlan(2),images:[],audio:[],usage:[]}),'before','before');
- const before=db.prepare('SELECT * FROM reader_sessions').all();
+ db.prepare("INSERT INTO stories(id,user_id,selection,document,created_at,updated_at) VALUES(?,?,?,?,?,?)").run('existing','owner',JSON.stringify(selection),JSON.stringify({publication:defaults,plan:makePlan(2),images:[],audio:[],usage:[]}),'before','before');
+ const before=db.prepare('SELECT * FROM stories').all();
  migrate(db,process.cwd());migrate(db,process.cwd());
- assert.deepEqual(db.prepare('SELECT * FROM reader_sessions').all(),before);
+ assert.deepEqual(db.prepare('SELECT * FROM stories').all(),before);
  assert.equal(db.prepare('SELECT count(*) AS count FROM reader_publication_defaults').get().count,0);
 });

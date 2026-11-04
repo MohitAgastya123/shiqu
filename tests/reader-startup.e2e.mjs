@@ -10,7 +10,7 @@ for(const delayed of ['sessions','deletions'])test(`startup waits for ${delayed}
  const b=await storyBrowser(t,'reader-startup-'+delayed),{page,f,context,url}=b;
  const story=await insertReaderStory(f.app,{...makeStory(4),title:'当前书库故事',pages:makeStory(4).pages.map(p=>({...p,image:'/api/media/current.png'}))});
  await f.app.services.media.put('current.png',png,{contentType:'image/png'});
- await f.app.services.database.prepare("UPDATE reader_sessions SET last_read_at='2026-11-04T00:00:00Z' WHERE id=?").bind(story.id).run();
+ await f.app.services.database.prepare("UPDATE stories SET last_read_at='2026-11-04T00:00:00Z' WHERE id=?").bind(story.id).run();
  await context.addInitScript(()=>{
   localStorage.setItem('yiyu-reading',JSON.stringify([{storyId:'zhongli',page:7,updatedAt:'2099-01-01'}]));
   localStorage.setItem('shiqu-last-read','zhongli');
@@ -19,7 +19,7 @@ for(const delayed of ['sessions','deletions'])test(`startup waits for ${delayed}
  let release,arrived;
  const pending=new Promise(resolve=>release=resolve),started=new Promise(resolve=>arrived=resolve);
  t.after(()=>release());
- await page.route('**/api/reader/'+delayed,async route=>{
+ await page.route('**/api/reader/'+delayed+(delayed==='deletions'?'?inventory=1':''),async route=>{
   const response=await route.fetch();arrived();await pending;await route.fulfill({response});
  });
  await page.goto(url,{waitUntil:'domcontentloaded',timeout:30000});await started;

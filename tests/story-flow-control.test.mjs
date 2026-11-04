@@ -22,7 +22,7 @@ async function prepared(f){const id=await create(f);await phase(f,id,'choosing')
 const jobs=async(f,id,kind)=>(await f.app.services.database.prepare(`SELECT * FROM production_jobs WHERE session_id=?${kind?' AND kind=?':''}`).bind(id,...(kind?[kind]:[])).all()).results;
 // The second candidate has no real source; reuse the saved text so that choosing it can prepare.
 async function reuseSource(f,id){const source=(await f.json(`sessions/${id}/source`)).source,generator=f.generation.generator.bind(f.generation);f.generation.generator=()=>({...generator(),prepareOriginal:async()=>source});}
-const stored=async(f,id)=>JSON.parse((await f.app.services.database.prepare('SELECT document FROM reader_sessions WHERE id=?').bind(id).first()).document);
+const stored=async(f,id)=>JSON.parse((await f.app.services.database.prepare('SELECT document FROM stories WHERE id=?').bind(id).first()).document);
 // A provider call that ends when it is told to stop, as the local reading loop does between calls.
 function heldSearch(f){
  const held={};
@@ -361,12 +361,12 @@ test('superseded jobs leave the queue on finished, paused and deleted stories to
 
 test('a dead lock on a paused story blocks nothing and does not resume it; confirming still starts it',async t=>{
  const f=await fixture(t),id=await prepared(f);
- await f.app.services.database.prepare("UPDATE reader_sessions SET state='running',lock_token='dead',lock_until=1,generation_control='paused' WHERE id=?").bind(id).run();
+ await f.app.services.database.prepare("UPDATE stories SET state='running',lock_token='dead',lock_until=1,generation_control='paused' WHERE id=?").bind(id).run();
  assert.equal(await setupStatus(f,id,{action:'more'}),200,'Search ignores the lock');
  await f.app.services.production.tick();
  const s=await f.read(id);assert.equal(s.state,'idle');assert.equal(s.generationControl,'paused');
  await f.json(`sessions/${id}/production-control`,'POST',{action:'resume'});await searchIs(f,id,'idle');await f.json(`sessions/${id}/production-control`,'POST',{action:'pause'});
- await f.app.services.database.prepare("UPDATE reader_sessions SET state='running',lock_token='dead',lock_until=1 WHERE id=?").bind(id).run();
+ await f.app.services.database.prepare("UPDATE stories SET state='running',lock_token='dead',lock_until=1 WHERE id=?").bind(id).run();
  await setup(f,id,{action:'confirm',settings:{...settings,length:2}});assert.equal((await f.read(id)).generationControl,'active');
  await until(async()=>(await f.read(id)).state==='completed');
 });
@@ -385,12 +385,12 @@ test('a story without intake never gains one from a worker save',async t=>{
 
 test('a discovering record an older release wrote still finds its stories',async t=>{
  const f=await fixture(t),id=await create(f);await phase(f,id,'choosing');await searchIs(f,id,'idle');
- await f.app.services.database.prepare("UPDATE reader_sessions SET document=json_set(document,'$.intake.phase','discovering') WHERE id=?").bind(id).run();
+ await f.app.services.database.prepare("UPDATE stories SET document=json_set(document,'$.intake.phase','discovering') WHERE id=?").bind(id).run();
  await until(async()=>{await f.app.services.production.tick();const s=await f.read(id);return s.intake.phase==='choosing'&&s.intake.batches.length===2;});assert.equal(f.discoveries.length,2);
  // With no search stored at all, the record reads as searching and starts one round.
  const fresh=await create(f);await phase(f,fresh,'choosing');await searchIs(f,fresh,'idle');
  await f.app.services.database.prepare("DELETE FROM production_jobs WHERE session_id=?").bind(fresh).run();
- await f.app.services.database.prepare("UPDATE reader_sessions SET document=json_set(json_remove(document,'$.intake.search'),'$.intake.phase','discovering') WHERE id=?").bind(fresh).run();
+ await f.app.services.database.prepare("UPDATE stories SET document=json_set(json_remove(document,'$.intake.search'),'$.intake.phase','discovering') WHERE id=?").bind(fresh).run();
  assert.equal((await f.read(fresh)).intake.search.state,'searching');
  await until(async()=>{await f.app.services.production.tick();return (await f.read(fresh)).intake.batches.length===2;});
 });
@@ -403,7 +403,7 @@ function oldLibrary(names){
 test('the migration carries saved searches over without new work or lost choices',()=>{
  const sqlite=oldLibrary(name=>name<'0006'),candidates=[{stories:[{title:'庄周梦蝶',description:'一个故事。'}],note:''}];
  const doc=(intake,extra={})=>JSON.stringify({plan:null,images:[],audio:[],usage:[],intake:{generation:2,creationHash:'x',batches:candidates,...intake},...extra});
- const row=(id,document,state='idle',error=null,control='active')=>sqlite.prepare("INSERT INTO reader_sessions(id,user_id,selection,document,generation_mode,generation_control,state,error,step_attempts,lock_token,lock_until,page,saved,created_at,updated_at) VALUES(?,?,?,?,'background',?,?,?,0,?,?,0,0,'2026-10-29','2026-10-29')").run(id,owner,JSON.stringify(selection),document,control,state,error,state==='running'?'dead':null,state==='running'?1:0);
+ const row=(id,document,state='idle',error=null,control='active')=>sqlite.prepare("INSERT INTO stories(id,user_id,selection,document,generation_mode,generation_control,state,error,step_attempts,lock_token,lock_until,page,saved,created_at,updated_at) VALUES(?,?,?,?,'background',?,?,?,0,?,?,0,0,'2026-10-29','2026-10-29')").run(id,owner,JSON.stringify(selection),document,control,state,error,state==='running'?'dead':null,state==='running'?1:0);
  row('queued',doc({phase:'discovering',progress:{completed:1}}));
  row('dead',doc({phase:'discovering'}),'running');
  row('failed-none',doc({phase:'discovering'}),'failed','找不到');
@@ -415,7 +415,7 @@ test('the migration carries saved searches over without new work or lost choices
  row('broken','{not json','failed','坏');
  sqlite.prepare("INSERT INTO production_jobs(id,session_id,owner_id,kind,pool,version,dependencies,payload,state,priority,attempts,lease_until,created_at,updated_at) VALUES('old','queued',?,'discover','text','v','[]','{\"setupGeneration\":2}','queued',-10,0,0,0,0),('done','other',?,'discover','text','v','[]','{\"setupGeneration\":1}','succeeded',-10,1,0,0,0)").run(owner,owner);
  sqlite.exec(readFileSync('drizzle/0006_intake_search.sql','utf8'));
- const read=id=>{const value=sqlite.prepare('SELECT * FROM reader_sessions WHERE id=?').get(id);return {...value,doc:value.id==='broken'?null:JSON.parse(value.document)};};
+ const read=id=>{const value=sqlite.prepare('SELECT * FROM stories WHERE id=?').get(id);return {...value,doc:value.id==='broken'?null:JSON.parse(value.document)};};
  const queued=read('queued');assert.equal(queued.doc.intake.phase,'discovering');assert.equal(queued.doc.intake.search.state,'searching');assert.equal(queued.doc.intake.progress,undefined);assert.deepEqual(queued.doc.intake.batches,candidates);
  const dead=read('dead');assert.equal(dead.state,'idle');assert.equal(dead.lock_token,null);assert.equal(dead.lock_until,0);assert.equal(dead.doc.intake.search.state,'searching');
  const none=read('failed-none');assert.equal(none.doc.intake.phase,'choosing');assert.equal(none.doc.intake.search.state,'failed');assert.equal(none.doc.intake.search.error,'找不到');assert.equal(none.state,'idle');assert.equal(none.error,null);
@@ -424,14 +424,14 @@ test('the migration carries saved searches over without new work or lost choices
  assert.equal(read('paused').generation_control,'paused');assert.equal(read('paused').doc.intake.search.state,'searching');
  assert.equal(read('other').doc.intake.search,undefined);assert.equal(read('other').doc.intake.phase,'confirming');
  assert.equal('intake' in read('plain').doc,false);
- assert.equal(sqlite.prepare("SELECT document FROM reader_sessions WHERE id='broken'").get().document,'{not json');assert.equal(read('broken').state,'failed');
+ assert.equal(sqlite.prepare("SELECT document FROM stories WHERE id='broken'").get().document,'{not json');assert.equal(read('broken').state,'failed');
  assert.deepEqual(sqlite.prepare('SELECT id FROM production_jobs').all().map(job=>job.id),['done']);
  sqlite.close();
 });
 
 test('the desktop summary still reads a library older than the service\'s migrations',()=>{
  const sqlite=oldLibrary(name=>name<'0004');
- sqlite.prepare("INSERT INTO reader_sessions(id,user_id,selection,document,state,created_at,updated_at) VALUES('test','owner','{\"bookId\":\"book\",\"storyTitle\":\"故事\"}','{\"plan\":null,\"images\":[]}','idle','2026-10-29','2026-10-29')").run();
+ sqlite.prepare("INSERT INTO stories(id,user_id,selection,document,state,created_at,updated_at) VALUES('test','owner','{\"bookId\":\"book\",\"storyTitle\":\"故事\"}','{\"plan\":null,\"images\":[]}','idle','2026-10-29','2026-10-29')").run();
  const summary=JSON.parse(Object.values(sqlite.prepare(readFileSync('desktop/library.sql','utf8')).get())[0]);
  assert.equal(summary.stories[0].title,'故事');assert.equal(summary.stories[0].jobs,0);sqlite.close();
 });

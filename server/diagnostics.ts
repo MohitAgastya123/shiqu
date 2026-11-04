@@ -66,7 +66,7 @@ export function diagnosticReport(directory:string,appVersion:string){
    const info=lstatSync(filename);if(!info.isFile()||info.isSymbolicLink())throw Error();db=new DatabaseSync(filename,{readOnly:true});db.exec('PRAGMA busy_timeout=1000');
    database.status=db.prepare('PRAGMA quick_check').all().every(row=>row.quick_check==='ok')?'ok':'corrupt';
    const tables=new Set(db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(r=>String(r.name)));
-   if(tables.has('reader_sessions'))database.sessions=Number(db.prepare('SELECT count(*) AS n FROM reader_sessions').get()!.n);
+   if(tables.has('stories'))database.sessions=Number(db.prepare('SELECT count(*) AS n FROM stories').get()!.n);
    if(tables.has('production_jobs')){database.jobs=Number(db.prepare('SELECT count(*) AS n FROM production_jobs').get()!.n);database.failedJobs=Number(db.prepare("SELECT count(*) AS n FROM production_jobs WHERE state='failed'").get()!.n);}
    if(tables.has('reader_faults'))database.pendingFaults=Number(db.prepare("SELECT count(*) AS n FROM reader_faults WHERE state='pending'").get()!.n);
   }

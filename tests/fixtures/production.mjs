@@ -71,7 +71,7 @@ export async function productionFixture(t,provider='codex',variables={},storage=
  async function json(suffix,method='GET',body){const response=await request(suffix,method,body);assert.ok(response.ok,`${response.status}: ${suffix}`);return response.json();}
  async function create(length=8,overrides={}){const id=crypto.randomUUID();await json('sessions','POST',{requestId:id,selection:{...selection,length,...overrides}});return id;}
  // Deliberately model persisted clients from before whole-story generation became the default.
- async function createLegacyReader(length=8,overrides={}){const id=await create(length,overrides);await app.services.database.prepare("UPDATE reader_sessions SET generation_mode='reader' WHERE id=?").bind(id).run();return id;}
+ async function createLegacyReader(length=8,overrides={}){const id=await create(length,overrides);await app.services.database.prepare("UPDATE stories SET generation_mode='reader' WHERE id=?").bind(id).run();return id;}
  const demand=async(id,viewerId=crypto.randomUUID(),page=0,retry=false)=>{
   const session=await json(`sessions/${id}/production`,'POST',{viewerId,page,retry:false});
   if(!retry||session.generationControl!=='active'||session.superseded)return session;

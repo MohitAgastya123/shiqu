@@ -7,7 +7,7 @@ import {advanceStory} from '../lib/reader-engine.ts';
 import {generationProgress} from '../lib/generation-progress.ts';
 
 const owner='docker-local-owner';
-const document=async(f,id)=>JSON.parse((await f.app.services.database.prepare('SELECT document FROM reader_sessions WHERE id=?').bind(id).first()).document);
+const document=async(f,id)=>JSON.parse((await f.app.services.database.prepare('SELECT document FROM stories WHERE id=?').bind(id).first()).document);
 for(const provider of ['codex','gemini'])test(`${provider}: outline and 20/20/5 checkpoints precede every image`,async t=>{
  const f=await productionFixture(t,provider),id=await f.createLegacyReader(45),observed=[];
  f.control.beforeText=async(kind,payload,schema)=>{
@@ -74,7 +74,7 @@ for(const action of ['pause','stop','leave'])test(`${action} between batches ret
  f.control.beforeText=async(kind,payload)=>{if(kind==='batch'&&payload.batch.first===1){started();await hold;}};
  await f.demand(id,viewer);await ready;
  if(action==='leave')await f.leave(id,viewer);else await f.json(`sessions/${id}/production-control`,'POST',{action});
- release();await until(async()=>{const row=await f.app.services.database.prepare('SELECT state,document FROM reader_sessions WHERE id=?').bind(id).first();return row.state!=='running'&&JSON.parse(row.document).storyboard?.pages.length===20;});
+ release();await until(async()=>{const row=await f.app.services.database.prepare('SELECT state,document FROM stories WHERE id=?').bind(id).first();return row.state!=='running'&&JSON.parse(row.document).storyboard?.pages.length===20;});
  await f.app.services.production.tick();assert.equal(f.control.batches.length,1);assert.equal(f.control.calls.length,0);
  const saved=await document(f,id);await f.restart();await f.app.services.production.tick();assert.equal(f.control.batches.length,1);
  if(action!=='leave')await f.json(`sessions/${id}/production-control`,'POST',{action:'resume'});

@@ -7,7 +7,7 @@ import {reviewReportSchema} from '../lib/reader-review.ts';
 
 const candidates=['梦中的自在，也能照见醒时的拘束。','醒来之后，梦中的自在仍值得回味。','梦与醒的分界，也未必是心境的分界。'];
 const choice=index=>({index,reason:'保留梦醒后的对照，避免重复情节，语气有分寸。'});
-const document=async(f,id)=>JSON.parse((await f.app.services.database.prepare('SELECT document FROM reader_sessions WHERE id=?').bind(id).first()).document);
+const document=async(f,id)=>JSON.parse((await f.app.services.database.prepare('SELECT document FROM stories WHERE id=?').bind(id).first()).document);
 
 for(const provider of ['codex','gemini'])for(const index of [2,3])test(`${provider}: audit selects candidate ${index} exactly and persists its evidence before drawing`,async t=>{
  const f=await productionFixture(t,provider),id=await f.createLegacyReader();let frames;

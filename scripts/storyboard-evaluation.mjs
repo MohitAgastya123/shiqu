@@ -104,7 +104,7 @@ export async function acquireEvaluationRun(directory){
   },
   async recover(database,owner){
    if(!active)throw Error('EVALUATION_RUN_RELEASED');
-   return database.prepare("UPDATE reader_sessions SET state='idle',lock_token=NULL,lock_until=0,error=NULL WHERE user_id=? AND state='running'").bind(owner).run();
+   return database.prepare("UPDATE stories SET state='idle',lock_token=NULL,lock_until=0,error=NULL WHERE user_id=? AND state='running'").bind(owner).run();
   },
   async release(){if(active){active=false;await unlock();}},
  };

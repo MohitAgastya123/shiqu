@@ -69,12 +69,12 @@ test('native/preview SQL and reader show the same saved stages without exporting
    {name:'rechecked-pass',doc:{original,plan,visualReview:review('passed',2)}},
    {name:'legacy',doc:{original,plan}},
   ];
-  const insert=database.prepare('INSERT INTO reader_sessions(id,user_id,selection,document,state,page,saved,created_at,updated_at) VALUES(?,?,?,?,?,0,0,?,?)');
+  const insert=database.prepare('INSERT INTO stories(id,user_id,selection,document,state,page,saved,created_at,updated_at) VALUES(?,?,?,?,?,0,0,?,?)');
   for(const f of fixtures)insert.run(f.name,'owner',JSON.stringify(f.selection||selection),JSON.stringify({plan:null,images:[],audio:[],usage:[],...f.doc}),f.state||'running','2026-10-29','2026-10-29');
   const before=readFileSync(path.join(directory,'shiqu.sqlite'));
   const summary=readLibrarySummary(directory);
   for(const item of summary.stories){
-   const row=database.prepare('SELECT * FROM reader_sessions WHERE id=?').get(item.id);
+   const row=database.prepare('SELECT * FROM stories WHERE id=?').get(item.id);
    const reader=generationProgress(view(row),0).steps;
    const desktop=productionSteps({...item.production,total:item.total||null,ready:item.ready,activeState:item.state==='failed'?'failed':'current'});
    assert.deepEqual(desktop.map(s=>[s.id,s.state]),reader.map(s=>[s.id,s.state]),item.id);

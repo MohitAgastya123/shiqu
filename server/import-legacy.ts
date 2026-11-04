@@ -51,7 +51,7 @@ export async function importLegacy(sourceDirectory:string,targetDirectory:string
    }
    const names=database.prepare('SELECT name FROM d1_migrations').all().map(row=>String(row.name));
    const migrations=(await readdir(path.join(root,'drizzle'))).filter(f=>f.endsWith('.sql'));
-   if(migrations.some(name=>![storySummaryMigration,bookReferenceMigration].includes(name)&&!names.includes(name)))throw Error('Legacy database migrations are incomplete; update the old edition before importing');
+   if(migrations.some(name=>![storySummaryMigration,bookReferenceMigration,'0018_consolidate_story_storage.sql'].includes(name)&&!names.includes(name)))throw Error('Legacy database migrations are incomplete; update the old edition before importing');
   }finally{database.close();}
   let objects=0;
   if(r2db.length){
@@ -78,13 +78,12 @@ export async function importLegacy(sourceDirectory:string,targetDirectory:string
    // Retain SQL history in the new journal, then discard obsolete emulator bookkeeping.
    local.sqlite.exec('DROP TABLE IF EXISTS d1_migrations; DROP TABLE IF EXISTS _cf_METADATA');
    const references:string[]=[];
-   for(const row of local.sqlite.prepare('SELECT pages FROM stories').all())for(const page of JSON.parse(String(row.pages)))references.push(page.image,page.audio);
-   for(const row of local.sqlite.prepare('SELECT id,document FROM reader_sessions').all()){
+   for(const row of local.sqlite.prepare('SELECT id,document FROM stories').all()){
     const doc=JSON.parse(String(row.document));references.push(...Object.values(doc.images||{}).map(String),...Object.values(doc.audio||{}).map(String));
    }
    const media=new FileMedia(path.join(stage,'media'));
    for(const reference of references.filter(Boolean)){
-    const key=reference.startsWith('/api/reader/media/')?'reader/'+reference.slice('/api/reader/media/'.length):reference.startsWith('/api/media/')?reference.slice('/api/media/'.length):null;
+    const key=reference.startsWith('/api/reader/media/')?'reader/'+reference.slice('/api/reader/media/'.length):reference.startsWith('/api/media/')?reference.slice('/api/media/'.length):reference.startsWith('/art/')?'legacy-art/'+reference.slice(5):null;
     if(key&&!await media.get(key))throw Error('Referenced media is missing: '+key);
    }
    local.sqlite.exec('PRAGMA wal_checkpoint(TRUNCATE)');

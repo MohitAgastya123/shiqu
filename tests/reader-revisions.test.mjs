@@ -69,7 +69,7 @@ test('family epoch serializes concurrent drafts; identical request replay is sta
  const payload={requestId:crypto.randomUUID(),token:base.token,changes:{plan}};
  const [a,b]=await Promise.all([f.request(`sessions/${id}/revisions`,'POST',payload),f.request(`sessions/${id}/revisions`,'POST',{...payload,requestId:crypto.randomUUID()})]);
  assert.deepEqual([a.status,b.status].sort(),[201,409]);const winner=a.ok?await a.json():await b.json();
- const rows=await f.app.services.database.prepare("SELECT id FROM reader_sessions WHERE json_extract(document,'$.revision.rootId')=?").bind(id).all();assert.equal(rows.results.length,1);
+ const rows=await f.app.services.database.prepare("SELECT id FROM stories WHERE json_extract(document,'$.revision.rootId')=?").bind(id).all();assert.equal(rows.results.length,1);
  // Whichever ID won is replayable, even after its review has completed.
  await until(async()=>(await f.read(winner.id)).state==='completed');
  const replay=await revise(f,id,{plan},base,winner.id);assert.equal(replay.id,winner.id);
@@ -84,9 +84,9 @@ test('invalid inputs, unchanged drafts, stale parent, and cross-owner IDs never 
  const plan=structuredClone(base.plan);plan.pages[0].caption='短';assert.equal((await send({plan})).status,400);
  plan.pages[0].caption='庄周梦见自己变成蝴蝶，在花间自在飞翔。';assert.equal((await send({length:4,plan})).status,400);assert.equal((await send({productionPrompt:'new requirements',plan})).status,400);
  const meta=structuredClone(base.plan);meta.sourceReference='an invented source';assert.equal((await send({plan:meta})).status,400);
- await f.app.services.database.prepare("UPDATE reader_sessions SET document=json_set(document,'$.plan.reflection',?) WHERE id=?").bind('新的余味。',id).run();
+ await f.app.services.database.prepare("UPDATE stories SET document=json_set(document,'$.plan.reflection',?) WHERE id=?").bind('新的余味。',id).run();
  assert.equal((await send({artStyle:'paper-cut'})).status,409);
- const foreign=await f.createLegacyReader();await f.app.services.database.prepare('UPDATE reader_sessions SET user_id=? WHERE id=?').bind('another-owner',foreign).run();
+ const foreign=await f.createLegacyReader();await f.app.services.database.prepare('UPDATE stories SET user_id=? WHERE id=?').bind('another-owner',foreign).run();
  assert.equal((await f.request(`sessions/${foreign}/revisions`)).status,404);
  let writes=0;const put=f.app.services.media.put.bind(f.app.services.media);f.app.services.media.put=async(...args)=>{writes++;return put(...args);};
  const fresh=await snapshot(f,id);const occupied=await f.request(`sessions/${id}/revisions`,'POST',{requestId:foreign,token:fresh.token,changes:{plan:base.plan}});assert.equal(occupied.status,409);assert.equal(writes,0);assert.equal(f.control.calls.length,before);
@@ -97,7 +97,7 @@ for(const kind of ['missing','corrupt','transient'])test(`reusable ${kind} asset
  const get=f.app.services.media.get.bind(f.app.services.media),bad=base.images[3].replace('/api/reader/media/','reader/');
  f.app.services.media.get=async key=>{if(key!==bad)return get(key);if(kind==='missing')return null;if(kind==='transient')throw Error('controlled read error');return {contentType:'image/png',async arrayBuffer(){return new ArrayBuffer(4);}};};
  const before=f.control.calls.length,res=await f.request(`sessions/${id}/revisions`,'POST',{requestId:crypto.randomUUID(),token:base.token,changes:{plan}});
- const rows=await f.app.services.database.prepare("SELECT id FROM reader_sessions WHERE json_extract(document,'$.revision.parentId')=?").bind(id).all();
+ const rows=await f.app.services.database.prepare("SELECT id FROM stories WHERE json_extract(document,'$.revision.parentId')=?").bind(id).all();
  if(kind==='transient'){assert.equal(res.status,503);assert.equal(rows.results.length,0);assert.equal(f.control.calls.length,before);return;}
  assert.equal(res.status,201);const child=(await res.json()).id;f.app.services.media.get=get;
  await until(async()=>(await f.read(child)).state==='completed');assert.equal(f.control.calls.length-before,1,'Only the unusable page is drawn again');
@@ -133,7 +133,7 @@ test('atomic active child survives restart and deleted parent; lost response rep
 test('failed publication INSERT leaves no child and replay publishes one active version',async t=>{
  const {f,id}=await completed(t),base=await snapshot(f,id),changes={artStyle:'paper-cut'},requestId=crypto.randomUUID(),database=f.app.services.database;
  const prepare=database.prepare.bind(database);let injected=false;
- database.prepare=query=>{const statement=prepare(query);if(query.includes('INSERT INTO reader_sessions')&&!injected){statement.run=async()=>{injected=true;throw Object.assign(Error('controlled crash'),{code:'ERR_SQLITE_ERROR'});};}return statement;};
+ database.prepare=query=>{const statement=prepare(query);if(query.includes('INSERT INTO stories')&&!injected){statement.run=async()=>{injected=true;throw Object.assign(Error('controlled crash'),{code:'ERR_SQLITE_ERROR'});};}return statement;};
  const failed=await f.request(`sessions/${id}/revisions`,'POST',{requestId,token:base.token,changes});assert.equal(failed.status,500);assert.equal(injected,true);assert.equal((await f.request(`sessions/${requestId}`)).status,404);assert.equal(f.control.calls.length,8);
  database.prepare=prepare;const child=await revise(f,id,changes,base,requestId);await until(async()=>(await f.read(child.id)).state==='completed');assert.equal(f.control.calls.length,16);
 });
@@ -148,7 +148,7 @@ test('new queue: copied anchor loss warns without paying, explicit retry redraws
  await f.app.services.production.tick();assert.equal(f.control.calls.length,before);
  await f.demand(child.id,crypto.randomUUID(),0,true);await until(async()=>(await f.read(child.id)).state==='completed');
  assert.deepEqual(f.control.calls.slice(before).map(c=>c.page),[0,2]);assert.deepEqual((await f.read(id)).story,original);
- const doc=JSON.parse((await f.app.services.database.prepare('SELECT document FROM reader_sessions WHERE id=?').bind(child.id).first()).document);
+ const doc=JSON.parse((await f.app.services.database.prepare('SELECT document FROM stories WHERE id=?').bind(child.id).first()).document);
  assert.notEqual(doc.images[0],doc.revision.base.images[0]);
 });
 

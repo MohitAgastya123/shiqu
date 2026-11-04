@@ -8,7 +8,7 @@ import {advanceStory} from '../lib/reader-engine.ts';
 
 const owner='docker-local-owner';
 const omission={page:18,category:'progression',requiresReplan:true,problem:'分镜停在董卓携貂蝉回郿坞，遗漏王允说服吕布、诱董入朝及吕布诛董的结果。',instruction:'按原文从定计到诛董重新编排，压缩前半段宴饮与示情，为关键行动及结果分配画幅。'};
-const document=async(f,id)=>JSON.parse((await f.app.services.database.prepare('SELECT document FROM reader_sessions WHERE id=?').bind(id).first()).document);
+const document=async(f,id)=>JSON.parse((await f.app.services.database.prepare('SELECT document FROM stories WHERE id=?').bind(id).first()).document);
 
 for(const provider of ['codex','gemini'])test(`${provider}: structural omissions block before any repair or image and survive retries and restart`,async t=>{
  const f=await productionFixture(t,provider);let incomplete=true;

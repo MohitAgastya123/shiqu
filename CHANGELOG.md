@@ -4,6 +4,13 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## 0.8.0 — unreleased
+
+- Consolidate all current production stories and revisions in one `stories` table. Retired studio rows, demo artwork without current use, and obsolete browser history are removed.
+- Before upgrading an existing library, create and verify a whole-library backup and print its path. Interrupted upgrades recover the original database and media before retrying. Fresh installations, restores and legacy imports use the same upgrader.
+- **Minimum compatible desktop and CLI: 0.8.0.** Both share library schema version 1. Do not open a consolidated library with 0.7.x or earlier: those released binaries do not have the new refusal guard. To roll back, stop every app and restore the pre-upgrade backup using its matching older application. New releases refuse schemas newer than they support before writing to the library.
+- Reader API paths, story IDs, saved settings, progress, favorites and exports remain unchanged. No provider work is started by migration or passive desktop summaries.
+
 ## [0.7.0](https://github.com/yysun/shiqu/releases/tag/v0.7.0) - 2026-11-03
 
 新增无需服务的完整 CLI 与 Codex 技能、可校验的书库备份恢复和脱敏诊断；统一正式审核、故障恢复与故事设置，完善选题及阅读体验。

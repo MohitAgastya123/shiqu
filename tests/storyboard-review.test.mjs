@@ -7,7 +7,7 @@ import {ReaderRepository} from '../lib/reader-repository.ts';
 import {advanceStory} from '../lib/reader-engine.ts';
 
 const owner='docker-local-owner';
-const document=async(f,id)=>JSON.parse((await f.app.services.database.prepare('SELECT document FROM reader_sessions WHERE id=?').bind(id).first()).document);
+const document=async(f,id)=>JSON.parse((await f.app.services.database.prepare('SELECT document FROM stories WHERE id=?').bind(id).first()).document);
 const issue=page=>({page,category:'action',problem:'本幅与前幅只有旁白变化，人物和道具状态完全重复。',instruction:'保留当前事件，以接触物件的手势和明确的动作结果表现这一步变化。'});
 for(const provider of ['codex','gemini'])test(`${provider}: review is a separate queued job and gates all drawing`,async t=>{
  const f=await productionFixture(t,provider),id=await f.createLegacyReader();let release,started;
@@ -78,7 +78,7 @@ for(const phase of ['review','repair'])for(const action of ['pause','stop','leav
  };
  await f.demand(id,viewer);await ready;
  if(action==='leave')await f.leave(id,viewer);else await f.json(`sessions/${id}/production-control`,'POST',{action});release();
- await until(async()=>{const row=await f.app.services.database.prepare('SELECT state FROM reader_sessions WHERE id=?').bind(id).first();return row.state!=='running';});
+ await until(async()=>{const row=await f.app.services.database.prepare('SELECT state FROM stories WHERE id=?').bind(id).first();return row.state!=='running';});
  const reviews=f.control.reviews.length,repairs=f.control.repairs.length;assert.equal(f.control.calls.length,0);
  await f.restart();await f.app.services.production.tick();assert.equal(f.control.calls.length,0);
  if(action!=='leave')await f.json(`sessions/${id}/production-control`,'POST',{action:'resume'});await f.demand(id);await until(async()=>(await f.read(id)).ready>=1);
@@ -88,7 +88,7 @@ for(const phase of ['review','repair'])for(const action of ['pause','stop','leav
 test('old complete plans remain readable without a retroactive audit',async t=>{
  const f=await productionFixture(t),id=await f.createLegacyReader();
  const original={title:'《庄子·齐物论》',text:'昔者庄周梦为胡蝶。',url:'https://example.org',kind:'passage',provider:'saved',retrievedAt:'2026-10-31T00:00:00Z'};
- await f.app.services.database.prepare('UPDATE reader_sessions SET document=? WHERE id=?').bind(JSON.stringify({plan:makePlan(8),original,images:[],audio:[],usage:[]}),id).run();
+ await f.app.services.database.prepare('UPDATE stories SET document=? WHERE id=?').bind(JSON.stringify({plan:makePlan(8),original,images:[],audio:[],usage:[]}),id).run();
  assert.equal((await document(f,id)).visualReview,undefined);
  await f.demand(id);await until(()=>f.control.calls.length===1);assert.equal(f.control.reviews.length,0);
 });

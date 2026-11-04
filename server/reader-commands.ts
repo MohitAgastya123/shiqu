@@ -10,7 +10,7 @@ export type CommandReceipt={request_id:string;owner_id:string;session_id:string;
 export const commandFingerprint=(input:unknown)=>createHash('sha256').update(JSON.stringify(input)).digest('hex');
 export async function commandReceipt(db:Database,ownerId:string,requestId:string,fingerprint?:string){
  const row=await db.prepare('SELECT * FROM reader_commands WHERE owner_id=? AND request_id=?').bind(ownerId,requestId).first<CommandReceipt>();
- if(!row&&await db.prepare('SELECT id FROM reader_sessions WHERE id=? AND user_id=?').bind(requestId,ownerId).first())throw new ReaderError(409,'这个操作编号已用于创建或提交故事。');
+ if(!row&&await db.prepare('SELECT id FROM stories WHERE id=? AND user_id=?').bind(requestId,ownerId).first())throw new ReaderError(409,'这个操作编号已用于创建或提交故事。');
  if(row&&fingerprint!==undefined&&row.fingerprint!==fingerprint)throw new ReaderError(409,'这个操作编号已用于其他内容，请重新操作。');
  return row;
 }
@@ -29,7 +29,7 @@ export async function authorizeRecovery(db:Database,input:{ownerId:string;sessio
  const resolved=input.resolved||false,payload=JSON.stringify({jobs,resolutionJob,redraw,...(input.adopt?{adopt:input.adopt}:{})}),fingerprint=commandFingerprint(['recover',sessionId,faultId,jobs,resolutionJob,redraw,resolved,...(input.adopt?[input.adopt]:[])]);
  const replay=await commandReceipt(db,ownerId,requestId,fingerprint);if(replay)return replay;
  if(!resolved&&(!jobs.length||!jobs.includes(resolutionJob)||new Set(jobs).size!==jobs.length))throw new ReaderError(400,'恢复任务不完整。');
- const eligible=input.basis?`AND EXISTS(SELECT 1 FROM reader_sessions s WHERE s.id=f.session_id AND s.user_id=f.owner_id
+ const eligible=input.basis?`AND EXISTS(SELECT 1 FROM stories s WHERE s.id=f.session_id AND s.user_id=f.owner_id
   AND s.generation_control='active' AND NOT ${supersededSql('s')}
   AND NOT EXISTS(SELECT 1 FROM library_deletions d WHERE d.story_id=s.id AND d.user_id=s.user_id)
   AND json_remove(s.selection,'$.displayTitle')=json_remove(?,'$.displayTitle')
@@ -57,7 +57,7 @@ export async function authorizeRecovery(db:Database,input:{ownerId:string;sessio
 export async function authorizeControl(db:Database,ownerId:string,sessionId:string,requestId:string,action:ProductionAction,now=Date.now()){
  const fingerprint=commandFingerprint(['control',sessionId,action]),replay=await commandReceipt(db,ownerId,requestId,fingerprint);if(replay)return replay;
  await db.prepare(`INSERT INTO reader_commands(request_id,owner_id,session_id,action,fingerprint,payload,created_at,updated_at)
-  SELECT ?,?,?,'control',?,?,?,? FROM reader_sessions s WHERE s.id=? AND s.user_id=? AND s.state!='completed'
+  SELECT ?,?,?,'control',?,?,?,? FROM stories s WHERE s.id=? AND s.user_id=? AND s.state!='completed'
    AND NOT ${supersededSql('s')} AND NOT EXISTS(SELECT 1 FROM library_deletions d WHERE d.story_id=s.id AND d.user_id=s.user_id)
   ON CONFLICT(owner_id,request_id) DO NOTHING`)
   .bind(requestId,ownerId,sessionId,fingerprint,JSON.stringify({action}),now,now,sessionId,ownerId).run();
@@ -67,7 +67,7 @@ export async function authorizeControl(db:Database,ownerId:string,sessionId:stri
 export async function authorizeOverride(db:Database,ownerId:string,sessionId:string,command:{requestId:string;faultId:string},now=Date.now()){
  const fingerprint=commandFingerprint(['override',sessionId,command.faultId]),replay=await commandReceipt(db,ownerId,command.requestId,fingerprint);if(replay)return replay;
  await db.prepare(`INSERT INTO reader_commands(request_id,owner_id,session_id,action,fingerprint,payload,fault_id,created_at,updated_at)
-  SELECT ?,?,?,'override',?,'{}',?,?,? FROM reader_sessions s JOIN reader_faults f ON f.session_id=s.id AND f.owner_id=s.user_id
+  SELECT ?,?,?,'override',?,'{}',?,?,? FROM stories s JOIN reader_faults f ON f.session_id=s.id AND f.owner_id=s.user_id
   WHERE s.id=? AND s.user_id=? AND f.id=? AND f.state='pending' AND s.state!='running'
    AND json_extract(s.document,'$.visualReview.status')='blocked' AND NOT ${supersededSql('s')}
    AND NOT EXISTS(SELECT 1 FROM library_deletions d WHERE d.story_id=s.id AND d.user_id=s.user_id)

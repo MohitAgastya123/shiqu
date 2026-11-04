@@ -36,6 +36,104 @@
       "when": 1793304957997,
       "tag": "0004_background_generation",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1793793600005,
+      "tag": "0005_single_generation_control",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1793793600006,
+      "tag": "0006_intake_search",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1793793600007,
+      "tag": "0007_original_story_label",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1793793600008,
+      "tag": "0008_search_pool",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1793793600009,
+      "tag": "0009_story_summary",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1793793600010,
+      "tag": "0010_book_image_references",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1793793600011,
+      "tag": "0011_publication_defaults",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1793793600012,
+      "tag": "0012_generation_authorization",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1793793600013,
+      "tag": "0013_reader_state_transitions",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1793793600014,
+      "tag": "0014_reader_input_identity",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "6",
+      "when": 1793793600015,
+      "tag": "0015_image_fault_checkpoints",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "6",
+      "when": 1793793600016,
+      "tag": "0016_legacy_input_faults",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1793793600017,
+      "tag": "0017_command_receipt_links",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1793793600018,
+      "tag": "0018_consolidate_story_storage",
+      "breakpoints": true
     }
   ]
 }

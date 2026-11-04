@@ -55,7 +55,7 @@ test('selected, preparing and confirmed stories reject a direct title reset',asy
  assert.equal((await f.request(`sessions/${created.id}/setup`,'POST',{requestId:crypto.randomUUID(),generation:saved.intake.generation,action:'search',title:'另一个故事'})).status,409);
  await until(async()=>(await f.read(created.id)).intake.phase==='confirming');saved=await f.read(created.id);
  assert.equal((await f.request(`sessions/${created.id}/setup`,'POST',{requestId:crypto.randomUUID(),generation:saved.intake.generation,action:'search',title:''})).status,409);
- await f.app.services.database.prepare("UPDATE reader_sessions SET document=json_set(document,'$.intake.phase','confirmed') WHERE id=?").bind(created.id).run();
+ await f.app.services.database.prepare("UPDATE stories SET document=json_set(document,'$.intake.phase','confirmed') WHERE id=?").bind(created.id).run();
  assert.equal((await f.request(`sessions/${created.id}/setup`,'POST',{requestId:crypto.randomUUID(),generation:saved.intake.generation,action:'search',title:'别篇'})).status,409);
  assert.equal(f.control.plans.length,0);assert.equal(f.control.calls.length,0);
 });

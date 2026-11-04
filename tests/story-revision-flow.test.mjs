@@ -101,7 +101,7 @@ test('retrying explicit production after a lost response uses the same version',
  assert.equal(h.submitted.length,1);
  const child=h.submitted[0];assert.equal(child.generationControl,'active');
  await until(async()=>(await h.f.read(child.id)).state==='completed');
- const rows=await h.f.app.services.database.prepare("SELECT id FROM reader_sessions WHERE json_extract(document,'$.revision.parentId')=?").bind(h.id).all();
+ const rows=await h.f.app.services.database.prepare("SELECT id FROM stories WHERE json_extract(document,'$.revision.parentId')=?").bind(h.id).all();
  assert.equal(rows.results.length,1);
 });
 

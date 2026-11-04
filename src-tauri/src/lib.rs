@@ -131,11 +131,12 @@ async fn library_summary(
 ) -> Result<Value, String> {
     let shared = state.0.clone();
     blocking(move || {
-        let directory = {
+        let settings = {
             let mut control = shared.lock().map_err(|_| "服务控制器不可用。")?;
-            open_store(&app, &mut control)?.settings()?.data_directory
+            open_store(&app, &mut control)?.settings()?
         };
-        library::summary(std::path::Path::new(&directory))
+        runtime::ensure_library(&settings, &resource_root(&app)?)?;
+        library::summary(std::path::Path::new(&settings.data_directory))
     })
     .await
 }
@@ -149,11 +150,12 @@ async fn set_library_story_deleted(
 ) -> Result<(), String> {
     let shared = state.0.clone();
     blocking(move || {
-        let directory = {
+        let settings = {
             let mut control = shared.lock().map_err(|_| "服务控制器不可用。")?;
-            open_store(&app, &mut control)?.settings()?.data_directory
+            open_store(&app, &mut control)?.settings()?
         };
-        library::set_deleted(std::path::Path::new(&directory), &id, deleted)
+        runtime::ensure_library(&settings, &resource_root(&app)?)?;
+        library::set_deleted(std::path::Path::new(&settings.data_directory), &id, deleted)
     })
     .await
 }

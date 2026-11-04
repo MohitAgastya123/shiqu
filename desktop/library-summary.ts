@@ -2,7 +2,7 @@
 import type {ProductionCheckpoint} from '../lib/production-stages';
 
 export type StorySummary={id:string;title:string;book:string;theme:string;artStyle:string;state:string;saved:number;page:number;ready:number;total:number;updatedAt:string;jobs:number;queued:number;running:number;failed:number;succeeded:number;production?:ProductionCheckpoint};
-export type LibrarySummary={stories:StorySummary[]};
+export type LibrarySummary={stories:StorySummary[];upgradeBackup?:string};
 export type ServiceState='loading'|'unavailable'|'stopped'|'running'|'preview';
 export function overviewStoryState(story:StorySummary):{kind:'completed'|'active'|'attention';label:string}{
  if(story.failed>0||story.state==='failed')return {kind:'attention',label:'需要重试'};

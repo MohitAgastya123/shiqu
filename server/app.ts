@@ -1,6 +1,7 @@
 // Serve the production API and public assets; saved media uses the API's media routes.
 import path from 'node:path';
 import {readFile,realpath,stat} from 'node:fs/promises';
+import {currentMediaKeys} from './library-upgrade.ts';
 import {openDatabase} from './database.ts';
 import {FileMedia} from './media.ts';
 import {localOwnerId} from './config.ts';
@@ -20,6 +21,7 @@ export function createApplication(options:{root:string;dataDirectory:string;vari
  const generation=options.generation||withLocalBooks(createReaderProvider(options.variables||{},media,options.transport||fetch),localBooks,media);
  const imageWorkers=configuredImageWorkers(options.variables?.SHIQU_IMAGE_WORKERS);
  const local=openDatabase(options.dataDirectory,options.root);
+ const retainedLegacyArt=currentMediaKeys(local.sqlite,options.dataDirectory);
  const production=new ReaderProductionCoordinator(local.database,generation,media,{imageWorkers,...options.production});
  if(options.variables?.SHIQU_AI_PROVIDER==='readonly'&&options.production?.autoStart!==false)production.stop();
  const services:Services={db:local.db,database:local.database,media,variables:options.variables||{},ownerId:localOwnerId,localBooks,transport:options.transport||fetch,generation,production,commandOnly:options.commandOnly};
@@ -40,6 +42,12 @@ export function createApplication(options:{root:string;dataDirectory:string;vari
    if(!['GET','HEAD'].includes(request.method))return new Response('Method not allowed',{status:405});
    const pathname=decodeURIComponent(url.pathname);
    if(pathname.split('/').some(segment=>segment.startsWith('.')||segment.includes('\\')))return new Response('Not found',{status:404});
+   if(pathname.startsWith('/art/')){
+    const key='legacy-art/'+pathname.slice(5);
+    if(!retainedLegacyArt.has(key))return new Response('Not found',{status:404});
+    const object=await media.get(key);if(!object)return new Response('Not found',{status:404});
+    return new Response(request.method==='HEAD'?null:object.body,{headers:{'Content-Type':object.contentType,'X-Content-Type-Options':'nosniff','Cache-Control':'no-cache'}});
+   }
    const file=path.join(publicDirectory,pathname==='/'||pathname==='/read'?'index.html':pathname);
    let resolved,publicRoot;
    try{publicRoot=await realpath(publicDirectory);resolved=await realpath(file);}catch{return new Response('Not found',{status:404});}

@@ -41,7 +41,7 @@ for(const provider of ['gemini','codex']){
   await turn();assert.equal(f.control.calls.length,1);f.control.calls[0].resolve();await until(()=>f.control.calls.length===4);
   const first=f.control.calls.find(c=>c.page===1);for(const page of [3,2]){f.control.calls.find(c=>c.page===page).resolve();await until(async()=>(await f.read(id)).story.pages[page].image);assert.equal((await f.read(id)).story.pages[1].image,'');}
   first.resolve();f.control.hold=false;for(const c of f.control.calls)c.resolve();await until(async()=>(await f.read(id)).state==='completed');
-  const doc=JSON.parse((await f.app.services.database.prepare('SELECT document FROM reader_sessions WHERE id=?').bind(id).first()).document);
+  const doc=JSON.parse((await f.app.services.database.prepare('SELECT document FROM stories WHERE id=?').bind(id).first()).document);
   for(let page=0;page<8;page++)assert.equal(doc.usage.filter(u=>u.step===`image:${page}`).length,1);
  });
  test(`${provider}: numeric detail prepares once and waits for durable explicit count confirmation`,async t=>{
@@ -60,7 +60,7 @@ for(const provider of ['gemini','codex']){
   for(const bad of [{count:0},{count:81},{count:1.5},{count:'7'},{reason:'   '}]){
    f.control.beforeText=async kind=>kind==='recommend'?bad:undefined;last=await f.create(8,{narrativeDetail:'balanced'});
    const failed=await waiting(f,last);assert.equal(failed.state,'failed');assert.equal(failed.frameRecommendation,null);assert.equal(f.control.plans.length,0);assert.equal(f.control.calls.length,0);
-   const doc=JSON.parse((await f.app.services.database.prepare('SELECT document FROM reader_sessions WHERE id=?').bind(last).first()).document);assert.ok(doc.original.text);
+   const doc=JSON.parse((await f.app.services.database.prepare('SELECT document FROM stories WHERE id=?').bind(last).first()).document);assert.ok(doc.original.text);
   }
   f.control.beforeText=null;await f.demand(last,crypto.randomUUID(),0,true);assert.equal((await waiting(f,last)).awaitingFrameCount,true);
  });

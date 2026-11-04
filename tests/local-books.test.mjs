@@ -140,7 +140,7 @@ test('ending, review, structural and local repair require the same verified loca
 test('explicit legacy backfill uses a local chapter and does not plan, draw, or fetch a public source',async t=>{
  const root=await directory(t),media=new FileMedia(path.join(root,'media')),provider=withLocalBooks(fake(),library,media),app=createApplication({root:process.cwd(),dataDirectory:root,generation:provider});t.after(()=>app.close());
  const repo=new ReaderRepository(app.services.database),id=crypto.randomUUID();await repo.create(id,'docker-local-owner',selected);
- const row=await repo.get(id,'docker-local-owner');await app.services.database.prepare("UPDATE reader_sessions SET document=?,generation_control='paused' WHERE id=?").bind(JSON.stringify({plan:{...plan,sourceReference:'《庄子·齐物论》'},images:[],audio:[],usage:[]}),id).run();
+ const row=await repo.get(id,'docker-local-owner');await app.services.database.prepare("UPDATE stories SET document=?,generation_control='paused' WHERE id=?").bind(JSON.stringify({plan:{...plan,sourceReference:'《庄子·齐物论》'},images:[],audio:[],usage:[]}),id).run();
  const response=await app.handle(new Request(`http://localhost/api/reader/sessions/${id}/source`,{method:'POST'}));assert.equal(response.status,200);const body=await response.json();assert.equal(body.source.kind,'chapter');assert.match(body.source.provider,/本地书库/);assert.match(body.source.text,/北冥|南郭|庄周/);assert.equal(body.searchUrl,'');assert.equal((await repo.get(id,'docker-local-owner')).page,row.page);
 });
 

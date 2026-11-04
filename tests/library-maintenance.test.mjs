@@ -1,4 +1,5 @@
 // Exercise production maintenance with disposable real SQLite/media, including upgrade rollback and hostile archives.
+import {historicalLibrary} from './fixtures/historical-library.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
@@ -40,20 +41,20 @@ for(const kind of ['tampered','missing','extra','path','duplicate','symlink'])te
  assert.deepEqual(await readFile(path.join(f.source,'media/image.webp')),Buffer.from([1,2,3,4]));
 });
 test('pending migration creates verified old-schema backup once; failed snapshots do not change the source',async t=>{
- const f=await startupFixture(t),source=path.join(f.root,'library');let local=openDatabase(source,f.root);local.close();
- await writeFile(path.join(f.root,'drizzle/9999_maintenance_probe.sql'),'CREATE TABLE maintenance_probe(value TEXT);');
+ const f=await startupFixture(t),source=path.join(f.root,'library');historicalLibrary(source,f.root).close();let local;
+ await writeFile(path.join(f.root,'drizzle/0017a_maintenance_probe.sql'),'CREATE TABLE maintenance_probe(value TEXT);');
  local=openDatabase(source,f.root);assert.ok(local.sqlite.prepare("SELECT name FROM sqlite_master WHERE name='maintenance_probe'").get());local.close();
  const backups=path.join(f.root,'library-backups'),names=await readdir(backups);assert.equal(names.length,1);const backup=path.join(backups,names[0]);verifyLibraryBackup(backup);
  restoreLibraryBackup(backup,path.join(f.root,'restored'));
  const old=new DatabaseSync(path.join(f.root,'restored/shiqu.sqlite'),{readOnly:true});assert.equal(old.prepare("SELECT name FROM sqlite_master WHERE name='maintenance_probe'").get(),undefined);old.close();
  local=openDatabase(source,f.root);local.close();assert.equal((await readdir(backups)).length,1);
  // A real filesystem obstruction prevents even the next SQL migration from starting.
- await writeFile(path.join(f.root,'drizzle/9998_failure_probe.sql'),'CREATE TABLE must_not_appear(value TEXT);');await rm(backups,{recursive:true});await writeFile(backups,'obstruction');
- assert.throws(()=>openDatabase(source,f.root));const unchanged=new DatabaseSync(path.join(source,'shiqu.sqlite'),{readOnly:true});assert.equal(unchanged.prepare("SELECT name FROM sqlite_master WHERE name='must_not_appear'").get(),undefined);unchanged.close();
+ const blocked=path.join(f.root,'blocked');historicalLibrary(blocked,f.root).close();await writeFile(path.join(f.root,'blocked-backups'),'obstruction');
+ assert.throws(()=>openDatabase(blocked,f.root));const unchanged=new DatabaseSync(path.join(blocked,'shiqu.sqlite'),{readOnly:true});assert.equal(unchanged.prepare("SELECT name FROM sqlite_master WHERE name='must_not_appear'").get(),undefined);unchanged.close();
 });
 test('CLI maintenance refuses busy library and works without provider setup, preserving full production checkpoints',async t=>{
  const f=await productionFixture(t);f.control.hold=false;const id=await f.create();await until(async()=>(await f.read(id)).state==='completed');
- await f.json(`sessions/${id}/progress`,'POST',{page:3,saved:true});const before=f.app.services.database;const row=await before.prepare('SELECT * FROM reader_sessions WHERE id=?').bind(id).first();await f.stop();
+ await f.json(`sessions/${id}/progress`,'POST',{page:3,saved:true});const before=f.app.services.database;const row=await before.prepare('SELECT * FROM stories WHERE id=?').bind(id).first();await f.stop();
  const cli=await startupFixture(t),backup=path.join(cli.root,'backup'),restore=path.join(cli.root,'restored');
  const release=await ownDesktopData(f.dataDirectory);
  const busy=startFixtureCli(cli,['--data-dir',f.dataDirectory,'--backup',backup]);assert.notEqual(await busy.ended(),0);assert.match(busy.output(),/DATA_BUSY/);await release();
@@ -62,7 +63,7 @@ test('CLI maintenance refuses busy library and works without provider setup, pre
  const missingDestination=startFixtureCli(cli,['--restore',backup]);assert.notEqual(await missingDestination.ended(),0);
  const recovery=startFixtureCli(cli,['--restore',backup,'--data-dir',restore]);assert.equal(await recovery.ended(),0,recovery.output());
  const app=createApplication({root:f.root,dataDirectory:restore,variables:{SHIQU_AI_PROVIDER:'readonly'}});t.after(()=>app.close());
- assert.deepEqual(await app.services.database.prepare('SELECT * FROM reader_sessions WHERE id=?').bind(id).first(),row);
+ assert.deepEqual(await app.services.database.prepare('SELECT * FROM stories WHERE id=?').bind(id).first(),row);
  const mediaKey=JSON.parse(row.document).images[0].replace('/api/reader/media/','reader/');assert.deepEqual(await readFile(path.join(restore,'media',mediaKey)),await readFile(path.join(f.dataDirectory,'media',mediaKey)));
  assert.equal(app.services.production.busy,false);
 });

@@ -8,7 +8,7 @@ import {createWriteStream,realpathSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 
 export const userFlowTests=[
- 'tests/reader-startup.e2e.mjs','tests/development-local.e2e.mjs','tests/story-lifecycle.playwright.e2e.mjs','tests/story-discovery-modes.e2e.mjs',
+ 'tests/story-storage-consolidation.e2e.mjs','tests/reader-startup.e2e.mjs','tests/development-local.e2e.mjs','tests/story-lifecycle.playwright.e2e.mjs','tests/story-discovery-modes.e2e.mjs',
  'tests/story-generation-state-machine.e2e.mjs','tests/unified-story-review.e2e.mjs',
  'tests/story-generation-state-machine-flow.test.mjs','tests/story-generation-state-machine-reselection.test.mjs','tests/story-flow-control.test.mjs',
  'tests/headless-cli.test.mjs','tests/cli-skill.test.mjs','tests/library-maintenance.test.mjs','tests/diagnostics.test.mjs',

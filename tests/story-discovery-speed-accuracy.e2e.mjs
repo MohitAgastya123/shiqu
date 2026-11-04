@@ -20,11 +20,11 @@ test('persistent bad stories do not block later originals; exhausted results dis
 });
 test('eight isolation calls span automatic rounds, viewer departures and a restart; manual retry starts a new cycle',async t=>{
  const s=await discoveryService(t,40);s.library.provider.matchStories=async(_theme,input)=>{if(input.some(story=>Number(story.title.slice(2))%4===0))throw new DiscoveryFailure('refused');return {matches:input.map(story=>({id:story.id,verdict:'yes',reason:'受控原文判断。'}))};};
- let row=await create(s);const cycle=JSON.parse((await s.f.app.services.database.prepare('SELECT document FROM reader_sessions WHERE id=?').bind(row.id).first()).document).intake.search.cycleId;
+ let row=await create(s);const cycle=JSON.parse((await s.f.app.services.database.prepare('SELECT document FROM stories WHERE id=?').bind(row.id).first()).document).intake.search.cycleId;
  for(let i=0;i<30&&row.intake.batches.at(-1).stories.length;i++){if(i===2){await s.restart();await s.f.demand(row.id);}row=await more(s,row.id);}
  await s.f.app.services.production.queue.settle();assert.ok(s.events.filter(e=>e.isolation).length<=8);assert.ok(s.events.filter(e=>e.isolation).length>0);
- const saved=await s.f.app.services.database.prepare('SELECT document FROM reader_sessions WHERE id=?').bind(row.id).first();assert.equal(JSON.parse(saved.document).intake.search.cycleId,cycle);
- const before=s.events.filter(e=>e.isolation).length;await more(s,row.id,false);assert.ok(s.events.filter(e=>e.isolation).length<=before+8);const changed=await s.f.app.services.database.prepare('SELECT document FROM reader_sessions WHERE id=?').bind(row.id).first();assert.notEqual(JSON.parse(changed.document).intake.search.cycleId,cycle);
+ const saved=await s.f.app.services.database.prepare('SELECT document FROM stories WHERE id=?').bind(row.id).first();assert.equal(JSON.parse(saved.document).intake.search.cycleId,cycle);
+ const before=s.events.filter(e=>e.isolation).length;await more(s,row.id,false);assert.ok(s.events.filter(e=>e.isolation).length<=before+8);const changed=await s.f.app.services.database.prepare('SELECT document FROM stories WHERE id=?').bind(row.id).first();assert.notEqual(JSON.parse(changed.document).intake.search.cycleId,cycle);
 });
 test('a service outage stops without splitting and keeps already-paid catalog entries',async t=>{
  const s=await discoveryService(t,4);let calls=0;s.library.provider.matchStories=async()=>{calls++;throw new DiscoveryFailure('service');};

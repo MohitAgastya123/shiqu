@@ -17,7 +17,7 @@ test('old script expands, rechecks count, then completes the original audit with
  const tmp=await mkdtemp(path.join(os.tmpdir(),'frame-count-evaluation-')),db=openDatabase(tmp,process.cwd());let lease;t.after(async()=>{await lease?.release();db.close();await rm(tmp,{recursive:true,force:true});});
  const repo=new ReaderRepository(db.database),selection=selectionSchema.parse({...legacy,length:'auto'}),id='offline-v1',owner='offline',plan=makePlan(3),original={title:'原文',text:'甲赠物，乙未接，后来二人和解。',url:'https://example.org',kind:'passage',provider:'fixture',retrievedAt:'2026-11-02'};
  lease=await acquireEvaluationRun(tmp);await assert.rejects(()=>acquireEvaluationRun(tmp),/ACTIVE/);
- await repo.create(id,owner,selection);await db.database.prepare("UPDATE reader_sessions SET document=?,generation_mode='reader',generation_control='active',state='idle' WHERE id=?").bind(JSON.stringify({plan,original,images:[],audio:[],usage:[],frameCountConfirmed:true,visualReview:newReview()}),id).run();
+ await repo.create(id,owner,selection);await db.database.prepare("UPDATE stories SET document=?,generation_mode='reader',generation_control='active',state='idle' WHERE id=?").bind(JSON.stringify({plan,original,images:[],audio:[],usage:[],frameCountConfirmed:true,visualReview:newReview()}),id).run();
  const calls=[];const gen=value=>({value,model:'controlled',requestId:null,usage:null});
  const base={reviewFrameCount:async(_s,p)=>{calls.push('frames');return gen({frameCountReview:{decision:p.pages.length===3?'expand':'keep',proposedCount:4,reason:'回应独立'},requirements:p.pages.length===3?[{page:2,quote:'乙未接',task:'拒绝',captionEvidence:'摘要',visualEvidence:'赠物者',loss:'回应缺失',instruction:'补听者没有伸手'}]:[]});},restructure:async()=>{calls.push('structure');return gen({edits:[{from:2,to:1,pages:[{caption:'听者没有伸手接取，只在原地停了一会儿。',prompt:'The listener pauses beside the gift with both hands at his sides.'}]}]});},review:async(_s,p)=>{calls.push('full');return gen({titleReview:{title:p.title,reason:'原文支持'},issues:[],coverage:[{quote:'后来二人和解',task:'收束',pages:[4],assessment:'adequate',reason:'已呈现',issuePage:0}]});},image:async()=>assert.fail('No images'),audio:async()=>assert.fail('No audio'),safeError:e=>e.message};
  for(let i=0;i<6;i++){
@@ -26,7 +26,7 @@ test('old script expands, rechecks count, then completes the original audit with
   await advanceStory(repo,base,owner,id,79);
   if(i===0){
    // A completed production checkpoint survives a new process reclaiming its abandoned lock.
-   await db.database.prepare("UPDATE reader_sessions SET state='running',lock_token='old-process',lock_until=? WHERE id=?").bind(Date.now()+180000,id).run();
+   await db.database.prepare("UPDATE stories SET state='running',lock_token='old-process',lock_until=? WHERE id=?").bind(Date.now()+180000,id).run();
    await lease.recover(db.database,owner);
   }
  }
@@ -60,7 +60,7 @@ test('an inherited exhausted repair budget blocks before restructuring or media'
  const repo=new ReaderRepository(db.database),selection=selectionSchema.parse({...legacy,length:'auto'}),id='continued-limit',owner='offline';
  const original={title:'原文',text:'甲赠物，乙未接。'},input={id,selection,original};
  const doc=continueEvaluationDocument(input,input,{plan:makePlan(3),original,images:[],usage:[],visualReview:{...newReview(),repairs:20,status:'blocked',stopReason:'limit'}});
- await repo.create(id,owner,selection);await db.database.prepare("UPDATE reader_sessions SET document=?,generation_mode='reader',generation_control='active',state='idle' WHERE id=?").bind(JSON.stringify(doc),id).run();
+ await repo.create(id,owner,selection);await db.database.prepare("UPDATE stories SET document=?,generation_mode='reader',generation_control='active',state='idle' WHERE id=?").bind(JSON.stringify(doc),id).run();
  const calls=[];const generator={reviewFrameCount:async()=>{calls.push('frames');return {value:{frameCountReview:{decision:'expand',proposedCount:4,reason:'补回应'},requirements:[{page:2,quote:'乙未接',task:'回应',captionEvidence:'概述',visualEvidence:'赠物',loss:'回应缺失',instruction:'补听者回应'}]},model:'controlled',usage:null};},review:async()=>assert.fail('Do not pass count gate'),restructure:async()=>assert.fail('No reset repair allowance'),image:async()=>assert.fail('No images'),audio:async()=>assert.fail('No audio'),safeError:e=>e.message};
  await advanceStory(repo,generator,owner,id,79);const saved=await repo.get(id,owner),after=JSON.parse(saved.document);
  assert.equal(saved.state,'failed');assert.equal(after.visualReview.repairs,20);assert.equal(after.visualReview.stopReason,'limit');assert.deepEqual(calls,['frames']);

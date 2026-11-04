@@ -15,7 +15,7 @@ const control=(f,id,action)=>f.json(`sessions/${id}/production-control`,'POST',{
 const completed=(f,id)=>until(async()=>(await f.read(id)).state==='completed',15000);
 const failed=(f,id)=>until(async()=>(await f.read(id)).state==='failed',15000);
 const retry=(f,id)=>f.demand(id,crypto.randomUUID(),0,true);
-const document=async(f,id)=>JSON.parse((await database(f).prepare('SELECT document FROM reader_sessions WHERE id=?').bind(id).first()).document);
+const document=async(f,id)=>JSON.parse((await database(f).prepare('SELECT document FROM stories WHERE id=?').bind(id).first()).document);
 const pageCalls=(f,page)=>f.control.calls.filter(call=>call.page===page).length;
 const settled=async f=>{for(let n=0;n<3;n++){await production(f).tick();await production(f).queue.settle();}};
 const artifact=async(f,id,page)=>path.join(f.dataDirectory,'media/reader',id,'artifacts',readdirSync(path.join(f.dataDirectory,'media/reader',id,'artifacts')).find(name=>name.startsWith(page+'-')));

@@ -17,7 +17,7 @@ const control=(f,id,action)=>f.json(`sessions/${id}/production-control`,'POST',{
 const completed=(f,id)=>until(async()=>(await f.read(id)).state==='completed',15000);
 const sqliteError=()=>Object.assign(Error('database is locked'),{code:'ERR_SQLITE_ERROR'});
 const issue=page=>({page,category:'action',problem:'本幅与前幅只有旁白变化，人物和道具状态完全重复。',instruction:'保留当前事件，以接触物件的手势和明确的动作结果表现这一步变化。'});
-const row=(f,id)=>database(f).prepare('SELECT state,error,document,selection FROM reader_sessions WHERE id=?').bind(id).first();
+const row=(f,id)=>database(f).prepare('SELECT state,error,document,selection FROM stories WHERE id=?').bind(id).first();
 // Fail matching statements on one owner's database handle until the returned function restores it.
 function failWrites(owner,match,times=Infinity,field='database'){
  const real=owner[field];let left=times;
@@ -37,7 +37,7 @@ async function quit(f,call){
 }
 const expireClaims=async(f,id)=>{
  await database(f).prepare("UPDATE production_jobs SET lease_until=1 WHERE session_id=? AND state='running'").bind(id).run();
- await database(f).prepare("UPDATE reader_sessions SET lock_until=1 WHERE id=? AND state='running'").bind(id).run();
+ await database(f).prepare("UPDATE stories SET lock_until=1 WHERE id=? AND state='running'").bind(id).run();
 };
 // Abandon a claim the way a dead service does: nothing here can renew its foreign token.
 const abandon=(f,job)=>database(f).prepare("UPDATE production_jobs SET lease_token='dead-service',lease_until=1 WHERE id=?").bind(job.id).run();
@@ -167,7 +167,7 @@ test('a tick error during shutdown still closes the database, and work resumes n
  await assert.rejects(async()=>closing.prepare('SELECT 1').first(),'SQLite is closed');
  await f.restart();f.control.hold=false;
  // The failed drain could not release its lock, so this behaves like a crash until the lock expires.
- await database(f).prepare('UPDATE reader_sessions SET lock_until=1 WHERE id=?').bind(id).run();
+ await database(f).prepare('UPDATE stories SET lock_until=1 WHERE id=?').bind(id).run();
  await completed(f,id);assert.equal(f.control.calls.filter(call=>call.page===0).length,1,'The saved image is reused');
 });
 
@@ -179,7 +179,7 @@ test('one failed tick during shutdown does not stop the drain: finished work is 
  const closing=f.app.close();await until(()=>thrown>0);
  f.control.calls[0].resolve();await closing;
  const saved=new DatabaseSync(path.join(f.dataDirectory,'shiqu.sqlite'));
- const {document,state}=saved.prepare('SELECT document,state FROM reader_sessions WHERE id=?').get(id);saved.close();
+ const {document,state}=saved.prepare('SELECT document,state FROM stories WHERE id=?').get(id);saved.close();
  assert.ok(JSON.parse(document).images[0],'The paid image is published before close resolves');assert.equal(state,'idle');
 });
 
@@ -191,7 +191,7 @@ for(const [name,corrupt] of [
 ])test(`a story with ${name} parks alone: other stories finish and the shelf loads`,async t=>{
  const logs=t.mock.method(console,'error',()=>{});
  const f=await productionFixture(t),bad=await f.create(3);await until(()=>f.control.calls.length===1);
- await database(f).prepare(`UPDATE reader_sessions SET ${corrupt} WHERE id=?`).bind(bad).run();
+ await database(f).prepare(`UPDATE stories SET ${corrupt} WHERE id=?`).bind(bad).run();
  const saved=await row(f,bad);
  f.control.hold=false;f.control.calls[0].resolve();
  const good=await f.create(3);await completed(f,good);
@@ -210,7 +210,7 @@ test('a queued text job for an unreadable document makes no paid plan call',asyn
  f.control.beforeText=async kind=>{if(kind==='plan')await gate;};
  const first=await f.create(3);await until(()=>f.control.plans.length===1);
  const bad=await f.create(3);await until(async()=>(await jobs(f,bad)).some(job=>job.state==='queued'&&job.pool==='text'));
- await database(f).prepare("UPDATE reader_sessions SET document='{}' WHERE id=?").bind(bad).run();
+ await database(f).prepare("UPDATE stories SET document='{}' WHERE id=?").bind(bad).run();
  f.control.beforeText=null;f.control.hold=false;release();
  await completed(f,first);await production(f).tick();
  assert.equal(f.control.plans.length,1);
@@ -275,7 +275,7 @@ test('a clock jump during a live call keeps its claims, saves its result and pay
  await production(f).tick();
  const renewed=await production(f).queue.job(before.id);
  assert.equal(renewed.state,'running');assert.equal(renewed.lease_token,before.lease_token);assert.ok(renewed.lease_until>Date.now());
- assert.ok((await database(f).prepare('SELECT lock_until FROM reader_sessions WHERE id=?').bind(id).first()).lock_until>Date.now());
+ assert.ok((await database(f).prepare('SELECT lock_until FROM stories WHERE id=?').bind(id).first()).lock_until>Date.now());
  f.control.hold=false;f.control.calls[0].resolve();await completed(f,id);
  assert.equal(f.control.calls.filter(call=>call.page===0).length,1);
  assert.equal(readdirSync(path.join(f.dataDirectory,'media/reader',id,'artifacts')).length,2,'No discarded paid artifact is left behind');

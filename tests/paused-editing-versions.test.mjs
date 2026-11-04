@@ -40,7 +40,7 @@ test('a paused unfinished storyboard can be revised; late work, replay and resta
 test('saving pauses the old version, keeps favorites and valid progress; replay respects later resume and pause',async t=>{
  const f=await productionFixture(t);f.control.hold=false;const id=await f.create(4);await until(async()=>(await f.read(id)).state==='completed');
  await f.json(`library/${id}/favorite`,'POST',{saved:true});
- await f.app.services.database.prepare('UPDATE reader_sessions SET page=3,last_read_at=? WHERE id=?').bind('2026-10-30T12:00:00Z',id).run();
+ await f.app.services.database.prepare('UPDATE stories SET page=3,last_read_at=? WHERE id=?').bind('2026-10-30T12:00:00Z',id).run();
  const base=await f.json(`sessions/${id}/revisions`),changes={length:2},requestId=crypto.randomUUID(),before=f.control.calls.length;
  const child=await submit(f,id,base,changes,requestId);assert.equal(child.saved,true);assert.equal(child.page,1);assert.equal(child.lastReadAt,'2026-10-30T12:00:00Z');
  assert.equal(child.generationControl,'paused');await f.app.services.production.tick();assert.equal(f.control.calls.length,before);
@@ -48,7 +48,7 @@ test('saving pauses the old version, keeps favorites and valid progress; replay 
  await f.json(`sessions/${child.id}/production-control`,'POST',{action:'pause'});
  await submit(f,id,base,changes,requestId);assert.equal((await f.read(child.id)).generationControl,'paused');
  const changedIntent=await f.request(`sessions/${id}/revisions`,'POST',{requestId,token:base.token,changes,paused:false});assert.equal(changedIntent.status,409);
- const rows=await f.app.services.database.prepare("SELECT id FROM reader_sessions WHERE json_extract(document,'$.revision.rootId')=?").bind(id).all();assert.equal(rows.results.length,1);
+ const rows=await f.app.services.database.prepare("SELECT id FROM stories WHERE json_extract(document,'$.revision.rootId')=?").bind(id).all();assert.equal(rows.results.length,1);
 });
 
 test('latest means submitted version, independent of status, reads, deletion and owner; independent same-title stories stay separate',async t=>{
@@ -56,13 +56,13 @@ test('latest means submitted version, independent of status, reads, deletion and
  const sameTitle=await f.create(3);await until(async()=>(await f.read(sameTitle)).state==='completed');
  const base=await f.json(`sessions/${id}/revisions`),child=await submit(f,id,base,{productionPrompt:'重新讲述。'});
  for(const state of ['idle','failed']){
-  await f.app.services.database.prepare('UPDATE reader_sessions SET state=? WHERE id=?').bind(state,child.id).run();
-  await f.app.services.database.prepare('UPDATE reader_sessions SET last_read_at=? WHERE id=?').bind('2099-01-01',id).run();
+  await f.app.services.database.prepare('UPDATE stories SET state=? WHERE id=?').bind(state,child.id).run();
+  await f.app.services.database.prepare('UPDATE stories SET last_read_at=? WHERE id=?').bind('2099-01-01',id).run();
   assert.deepEqual(ids(await f.json('sessions')),ids([child,{id:sameTitle}]));
   assert.deepEqual(ids(readLibrarySummary(f.dataDirectory).stories),ids([child,{id:sameTitle}]));
  }
  const foreign=crypto.randomUUID();
- await f.app.services.database.prepare("INSERT INTO reader_sessions(id,user_id,selection,document,state,created_at,updated_at) SELECT ?,'other-owner',selection,json_set(document,'$.revision.number',999),'idle',created_at,updated_at FROM reader_sessions WHERE id=?").bind(foreign,child.id).run();
+ await f.app.services.database.prepare("INSERT INTO stories(id,user_id,selection,document,state,created_at,updated_at) SELECT ?,'other-owner',selection,json_set(document,'$.revision.number',999),'idle',created_at,updated_at FROM stories WHERE id=?").bind(foreign,child.id).run();
  assert.deepEqual(ids(await f.json('sessions')),ids([child,{id:sameTitle}]));
  assert.equal((await f.request(`sessions/${id}`)).status,200,'Historical record remains directly readable');
  await f.json(`library/${child.id}`,'DELETE');assert.deepEqual(ids(await f.json('sessions')),[sameTitle]);

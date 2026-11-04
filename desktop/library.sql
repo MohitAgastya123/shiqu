@@ -6,7 +6,7 @@ WITH selected_sessions AS (
  SELECT s.*, CASE WHEN json_type(document,'$.intake.selected.batch')='integer' AND json_extract(document,'$.intake.selected.batch')>=0
   AND json_type(document,'$.intake.selected.index')='integer' AND json_extract(document,'$.intake.selected.index')>=0
   THEN json_extract(document,'$.intake.batches['||json_extract(document,'$.intake.selected.batch')||'].stories['||json_extract(document,'$.intake.selected.index')||']') END AS selected_candidate
- FROM reader_sessions s WHERE json_type(document,'$.reselection') IS NULL
+ FROM stories s WHERE json_type(document,'$.reselection') IS NULL
 ), prepared_sessions AS (
  SELECT s.*, CASE WHEN json_extract(document,'$.intake.phase')='choosing' AND json_extract(document,'$.plan') IS NULL
   AND json_extract(selected_candidate,'$.title')=json_extract(selection,'$.storyTitle')
@@ -27,7 +27,7 @@ WITH selected_sessions AS (
  SELECT j.session_id, j.owner_id, count(*) AS jobs,
   sum(j.state = 'queued') AS queued, sum(j.state = 'running') AS running,
   sum(j.state = 'failed') AS failed, sum(j.state = 'succeeded') AS succeeded
- FROM production_jobs j JOIN reader_sessions r ON r.id=j.session_id AND r.user_id=j.owner_id
+ FROM production_jobs j JOIN stories r ON r.id=j.session_id AND r.user_id=j.owner_id
  WHERE json_extract(r.document,'$.intake.generation') IS NULL OR json_extract(j.payload,'$.setupGeneration')=json_extract(r.document,'$.intake.generation')
   OR (j.kind='discover' AND j.state IN ('queued','running') AND json_extract(r.document,'$.intake.phase')='discovering')
  GROUP BY j.session_id, j.owner_id
@@ -84,7 +84,7 @@ SELECT json_object('stories', json_group_array(json(summary))) FROM (
  LEFT JOIN books b ON b.id = json_extract(s.selection, '$.bookId')
  LEFT JOIN job_counts j ON j.session_id = s.id AND j.owner_id = s.user_id
  WHERE NOT EXISTS (SELECT 1 FROM library_deletions d WHERE d.story_id = s.id AND d.user_id = s.user_id)
- AND NOT EXISTS (SELECT 1 FROM reader_sessions newer WHERE newer.user_id=s.user_id
+ AND NOT EXISTS (SELECT 1 FROM stories newer WHERE newer.user_id=s.user_id
   AND coalesce(json_extract(newer.document,'$.revision.rootId'),newer.id)=coalesce(json_extract(s.document,'$.revision.rootId'),s.id)
   AND coalesce(json_extract(newer.document,'$.revision.number'),1)>coalesce(json_extract(s.document,'$.revision.number'),1))
  ORDER BY coalesce(s.last_read_at, s.created_at) DESC

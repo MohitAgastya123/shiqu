@@ -37,9 +37,9 @@ test('structural edits remap existing duplicate pictures and concurrent reading 
   if(kind==='review'){if(f.control.reviews.length===1)return {issues:[issue]};rechecking();await auditHold;return {issues:[]};}
   if(kind==='structure'){editing();await hold;return {edits:[{from:2,to:1,pages:[inserted]}]};}
  };
- await f.app.services.database.prepare("UPDATE reader_sessions SET selection=?,document=?,state='idle',page=2 WHERE id=?").bind(JSON.stringify({...JSON.parse(row.selection),length:'auto'}),JSON.stringify(doc),id).run();
+ await f.app.services.database.prepare("UPDATE stories SET selection=?,document=?,state='idle',page=2 WHERE id=?").bind(JSON.stringify({...JSON.parse(row.selection),length:'auto'}),JSON.stringify(doc),id).run();
  f.app.services.production.wake();await started;
- await f.app.services.database.prepare('UPDATE reader_sessions SET page=3 WHERE id=?').bind(id).run();release();await audit;
+ await f.app.services.database.prepare('UPDATE stories SET page=3 WHERE id=?').bind(id).run();release();await audit;
  const saved=await f.app.services.production.repository.get(id,owner),after=JSON.parse(saved.document);
  assert.equal(saved.page,4,'Use the concurrent current page, not the stale page acquired with the work');
  assert.deepEqual(after.images,[oldImages[0],'',oldImages[1],oldImages[2],oldImages[3]]);assert.equal(f.control.calls.length,0);

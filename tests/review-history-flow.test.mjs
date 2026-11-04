@@ -9,7 +9,7 @@ test('formal review flow persists ordered history and before text without affect
  const f=await productionFixture(t),owner='docker-local-owner',id=crypto.randomUUID();
  const repo=()=>new ReaderRepository(f.app.services.database),plan=makePlan(3);
  await repo().create(id,owner,selectionSchema.parse({...selection,length:'auto'}));
- await f.app.services.database.prepare("UPDATE reader_sessions SET document=?,generation_mode='reader',generation_control='active',state='idle' WHERE id=?").bind(JSON.stringify({plan,original:{title:'原文',text:'甲赠物，乙未接，后来二人和解。'},images:[],audio:[],usage:[],frameCountConfirmed:true,visualReview:newReview()}),id).run();
+ await f.app.services.database.prepare("UPDATE stories SET document=?,generation_mode='reader',generation_control='active',state='idle' WHERE id=?").bind(JSON.stringify({plan,original:{title:'原文',text:'甲赠物，乙未接，后来二人和解。'},images:[],audio:[],usage:[],frameCountConfirmed:true,visualReview:newReview()}),id).run();
  f.control.beforeText=async(kind,payload)=>{
   if(kind==='frames'&&payload.plan.pages.length===3)return {frameCountReview:{decision:'reduce',proposedCount:2,reason:'重复反应可精简。'},requirements:[{page:2,quote:'乙未接',task:'重复反应',captionEvidence:'已经交代拒绝',visualEvidence:'重复停顿',loss:'拖慢推进',instruction:'合并重复反应。'}]};
   if(kind==='structure')return {edits:[{from:2,to:2,pages:[]}]};

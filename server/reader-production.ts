@@ -94,7 +94,7 @@ export class ReaderProductionCoordinator implements ReaderProduction{
    targetSessionId:options.targetSessionId,
    limits:{search:1,text:1,image:options.imageWorkers??3,local:2},now:this.clock,leaseMs:options.leaseMs,
    canRun:job=>this.canRun(job),resumeInterrupted:job=>this.resumeInterrupted(job),onSettled:()=>this.wake(),
-   candidateFilter:`j.kind='image-publish' OR NOT EXISTS(SELECT 1 FROM reader_sessions s WHERE s.id=j.session_id AND s.user_id=j.owner_id AND (s.generation_control!='active' OR (s.state='failed' AND NOT EXISTS(SELECT 1 FROM reader_faults f WHERE f.session_id=s.id AND f.owner_id=s.user_id AND f.state='recovering' AND (f.command_id=j.recovery_id OR f.kind='interrupted' AND f.job_id=j.id))) OR EXISTS(SELECT 1 FROM library_deletions d WHERE d.story_id=s.id AND d.user_id=s.user_id)))`,
+   candidateFilter:`j.kind='image-publish' OR NOT EXISTS(SELECT 1 FROM stories s WHERE s.id=j.session_id AND s.user_id=j.owner_id AND (s.generation_control!='active' OR (s.state='failed' AND NOT EXISTS(SELECT 1 FROM reader_faults f WHERE f.session_id=s.id AND f.owner_id=s.user_id AND f.state='recovering' AND (f.command_id=j.recovery_id OR f.kind='interrupted' AND f.job_id=j.id))) OR EXISTS(SELECT 1 FROM library_deletions d WHERE d.story_id=s.id AND d.user_id=s.user_id)))`,
    skipCandidate:job=>!!options.targetSessionId&&job.session_id!==options.targetSessionId||!!options.stopBeforeImages&&['image','image-publish'].includes(job.kind)||job.kind!=='image-publish'&&this.supersededJobs.has(job.session_id),
    safeError:(error,job)=>error instanceof ReaderError?error.message:job.kind==='image-publish'?'图片已生成，暂时无法展开。请重试继续。':this.provider.safeError(error),
    terminal:error=>error instanceof ReaderError&&error.status<500,
@@ -109,7 +109,7 @@ export class ReaderProductionCoordinator implements ReaderProduction{
   if(options.autoStart!==false)this.start();
  }
  start(){if(this.enabled||this.stopping||this.closed)return;this.enabled=true;this.timer=setInterval(()=>this.wake(),this.options.tickMs||1000);this.timer.unref();this.wake();}
- private async find(id:string,ownerId:string){return this.database.prepare('SELECT * FROM reader_sessions WHERE id=? AND user_id=?').bind(id,ownerId).first<SessionRow>();}
+ private async find(id:string,ownerId:string){return this.database.prepare('SELECT * FROM stories WHERE id=? AND user_id=?').bind(id,ownerId).first<SessionRow>();}
  private async raw(id:string,ownerId:string){
   const row=await this.find(id,ownerId);
   if(!row)throw new ReaderError(404,'这篇故事不在你的书架里');return row;
@@ -143,10 +143,10 @@ export class ReaderProductionCoordinator implements ReaderProduction{
  }
  private async demands(id?:string){
   id=this.options.targetSessionId||id;
-  const viewers=(await this.database.prepare(`SELECT * FROM production_demand WHERE runtime_id=? AND expires_at>? AND NOT EXISTS(SELECT 1 FROM reader_sessions s WHERE s.id=production_demand.session_id AND s.user_id=production_demand.owner_id AND ${supersededSql('s')})${id?' AND session_id=?':''}`)
+  const viewers=(await this.database.prepare(`SELECT * FROM production_demand WHERE runtime_id=? AND expires_at>? AND NOT EXISTS(SELECT 1 FROM stories s WHERE s.id=production_demand.session_id AND s.user_id=production_demand.owner_id AND ${supersededSql('s')})${id?' AND session_id=?':''}`)
    .bind(this.runtimeId,this.clock(),...(id?[id]:[])).all<Demand>()).results;
-  const background=(await this.database.prepare(`SELECT id,user_id FROM reader_sessions WHERE generation_mode='background' AND generation_control='active' AND state!='completed'
-   AND NOT ${supersededSql()} AND NOT EXISTS(SELECT 1 FROM library_deletions d WHERE d.story_id=reader_sessions.id AND d.user_id=reader_sessions.user_id)${id?' AND id=?':''}`)
+  const background=(await this.database.prepare(`SELECT id,user_id FROM stories WHERE generation_mode='background' AND generation_control='active' AND state!='completed'
+   AND NOT ${supersededSql()} AND NOT EXISTS(SELECT 1 FROM library_deletions d WHERE d.story_id=stories.id AND d.user_id=stories.user_id)${id?' AND id=?':''}`)
    .bind(...(id?[id]:[])).all<{id:string;user_id:string}>()).results;
   return [...viewers,...background.map(row=>({session_id:row.id,owner_id:row.user_id,viewer_id:'background',page:0,through_page:readerMaxFrames-1,expires_at:Infinity,runtime_id:this.runtimeId}))];
  }
@@ -181,7 +181,7 @@ export class ReaderProductionCoordinator implements ReaderProduction{
   else await this.repository.control(id,ownerId,action,handoffOnly);
   this.wake();return this.snapshot(ownerId,id);
  }
- async managed(ownerId:string,id:string){const saved=await this.database.prepare('SELECT document FROM reader_sessions WHERE id=? AND user_id=?').bind(id,ownerId).first<{document:string}>();if(saved&&(JSON.parse(saved.document) as Document).intake)return true;return !!await this.database.prepare('SELECT id FROM production_jobs WHERE owner_id=? AND session_id=? LIMIT 1').bind(ownerId,id).first();}
+ async managed(ownerId:string,id:string){const saved=await this.database.prepare('SELECT document FROM stories WHERE id=? AND user_id=?').bind(id,ownerId).first<{document:string}>();if(saved&&(JSON.parse(saved.document) as Document).intake)return true;return !!await this.database.prepare('SELECT id FROM production_jobs WHERE owner_id=? AND session_id=? LIMIT 1').bind(ownerId,id).first();}
  async request(ownerId:string,id:string,viewerId:string,page:number,retry=false){return this.demand(ownerId,id,viewerId,page,page+productionReadAhead,retry);}
  async advance(ownerId:string,id:string,throughPage:number,retry:boolean){return this.demand(ownerId,id,'legacy-advance',0,throughPage,retry);}
  private async demand(ownerId:string,id:string,viewerId:string,page:number,throughPage:number,retry:boolean){
@@ -208,8 +208,8 @@ export class ReaderProductionCoordinator implements ReaderProduction{
   if(await this.repository.superseded(id,ownerId))throw new ReaderError(409,latestVersionMessage);
   if(review?.status!=='blocked'&&!review?.overridden)throw new ReaderError(409,'这篇故事没有待处理的审片问题。');
   if(review.status==='blocked'){
-   const saved=await this.database.prepare(`UPDATE reader_sessions SET document=json_remove(json_set(document,'$.visualReview.status','passed','$.visualReview.overridden',json('true')),'$.visualReview.stopReason'),state='idle',error=NULL,lock_token=NULL,lock_until=0,updated_at=?
-    WHERE id=? AND user_id=? AND state!='running' AND NOT ${supersededSql()} AND json_extract(document,'$.visualReview.status')='blocked' AND NOT EXISTS(SELECT 1 FROM library_deletions d WHERE d.story_id=reader_sessions.id AND d.user_id=reader_sessions.user_id)`)
+   const saved=await this.database.prepare(`UPDATE stories SET document=json_remove(json_set(document,'$.visualReview.status','passed','$.visualReview.overridden',json('true')),'$.visualReview.stopReason'),state='idle',error=NULL,lock_token=NULL,lock_until=0,updated_at=?
+    WHERE id=? AND user_id=? AND state!='running' AND NOT ${supersededSql()} AND json_extract(document,'$.visualReview.status')='blocked' AND NOT EXISTS(SELECT 1 FROM library_deletions d WHERE d.story_id=stories.id AND d.user_id=stories.user_id)`)
     .bind(new Date(this.clock()).toISOString(),id,ownerId).run();
    if(!saved.meta.changes)throw new ReaderError(409,'故事状态已更新，请重新打开后继续。');
   }
@@ -234,14 +234,14 @@ export class ReaderProductionCoordinator implements ReaderProduction{
   return {id:fault.id,message:fault.message,page:fault.page,stage,state:fault.state as FaultView['state'],retryAllowed:fault.state==='pending'&&!['replan','requirements'].includes(doc.visualReview?.stopReason||'')};
  }
  private async resolveFault(row:SessionRow,fault:ReaderFault){
-  await this.database.prepare("UPDATE reader_faults SET state='resolved',updated_at=? WHERE id=? AND session_id=? AND owner_id=? AND state='pending' AND EXISTS(SELECT 1 FROM reader_sessions s WHERE s.id=reader_faults.session_id AND s.user_id=reader_faults.owner_id AND json_extract(s.document,'$.images['||reader_faults.page||']')=?)")
+  await this.database.prepare("UPDATE reader_faults SET state='resolved',updated_at=? WHERE id=? AND session_id=? AND owner_id=? AND state='pending' AND EXISTS(SELECT 1 FROM stories s WHERE s.id=reader_faults.session_id AND s.user_id=reader_faults.owner_id AND json_extract(s.document,'$.images['||reader_faults.page||']')=?)")
    .bind(this.clock(),fault.id,row.id,row.user_id,(JSON.parse(row.document) as Document).images[fault.page!]).run();
   this.wake();
  }
  private async completeHealthy(ownerId:string,id:string){
   const row=await this.repository.get(id,ownerId),doc=JSON.parse(row.document) as Document;
   if(!productionComplete(doc,selectionSchema.parse(JSON.parse(row.selection))))return;
-  await this.database.prepare("UPDATE reader_sessions SET state='completed',error=NULL WHERE id=? AND user_id=? AND state!='running' AND document=? AND NOT EXISTS(SELECT 1 FROM reader_faults f WHERE f.session_id=reader_sessions.id AND f.owner_id=reader_sessions.user_id AND f.state IN ('pending','recovering'))")
+  await this.database.prepare("UPDATE stories SET state='completed',error=NULL WHERE id=? AND user_id=? AND state!='running' AND document=? AND NOT EXISTS(SELECT 1 FROM reader_faults f WHERE f.session_id=stories.id AND f.owner_id=stories.user_id AND f.state IN ('pending','recovering'))")
    .bind(id,ownerId,row.document).run();
  }
  async checkImage(ownerId:string,id:string,page:number,image:string){
@@ -260,7 +260,7 @@ export class ReaderProductionCoordinator implements ReaderProduction{
   }
   // A late browser report must not mark a new image, plan or selection. Keep in-flight writes valid.
   await this.database.prepare(`INSERT INTO reader_faults(id,session_id,owner_id,kind,page,version,image,message,created_at,updated_at)
-   SELECT ?,?,?,'image-loss',?,?,?,?,?,? FROM reader_sessions s
+   SELECT ?,?,?,'image-loss',?,?,?,?,?,? FROM stories s
    WHERE s.id=? AND s.user_id=? AND json_extract(s.document,?)=?
     AND json_remove(s.selection,'$.displayTitle')=json_remove(?,'$.displayTitle')
     AND json_extract(s.document,'$.plan') IS json_extract(?,'$.plan')
@@ -397,7 +397,7 @@ export class ReaderProductionCoordinator implements ReaderProduction{
    const search=intakeSearch(doc.intake),searching=search.state==='searching'&&!doc.plan&&doc.intake.phase!=='confirmed';
    // A record written by an older release has no stored search to fence its result against.
    if(doc.intake.phase==='discovering'&&doc.intake.search?.state!=='searching'){
-    await this.database.prepare("UPDATE reader_sessions SET document=json_set(document,'$.intake.search',json(?)) WHERE id=? AND user_id=? AND json_extract(document,'$.intake.phase')='discovering' AND COALESCE(json_extract(document,'$.intake.search.round'),0)=?")
+    await this.database.prepare("UPDATE stories SET document=json_set(document,'$.intake.search',json(?)) WHERE id=? AND user_id=? AND json_extract(document,'$.intake.phase')='discovering' AND COALESCE(json_extract(document,'$.intake.search.round'),0)=?")
      .bind(JSON.stringify({round:search.round+1,state:'searching'}),row.id,row.user_id,search.round).run();
     return;
    }
@@ -413,12 +413,12 @@ export class ReaderProductionCoordinator implements ReaderProduction{
   await this.queue.enqueue(script,doc.plan&&doc.original&&reviewPassed(doc)?{pages:doc.plan.pages.length}:undefined);
   if(!doc.plan||!doc.original||!reviewPassed(doc))return;
   if(doc.plan.pages.every((_,page)=>!!doc.images[page])&&!(await this.faults(row)).length){
-   await this.database.prepare("UPDATE reader_sessions SET state='completed',error=NULL WHERE id=? AND user_id=? AND state='idle' AND document=? AND NOT EXISTS(SELECT 1 FROM reader_faults f WHERE f.session_id=reader_sessions.id AND f.owner_id=reader_sessions.user_id AND f.state IN ('pending','recovering'))").bind(row.id,row.user_id,row.document).run();return;
+   await this.database.prepare("UPDATE stories SET state='completed',error=NULL WHERE id=? AND user_id=? AND state='idle' AND document=? AND NOT EXISTS(SELECT 1 FROM reader_faults f WHERE f.session_id=stories.id AND f.owner_id=stories.user_id AND f.state IN ('pending','recovering'))").bind(row.id,row.user_id,row.document).run();return;
   }
   // SQLite json_set cannot fill a missing array index out of order; reserve all slots first.
   if(doc.images.length<doc.plan.pages.length){
    const normalized=doc.plan.pages.map((_,page)=>doc.images[page]||'');
-   const saved=await this.database.prepare("UPDATE reader_sessions SET document=json_set(document,'$.images',json(?)) WHERE id=? AND user_id=? AND document=?")
+   const saved=await this.database.prepare("UPDATE stories SET document=json_set(document,'$.images',json(?)) WHERE id=? AND user_id=? AND document=?")
     .bind(JSON.stringify(normalized),row.id,row.user_id,row.document).run();
    if(!saved.meta.changes)return;
   }
@@ -464,7 +464,7 @@ export class ReaderProductionCoordinator implements ReaderProduction{
   const now=this.clock(),recent=now-publicationYieldMs;
   // CROSS JOIN fixes the order: start from the few live viewers rather than scanning every job.
   const candidates=(await this.database.prepare(`SELECT DISTINCT s.id,s.user_id FROM production_demand d
-   CROSS JOIN reader_sessions s ON s.id=d.session_id AND s.user_id=d.owner_id
+   CROSS JOIN stories s ON s.id=d.session_id AND s.user_id=d.owner_id
    CROSS JOIN production_jobs p ON p.session_id=s.id AND p.owner_id=s.user_id
    CROSS JOIN production_jobs parent ON parent.id=json_extract(p.dependencies,'$[0]')
    WHERE d.runtime_id=? AND d.expires_at>? AND s.generation_control='active' AND NOT ${supersededSql('s')}
@@ -495,12 +495,12 @@ export class ReaderProductionCoordinator implements ReaderProduction{
   if(row.state==='running'){
    if(row.lock_until>this.clock())return false;
    // Publication must recover a deleted story too; visible repository reads intentionally hide it.
-   await this.database.prepare("UPDATE reader_sessions SET state='failed',error=?,lock_token=NULL,lock_until=0,updated_at=? WHERE id=? AND user_id=? AND state='running' AND lock_until<=?")
+   await this.database.prepare("UPDATE stories SET state='failed',error=?,lock_token=NULL,lock_until=0,updated_at=? WHERE id=? AND user_id=? AND state='running' AND lock_until<=?")
     .bind('上次制作已中断，已保留保存的结果。',new Date(this.clock()).toISOString(),row.id,row.user_id,this.clock()).run();return false;
   }
   const token=randomUUID(),now=this.clock();
-  const acquired=await this.database.prepare(`UPDATE reader_sessions SET state='running',lock_token=?,lock_until=?,error=NULL,updated_at=?
-   WHERE id=? AND user_id=? AND state=? AND document=? AND ${allowDeleted?'1=1':"NOT EXISTS (SELECT 1 FROM library_deletions WHERE story_id=reader_sessions.id AND user_id=reader_sessions.user_id)"}`)
+  const acquired=await this.database.prepare(`UPDATE stories SET state='running',lock_token=?,lock_until=?,error=NULL,updated_at=?
+   WHERE id=? AND user_id=? AND state=? AND document=? AND ${allowDeleted?'1=1':"NOT EXISTS (SELECT 1 FROM library_deletions WHERE story_id=stories.id AND user_id=stories.user_id)"}`)
    .bind(token,now+(this.options.leaseMs||sessionLeaseMs),new Date(now).toISOString(),row.id,row.user_id,row.state,row.document).run();
   if(acquired.meta.changes){this.leases.set(row.id,{ownerId:row.user_id,token});return true;}return false;
  }
@@ -508,7 +508,7 @@ export class ReaderProductionCoordinator implements ReaderProduction{
   // The fence refuses a result that arrives after confirmation or after a crash already saved it.
   const phase="'$.intake.phase',CASE WHEN json_extract(document,'$.intake.phase')='discovering' THEN 'choosing' ELSE json_extract(document,'$.intake.phase') END";
   const updated=`json_set(document,'$.intake.search',json(?),${phase})`;
-  const saved=await this.database.prepare(`UPDATE reader_sessions SET document=${batch?`json_insert(${updated},'$.intake.batches[#]',json(?))`:updated},updated_at=?
+  const saved=await this.database.prepare(`UPDATE stories SET document=${batch?`json_insert(${updated},'$.intake.batches[#]',json(?))`:updated},updated_at=?
    WHERE id=? AND user_id=? AND json_extract(document,'$.intake.search.round')=? AND json_extract(document,'$.intake.search.state')='searching'`)
    .bind(JSON.stringify(search),...(batch?[JSON.stringify(batch)]:[]),new Date(this.clock()).toISOString(),id,ownerId,round).run();
   return saved.meta.changes>0;
@@ -520,7 +520,7 @@ export class ReaderProductionCoordinator implements ReaderProduction{
   const doc=JSON.parse(row.document) as Document,intake=doc.intake!,search=intakeSearch(intake),selection=selectionSchema.parse(JSON.parse(row.selection));
   if(!search.cycleId){
    search.cycleId=row.id+'-'+round;
-   await this.database.prepare("UPDATE reader_sessions SET document=json_set(document,'$.intake.search.cycleId',?) WHERE id=? AND json_extract(document,'$.intake.search.round')=?").bind(search.cycleId,row.id,round).run();
+   await this.database.prepare("UPDATE stories SET document=json_set(document,'$.intake.search.cycleId',?) WHERE id=? AND json_extract(document,'$.intake.search.round')=?").bind(search.cycleId,row.id,round).run();
   }
   const excluded=intake.batches.flatMap(batch=>batch.stories),titles=excluded.map(story=>story.title),sources=excluded.flatMap(story=>story.source?[story.source]:[]);
   const active:ActiveSearch={round,controller:new AbortController(),startedAt:this.clock()};this.searches.set(row.id,active);
@@ -547,14 +547,14 @@ export class ReaderProductionCoordinator implements ReaderProduction{
   const candidates=(await this.database.prepare(`SELECT s.*,j.queued_count,j.failed_count FROM (
    SELECT session_id,owner_id,COUNT(CASE WHEN state='queued' THEN 1 END) AS queued_count,COUNT(CASE WHEN state='failed' THEN 1 END) AS failed_count
    FROM production_jobs WHERE state IN('queued','failed') GROUP BY session_id,owner_id
-   ) j JOIN reader_sessions s ON s.id=j.session_id AND s.user_id=j.owner_id`).all<SessionRow&{queued_count:number;failed_count:number}>()).results;
+   ) j JOIN stories s ON s.id=j.session_id AND s.user_id=j.owner_id`).all<SessionRow&{queued_count:number;failed_count:number}>()).results;
   const seen=new Set<string>();
   for(const row of candidates){
    if(this.options.targetSessionId&&row.id!==this.options.targetSessionId)continue;
    seen.add(row.id);
    const key={document:row.document,selection:row.selection,queued:row.queued_count,failed:row.failed_count},previous=this.pruneKeys.get(row.id);
    if(forceId!==row.id&&previous?.document===key.document&&previous.selection===key.selection&&previous.queued===key.queued&&previous.failed===key.failed||!this.readable(row))continue;
-   await this.database.prepare(`DELETE FROM production_jobs WHERE session_id=? AND owner_id=? AND state IN('queued','failed') AND EXISTS(SELECT 1 FROM reader_sessions s WHERE s.id=production_jobs.session_id AND s.user_id=production_jobs.owner_id
+   await this.database.prepare(`DELETE FROM production_jobs WHERE session_id=? AND owner_id=? AND state IN('queued','failed') AND EXISTS(SELECT 1 FROM stories s WHERE s.id=production_jobs.session_id AND s.user_id=production_jobs.owner_id
    AND CASE WHEN json_valid(s.document) AND json_type(s.document,'$.intake')='object' THEN
     CASE WHEN production_jobs.kind='discover'
      THEN COALESCE(json_extract(production_jobs.payload,'$.searchRound'),-1)!=CASE WHEN json_extract(s.document,'$.intake.search.state')='searching' THEN json_extract(s.document,'$.intake.search.round') ELSE -2 END
@@ -566,7 +566,7 @@ export class ReaderProductionCoordinator implements ReaderProduction{
    if(!obsolete.length){this.pruneKeys.set(row.id,key);continue;}
    // A current worker may have saved its error before the queue has recorded that failure.
    if(row.state==='failed'&&obsolete.some(job=>job.state==='failed'&&job.error===row.error)&&!current.some(job=>['failed','running'].includes(job.state))){
-    await this.database.prepare("UPDATE reader_sessions SET state='idle',error=NULL WHERE id=? AND user_id=? AND state='failed' AND error IS ? AND document=? AND selection=?")
+    await this.database.prepare("UPDATE stories SET state='idle',error=NULL WHERE id=? AND user_id=? AND state='failed' AND error IS ? AND document=? AND selection=?")
      .bind(row.id,row.user_id,row.error,row.document,row.selection).run();
    }
    for(const job of obsolete)await this.database.prepare("DELETE FROM production_jobs WHERE id=? AND state IN('queued','failed')").bind(job.id).run();
@@ -576,7 +576,7 @@ export class ReaderProductionCoordinator implements ReaderProduction{
  }
  private async stopUnwantedSearches(){
   for(const [id,search] of this.searches){
-   const row=await this.database.prepare('SELECT * FROM reader_sessions WHERE id=?').bind(id).first<SessionRow>();
+   const row=await this.database.prepare('SELECT * FROM stories WHERE id=?').bind(id).first<SessionRow>();
    if(!row||!await this.searchRunnable(row,search.round))search.controller.abort();
   }
  }
@@ -585,7 +585,7 @@ export class ReaderProductionCoordinator implements ReaderProduction{
   const failed=(await this.database.prepare("SELECT * FROM production_jobs WHERE kind='discover' AND state='failed'").all<ProductionJob>()).results;
   for(const job of failed){
    if(this.options.targetSessionId&&job.session_id!==this.options.targetSessionId)continue;
-   const row=await this.database.prepare('SELECT * FROM reader_sessions WHERE id=? AND user_id=?').bind(job.session_id,job.owner_id).first<SessionRow>(),round=searchRound(job);
+   const row=await this.database.prepare('SELECT * FROM stories WHERE id=? AND user_id=?').bind(job.session_id,job.owner_id).first<SessionRow>(),round=searchRound(job);
    if(row&&!this.readable(row))continue;
    if(row&&round!==undefined&&this.searchCurrent(row,round)){
     if(job.interrupted&&(job.attempts<maxAutomaticAttempts||!await this.searchRunnable(row,round)))continue;
@@ -610,7 +610,7 @@ export class ReaderProductionCoordinator implements ReaderProduction{
    const saved=await this.find(row.id,row.user_id);
    if(failure){
     const terminal=failure instanceof ReaderError&&failure.status<500;
-    if(this.stopping&&!terminal)await this.database.prepare("UPDATE reader_sessions SET state='idle',error=NULL WHERE id=? AND user_id=? AND state='failed'").bind(row.id,row.user_id).run();
+    if(this.stopping&&!terminal)await this.database.prepare("UPDATE stories SET state='idle',error=NULL WHERE id=? AND user_id=? AND state='failed'").bind(row.id,row.user_id).run();
     throw terminal?failure:new ReaderError(503,saved?.error||this.provider.safeError(failure));
    }
    if(!acquired||saved&&saved.lock_token!==acquired)throw new JobYield();
@@ -620,7 +620,7 @@ export class ReaderProductionCoordinator implements ReaderProduction{
    // The engine records its failure before the queue can classify it, so undo that for a stop.
    // A 4xx stays failed: replaying a blocked review would pay for repair without the reader asking.
    const terminal=failure instanceof ReaderError&&failure.status<500;
-   if(this.stopping&&!terminal)await this.database.prepare("UPDATE reader_sessions SET state='idle',error=NULL WHERE id=? AND user_id=? AND state='failed'").bind(row.id,row.user_id).run();
+   if(this.stopping&&!terminal)await this.database.prepare("UPDATE stories SET state='idle',error=NULL WHERE id=? AND user_id=? AND state='failed'").bind(row.id,row.user_id).run();
    throw terminal?failure:new ReaderError(503,result.error||'故事编排暂未完成');
   }
   // A step was waiting but the story changed first. Nothing ran, so take it on the next turn.
@@ -669,7 +669,7 @@ export class ReaderProductionCoordinator implements ReaderProduction{
   if(doc.images[page]===result.value)return {value:result.value};
   const lease=this.leases.get(row.id);if(!lease)throw new ReaderError(409,'故事状态已更新，请重新打开后继续。');
   const usage={step:`image:${page}`,model:result.model,requestId:result.requestId,usage:result.usage,...(result.promptRecord?{promptRecord:result.promptRecord}:{})};
-  const saved=await this.database.prepare(`UPDATE reader_sessions SET document=json_set(document,?, ?, '$.usage',json_insert(json_extract(document,'$.usage'),'$[#]',json(?))),updated_at=?
+  const saved=await this.database.prepare(`UPDATE stories SET document=json_set(document,?, ?, '$.usage',json_insert(json_extract(document,'$.usage'),'$[#]',json(?))),updated_at=?
    WHERE id=? AND user_id=? AND state='running' AND lock_token=? AND COALESCE(json_extract(document,?),'')=?
    AND json_remove(selection,'$.displayTitle')=json_remove(?,'$.displayTitle') AND json_extract(document,'$.plan')=json_extract(?,'$.plan')
    AND COALESCE(json_extract(document,'$.intake.generation'),-1)=?
@@ -690,11 +690,11 @@ export class ReaderProductionCoordinator implements ReaderProduction{
  private async settleHealthyCheckpoints(){
   // Local completion is independent of generation permission or a viewer. A crash after a saved
   // checkpoint cannot leave a healthy paused story waiting for an unrelated Resume command.
-  const rows=(await this.database.prepare("SELECT * FROM reader_sessions WHERE state='idle' AND json_valid(document) AND json_type(document,'$.plan')='object' AND json_type(document,'$.original')='object' AND NOT EXISTS(SELECT 1 FROM reader_faults f WHERE f.session_id=reader_sessions.id AND f.owner_id=reader_sessions.user_id AND f.state IN ('pending','recovering'))").all<SessionRow>()).results;
+  const rows=(await this.database.prepare("SELECT * FROM stories WHERE state='idle' AND json_valid(document) AND json_type(document,'$.plan')='object' AND json_type(document,'$.original')='object' AND NOT EXISTS(SELECT 1 FROM reader_faults f WHERE f.session_id=stories.id AND f.owner_id=stories.user_id AND f.state IN ('pending','recovering'))").all<SessionRow>()).results;
   for(const row of rows){
    if(this.options.targetSessionId&&row.id!==this.options.targetSessionId)continue;
    if(!this.readable(row)||!productionComplete(JSON.parse(row.document) as Document,selectionSchema.parse(JSON.parse(row.selection))))continue;
-   await this.database.prepare("UPDATE reader_sessions SET state='completed',error=NULL WHERE id=? AND user_id=? AND state='idle' AND document=? AND NOT EXISTS(SELECT 1 FROM reader_faults f WHERE f.session_id=reader_sessions.id AND f.owner_id=reader_sessions.user_id AND f.state IN ('pending','recovering'))").bind(row.id,row.user_id,row.document).run();
+   await this.database.prepare("UPDATE stories SET state='completed',error=NULL WHERE id=? AND user_id=? AND state='idle' AND document=? AND NOT EXISTS(SELECT 1 FROM reader_faults f WHERE f.session_id=stories.id AND f.owner_id=stories.user_id AND f.state IN ('pending','recovering'))").bind(row.id,row.user_id,row.document).run();
   }
  }
  private async cycle(){
@@ -702,7 +702,7 @@ export class ReaderProductionCoordinator implements ReaderProduction{
   await this.queue.renew();
   for(const [id,lease] of this.leases){
    const now=this.clock();
-   await this.database.prepare("UPDATE reader_sessions SET lock_until=? WHERE id=? AND user_id=? AND state='running' AND lock_token=?")
+   await this.database.prepare("UPDATE stories SET lock_until=? WHERE id=? AND user_id=? AND state='running' AND lock_token=?")
     .bind(now+(this.options.leaseMs||sessionLeaseMs),id,lease.ownerId,lease.token).run();
   }
   await this.queue.recoverExpired();
@@ -710,14 +710,14 @@ export class ReaderProductionCoordinator implements ReaderProduction{
   await this.stopUnwantedSearches();
   // A dead runtime cannot renew these locks. Preserve every live session/job lease across processes.
   if(!this.stopping){
-   const expired=(await this.database.prepare(`SELECT * FROM reader_sessions WHERE state='running' AND lock_until<=? AND generation_mode='background'
-    AND NOT EXISTS(SELECT 1 FROM library_deletions d WHERE d.story_id=reader_sessions.id AND d.user_id=reader_sessions.user_id)`).bind(this.clock()).all<SessionRow>()).results;
+   const expired=(await this.database.prepare(`SELECT * FROM stories WHERE state='running' AND lock_until<=? AND generation_mode='background'
+    AND NOT EXISTS(SELECT 1 FROM library_deletions d WHERE d.story_id=stories.id AND d.user_id=stories.user_id)`).bind(this.clock()).all<SessionRow>()).results;
    for(const row of expired){
     if(this.options.targetSessionId&&row.id!==this.options.targetSessionId)continue;
     if(!this.readable(row))continue;
     const jobs=await this.currentJobs(row);
     if(jobs.some(job=>job.state==='failed'&&!job.interrupted||job.state==='running'&&job.lease_until>this.clock()))continue;
-    await this.database.prepare("UPDATE reader_sessions SET state='idle',lock_token=NULL,lock_until=0,error=NULL WHERE id=? AND user_id=? AND state='running' AND lock_until<=? AND lock_token IS ? AND document=? AND selection=?")
+    await this.database.prepare("UPDATE stories SET state='idle',lock_token=NULL,lock_until=0,error=NULL WHERE id=? AND user_id=? AND state='running' AND lock_until<=? AND lock_token IS ? AND document=? AND selection=?")
      .bind(row.id,row.user_id,this.clock(),row.lock_token,row.document,row.selection).run();
    }
   }
@@ -732,7 +732,7 @@ export class ReaderProductionCoordinator implements ReaderProduction{
    }catch(error){if(!(error instanceof ReaderError&&error.status===404))throw error;}
   }
   for(const id of this.rebuildKeys.keys())if(!seen.has(id))this.rebuildKeys.delete(id);
-  const superseded=(await this.database.prepare(`SELECT id FROM reader_sessions WHERE generation_control='active' AND EXISTS(SELECT 1 FROM production_jobs j WHERE j.session_id=reader_sessions.id AND j.owner_id=reader_sessions.user_id AND j.state='queued' AND j.kind!='image-publish' AND (j.kind='discover' OR reader_sessions.state!='failed')) AND ${supersededSql()}`).all<{id:string}>()).results;
+  const superseded=(await this.database.prepare(`SELECT id FROM stories WHERE generation_control='active' AND EXISTS(SELECT 1 FROM production_jobs j WHERE j.session_id=stories.id AND j.owner_id=stories.user_id AND j.state='queued' AND j.kind!='image-publish' AND (j.kind='discover' OR stories.state!='failed')) AND ${supersededSql()}`).all<{id:string}>()).results;
   this.supersededJobs=new Set(superseded.map(row=>row.id));
   for(const id of this.parsedRows.keys())if(!seen.has(id)&&!this.pruneKeys.has(id)&&!this.leases.has(id))this.parsedRows.delete(id);
   await this.queue.pump();

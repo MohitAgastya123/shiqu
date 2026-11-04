@@ -5,7 +5,7 @@ import {productionFixture,until} from './fixtures/production.mjs';
 import {readLibrarySummary} from '../desktop/library-preview.ts';
 
 const owner='docker-local-owner';
-const row=(f,id)=>f.app.services.database.prepare('SELECT * FROM reader_sessions WHERE id=?').bind(id).first();
+const row=(f,id)=>f.app.services.database.prepare('SELECT * FROM stories WHERE id=?').bind(id).first();
 const rename=(f,id,title)=>f.json(`sessions/${id}/title`,'POST',{title});
 
 test('renaming persists across restart without changing source, script, media, progress, versions or jobs; no provider required',async t=>{
@@ -57,8 +57,8 @@ test('invalid, cross-origin and other-owner renames leave stored data intact',as
  }
  assert.equal((await f.request(`sessions/${id}/title`,'POST',{title:'跨站改名'},{origin:'http://other.example'})).status,403);
  assert.deepEqual(await row(f,id),before);
- await f.app.services.database.prepare('UPDATE reader_sessions SET user_id=? WHERE id=?').bind('someone-else',id).run();
+ await f.app.services.database.prepare('UPDATE stories SET user_id=? WHERE id=?').bind('someone-else',id).run();
  assert.equal((await f.request(`sessions/${id}/title`,'POST',{title:'不能改'})).status,404);
- await f.app.services.database.prepare('UPDATE reader_sessions SET user_id=? WHERE id=?').bind(owner,id).run();
+ await f.app.services.database.prepare('UPDATE stories SET user_id=? WHERE id=?').bind(owner,id).run();
  assert.deepEqual(await row(f,id),before);
 });

@@ -9,7 +9,7 @@ import {readLibrarySummary} from '../desktop/library-preview.ts';
 import {generationProgress} from '../lib/generation-progress.ts';
 
 const owner='docker-local-owner';
-const document=async(f,id)=>JSON.parse((await f.app.services.database.prepare('SELECT document FROM reader_sessions WHERE id=?').bind(id).first()).document);
+const document=async(f,id)=>JSON.parse((await f.app.services.database.prepare('SELECT document FROM stories WHERE id=?').bind(id).first()).document);
 const endingIssue={page:0,category:'reflection',problem:'结语把已还阳奉母的处境误写成荣誉与责任不能兼顾。',instruction:'结合已死三日、还阳九年及母丧后赴任的完整因果，只重写结语。'};
 const ending='生死本无宽限，未尽的亲情却让它通融了九年。';
 

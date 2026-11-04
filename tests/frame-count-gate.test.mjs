@@ -14,7 +14,7 @@ async function seed(f,extra={}){
  const repo=new ReaderRepository(f.app.services.database),id=crypto.randomUUID(),selection=selectionSchema.parse({...legacy,length:'auto'});
  await repo.create(id,owner,selection);
  const doc={plan:makePlan(3),original:{title:'原文',text:'甲赠物，乙未接，后来二人和解。'},images:[],audio:[],usage:[],frameCountConfirmed:true,visualReview:newReview(),...extra};
- await f.app.services.database.prepare("UPDATE reader_sessions SET document=?,generation_mode='reader',generation_control='active',state='idle' WHERE id=?").bind(JSON.stringify(doc),id).run();
+ await f.app.services.database.prepare("UPDATE stories SET document=?,generation_mode='reader',generation_control='active',state='idle' WHERE id=?").bind(JSON.stringify(doc),id).run();
  const currentRepo=()=>new ReaderRepository(f.app.services.database);
  const read=async()=>{const row=await currentRepo().get(id,owner);return {row,doc:JSON.parse(row.document)};};
  return {id,selection,read,advance:(g=f.generation.generator(),retry=false)=>advanceStory(currentRepo(),g,owner,id,0,retry)};

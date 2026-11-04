@@ -295,7 +295,13 @@ pub fn launch(
         stream_status(output, send);
     });
     let response = receive
-        .recv_timeout(Duration::from_secs(if action == "test" { 30 } else { 60 }))
+        .recv_timeout(Duration::from_secs(if action == "test" {
+            30
+        } else if action == "upgrade" {
+            600
+        } else {
+            60
+        }))
         .ok();
     let Some(response) = response else {
         drop(child.stdin.take());
@@ -310,7 +316,22 @@ pub fn launch(
     Ok((child, response, receive))
 }
 
+pub fn ensure_library(settings: &Settings, root: &Path) -> Result<(), String> {
+    if !crate::library::needs_upgrade(Path::new(&settings.data_directory))? {
+        return Ok(());
+    }
+    // Do not hold the short SQLite gate while Node acquires it for migration/recovery.
+    let (mut child, response, _) = launch(settings, "", root, "upgrade")?;
+    drop(child.stdin.take());
+    wait(&mut child, Duration::from_secs(8))?;
+    if response["upgraded"] != true {
+        return Err("书库升级未完成。".into());
+    }
+    Ok(())
+}
+
 pub fn start(settings: &Settings, key: &str, root: &Path) -> Result<Runtime, String> {
+    crate::library::needs_upgrade(Path::new(&settings.data_directory))?;
     let ownership = lock(Path::new(&settings.data_directory))?;
     let (child, status, updates) = launch(settings, key, root, "start")?;
     Ok(Runtime {
