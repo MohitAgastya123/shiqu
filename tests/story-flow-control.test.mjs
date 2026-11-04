@@ -403,7 +403,7 @@ function oldLibrary(names){
 test('the migration carries saved searches over without new work or lost choices',()=>{
  const sqlite=oldLibrary(name=>name<'0006'),candidates=[{stories:[{title:'庄周梦蝶',description:'一个故事。'}],note:''}];
  const doc=(intake,extra={})=>JSON.stringify({plan:null,images:[],audio:[],usage:[],intake:{generation:2,creationHash:'x',batches:candidates,...intake},...extra});
- const row=(id,document,state='idle',error=null,control='active')=>sqlite.prepare("INSERT INTO stories(id,user_id,selection,document,generation_mode,generation_control,state,error,step_attempts,lock_token,lock_until,page,saved,created_at,updated_at) VALUES(?,?,?,?,'background',?,?,?,0,?,?,0,0,'2026-10-29','2026-10-29')").run(id,owner,JSON.stringify(selection),document,control,state,error,state==='running'?'dead':null,state==='running'?1:0);
+ const row=(id,document,state='idle',error=null,control='active')=>sqlite.prepare("INSERT INTO reader_sessions(id,user_id,selection,document,generation_mode,generation_control,state,error,step_attempts,lock_token,lock_until,page,saved,created_at,updated_at) VALUES(?,?,?,?,'background',?,?,?,0,?,?,0,0,'2026-10-29','2026-10-29')").run(id,owner,JSON.stringify(selection),document,control,state,error,state==='running'?'dead':null,state==='running'?1:0);
  row('queued',doc({phase:'discovering',progress:{completed:1}}));
  row('dead',doc({phase:'discovering'}),'running');
  row('failed-none',doc({phase:'discovering'}),'failed','找不到');
@@ -415,7 +415,7 @@ test('the migration carries saved searches over without new work or lost choices
  row('broken','{not json','failed','坏');
  sqlite.prepare("INSERT INTO production_jobs(id,session_id,owner_id,kind,pool,version,dependencies,payload,state,priority,attempts,lease_until,created_at,updated_at) VALUES('old','queued',?,'discover','text','v','[]','{\"setupGeneration\":2}','queued',-10,0,0,0,0),('done','other',?,'discover','text','v','[]','{\"setupGeneration\":1}','succeeded',-10,1,0,0,0)").run(owner,owner);
  sqlite.exec(readFileSync('drizzle/0006_intake_search.sql','utf8'));
- const read=id=>{const value=sqlite.prepare('SELECT * FROM stories WHERE id=?').get(id);return {...value,doc:value.id==='broken'?null:JSON.parse(value.document)};};
+ const read=id=>{const value=sqlite.prepare('SELECT * FROM reader_sessions WHERE id=?').get(id);return {...value,doc:value.id==='broken'?null:JSON.parse(value.document)};};
  const queued=read('queued');assert.equal(queued.doc.intake.phase,'discovering');assert.equal(queued.doc.intake.search.state,'searching');assert.equal(queued.doc.intake.progress,undefined);assert.deepEqual(queued.doc.intake.batches,candidates);
  const dead=read('dead');assert.equal(dead.state,'idle');assert.equal(dead.lock_token,null);assert.equal(dead.lock_until,0);assert.equal(dead.doc.intake.search.state,'searching');
  const none=read('failed-none');assert.equal(none.doc.intake.phase,'choosing');assert.equal(none.doc.intake.search.state,'failed');assert.equal(none.doc.intake.search.error,'找不到');assert.equal(none.state,'idle');assert.equal(none.error,null);
@@ -424,14 +424,16 @@ test('the migration carries saved searches over without new work or lost choices
  assert.equal(read('paused').generation_control,'paused');assert.equal(read('paused').doc.intake.search.state,'searching');
  assert.equal(read('other').doc.intake.search,undefined);assert.equal(read('other').doc.intake.phase,'confirming');
  assert.equal('intake' in read('plain').doc,false);
- assert.equal(sqlite.prepare("SELECT document FROM stories WHERE id='broken'").get().document,'{not json');assert.equal(read('broken').state,'failed');
+ assert.equal(sqlite.prepare("SELECT document FROM reader_sessions WHERE id='broken'").get().document,'{not json');assert.equal(read('broken').state,'failed');
  assert.deepEqual(sqlite.prepare('SELECT id FROM production_jobs').all().map(job=>job.id),['done']);
  sqlite.close();
 });
 
-test('the desktop summary still reads a library older than the service\'s migrations',()=>{
+test('the desktop summary reads a historical library after its required rename',()=>{
  const sqlite=oldLibrary(name=>name<'0004');
- sqlite.prepare("INSERT INTO stories(id,user_id,selection,document,state,created_at,updated_at) VALUES('test','owner','{\"bookId\":\"book\",\"storyTitle\":\"故事\"}','{\"plan\":null,\"images\":[]}','idle','2026-10-29','2026-10-29')").run();
+ sqlite.prepare("INSERT INTO reader_sessions(id,user_id,selection,document,state,created_at,updated_at) VALUES('test','owner','{\"bookId\":\"book\",\"storyTitle\":\"故事\"}','{\"plan\":null,\"images\":[]}','idle','2026-10-29','2026-10-29')").run();
+ // This SQL fixture proves summary compatibility after rename; production readiness performs the full upgrade.
+ sqlite.exec('DROP TABLE stories; DROP TABLE jobs; DROP TABLE progress; ALTER TABLE reader_sessions RENAME TO stories; PRAGMA user_version=1');
  const summary=JSON.parse(Object.values(sqlite.prepare(readFileSync('desktop/library.sql','utf8')).get())[0]);
  assert.equal(summary.stories[0].title,'故事');assert.equal(summary.stories[0].jobs,0);sqlite.close();
 });
