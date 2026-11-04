@@ -1,7 +1,7 @@
 // Present owner-scoped deletion records; restoration preserves saved checkpoints and never opens a story.
 import {RotateCcw,Trash2} from 'lucide-react';
 
-export type DeletedStory={storyId:string;title:string;deletedAt:string;kind:'generated'|'published'};
+export type DeletedStory={storyId:string;title:string;deletedAt:string;kind:'generated'};
 type Props={items:DeletedStory[];loading:boolean;error:string;busy:string;onRestore:(item:DeletedStory)=>void;onRetry:()=>void};
 export default function DeletedStories({items,loading,error,busy,onRestore,onRetry}:Props){
  return <div className="yu-deleted-stories">

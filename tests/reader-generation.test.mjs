@@ -374,9 +374,16 @@ test('deleting during a paid step retains its result but cannot resume or resurr
  const stored=db.prepare('SELECT document,state FROM reader_sessions WHERE id=?').get(id);assert.equal(JSON.parse(stored.document).draft.title,plan.title);assert.equal(JSON.parse(stored.document).usage.find(item=>item.step==='plan').requestId,'paid');assert.notEqual(stored.state,'running');
  await assert.rejects(advanceStory(repo,g,'alice',id,0),e=>e.status===404);assert.equal((await repo.list('alice')).length,0);
 });
-test('removing a shared sample affects only that reader and retains the published original',async()=>{
+test('retired studio records are retained on disk but cannot enter current reader library actions',async()=>{
  const {repo,db}=setup();db.prepare("INSERT INTO stories(id,title,summary,book_id,theme,status,pages,reflection,source_text,source_url,adaptation_note,checks,created_at,updated_at) VALUES('shared','样篇','','liaozhai','','published','[]','','','','','{}','2026-01-01','2026-01-01')").run();
- await repo.remove('shared','alice');assert.equal((await repo.deletions('alice'))[0].storyId,'shared');assert.equal((await repo.deletions('bob')).length,0);assert.equal(db.prepare("SELECT status FROM stories WHERE id='shared'").get().status,'published');
+ const before=db.prepare("SELECT * FROM stories WHERE id='shared'").get();
+ for(const owner of ['alice','bob']){
+  await assert.rejects(repo.remove('shared',owner),e=>e.status===404);
+  await assert.rejects(repo.restore('shared',owner),e=>e.status===404);
+  await assert.rejects(repo.favorite('shared',owner,true),e=>e.status===404);
+  assert.deepEqual(await repo.list(owner),[]);assert.deepEqual(await repo.deletions(owner),[]);
+ }
+ assert.deepEqual(db.prepare("SELECT * FROM stories WHERE id='shared'").get(),before);
 });
 test('restoring preserves content and progress without reactivating deleted generation',async()=>{
  const {repo,db}=setup(),id=crypto.randomUUID(),g=fake();await repo.create(id,'alice',selection);
@@ -390,10 +397,13 @@ test('restoring preserves content and progress without reactivating deleted gene
  await repo.restore(id,'alice');assert.equal((await repo.get(id,'alice')).state,'failed');assert.deepEqual(g.calls,['plan','image:0']);
  await assert.rejects(repo.restore(crypto.randomUUID(),'alice'),e=>e.status===404);
 });
-test('restoring a shared story leaves other readers deletion markers in place',async()=>{
- const {repo,db}=setup();db.prepare("INSERT INTO stories(id,title,summary,book_id,theme,status,pages,reflection,source_text,source_url,adaptation_note,checks,created_at,updated_at) VALUES('shared','样篇','','liaozhai','','published','[]','','','','','{}','2026-01-01','2026-01-01')").run();
- await repo.remove('shared','alice');await repo.remove('shared','bob');await repo.restore('shared','alice');
- assert.equal((await repo.deletions('alice')).length,0);assert.equal((await repo.deletions('bob')).length,1);assert.equal(db.prepare("SELECT status FROM stories WHERE id='shared'").get().status,'published');
+test('restoring a current story leaves the other owner’s deletion markers untouched',async()=>{
+ const {repo}=setup(),alice=crypto.randomUUID(),bob=crypto.randomUUID();
+ await repo.create(alice,'alice',selection);await repo.create(bob,'bob',selection);
+ await repo.remove(alice,'alice');await repo.remove(bob,'bob');await repo.restore(alice,'alice');
+ assert.equal((await repo.deletions('alice')).length,0);assert.equal((await repo.deletions('bob'))[0].storyId,bob);
+ await assert.rejects(repo.restore(bob,'alice'),e=>e.status===404);
+ assert.equal((await repo.deletions('bob')).length,1);
 });
 
 // Follow preparation through real SQLite, including edits made while art inference is running.

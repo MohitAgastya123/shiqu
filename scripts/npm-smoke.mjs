@@ -163,8 +163,7 @@ try {
   const response = await request(origin), html = await response.text(); assert.equal(response.status, 200); assert.match(html, /<html/);
   const asset = html.match(/(?:src|href)="(\/assets\/[^" ]+\.js)"/)?.[1]; assert.ok(asset, 'Built reader JS must be referenced.');
   assert.equal((await request(origin + asset)).status, 200);
-  assert.equal((await request(origin + '/api/books')).status, 200);
-  for (const endpoint of ['/api/stories','/api/me/progress','/api/reader/sessions']) assert.deepEqual(await (await request(origin + endpoint)).json(), []);
+  for (const endpoint of ['/api/reader/sessions','/api/reader/deletions']) assert.deepEqual(await (await request(origin + endpoint)).json(), []);
   assert.equal((await (await request(origin + '/api/reader/status')).json()).configured, false);
   const foreignHostStatus = await new Promise((resolve, reject)=>{
     const request = get(origin, {headers:{Host:'foreign.example'}}, response=>{response.resume();resolve(response.statusCode);});
@@ -172,12 +171,11 @@ try {
     request.on('error', reject);
   });
   assert.equal(foreignHostStatus, 403);
-  assert.equal((await request(origin + '/api/admin/stories', {method:'POST',headers:{Origin:'https://foreign.example'}})).status, 403);
-  assert.equal((await request(origin + '/api/admin/stories', {method:'POST'})).status, 403);
-  const draft = await request(origin + '/api/admin/stories', {method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({title:'Survives npm cache cleanup',bookId:'zhuangzi',theme:'test',sourceText:'',sourceUrl:''})});
-  assert.equal(draft.status, 201); const saved = await draft.json();
-  await stop(); await start(bin, parameters);
-  const drafts = await (await request(origin + '/api/admin/stories')).json(); assert.equal(drafts[0].id, saved.id); assert.equal(drafts[0].title, saved.title);
+  assert.equal((await request(origin + '/api/reader/sessions', {method:'POST',headers:{Origin:'https://foreign.example'}})).status, 403);
+  assert.equal((await request(origin + '/api/reader/sessions', {method:'POST'})).status, 403);
+  const beforeRestart=await (await request(origin+'/api/reader/sessions')).json();
+  await stop(); await start(bin,parameters);
+  assert.deepEqual(await (await request(origin+'/api/reader/sessions')).json(),beforeRestart);
   await stop();
   // Env-file settings are used when no flag overrides them; shell variables still win over the file.
   await start(bin, ['--config','selected.env'], {PORT:String(port), SHIQU_BIND_IP:'127.0.0.1'});

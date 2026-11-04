@@ -1,6 +1,6 @@
 // Exercise real page selection and paid-dispatch boundaries with SQLite/files and controlled images.
 import test from 'node:test';import assert from 'node:assert/strict';import path from 'node:path';import {rm} from 'node:fs/promises';
-import {productionFixture,until,makePlan} from './fixtures/production.mjs';import {savedStory,star,unstar,owner} from './fixtures/book-reference.mjs';import {png,jpeg} from './fixtures/images.mjs';import {insertStory,makeStory} from './fixtures/story.mjs';
+import {productionFixture,until,makePlan} from './fixtures/production.mjs';import {savedStory,star,unstar,owner} from './fixtures/book-reference.mjs';import {png,jpeg} from './fixtures/images.mjs';
 const original={title:'测试原文',text:'人物采取行动，回应彼此，故事在实际结果处结束。',kind:'passage',url:'https://example.org/original',provider:'fixture',retrievedAt:'2026-11-01'};
 async function target(f,{bookId='红楼梦',length=3,images=[]}={}){
  const id=crypto.randomUUID(),doc={plan:makePlan(length),original,frameCountConfirmed:true,images,audio:[],usage:[]},now=new Date().toISOString();
@@ -28,7 +28,7 @@ test('no-star defaults and other-book isolation remain first-frame empty then ow
 
 test('restart keeps the selected bytes and legacy advance uses the same book reference',async t=>{
  const f=await productionFixture(t),source=await savedStory(f,{bytes:jpeg});await star(f,source.id);await f.restart();f.control.hold=false;const id=await target(f,{length:2});
- const response=await f.request(`sessions/${id}/advance`,'POST',{throughPage:0});assert.equal(response.status,200);assert.equal(f.control.calls.length,1);assert.equal(f.control.calls[0].reference,Buffer.from(jpeg).toString('base64'));assert.ok((await doc(f,id)).images[0]);
+ const response=await f.request(`sessions/${id}/advance`,'POST',{throughPage:0});assert.ok([200,202].includes(response.status));await until(async()=>!!(await doc(f,id)).images[0]);assert.equal(f.control.calls.length,1);assert.equal(f.control.calls[0].reference,Buffer.from(jpeg).toString('base64'));assert.ok((await doc(f,id)).images[0]);
 });
 
 test('a valid book reference can serve a later frame without loading its unused missing first-image file',async t=>{
@@ -42,8 +42,8 @@ test('missing snapshot blocks the model but cancellation is still possible',asyn
  const id=await target(f,{length:2});await f.demand(id);await until(async()=>(await f.read(id)).state==='failed');assert.equal(f.control.calls.length,0);assert.match((await f.read(id)).error,/参考图不可用/);assert.equal((await unstar(f,source.id,selected)).reference,null);
 });
 
-test('published local pages may supply references; unpublished stories cannot',async t=>{
- const f=await productionFixture(t),published=makeStory(2);published.bookId='红楼梦';published.pages[0].image='/api/media/test-0.jpg';await insertStory(f.app,published);await f.media.put('test-0.jpg',jpeg,{contentType:'image/jpeg'});
- await star(f,published.id);const id=await target(f,{length:2});f.control.hold=false;await f.demand(id);await until(async()=>(await f.read(id)).state==='completed');assert.equal(f.control.calls[0].reference,Buffer.from(jpeg).toString('base64'));
- await f.app.services.database.prepare("UPDATE stories SET status='draft' WHERE id=?").bind(published.id).run();assert.equal((await f.request(`library/${published.id}/reference`)).status,404);assert.equal((await f.json(`library/${id}/reference`)).reference,null);
+test('current stories may reference previously uploaded local pictures; deleted sources cannot',async t=>{
+ const f=await productionFixture(t),source=await savedStory(f,{image:'/api/media/test-0.jpg'});await f.media.put('test-0.jpg',jpeg,{contentType:'image/jpeg'});
+ await star(f,source.id);const id=await target(f,{length:2});f.control.hold=false;await f.demand(id);await until(async()=>(await f.read(id)).state==='completed');assert.equal(f.control.calls[0].reference,Buffer.from(jpeg).toString('base64'));
+ await f.json(`library/${source.id}`,'DELETE');assert.equal((await f.request(`library/${source.id}/reference`)).status,404);assert.equal((await f.json(`library/${id}/reference`)).reference,null);
 });

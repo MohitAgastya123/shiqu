@@ -1,4 +1,4 @@
-// Serve public assets and narrowly scoped historical artwork preserved in the local media store.
+// Serve the production API and public assets; saved media uses the API's media routes.
 import path from 'node:path';
 import {readFile,realpath,stat} from 'node:fs/promises';
 import {openDatabase} from './database.ts';
@@ -40,10 +40,6 @@ export function createApplication(options:{root:string;dataDirectory:string;vari
    if(!['GET','HEAD'].includes(request.method))return new Response('Method not allowed',{status:405});
    const pathname=decodeURIComponent(url.pathname);
    if(pathname.split('/').some(segment=>segment.startsWith('.')||segment.includes('\\')))return new Response('Not found',{status:404});
-   if(/^\/art\/(?:pear-(?:[1-9]|10)|dongguo-(?:[1-9]|[12][0-9]|30))\.png$/.test(pathname)){
-    const saved=await media.get('legacy-art/'+pathname.split('/').at(-1));
-    return saved?new Response(request.method==='HEAD'?null:saved.body,{headers:{'Content-Type':'image/png','X-Content-Type-Options':'nosniff','Cache-Control':'private, no-cache'}}):new Response('Not found',{status:404});
-   }
    const file=path.join(publicDirectory,pathname==='/'||pathname==='/read'?'index.html':pathname);
    let resolved,publicRoot;
    try{publicRoot=await realpath(publicDirectory);resolved=await realpath(file);}catch{return new Response('Not found',{status:404});}

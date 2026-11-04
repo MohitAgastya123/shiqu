@@ -52,7 +52,8 @@ test('upgrade removes old fields from stories, drafts, outlines, revision bases 
  const media=JSON.parse(await readFile(file,'utf8'));assert.deepEqual(media.value,{summary:'已有摘要。',text:'原文中出现 "hook" 文字，不改写。'});assert.deepEqual(await readFile(cache),cacheBefore);
  const after=row.document,mtime=(await stat(file)).mtimeMs;local.close();local=openDatabase(f.directory,process.cwd());assert.equal(local.sqlite.prepare('SELECT document FROM reader_sessions WHERE id=?').get(f.id).document,after);local.close();assert.equal((await stat(file)).mtimeMs,mtime);
  const app=createApplication({root:process.cwd(),dataDirectory:f.directory,variables:{SHIQU_AI_PROVIDER:'readonly'}});t.after(()=>app.close());
- const response=await app.handle(new Request('http://localhost/api/stories/'+saved.id));const body=await response.json();assert.equal(response.status,200);assert.equal(body.summary,'旧文字原样保留。');assert.equal(body.hook,undefined);
+ assert.equal((await app.handle(new Request('http://localhost/api/stories/'+saved.id))).status,404);
+ const response=await app.handle(new Request('http://localhost/api/reader/sessions/'+f.id));const body=await response.json();assert.equal(response.status,200);assert.equal(body.story.summary,plan.hook);assert.equal(body.story.hook,undefined);
 });
 
 test('an unsafe media backup blocks migration before writes and a repaired source retries safely',async t=>{

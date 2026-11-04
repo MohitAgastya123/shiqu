@@ -1,7 +1,6 @@
 // Resolve verified originals and canonical Wikisource chapters without inventing source text.
 import {Parser} from 'htmlparser2';
 import {Converter} from 'opencc-js';
-import {pearSource,sourceUrl as pearUrl} from './content.ts';
 import type {Selection} from './reader-model.ts';
 import type {OriginalSource,SourceResult,SourceFailure,SourceHint} from './reader-source-types.ts';
 import {verifiedPassages} from './reader-verified-passages.ts';
@@ -42,7 +41,6 @@ const caoText='魏武尝过曹娥碑下，杨修从，碑背上见题作“黄�
 export function verifiedPassage(selection:Selection,plan:SourceHint):OriginalSource|null{
  const {book}=sourceQuery(selection,plan),clues=normalize([plan.sourceReference,selection.storyTitle||'',plan.adaptationNote||'',...(plan.pages||[]).map(p=>p.caption)].join(' '));
  if(book==='世说新语'&&clues.includes('曹娥碑')&&(/杨修|杨脩/.test(clues)||clues.includes('绝妙好辞')))return {title:'《世说新语·捷悟》· 曹娥碑',text:caoText,url:'https://zh.wikisource.org/zh-hans/世說新語/捷悟',kind:'passage',provider:'维基文库',retrievedAt:new Date().toISOString()};
- if(book==='聊斋志异'&&normalize(plan.sourceReference).includes('种梨'))return {title:'《聊斋志异·种梨》',text:pearSource,url:pearUrl,kind:'passage',provider:'维基文库 · CC BY-SA 4.0',retrievedAt:new Date().toISOString()};
  const known=verifiedPassages.find(p=>p.book===book&&p.clues.every(clue=>clues.includes(clue)));
  if(known)return {title:known.title,text:known.text,url:known.url,kind:'passage',provider:'维基文库',retrievedAt:new Date().toISOString()};
  return null;

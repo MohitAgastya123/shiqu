@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import path from 'node:path';
 import {productionFixture} from './fixtures/production.mjs';
-import {insertStory} from './fixtures/story.mjs';
+import {insertReaderStory} from './fixtures/story.mjs';
 
 function withoutSaved({saved,...row}){return row;}
 test('pending and readable generated stories can be favorited without changing progress or starting generation',async t=>{
@@ -31,21 +31,20 @@ test('pending and readable generated stories can be favorited without changing p
  assert.equal(database.prepare('SELECT saved FROM reader_sessions WHERE id=?').get(id).saved,1);
 });
 
-test('published favorites preserve existing reading progress and reject cross-origin, deleted and malformed requests',async t=>{
+test('current favorites preserve existing reading progress and reject cross-origin, deleted and malformed requests',async t=>{
  const f=await productionFixture(t);
  const database=new DatabaseSync(path.join(f.dataDirectory,'shiqu.sqlite'));t.after(()=>database.close());
- await insertStory(f.app);
- const stories=await (await f.app.handle(new Request('http://localhost/api/stories'))).json(),id=stories[0].id;
+ const {id}=await insertReaderStory(f.app);
  const favorite=(saved,headers={})=>f.request(`library/${id}/favorite`,'POST',{saved},headers);
  assert.equal((await favorite(true)).status,200);
- database.prepare('UPDATE progress SET page=4,updated_at=? WHERE story_id=?').run('2026-10-28T10:00:00Z',id);
- const before=database.prepare('SELECT * FROM progress WHERE story_id=?').get(id);
+ database.prepare('UPDATE reader_sessions SET page=4,last_read_at=? WHERE id=?').run('2026-10-28T10:00:00Z',id);
+ const before=database.prepare('SELECT * FROM reader_sessions WHERE id=?').get(id);
  assert.equal((await favorite(false)).status,200);
- const after=database.prepare('SELECT * FROM progress WHERE story_id=?').get(id);
+ const after=database.prepare('SELECT * FROM reader_sessions WHERE id=?').get(id);
  assert.equal(after.saved,0);assert.deepEqual(withoutSaved(after),withoutSaved(before));
  assert.equal((await favorite(true,{Origin:'https://foreign.example'})).status,403);
  assert.equal((await favorite('true')).status,400);
- assert.equal(database.prepare('SELECT saved FROM progress WHERE story_id=?').get(id).saved,0);
+ assert.equal(database.prepare('SELECT saved FROM reader_sessions WHERE id=?').get(id).saved,0);
  await f.json(`library/${id}`,'DELETE');
  assert.equal((await favorite(true)).status,404);
  assert.equal((await f.request('library/missing/favorite','POST',{saved:true})).status,404);

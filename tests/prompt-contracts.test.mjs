@@ -7,7 +7,6 @@ import {selectionSchema} from '../lib/reader-model.ts';
 import {defaultProductionPrompt,normalizeProductionPrompt,titleDirection,storyScopeDirection,storyOpeningDirection,narrativeMeaningDirection,sourceFidelityDirection,storyboardDirection} from '../lib/reader-prompts.ts';
 import {legacyProductionDirection} from '../lib/reader-legacy-prompts.ts';
 import {legacyLocalReadingPrompt,legacyLocalScanJson} from '../lib/reader-local-contract.ts';
-import {studioPlanPrompt,studioImagePrompt} from '../lib/studio-prompts.ts';
 import {makePlan,makeReflectionCandidates,encoded} from './fixtures/production.mjs';
 
 const hash=value=>createHash('sha256').update(typeof value==='string'?value:JSON.stringify(value)).digest('hex');
@@ -157,15 +156,6 @@ test('all providers send the same stage-specific instructions, data and strict o
  assert.equal(get('theme-match').payload.theme,selection.theme);assert.equal(get('theme-match').payload.stories[0].text,original.text);assert.deepEqual(get('theme-match').schema.properties.matches.items.properties.verdict.enum,['yes','no']);
  assert.match(get('image').prompt,/reference data/);assert.match(get('image').prompt,/Scene 1:/);
  assert.match(get('image').instructions,/native image generation tool directly/);
-});
-
-test('legacy studio retains its own caption target, fixed art and independent ending',()=>{
- assert.match(studioPlanPrompt,/10页/);assert.match(studioPlanPrompt,/8至65字/);
- assert.doesNotMatch(studioPlanPrompt,/8至55字|90字硬上限/);
- assert.match(studioPlanPrompt,/米白纸、墨线与彩铅/);
- assert.match(studioPlanPrompt,/余味写给已经读完故事的人/);
- assert.match(studioPlanPrompt,/reflection 在故事后独立展示/);
- assert.match(studioImagePrompt(marker),/reference data/);
 });
 
 for(const provider of ['codex','gemini','openai'])test(`${provider}: story-specific acceptance criteria reach production, review and repairs with exact prompt captures`,async()=>{

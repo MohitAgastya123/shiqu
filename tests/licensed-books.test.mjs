@@ -2,7 +2,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';import path from 'node:path';import os from 'node:os';
 import {readFile,writeFile,mkdtemp,cp,rm,access} from 'node:fs/promises';import {createHash} from 'node:crypto';
 import {LocalBooks} from '../server/local-books.ts';import {licensedBookSpecs,loadLicensedCollection,parseKanripoChapter} from '../server/local-book-licensed.ts';
-import {hasSourceAnomaly} from '../server/local-source-quality.ts';import {pearSource,sourceUrl} from '../lib/content.ts';import {verifiedPassage} from '../lib/reader-source.ts';
+import {hasSourceAnomaly} from '../server/local-source-quality.ts';import {verifiedPassage} from '../lib/reader-source.ts';
 const catalog=JSON.parse(await readFile('data/library/catalog.json','utf8')),baseline=JSON.parse(await readFile('tests/fixtures/publication-source-baseline.json','utf8')),library=new LocalBooks(process.cwd()),choose=bookId=>({bookId,theme:'人情冷暖',length:8,voice:false});
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
 
@@ -52,7 +52,9 @@ test('replacement collections reject changed identities, extra files and a trunc
  }
 });
 
-test('the independently licensed historical Zhongli fallback remains available after changing demos',async()=>{
- const book=await library.book(choose('liaozhai')),s=book.sections[0],n=s.units.findIndex(u=>u.text==='種梨');assert.ok(n>=0);assert.equal(pearSource,s.units.slice(n+1,n+4).map(u=>u.text).join('\n\n'));assert.doesNotMatch(pearSource,/異史氏曰/);assert.equal(new URL(sourceUrl).searchParams.get('oldid'),'7908703');assert.ok(sourceUrl.endsWith('#種梨'));
- const known=verifiedPassage(choose('liaozhai'),{sourceReference:'《聊斋志异·种梨》',pages:[]});assert.equal(known.text,pearSource);assert.match(known.provider,/CC BY-SA 4.0/);
+test('the former demo source uses the selected library edition without a hardcoded fallback',async()=>{
+ const book=await library.book(choose('liaozhai')),section=book.sections[0],entry=section.units.findIndex(unit=>unit.text==='種梨');assert.ok(entry>=0);
+ const units=section.units.slice(entry+1,entry+4),original=library.resolve(book,{edition:book.edition,sectionId:section.id,firstUnit:units[0].id,lastUnit:units.at(-1).id});
+ assert.match(original.text,/有鄉人貨梨於市/);assert.doesNotMatch(original.text,/異史氏曰/);
+ assert.equal(verifiedPassage(choose('liaozhai'),{sourceReference:'《聊斋志异·种梨》',pages:[]}),null);
 });

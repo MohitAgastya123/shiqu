@@ -11,7 +11,7 @@ import {once} from 'node:events';
 import {createInterface} from 'node:readline';
 import {build} from 'esbuild';
 import {openDatabase} from '../server/database.ts';
-import {insertStory} from './fixtures/story.mjs';
+import {insertReaderStory} from './fixtures/story.mjs';
 import {desktopRemote} from '../server/desktop-remote.ts';
 import {startDesktopTunnel} from '../server/desktop-tunnel.ts';
 import {desktopSettings,startDesktop,desktopFailure} from '../server/desktop.ts';
@@ -29,14 +29,14 @@ test('public URLs gate every reader route; private fragment pairs into a distinc
  const bootstrap=await request(gate,'/connect');assert.equal(bootstrap.status,200);
  assert.match(bootstrap.headers.get('content-security-policy'),/default-src 'none'/);
  const html=await bootstrap.text();assert.ok(!html.includes(token));assert.match(html,/history.replaceState/);
- for(const route of ['/','/api/stories','/api/reader/library','/api/reader/media/private.png','/assets/app.js','/sw.js']){
+ for(const route of ['/','/api/reader/sessions','/api/reader/library','/api/reader/media/private.png','/assets/app.js','/sw.js']){
   const response=await request(gate,route);assert.equal(response.status,401);assert.equal(response.headers.get('cache-control'),'private, no-store');
  }
  assert.equal(seen.length,0);
  for(const body of ['not json',JSON.stringify({token:'wrong'}),JSON.stringify({token:42}),JSON.stringify({token:'x'.repeat(1000)})])assert.equal((await request(gate,'/connect',{method:'POST',headers:{Origin:publicOrigin},body})).status,401);
  const session=await cookie(gate,link);assert.match(session,/; Path=\/; Secure; HttpOnly; SameSite=Strict; Max-Age=/);assert.ok(!session.includes(token));
  const Cookie=session.split(';')[0];
- for(const route of ['/','/api/stories','/api/reader/media/private.png','/assets/app.js']){
+ for(const route of ['/','/api/reader/sessions','/api/reader/media/private.png','/assets/app.js']){
   const response=await request(gate,route,{headers:{Cookie}});assert.equal(response.status,200);assert.equal(response.headers.get('cache-control'),'private, no-store');
  }
  assert.equal((await request(gate,'/api/test',{method:'POST',headers:{Cookie,Origin:publicOrigin},body:'{}'})).status,200);
@@ -115,22 +115,22 @@ async function fixture(t){
  const root=await temporary(t);
  await cp('drizzle',path.join(root,'drizzle'),{recursive:true});await mkdir(path.join(root,'docker'));await cp('docker/seed.sql',path.join(root,'docker/seed.sql'));
  await mkdir(path.join(root,'dist/client'),{recursive:true});await writeFile(path.join(root,'dist/client/index.html'),'<html>temporary reader</html>');
- const saved=openDatabase(path.join(root,'library'),root);await insertStory({services:{db:saved.db}});saved.close();
+ const saved=openDatabase(path.join(root,'library'),root);await insertReaderStory({services:{database:saved.database}});saved.close();
  return {root,settings:desktopSettings.parse({dataDirectory:path.join(root,'library'),port:await port(),provider:'gemini',textModel:'test',imageModel:'test',codexPath:'',codexModel:'',codexHome:'',internetEnabled:true})};
 }
 test('tunnel entry pairs safely and helper exit clears public access while LAN survives',nativeOnly,async t=>{
  const f=await fixture(t),helper=await fake(t),updates=[];
  const runtime=await startDesktop({...f.settings,cloudflaredPath:helper.binary},'',f.root,{onStatus:status=>updates.push(status)});t.after(()=>runtime.stop());
  const info=await helper.info(),target=info.args[info.args.indexOf('--url')+1],headers={Host:new URL(publicOrigin).host,Origin:publicOrigin};
- assert.equal((await tunnelRequest(target+'/api/stories',{headers})).status,401);
+ assert.equal((await tunnelRequest(target+'/api/reader/sessions',{headers})).status,401);
  const token=new URL(runtime.status.publicUrl).hash.slice(1);
  const paired=await tunnelRequest(target+'/connect',{method:'POST',headers,body:JSON.stringify({token})});assert.equal(paired.status,200);
  const Cookie=paired.headers.get('set-cookie').split(';')[0];
- const stories=await (await tunnelRequest(target+'/api/stories',{headers:{...headers,Cookie}})).json();assert.equal(stories.length,1);
- const changed=await tunnelRequest(target+'/api/me/progress',{method:'POST',headers:{...headers,Cookie,'Content-Type':'application/json'},body:JSON.stringify({storyId:stories[0].id,page:2,saved:true})});assert.equal(changed.status,200);
+ const stories=await (await tunnelRequest(target+'/api/reader/sessions',{headers:{...headers,Cookie}})).json();assert.equal(stories.length,1);
+ const changed=await tunnelRequest(target+'/api/reader/sessions/'+stories[0].id+'/progress',{method:'POST',headers:{...headers,Cookie,'Content-Type':'application/json'},body:JSON.stringify({storyId:stories[0].id,page:2,saved:true})});assert.equal(changed.status,200);
  process.kill(info.pid,'SIGTERM');await until(()=>updates.length);
  assert.equal(runtime.status.publicUrl,'');assert.match(updates[0].internetError,/局域网仍可使用/);
- assert.equal((await fetch(runtime.status.url+'/api/stories')).status,200);
+ assert.equal((await fetch(runtime.status.url+'/api/reader/sessions')).status,200);
  await until(async()=>{try{await fetch(target);return false;}catch{return true;}});
  await runtime.stop();await assert.rejects(fetch(runtime.status.url));
 });
@@ -139,15 +139,15 @@ test('missing helper leaves direct local/LAN access running without pairing',nat
  let runtime=await startDesktop({...f.settings,cloudflaredPath:'/missing/cloudflared'},'',f.root);t.after(()=>runtime.stop());
  assert.equal(runtime.status.running,true);assert.equal(runtime.status.publicUrl,'');assert.match(runtime.status.internetError,/未找到 cloudflared/);assert.match(runtime.status.internetError,/无需配对 ID/);
  assert.equal((await fetch(runtime.status.url)).status,200);assert.equal(runtime.server.address().address,'0.0.0.0');
- const stories=await (await fetch(runtime.status.url+'/api/stories')).json();assert.equal(stories.length,1);assert.equal(new URL(runtime.status.url).hash,'');
+ const stories=await (await fetch(runtime.status.url+'/api/reader/sessions')).json();assert.equal(stories.length,1);assert.equal(new URL(runtime.status.url).hash,'');
  let lan=false;
  for(const url of runtime.status.phoneUrls){
   assert.equal(new URL(url).hash,'');assert.equal(new URL(url).pathname,'/');
-  try{const response=await fetch(url+'/api/stories',{signal:AbortSignal.timeout(1000)});if(response.ok){assert.equal(response.headers.get('set-cookie'),null);lan=true;break;}}catch{}
+  try{const response=await fetch(url+'/api/reader/sessions',{signal:AbortSignal.timeout(1000)});if(response.ok){assert.equal(response.headers.get('set-cookie'),null);lan=true;break;}}catch{}
  }
  if(runtime.status.phoneUrls.length)assert.equal(lan,true);
  const origin=runtime.status.url;
- assert.equal((await fetch(origin+'/api/me/progress',{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({storyId:stories[0].id,page:2,saved:true})})).status,200);
+ assert.equal((await fetch(origin+'/api/reader/sessions/'+stories[0].id+'/progress',{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({storyId:stories[0].id,page:2,saved:true})})).status,200);
  await runtime.stop();await assert.rejects(fetch(origin));
  runtime=await startDesktop({...f.settings,internetEnabled:false},'',f.root);assert.equal((await fetch(runtime.status.url)).status,200);
  assert.match(desktopFailure(new Error('raw-private-data')),/服务启动失败/);
@@ -158,7 +158,7 @@ test('helper exiting before readiness closes only the remote entry and retains L
  const runtime=await startDesktop({...f.settings,cloudflaredPath:helper.binary},'',f.root);t.after(()=>runtime.stop());
  assert.equal(runtime.status.running,true);assert.equal(runtime.status.publicUrl,'');assert.match(runtime.status.internetError,/本机和局域网仍可使用/);
  const info=await helper.info();assert.equal(alive(info.pid),false);await assert.rejects(access(info.args[info.args.indexOf('--config')+1]));
- await assert.rejects(fetch(info.args[info.args.indexOf('--url')+1]));assert.equal((await fetch(runtime.status.url+'/api/stories')).status,200);
+ await assert.rejects(fetch(info.args[info.args.indexOf('--url')+1]));assert.equal((await fetch(runtime.status.url+'/api/reader/sessions')).status,200);
 });
 test('parent EOF during tunnel startup cancels helper before native forced-stop deadline', {...nativeOnly,timeout:15000},async t=>{
  const f=await fixture(t),helper=await fake(t,{ready:false}),entry=path.join(f.root,'dist/server/desktop.js');
@@ -182,6 +182,6 @@ test('native JSON protocol reports tunnel disconnect and EOF stops the remaining
  const initial=JSON.parse((await ready)[0]);assert.ok(initial.publicUrl.startsWith(publicOrigin+'/connect#'));
  const info=await helper.info(),changed=once(lines,'line');process.kill(info.pid,'SIGTERM');const status=JSON.parse((await changed)[0]);
  assert.equal(status.publicUrl,'');assert.equal(status.running,true);assert.equal(status.url,initial.url);assert.match(status.internetError,/局域网/);
- assert.equal((await fetch(status.url+'/api/stories')).status,200);
+ assert.equal((await fetch(status.url+'/api/reader/sessions')).status,200);
  const exited=once(child,'exit');child.stdin.end();await exited;assert.equal(alive(info.pid),false);await assert.rejects(fetch(status.url));
 });

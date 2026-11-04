@@ -10,7 +10,7 @@ import {once} from 'node:events';
 import {createInterface} from 'node:readline';
 import {build} from 'esbuild';
 import {openDatabase} from '../server/database.ts';
-import {insertStory} from './fixtures/story.mjs';
+import {insertReaderStory} from './fixtures/story.mjs';
 import {desktopAccess} from '../server/desktop-access.ts';
 import {desktopSettings,desktopVariables,testDesktopProvider,startDesktop} from '../server/desktop.ts';
 import {ownDesktopData} from '../server/desktop-owner.ts';
@@ -21,23 +21,23 @@ async function fixture(t){
  const root=await mkdtemp(path.join(os.tmpdir(),'shiqu desktop test '));t.after(()=>rm(root,{recursive:true,force:true}));
  await cp('drizzle',path.join(root,'drizzle'),{recursive:true});await mkdir(path.join(root,'docker'));await cp('docker/seed.sql',path.join(root,'docker/seed.sql'));
  await mkdir(path.join(root,'dist/client'),{recursive:true});await writeFile(path.join(root,'dist/client/index.html'),'<html>desktop reader</html>');
- const saved=openDatabase(path.join(root,'personal library'),root);await insertStory({services:{db:saved.db}});saved.close();
+ const saved=openDatabase(path.join(root,'personal library'),root);await insertReaderStory({services:{database:saved.database}});saved.close();
  return {root,settings:{...settings(path.join(root,'personal library')),port:await port()}};
 }
 test('direct access needs no cookies and rejects foreign origins/hosts and native routes',async()=>{
  let calls=0;const gate=desktopAccess(async()=>{calls++;return Response.json({ok:true});},{hosts:['127.0.0.1:3000']});
  const request=(url,options={})=>gate.handle(new Request(url,options)),origin='http://127.0.0.1:3000';
- for(const route of ['/','/api/stories','/api/reader/media/private/0.png','/sw.js']){
+ for(const route of ['/','/api/reader/sessions','/api/reader/media/private/0.png','/sw.js']){
   const response=await request(origin+route);assert.equal(response.status,200);assert.equal(response.headers.get('set-cookie'),null);
  }
  assert.equal(calls,4);
- assert.equal((await request(origin+'/api/me/progress',{method:'POST',headers:{Origin:origin}})).status,200);
- assert.equal((await request('http://evil.example:3000/api/stories')).status,403);
- for(const method of ['GET','POST'])assert.equal((await request(origin+'/api/stories',{method,headers:{Origin:'http://evil.example'}})).status,403);
- assert.equal((await request(origin+'/api/stories',{method:'POST'})).status,403);
+ assert.equal((await request(origin+'/api/reader/sessions/sample/progress',{method:'POST',headers:{Origin:origin}})).status,200);
+ assert.equal((await request('http://evil.example:3000/api/reader/sessions')).status,403);
+ for(const method of ['GET','POST'])assert.equal((await request(origin+'/api/reader/sessions',{method,headers:{Origin:'http://evil.example'}})).status,403);
+ assert.equal((await request(origin+'/api/reader/sessions',{method:'POST'})).status,403);
  for(const route of ['/desktop','/desktop/settings','/desktop/pair','/desktop/session'])assert.equal((await request(origin+route)).status,404);
  const restarted=desktopAccess(async()=>Response.json({ok:true}),{hosts:['127.0.0.1:3000']});
- assert.equal((await restarted.handle(new Request(origin+'/api/stories'))).status,200);
+ assert.equal((await restarted.handle(new Request(origin+'/api/reader/sessions'))).status,200);
 });
 test('desktop settings reject unknown secrets/invalid models and isolate environment variables',()=>{
  const valid=settings(path.join(os.tmpdir(),'library'));desktopSettings.parse(valid);
@@ -71,14 +71,14 @@ test('desktop lifecycle preserves progress and direct access across restarts, de
  assert.equal((await fetch(origin)).status,200);
  assert.equal(running.status.publicUrl,'');
  assert.equal(running.server.address().address,'0.0.0.0');
- let lan=false;for(const link of running.status.phoneUrls){try{if((await fetch(link+'/api/stories',{signal:AbortSignal.timeout(1000)})).ok){lan=true;break;}}catch{}}
+ let lan=false;for(const link of running.status.phoneUrls){try{if((await fetch(link+'/api/reader/sessions',{signal:AbortSignal.timeout(1000)})).ok){lan=true;break;}}catch{}}
  if(running.status.phoneUrls.length)assert.equal(lan,true);
- const stories=await (await fetch(origin+'/api/stories')).json();assert.equal(stories.length,1);
- await fetch(origin+'/api/me/progress',{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({storyId:stories[0].id,page:3,saved:true})});
+ const stories=await (await fetch(origin+'/api/reader/sessions')).json();assert.equal(stories.length,1);
+ await fetch(origin+'/api/reader/sessions/'+stories[0].id+'/progress',{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({storyId:stories[0].id,page:3,saved:true})});
  await assert.rejects(startDesktop({...f.settings,port:await port()},'',f.root),/DATA_BUSY/);
- await running.stop();await assert.rejects(fetch(origin+'/api/stories'));
- running=await startDesktop(f.settings,'',f.root);assert.equal(running.status.url,origin);assert.equal((await fetch(origin+'/api/stories')).status,200);
- const progress=await (await fetch(origin+'/api/me/progress')).json();assert.equal(progress[0].page,3);assert.equal(progress[0].saved,1);
+ await running.stop();await assert.rejects(fetch(origin+'/api/reader/sessions'));
+ running=await startDesktop(f.settings,'',f.root);assert.equal(running.status.url,origin);assert.equal((await fetch(origin+'/api/reader/sessions')).status,200);
+ const progress=await (await fetch(origin+'/api/reader/sessions')).json();assert.equal(progress[0].page,3);assert.equal(progress[0].saved,true);
  await running.stop();
  for(const host of ['127.0.0.1','0.0.0.0']){
   const occupied=createServer();occupied.listen(f.settings.port,host);await once(occupied,'listening');
@@ -115,7 +115,7 @@ test('parent EOF kills active detached Codex groups before releasing the data di
  assert.ok(alive(pids.parent));assert.ok(alive(pids.descendant));
  child.stdin.end();await Promise.race([once(child,'exit'),new Promise((_,reject)=>{const timer=setTimeout(()=>reject(Error('EOF did not terminate Node')),10000);timer.unref();})]);await request;
  await until(()=>!alive(pids.parent)&&!alive(pids.descendant));
- await assert.rejects(fetch(url.origin+'/api/stories'));
+ await assert.rejects(fetch(url.origin+'/api/reader/sessions'));
  const release=await ownDesktopData(f.settings.dataDirectory);await release();
  assert.ok(!line.includes('GEMINI_API_KEY'));
 });

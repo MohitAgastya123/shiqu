@@ -12,7 +12,6 @@ import {useCallback, useEffect, useRef, useState} from 'react';
 import {ArrowLeft, ArrowRight, Bookmark, BookOpen, Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Compass, Feather, Leaf, List, Moon, Play, RotateCcw, ImageDown, Settings2, Sparkles, UserRound, X, Loader2, FileDown, FileArchive, RefreshCw, Trash2} from 'lucide-react';
 import {randomId, request} from './shared';
 import type {Story} from '@/lib/content';
-import {historicalBookTitle} from '@/lib/story-book';
 import type {GeneratedStory,Selection,SessionView} from '@/lib/reader-model';
 import {readerBooks,type ReaderBook} from '@/lib/reader-books';
 import {useStoryGeneration} from './useStoryGeneration';
@@ -46,7 +45,7 @@ import StoryPageSurface from './StoryPageSurface';
 import StoryEndingSurface from './StoryEndingSurface';
 import StoryFilmstrip from './StoryFilmstrip';
 import {createDragOffset} from './useDragOffset';
-import {keepSnapshot,sameSnapshot,shareRows} from '@/lib/reader-snapshots';
+import {keepSnapshot,shareRows} from '@/lib/reader-snapshots';
 import {newWheelGesture,wheelPageDirection,swipePageDirection} from '@/lib/reader-navigation';
 import './reader.css';
 
@@ -73,7 +72,8 @@ function initialReaderSelection():Selection{
 
 
 export default function Reader(){
- const [stories,setStories]=useState<Story[]>([]),[books,setBooks]=useState<Book[]>(choices),[progress,setProgress]=useState<Progress[]>([]);
+ const [progress,setProgress]=useState<Progress[]>([]);
+ const startupDeletions=useRef<Promise<DeletedStory[]>|null>(null);
  const authoritativeProgress=useRef<Progress[]>([]);
  const [shelfQuery,setShelfQuery]=useState(()=>{try{return localStorage.getItem('shiqu-shelf-query')||'';}catch{return '';}}),[shelfGrouping,setShelfGrouping]=useState<ShelfGrouping>(()=>{
   try{const saved=localStorage.getItem('shiqu-shelf-grouping');return shelfGroupings.find(option=>option.value===saved)?.value||'book';}catch{return 'book';}
@@ -120,7 +120,7 @@ export default function Reader(){
    return merged;
   });
  }
- const gen=useStoryGeneration(page,{onStory:(s,p,b)=>{if(deleted.current.has(s.id))return;setStory(old=>keepSnapshot(old,s));setStories(old=>old[0]&&sameSnapshot(old[0],s)?old:[s,...old.filter(x=>x.id!==s.id)]);if(p!==undefined){setPage(p);setSaved(!!b);}},onProgress:acceptServerProgress},tab==='shelf'&&!story&&!configure&&!favoriteBusy&&!deleting&&!restoring&&!shelfRefreshing);
+ const gen=useStoryGeneration(page,{onStory:(s,p,b)=>{if(deleted.current.has(s.id))return;setStory(old=>keepSnapshot(old,s));if(p!==undefined){setPage(p);setSaved(!!b);}},onProgress:acceptServerProgress},!loading&&tab==='shelf'&&!story&&!configure&&!favoriteBusy&&!deleting&&!restoring&&!shelfRefreshing);
  // Keep the same panel open when the first image arrives underneath it.
  useEffect(()=>{if(gen.active&&!story&&!configure&&!workflowTarget)setWorkflowTarget(gen.active.id);},[gen.active?.id,story?.id,configure,workflowTarget]);
  function openWorkflow(id:string){
@@ -128,11 +128,7 @@ export default function Reader(){
   if(story?.id!==id)setStory(null);
   if(gen.active?.id!==id)void gen.resume(id,story?.id===id?page:undefined).catch(error=>setWorkflowError(error instanceof Error?error.message:'制作流程暂时无法打开，请重试。'));
  }
- function openStorySettings(next:Story){
-  if(isGenerated(next)){openWorkflow(next.id);return;}
-  if(story?.id!==next.id)open(next);
-  setWorkflowTarget(null);setWorkflowError('');setSettings(true);
- }
+ function openStorySettings(next:Story){openWorkflow(next.id);}
  function closeWorkflow(){
   setWorkflowTarget(null);setWorkflowError('');
   if(!story){gen.leave();history.replaceState(null,'','/');}
@@ -144,7 +140,7 @@ export default function Reader(){
  // The id stays the same when the first image arrives, so a draft written before it survives.
  const historyOwner=story?.id||gen.active?.id;
  useEffect(()=>{setReviewHistoryId(null);},[historyOwner]);
- const revision=useStoryRevision(story?(isGenerated(story)?story.id:undefined):gen.active&&(!gen.active.intake||gen.active.intake.phase==='confirmed')?gen.active.id:undefined,async next=>{await switchVersion(next.id);});
+ const revision=useStoryRevision(story?story.id:gen.active&&(!gen.active.intake||gen.active.intake.phase==='confirmed')?gen.active.id:undefined,async next=>{await switchVersion(next.id);});
  async function switchVersion(id:string){
   const previous={story,page,saved,ended,drag:drag.get(),motion,seen:seen.current,session:session.current,workflowTarget};setWorkflowTarget(id);setWorkflowError('');setSettings(false);setSource(false);setRequirements(false);setScript(false);revision.setTab(null);setStory(null);setPage(0);setEnded(false);setSaved(false);setDrag(0);setMotion('forward');seen.current=new Set();session.current=randomId();gen.leave();
   try{await gen.resume(id,0,false,true);}catch{setPage(previous.page);setSaved(previous.saved);setEnded(previous.ended);setDrag(previous.drag);setMotion(previous.motion);seen.current=previous.seen;session.current=previous.session;setStory(previous.story);setWorkflowTarget(previous.workflowTarget);setWorkflowError('新版暂时无法打开，请重新加载制作流程。');void gen.refreshLibrary().catch(()=>{});notify('这个版本暂时无法打开，已保存的新版可从书架继续。');}
@@ -167,23 +163,33 @@ export default function Reader(){
  async function refreshShelf(){
   if(shelfRefreshing)return;setShelfRefreshing(true);
   try{
-   const [published,,serverProgress]:[Story[],unknown,Progress[]]=await Promise.all([request('stories'),gen.refreshLibrary(),request('me/progress')]);
-   setStories(old=>[...old.filter(s=>isGenerated(s)&&!deleted.current.has(s.id)),...published.filter(s=>!deleted.current.has(s.id))]);
-   acceptServerProgress(serverProgress);setLoadError('');
+   await gen.refreshLibrary();setLoadError('');
   }catch(error){notify(error instanceof Error?error.message:'书架刷新失败，请重试。');}
   finally{setShelfRefreshing(false);}
  }
 
- function track(kind:string,s:Story|null=story,index:number|null=null){if(!s||!visitor.current||!session.current)return;request(isGenerated(s)?'reader/sessions/'+s.id+'/events':'events','POST',{id:session.current+':'+s.id+':'+kind+(index===null?'':':'+index),visitor:visitor.current,session:session.current,storyId:s.id,kind,page:index,mode:'manual',cohort:'internal'}).catch(()=>{});}
- function remember(s:Story,index:number,isSaved:boolean){if(deleted.current.has(s.id))return;authoritativeProgress.current=reconcileReadingProgress(authoritativeProgress.current,[{storyId:s.id,page:index,saved:isSaved?1:0,updatedAt:new Date().toISOString()}]);setLastReadId(s.id);try{localStorage.setItem('shiqu-last-read',s.id);}catch{}setProgress(pr=>{const rows=[{storyId:s.id,page:index,saved:isSaved?1:0,updatedAt:new Date().toISOString()},...pr.filter(p=>p.storyId!==s.id)];localStorage.setItem('yiyu-reading',JSON.stringify(rows));return rows;});request(isGenerated(s)?'reader/sessions/'+s.id+'/progress':'me/progress','POST',{storyId:s.id,page:index,saved:isSaved}).catch(()=>{});}
- function open(s:Story,restart=false){if(deleted.current.has(s.id))return;setWorkflowTarget(null);setDrag(0);if(isGenerated(s))gen.resume(s.id,restart?0:undefined).catch(e=>notify(e.message));else gen.leave();setConfigure(false);setUnavailable('');const pr=progress.find(p=>p.storyId===s.id);const index=restart?0:Math.min(pr?.page||0,s.pages.length-1);setPage(index);setStory(s);setSaved(!!pr?.saved);setEnded(false);setMotion('forward');seen.current=new Set();session.current=randomId();history.replaceState(null,'','/read?id='+encodeURIComponent(s.id));track('start',s);window.scrollTo(0,0);}
+ function track(kind:string,s:Story|null=story,index:number|null=null){if(!s||!visitor.current||!session.current)return;request('reader/sessions/'+s.id+'/events','POST',{id:session.current+':'+s.id+':'+kind+(index===null?'':':'+index),visitor:visitor.current,session:session.current,storyId:s.id,kind,page:index,mode:'manual',cohort:'internal'}).catch(()=>{});}
+ function remember(s:Story,index:number,isSaved:boolean){if(deleted.current.has(s.id))return;authoritativeProgress.current=reconcileReadingProgress(authoritativeProgress.current,[{storyId:s.id,page:index,saved:isSaved?1:0,updatedAt:new Date().toISOString()}]);setLastReadId(s.id);try{localStorage.setItem('shiqu-last-read',s.id);}catch{}setProgress(pr=>{const rows=[{storyId:s.id,page:index,saved:isSaved?1:0,updatedAt:new Date().toISOString()},...pr.filter(p=>p.storyId!==s.id)];localStorage.setItem('yiyu-reading',JSON.stringify(rows));return rows;});request('reader/sessions/'+s.id+'/progress','POST',{storyId:s.id,page:index,saved:isSaved}).catch(()=>{});}
+ function open(s:Story,restart=false){if(deleted.current.has(s.id))return;setWorkflowTarget(null);setDrag(0);gen.resume(s.id,restart?0:undefined).catch(e=>notify(e.message));setConfigure(false);setUnavailable('');const pr=progress.find(p=>p.storyId===s.id);const index=restart?0:Math.min(pr?.page||0,s.pages.length-1);setPage(index);setStory(s);setSaved(!!pr?.saved);setEnded(false);setMotion('forward');seen.current=new Set();session.current=randomId();history.replaceState(null,'','/read?id='+encodeURIComponent(s.id));track('start',s);window.scrollTo(0,0);}
  function home(){setWorkflowTarget(null);setWorkflowError('');setDrag(0);gen.leave();setStory(null);setEnded(false);setSource(false);history.replaceState(null,'','/');}
  function backToShelf(){setSettings(false);setSource(false);setRequirements(false);setScript(false);revision.setTab(null);home();setTab('shelf');window.scrollTo({top:0,behavior:'instant'});}
  function turn(delta:number){if(!story)return;if(!ended&&page===0&&delta<0)return;if(ended){if(delta<0){setDrag(0);setPage(story.pages.length-1);setEnded(false);setMotion('back');}else if(delta>0)home();return;}if(delta>0&&!story.pages[page]?.image){notify('这一幅还在绘制，稍等一下。');return;}setMotion(delta>0?'forward':'back');if(page+delta>=story.pages.length){setEnded(true);if(seen.current.size===story.pages.length)track('complete');}else setPage(p=>Math.max(0,p+delta));}
  function goToPage(index:number){if(!story)return;setDrag(0);setMotion(index>page?'forward':'back');setEnded(false);setPage(Math.max(0,Math.min(index,story.pages.length-1)));}
  function choose(bookId:Selection['bookId']=selection.bookId,theme:Selection['theme']='原典故事'){setDiscoveryTarget(null);setSelection(s=>({...s,bookId,theme,productionPrompt:promptAfterThemeChange(s.productionPrompt,s.theme,theme),discovery:{mode:'auto'},storyTitle:undefined,source:undefined,discoverySources:undefined}));setConfigure(true);setUnavailable('');}
  useEffect(()=>{visitor.current=localStorage.getItem('yiyu-visitor')||randomId();localStorage.setItem('yiyu-visitor',visitor.current);try{setLargeText(localStorage.getItem('yiyu-large-text')==='1');}catch{}const installHandler=(e:Event)=>{e.preventDefault();setInstall(e);};window.addEventListener('beforeinstallprompt',installHandler);if('serviceWorker'in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});
- Promise.all([request('stories'),request('books'),request('me/progress').catch(()=>null),request('reader/deletions')]).then(([list,bookList,serverProgress,deletions])=>{setDeletedStories(deletions);const hidden:string[]=deletions.map((d:{storyId:string})=>d.storyId);hidden.forEach(id=>deleted.current.add(id));setDeletedIds([...deleted.current]);setStories(list.filter((s:Story)=>!deleted.current.has(s.id)));setBooks(choices);let local:Progress[]=[];try{local=JSON.parse(localStorage.getItem('yiyu-reading')||'[]');setLastReadId(localStorage.getItem('shiqu-last-read')||local[0]?.storyId||'');}catch{}authoritativeProgress.current=reconcileReadingProgress(authoritativeProgress.current,serverProgress||[]);const merged=reconcileReadingProgress(local,authoritativeProgress.current).filter(p=>!deleted.current.has(p.storyId));setProgress(old=>reconcileReadingProgress(mergeReadingProgress(old,merged),authoritativeProgress.current).filter(p=>!deleted.current.has(p.storyId)));localStorage.setItem('yiyu-reading',JSON.stringify(merged));const id=new URLSearchParams(location.search).get('id');const selected=list.find((s:Story)=>s.id===id);if(selected&&!deleted.current.has(selected.id)){const pr=merged.find(p=>p.storyId===id);setPage(Math.min(pr?.page||0,selected.pages.length-1));setSaved(!!pr?.saved);setStory(selected);session.current=randomId();track('start',selected);}else if(id&&!deleted.current.has(id)){gen.resume(id).catch(()=>setLoadError('这篇故事暂时无法打开。'));}}).catch(()=>setLoadError('故事暂时没有加载出来，请检查网络后再试。')).finally(()=>setLoading(false));return()=>{window.removeEventListener('beforeinstallprompt',installHandler);if(noticeTimer.current)clearTimeout(noticeTimer.current);};},[]);
+ let active=true;
+ startupDeletions.current??=request('reader/deletions');
+ startupDeletions.current.then(deletions=>{
+  if(!active)return;
+  setDeletedStories(deletions);deletions.forEach(item=>deleted.current.add(item.storyId));setDeletedIds([...deleted.current]);
+  let local:Progress[]=[];try{local=JSON.parse(localStorage.getItem('yiyu-reading')||'[]');setLastReadId(localStorage.getItem('shiqu-last-read')||local[0]?.storyId||'');}catch{}
+  const merged=reconcileReadingProgress(local,authoritativeProgress.current).filter(p=>!deleted.current.has(p.storyId));
+  setProgress(old=>reconcileReadingProgress(mergeReadingProgress(old,merged),authoritativeProgress.current).filter(p=>!deleted.current.has(p.storyId)));
+  try{localStorage.setItem('yiyu-reading',JSON.stringify(merged));}catch{}
+  const id=new URLSearchParams(location.search).get('id');
+  if(id&&!deleted.current.has(id))gen.resume(id).catch(()=>{if(active)setLoadError('这篇故事暂时无法打开。');});
+ }).catch(()=>{if(active)setLoadError('故事暂时没有加载出来，请检查网络后再试。');}).finally(()=>{if(active)setLoading(false);});
+ return()=>{active=false;window.removeEventListener('beforeinstallprompt',installHandler);if(noticeTimer.current)clearTimeout(noticeTimer.current);};},[]);
  useEffect(()=>{if(story){if(!session.current)session.current=randomId();track('start',story);}},[story?.id]);
  useEffect(()=>{if(!story||ended||!story.pages[page]?.image)return;seen.current.add(page);track('page',story,page);remember(story,page,saved);const next=story.pages[page+1]?.image;if(next){const img=new Image();img.src=next;}},[story?.id,story?.pages[page]?.image,page,ended]);
  useEffect(()=>{function key(e:KeyboardEvent){if(!story||source||settings||workflowTarget||configure||sceneList)return;if(e.key==='ArrowRight'||e.key==='ArrowDown'){e.preventDefault();turn(1);}if(e.key==='ArrowLeft'||e.key==='ArrowUp'){e.preventDefault();turn(-1);}if(e.key==='Escape')home();}window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key);},[story,page,ended,source,settings,workflowTarget,configure,sceneList]);
@@ -290,9 +296,9 @@ export default function Reader(){
   if(!deleteTarget||deleting)return;const target=deleteTarget;setDeleting(true);setDeleteError('');
   try{
    const result=await request('reader/library/'+encodeURIComponent(target.id),'DELETE');
-   const record:DeletedStory={storyId:target.id,title:target.title,deletedAt:result.deletedAt,kind:gen.sessions.some(s=>s.id===target.id)?'generated':'published'};
+   const record:DeletedStory={storyId:target.id,title:target.title,deletedAt:result.deletedAt,kind:'generated'};
    setDeletedStories(rows=>[record,...rows.filter(row=>row.storyId!==record.storyId)]);setUndoTarget(record);setRecoveryError('');setToast('');
-   deleted.current.add(target.id);setDeletedIds([...deleted.current]);gen.remove(target.id);setStories(old=>old.filter(s=>s.id!==target.id));
+   deleted.current.add(target.id);setDeletedIds([...deleted.current]);gen.remove(target.id);
    setProgress(old=>{const rows=old.filter(p=>p.storyId!==target.id);try{localStorage.setItem('yiyu-reading',JSON.stringify(rows));}catch{}return rows;});
    if(lastReadId===target.id){setLastReadId('');try{localStorage.removeItem('shiqu-last-read');}catch{}}
    try{const cache=await caches.open('yiyu-offline-v1');await cache.delete('/offline-data/'+target.id);}catch{}
@@ -315,10 +321,9 @@ export default function Reader(){
   try{
    pendingRestores.current.set(target.storyId,target);
    await request('reader/library/'+encodeURIComponent(target.storyId)+'/restore','POST');
-   const [published,sessions,serverProgress]:[Story[],Awaited<ReturnType<typeof gen.refreshLibrary>>,Progress[]]=await Promise.all([request('stories'),gen.refreshLibrary(target.kind==='generated'?target.storyId:undefined),request('me/progress')]);
+   const sessions=await gen.refreshLibrary(target.storyId);
    deleted.current.delete(target.storyId);setDeletedIds([...deleted.current]);
-   setStories(published.filter(s=>!deleted.current.has(s.id)));
-   acceptServerProgress([...serverProgress,...sessions.map(s=>({storyId:s.id,page:s.page,saved:s.saved?1:0,updatedAt:s.lastReadAt||s.createdAt}))]);
+   acceptServerProgress(sessions.map(s=>({storyId:s.id,page:s.page,saved:s.saved?1:0,updatedAt:s.lastReadAt||s.createdAt})));
    pendingRestores.current.delete(target.storyId);
    setDeletedStories(rows=>rows.filter(row=>row.storyId!==target.storyId));setUndoTarget(old=>old?.storyId===target.storyId?null:old);
    notify('已恢复《'+target.title+'》，可从书架继续。');
@@ -339,11 +344,11 @@ export default function Reader(){
  }
  // Session lists contain only the newest submission; cached artwork must not resurrect older editions.
  const latestIds=new Set(gen.sessions.map(session=>session.id));
- const allStories=[...stories.filter(s=>!isGenerated(s)),...gen.sessions.flatMap(s=>s.story?[s.story]:[])].filter(s=>!deletedIds.includes(s.id));
+ const allStories=gen.sessions.flatMap(s=>s.story?[s.story]:[]).filter(s=>!deletedIds.includes(s.id));
  const heroes=recentHeroes(allStories,deletedIds.includes(lastReadId)?'':lastReadId,progress.filter(p=>!deletedIds.includes(p.storyId)));
- const bookName=(s:Pick<Story,'id'|'bookId'>)=>(s.bookId==='other'?gen.sessions.find(session=>session.id===s.id)?.selection.customBook:'')||books.find(b=>b.id===s.bookId)?.title||historicalBookTitle(s.bookId)||s.bookId;
+ const bookName=(s:Pick<Story,'id'|'bookId'>)=>(s.bookId==='other'?gen.sessions.find(session=>session.id===s.id)?.selection.customBook:'')||choices.find(b=>b.id===s.bookId)?.title||s.bookId;
  const current=story?.pages[page];
- const activeProgress=mergeReadingProgress(progress,gen.sessions.map(s=>({storyId:s.id,page:s.page,saved:s.saved?1:0,updatedAt:s.lastReadAt||s.createdAt}))).filter(p=>!deletedIds.includes(p.storyId)&&(!stories.some(s=>s.id===p.storyId&&isGenerated(s))||latestIds.has(p.storyId)));
+ const activeProgress=mergeReadingProgress(progress,gen.sessions.map(s=>({storyId:s.id,page:s.page,saved:s.saved?1:0,updatedAt:s.lastReadAt||s.createdAt}))).filter(p=>!deletedIds.includes(p.storyId)&&latestIds.has(p.storyId));
  const readingSession=story?(gen.active?.id===story.id?gen.active:gen.sessions.find(session=>session.id===story.id)):undefined;
  const workflowSession=workflowTarget?(gen.active?.id===workflowTarget?gen.active:null):settings?readingSession:!story?gen.active:null;
  const scriptStory=story||gen.active?.story||null;
@@ -401,7 +406,7 @@ export default function Reader(){
  <main className="yu-home">
  {tab==='discover'?<>
  <section className="yu-intro"><div><p className="yu-kicker">把片刻，留给一个好故事</p><h1>今天，想遇见<br/>什么<span>故事</span>？</h1></div><span className="yu-stamp">古意<br/>新生</span></section>
- <RecentStories key={heroes.map(h=>h.story.id).join('|')} items={heroes} loading={loading} bookName={bookName} onOpen={open}/>
+ <RecentStories key={heroes.map(h=>h.story.id).join('|')} items={heroes} loading={loading||gen.libraryLoading} bookName={bookName} onOpen={open}/>
  <button className="yu-new-story-link" onClick={()=>choose()}><Sparkles size={16}/><span>生成我的故事</span><ArrowRight size={16}/></button>
  <section className="yu-section"><div className="yu-section-title"><h2>从一本书开始</h2><span>熟悉的经典，新的相遇</span></div><div className="yu-books">{choices.map((b,i)=><button key={b.id} onClick={()=>choose(b.id)} aria-label={'选择'+b.title}><span className={'yu-book-cover book-'+(i%3)}><span className="yu-book-border"/><small>{b.era} · {b.author}</small><strong className={b.title.length>5?'yu-book-title-long':undefined}>{b.title}</strong><i>{b.genre}</i><span className="yu-book-ornament">{i===0?<Moon size={44} strokeWidth={.7}/>:i===1?<Leaf size={52} strokeWidth={.7}/>:<Feather size={48} strokeWidth={.7}/>}</span></span><strong>{b.title}</strong><small>{b.note}</small></button>)}</div></section>
  <section className="yu-section yu-theme-section"><div className="yu-section-title"><h2>或者，跟着心情走</h2><Sparkles size={17}/></div><div className="yu-moods">{moods.map((m,i)=><button key={m} className={selection.theme===m?'selected':''} onClick={()=>{choose(selection.bookId,m);}}>{i===0&&<Sparkles size={13}/>} {m}</button>)}</div></section>

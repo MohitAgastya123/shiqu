@@ -8,8 +8,7 @@ const serif='"Noto Serif SC", "Songti SC", "STSong", serif';
 const sans='"Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", sans-serif';
 export function storySourceReference(story:Story){
  if('sourceReference'in story&&typeof story.sourceReference==='string')return story.sourceReference;
- if(story.bookId==='zhongshanlang')return '《中山狼传》·马中锡《东田文集》';
- return story.id==='zhongli'&&story.bookId==='liaozhai'?'《聊斋志异·种梨》':'原典见出处链接';
+ return '原典见出处链接';
 }
 export function pdfFilename(title:string){return (title.replace(/[<>:"/\\|?*\u0000-\u001f]/g,'').trim().slice(0,60)||'拾趣故事')+'-拾趣.pdf';}
 export function assertPdfReady(story:Story){if(!story.pages.length||story.pages.some(page=>!page.image))throw Error('等所有画面生成完成后，就能导出完整 PDF。');}

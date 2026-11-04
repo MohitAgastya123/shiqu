@@ -27,7 +27,7 @@ test('deleted generated stories retain titles, favorite flags and exact checkpoi
  assert.deepEqual([f.control.calls.length,f.control.plans.length,f.control.recommendations.length],[0,0,0]);
 });
 
-test('recovery metadata does not expose foreign generated titles and supports published and unfinished stories',async t=>{
+test('recovery metadata does not expose foreign generated titles and supports unfinished stories while excluding retired studio records',async t=>{
  const f=await productionFixture(t),pending=await f.create(),foreign=await f.create();
  const db=new DatabaseSync(path.join(f.dataDirectory,'shiqu.sqlite'));t.after(()=>db.close());
  const owner=db.prepare('SELECT user_id FROM reader_sessions WHERE id=?').get(pending).user_id;
@@ -35,14 +35,14 @@ test('recovery metadata does not expose foreign generated titles and supports pu
  assert.equal((await f.request(`library/${foreign}/restore`,'POST')).status,404);
  await f.json(`library/${pending}`,'DELETE');
  assert.equal((await f.json('deletions'))[0].title,'庄周梦蝶');
- await insertStory(f.app);
- const stories=await (await f.app.handle(new Request('http://localhost/api/stories'))).json(),sample=stories[0];
- await f.json(`library/${sample.id}`,'DELETE');
- let rows=await f.json('deletions');assert.equal(rows.find(row=>row.storyId===sample.id).title,sample.title);assert.equal(rows.find(row=>row.storyId===sample.id).kind,'published');
+ const sample=await insertStory(f.app);
+ assert.equal((await f.request(`library/${sample.id}`,'DELETE')).status,404);
+ db.prepare("INSERT INTO library_deletions(user_id,story_id,kind,deleted_at) VALUES(?,?,'published','2026-10-29')").run(owner,sample.id);
+ let rows=await f.json('deletions');assert.equal(rows.some(row=>row.storyId===sample.id),false);
  db.prepare(`INSERT INTO library_deletions(user_id,story_id,kind,deleted_at) VALUES(?,?,'generated','2026-10-29')`).run(owner,foreign);
  rows=await f.json('deletions');assert.equal(rows.find(row=>row.storyId===foreign).title,'未命名故事');
  assert.equal(JSON.stringify(rows).includes('私有故事'),false);
- await f.json(`library/${sample.id}/restore`,'POST');
+ assert.equal((await f.request(`library/${sample.id}/restore`,'POST')).status,404);
  assert.equal((await f.json('deletions')).some(row=>row.storyId===sample.id),false);
  assert.equal((await f.request('library/missing/restore','POST')).status,404);
 });

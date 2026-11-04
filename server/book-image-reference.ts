@@ -27,10 +27,7 @@ export class BookImageReferences{
    const selection=JSON.parse(row.selection),doc=JSON.parse(row.document),image=doc.plan?.pages[page]?doc.images[page]||'':'';
    return {bookKey:bookKey(selection.bookId,selection.customBook),image,validPage:!!doc.plan?.pages[page],guard:`EXISTS(SELECT 1 FROM reader_sessions WHERE id=? AND user_id=? AND selection=? AND json_extract(document,?)=? AND ${visible})`,values:[id,this.owner,row.selection,`$.images[${page}]`,image,id,this.owner]};
   }
-  const story=await this.database.prepare(`SELECT book_id,pages FROM stories WHERE id=? AND status='published' AND ${visible}`).bind(id,id,this.owner).first<{book_id:string;pages:string}>();
-  if(!story)throw new ReaderError(404,'这篇故事不在你的书架里');
-  const image=JSON.parse(story.pages)[page]?.image||'';
-  return {bookKey:bookKey(story.book_id),image,validPage:!!JSON.parse(story.pages)[page],guard:`EXISTS(SELECT 1 FROM stories WHERE id=? AND status='published' AND book_id=? AND json_extract(pages,?)=? AND ${visible})`,values:[id,story.book_id,`$[${page}].image`,image,id,this.owner]};
+  throw new ReaderError(404,'这篇故事不在你的书架里');
  }
  private async selected(key:string){
   const row=await this.database.prepare('SELECT * FROM book_image_references WHERE owner_id=? AND book_key=?').bind(this.owner,key).first<SavedReference>();
@@ -53,7 +50,6 @@ export class BookImageReferences{
   if(!source.image)throw new ReaderError(400,'这幅画面还没有图片，暂时不能设为参考图。');
   let key=referenceImageKey(id,source.image);
   if(!key&&/^\/api\/media\/[a-zA-Z0-9_-][a-zA-Z0-9._-]*$/.test(source.image))key=source.image.slice('/api/media/'.length);
-  if(!key&&/^\/art\/(?:pear-(?:[1-9]|10)|dongguo-(?:[1-9]|[12][0-9]|30))\.png$/.test(source.image))key='legacy-art/'+source.image.slice('/art/'.length);
   if(!key)throw new ReaderError(400,'只能选择本地已保存的故事图片。');
   const object=await this.media.get(key).catch(()=>{throw new ReaderError(503,'图片暂时无法读取，请稍后重试。');});
   if(!object)throw new ReaderError(400,'这幅图片文件已丢失，请选择其他画面。');

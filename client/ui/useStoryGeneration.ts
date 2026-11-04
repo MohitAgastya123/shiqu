@@ -17,6 +17,8 @@ export function useStoryGeneration(page:number,callbacks:Callbacks,watchShelf=fa
  const currentPage=useRef(page);currentPage.current=page;
  const [sessions,setSessions]=useState<SessionView[]>([]),[active,setActive]=useState<SessionView|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[connected,setConnected]=useState(false),[wake,setWake]=useState(0);
  const librarySessions=useRef<SessionView[]>([]);
+ // StrictMode replays startup effects; both runs share one initial library request.
+ const startupLibrary=useRef<Promise<SessionView[]>|null>(null),libraryReadAt=useRef(0);
  const [libraryLoading,setLibraryLoading]=useState(true),[libraryRefreshing,setLibraryRefreshing]=useState(false),[libraryError,setLibraryError]=useState('');
  const live=useRef(true),libraryRead=useRef(0),libraryChanges=useRef(0),refreshingReads=useRef(0);
  const removed=useRef(new Set<string>());
@@ -34,7 +36,7 @@ export function useStoryGeneration(page:number,callbacks:Callbacks,watchShelf=fa
   if(removed.current.has(s.id)||!submitted&&!librarySessions.current.some(row=>row.id===s.id))return;
   libraryChanges.current++;librarySessions.current=shareRows(librarySessions.current,latestStoryVersions([s,...librarySessions.current.filter(x=>x.id!==s.id)]),row=>row.id);setSessions(librarySessions.current);
  }
- useEffect(()=>{live.current=true;request('reader/status').then(s=>{if(live.current)setConnected(s.configured);}).catch(()=>{});refreshLibrary().catch(()=>{}).finally(()=>{if(live.current)setLibraryLoading(false);});return()=>{live.current=false;libraryRead.current++;id.current='';};},[]);
+ useEffect(()=>{live.current=true;request('reader/status').then(s=>{if(live.current)setConnected(s.configured);}).catch(()=>{});startupLibrary.current??=request('reader/sessions');refreshLibrary(undefined,()=>true,false,startupLibrary.current).catch(()=>{}).finally(()=>{if(live.current)setLibraryLoading(false);});return()=>{live.current=false;libraryRead.current++;id.current='';};},[]);
  async function start(selection:Selection,intake=false){
   passive.current=false;
   const signature=JSON.stringify([selection,intake]);
@@ -160,17 +162,17 @@ export function useStoryGeneration(page:number,callbacks:Callbacks,watchShelf=fa
  }
  function leave(){id.current='';setActive(null);setBusy(false);setError('');}
  function remove(sessionId:string){libraryChanges.current++;removed.current.add(sessionId);if(id.current===sessionId)leave();librarySessions.current=librarySessions.current.filter(s=>s.id!==sessionId);setSessions(librarySessions.current);}
- async function refreshLibrary(restoredId?:string,isCurrent:()=>boolean=()=>true,background=false){
+ async function refreshLibrary(restoredId?:string,isCurrent:()=>boolean=()=>true,background=false,snapshot?:Promise<SessionView[]>){
   // A recovery reads snapshots only; resume() would create viewer demand and can dispatch generation.
   const read=++libraryRead.current,changes=libraryChanges.current;
   // Background snapshots keep cards current without locking the shelf's manual actions.
   if(!background){refreshingReads.current++;setLibraryRefreshing(true);}
   try{
-   const [rows,restored]:[SessionView[],SessionView|null]=await Promise.all([request('reader/sessions'),restoredId?request('reader/sessions/'+encodeURIComponent(restoredId)):Promise.resolve(null)]);
+   const [rows,restored]:[SessionView[],SessionView|null]=await Promise.all([snapshot||request('reader/sessions'),restoredId?request('reader/sessions/'+encodeURIComponent(restoredId)):Promise.resolve(null)]);
    if(restored&&live.current&&read===libraryRead.current)removed.current.delete(restored.id);
    const visible=rows.filter(s=>!removed.current.has(s.id));
    if(live.current&&isCurrent()&&read===libraryRead.current&&changes===libraryChanges.current){
-    librarySessions.current=shareRows(librarySessions.current,visible,row=>row.id);setSessions(librarySessions.current);setLibraryError('');
+    libraryReadAt.current=Date.now();librarySessions.current=shareRows(librarySessions.current,visible,row=>row.id);setSessions(librarySessions.current);setLibraryError('');
     cb.current.onProgress(visible.map(s=>({storyId:s.id,page:s.page,saved:s.saved?1:0,updatedAt:s.lastReadAt||s.createdAt})));
    }
    return visible;
@@ -185,7 +187,8 @@ export function useStoryGeneration(page:number,callbacks:Callbacks,watchShelf=fa
    if(stopped||inFlight||document.visibilityState==='hidden')return;
    inFlight=true;try{await refresh.current(undefined,()=>!stopped,true);}catch{/* Keep saved cards visible; expose the retry beside them. */}finally{inFlight=false;}
   }
-  void update();const timer=setInterval(()=>void update(),4000);
+  // A fresh startup snapshot needs no immediate second database read.
+  if(Date.now()-libraryReadAt.current>=4000)void update();const timer=setInterval(()=>void update(),4000);
   window.addEventListener('focus',update);document.addEventListener('visibilitychange',update);
   return()=>{stopped=true;clearInterval(timer);window.removeEventListener('focus',update);document.removeEventListener('visibilitychange',update);};
  },[watchShelf,libraryLoading,active?.id]);

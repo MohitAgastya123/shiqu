@@ -115,6 +115,6 @@ test('read-only mode never starts queued work and rejects historical generation 
  const saved=await app.services.production.queue.job(jobId);assert.equal(saved.state,'queued');assert.equal(saved.attempts,0);
  assert.equal((await app.services.generation.status()).configured,false);
  await assert.rejects(app.services.generation.suggestions(selection,[]));
- const response=await app.handle(new Request('http://localhost/api/admin/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({storyId:'unused',kind:'text',requestId:crypto.randomUUID()})}));assert.equal(response.status,403);
+ const response=await app.handle(new Request('http://localhost/api/admin/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({storyId:'unused',kind:'text',requestId:crypto.randomUUID()})}));assert.equal(response.status,404);
  assert.equal((await app.services.database.prepare('SELECT COUNT(*) AS n FROM production_jobs WHERE attempts>0').first()).n,0);
 });

@@ -14,8 +14,7 @@ import {ReaderRepository} from '../lib/reader-repository.ts';
 import {LocalBooks} from '../server/local-books.ts';
 import {importLegacy} from '../server/import-legacy.ts';
 import {stories} from '../db/schema.ts';
-import {eq} from 'drizzle-orm';
-import {makeStory} from './fixtures/story.mjs';
+import {makeStory,insertReaderStory} from './fixtures/story.mjs';
 
 async function fixture(t){
  const root=await mkdtemp(path.join(os.tmpdir(),'shiqu node test '));t.after(()=>rm(root,{recursive:true,force:true}));
@@ -28,25 +27,21 @@ async function fixture(t){
 function request(app,url,method='GET',value,headers={}){
  return app.handle(new Request('http://localhost'+url,{method,headers:{...(value?{'Content-Type':'application/json'}:{}),...headers},body:value?JSON.stringify(value):undefined}));
 }
-test('SQLite initialization and seed are idempotent and preserve edited rows and raw SQL checkpoints',async t=>{
+test('SQLite reopen preserves current reader checkpoints, media, owner identity and recovery',async t=>{
  const options=await fixture(t);let app=createApplication(options);
- assert.deepEqual(await (await request(app,'/api/stories')).json(),[]);
- const initial=makeStory();await app.services.db.insert(stories).values({...initial,pages:JSON.stringify(initial.pages),checks:JSON.stringify(initial.checks)});
- let sample=(await (await request(app,'/api/stories')).json())[0];assert.equal(sample.pages.length,10);
- await app.services.db.update(stories).set({title:'preserved title'}).where(eq(stories.id,sample.id));
- await request(app,'/api/me/progress','POST',{storyId:sample.id,page:4,saved:true},{'oai-authenticated-user-id':'spoofed'});
- const repo=new ReaderRepository(app.services.database);const id=crypto.randomUUID();
- await repo.create(id,'docker-local-owner',{bookId:'zhuangzi',theme:'放下执念',length:8,voice:false});
- await app.services.media.put(`reader/${id}/source.json`,new TextEncoder().encode('{"title":"saved"}'),{contentType:'application/json'});
+ assert.deepEqual(await (await request(app,'/api/reader/sessions')).json(),[]);
+ const sample=await insertReaderStory(app);
+ await app.services.database.prepare("UPDATE reader_sessions SET selection=json_set(selection,'$.displayTitle','preserved title') WHERE id=?").bind(sample.id).run();
+ assert.equal((await request(app,'/api/reader/sessions/'+sample.id+'/progress','POST',{page:4,saved:true},{'oai-authenticated-user-id':'spoofed'})).status,200);
+ await app.services.media.put(`reader/${sample.id}/source.json`,new TextEncoder().encode('{"title":"saved"}'),{contentType:'application/json'});
  app.close();app=createApplication(options);
  try{
-  sample=(await (await request(app,'/api/stories')).json())[0];assert.equal(sample.title,'preserved title');
-  const progress=await (await request(app,'/api/me/progress')).json();assert.equal(progress[0].page,4);assert.equal(progress[0].userId,'docker-local-owner');
-  assert.equal((await request(app,'/api/reader/sessions/'+id)).status,200);
-  assert.equal(new TextDecoder().decode((await app.services.media.get(`reader/${id}/source.json`)).body),'{"title":"saved"}');
+  const row=(await (await request(app,'/api/reader/sessions')).json())[0];assert.equal(row.story.title,'preserved title');assert.equal(row.page,4);assert.equal(row.saved,true);
+  assert.equal((await app.services.database.prepare('SELECT user_id FROM reader_sessions WHERE id=?').bind(sample.id).first()).user_id,'docker-local-owner');
+  assert.equal(new TextDecoder().decode((await app.services.media.get(`reader/${sample.id}/source.json`)).body),'{"title":"saved"}');
   assert.equal((await (await request(app,'/api/reader/status')).json()).configured,false);
-  await request(app,'/api/reader/library/'+sample.id,'DELETE');assert.equal((await (await request(app,'/api/stories')).json()).length,0);
-  await request(app,'/api/reader/library/'+sample.id+'/restore','POST',{});assert.equal((await (await request(app,'/api/stories')).json()).length,1);
+  await request(app,'/api/reader/library/'+sample.id,'DELETE');assert.equal((await (await request(app,'/api/reader/sessions')).json()).length,0);
+  await request(app,'/api/reader/library/'+sample.id+'/restore','POST',{});assert.equal((await (await request(app,'/api/reader/sessions')).json()).length,1);
  }finally{app.close();}
 });
 test('failed migrations roll back DDL and can retry after the migration is corrected',async t=>{
@@ -65,12 +60,12 @@ test('HTTP serves SPA deep links and binary uploads, blocks origin writes, and n
  assert.match(await (await fetch(origin+'/read?id=sample')).text(),/reader shell/);
  for(const url of ['/missing.js','/assets/missing.js','/.env','/data/shiqu.sqlite','/api/missing','/api/reader/missing'])assert.equal((await fetch(origin+url)).status,404,url);
  assert.equal((await fetch(origin+'/api/reader/library/sample',{method:'DELETE',headers:{Origin:'https://evil.example'}})).status,403);
- assert.equal((await fetch(origin+'/api/me/progress',{method:'POST',headers:{Origin:'https://evil.example'},body:'{}'})).status,403);
- const form=new FormData(),bytes=Uint8Array.from([137,80,78,71,13,10,26,10,1,2,3,4]);form.append('file',new File([bytes],'test.png',{type:'image/png'}));
- const uploaded=await fetch(origin+'/api/admin/upload',{method:'POST',body:form});assert.equal(uploaded.status,200);
- const {url}=await uploaded.json(),media=await fetch(origin+url);assert.equal(media.headers.get('content-type'),'image/png');assert.deepEqual(new Uint8Array(await media.arrayBuffer()),bytes);
- const oversized=await fetch(origin+'/api/admin/upload',{method:'POST',body:new Uint8Array(14*1024*1024)});assert.equal(oversized.status,413);
- assert.equal((await fetch(origin+'/api/stories',{method:'HEAD'})).headers.get('content-type')?.includes('json'),true);
+ assert.equal((await fetch(origin+'/api/reader/sessions/'+crypto.randomUUID()+'/progress',{method:'POST',headers:{Origin:'https://evil.example'},body:'{}'})).status,403);
+ const bytes=Uint8Array.from([137,80,78,71,13,10,26,10,1,2,3,4]);
+ await app.services.media.put('saved.png',bytes,{contentType:'image/png'});
+ const media=await fetch(origin+'/api/media/saved.png');assert.equal(media.headers.get('content-type'),'image/png');assert.deepEqual(new Uint8Array(await media.arrayBuffer()),bytes);
+ assert.equal((await fetch(origin+'/api/admin/upload',{method:'POST'})).status,404);
+
 });
 test('media validates keys, MIME and symlinks; replacing files is atomic and leaves no temporary file',async t=>{
  const {root}=await fixture(t),store=new FileMedia(path.join(root,'media'));
@@ -116,7 +111,7 @@ test('offline importer preserves records, identities, media keys and source byte
  const result=await importLegacy(fixture.source,fixture.target,fixture.root);assert.equal(result.mediaObjects,1);
  assert.deepEqual(await readFile(fixture.databaseFile),before);assert.deepEqual(await readFile(fixture.metadataFile),metadataBefore);
  const app=createApplication({root:fixture.root,dataDirectory:fixture.target});
- try{assert.equal((await (await request(app,'/api/stories')).json())[0].title,'imported story');assert.equal((await (await request(app,'/api/me/progress')).json())[0].userId,'docker-local-owner');assert.deepEqual((await app.services.media.get('reader/story/0.png')).body,fixture.bytes);}
+ try{assert.equal((await app.services.database.prepare('SELECT title FROM stories').first()).title,'imported story');assert.equal((await app.services.database.prepare('SELECT user_id FROM progress').first()).user_id,'docker-local-owner');assert.deepEqual((await app.services.media.get('reader/story/0.png')).body,fixture.bytes);assert.deepEqual(await (await request(app,'/api/reader/sessions')).json(),[]);}
  finally{app.close();}
  await assert.rejects(importLegacy(fixture.source,fixture.target,fixture.root),/empty/);
 });
@@ -137,21 +132,15 @@ test('import failure keeps destination absent and rejects live WAL, missing blob
  }
 });
 
-test('legacy accounting data stays on disk while story APIs create and edit without it',async t=>{
+test('retired studio tables survive reopen but have no runtime editing or reading API',async t=>{
  const options=await fixture(t);let app=createApplication(options);t.after(()=>app.close());
- const initial=makeStory();initial.status='draft';
+ const initial={...makeStory(),status:'draft'};
  await app.services.db.insert(stories).values({...initial,actualCost:12.5,currency:'USD',pages:JSON.stringify(initial.pages),checks:JSON.stringify(initial.checks)});
- let response=await request(app,'/api/admin/stories/'+initial.id);assert.equal(response.status,200);
- const saved=await response.json();assert.equal('actualCost' in saved,false);assert.equal('currency' in saved,false);
- response=await request(app,'/api/admin/stories/'+initial.id,'PUT',{...saved,title:'edited without billing',actualCost:999,currency:'CNY'});
- assert.equal(response.status,200);assert.equal('actualCost' in await response.json(),false);
- response=await request(app,'/api/admin/stories','POST',{title:'new story',bookId:'zhuangzi',theme:'test',sourceText:'',sourceUrl:''});
- assert.equal(response.status,201);const created=await response.json();assert.equal('actualCost' in created,false);assert.equal('currency' in created,false);
- response=await request(app,'/api/admin/generate','POST',{storyId:created.id,kind:'text',requestId:crypto.randomUUID()});assert.equal(response.status,503);
+ const before=await app.services.database.prepare('SELECT * FROM stories WHERE id=?').bind(initial.id).first();
+ for(const [route,method] of [['/api/stories','GET'],['/api/admin/stories/'+initial.id,'GET'],['/api/admin/stories/'+initial.id,'PUT'],['/api/admin/stories','POST'],['/api/admin/generate','POST']])assert.equal((await request(app,route,method,method==='GET'?undefined:{})).status,404);
  app.close();app=createApplication(options);
- const persisted=await app.services.database.prepare('SELECT actual_cost,currency FROM stories WHERE id=?').bind(initial.id).first();
- assert.deepEqual({...persisted},{actual_cost:12.5,currency:'USD'});
- const reopened=await (await request(app,'/api/admin/stories/'+initial.id)).json();assert.equal(reopened.title,'edited without billing');assert.equal('actualCost' in reopened,false);
+ const after=await app.services.database.prepare('SELECT * FROM stories WHERE id=?').bind(initial.id).first();
+ assert.deepEqual({...after},{...before});assert.deepEqual(await (await request(app,'/api/reader/sessions')).json(),[]);
 });
 test('single-owner shelf returns more than 80 stories and keeps hidden stories excluded',async t=>{
  const app=createApplication(await fixture(t));t.after(()=>app.close());const repo=new ReaderRepository(app.services.database),ids=[];

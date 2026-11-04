@@ -5,7 +5,6 @@ import {imageDimensions,imageRequestSize} from '../lib/reader-image-dimensions.t
 import {createReaderProvider} from '../server/generation.ts';
 import {imageBytes,png,jpeg} from './fixtures/images.mjs';
 import {productionFixture,makePlan,until} from './fixtures/production.mjs';
-import {insertStory,makeStory} from './fixtures/story.mjs';
 
 const formats=[['portrait.png','image/png','.png'],['portrait.jpg','image/jpeg','.jpg'],['portrait-progressive.jpg','image/jpeg','.jpg'],['portrait.webp','image/webp','.webp'],['portrait-lossy.webp','image/webp','.webp'],['portrait-alpha.webp','image/webp','.webp']];
 const nativeImages=['square.png','landscape.png','small.png','rotated.png','rotated.jpg','rotated.webp','legacy-2-3.png','native.png','gemini.png','codex-native.png','codex-requested.png'];
@@ -67,33 +66,3 @@ for(const name of ['codex','gemini']){
   session=await f.read(id);assert.equal(session.story.pages.filter(page=>page.image).length,7);assert.equal(f.control.calls.filter(call=>call.page===0).length,2);
  });
 }
-
-async function adminFixture(t,size){
- const f=await productionFixture(t),story=await insertStory(f.app,{...makeStory(),status:'draft'}),calls=[],writes=[];
- Object.assign(f.app.services.variables,{IMAGE_API_BASE:'https://provider.example/v1',IMAGE_API_KEY:'controlled',IMAGE_MODEL:'controlled',...(size===undefined?{}:{IMAGE_SIZE:size})});
- const control={bytes:png,mime:'image/png',download:false};
- f.app.services.transport=async(url,options)=>{
-  calls.push({url:String(url),body:options?.body?JSON.parse(options.body):null});
-  if(String(url)==='https://images.example/result')return new Response(control.bytes,{headers:{'Content-Type':control.mime}});
-  return Response.json({data:[control.download?{url:'https://images.example/result'}:{b64_json:Buffer.from(control.bytes).toString('base64')}]});
- };
- const put=f.app.services.media.put.bind(f.app.services.media);f.app.services.media.put=async(...args)=>{writes.push(args);return put(...args);};
- async function generate(){return f.app.handle(new Request('http://localhost/api/admin/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({storyId:story.id,kind:'image',page:0,requestId:crypto.randomUUID()})}));}
- async function saved(){return (await f.app.handle(new Request('http://localhost/api/admin/stories/'+story.id))).json();}
- return {...f,story,control,calls,writes,generate,saved};
-}
-test('admin accepts valid inline/downloaded images even below the requested size and keeps their actual MIME',async t=>{
- const f=await adminFixture(t);f.control.bytes=jpeg;f.control.mime='image/jpeg';
- let response=await f.generate();assert.equal(response.status,200);let result=await response.json();
- assert.match(result.story.pages[0].image,/\.jpeg$/);assert.equal(f.writes[0][2].contentType,'image/jpeg');
- assert.equal(f.calls[0].body.size,'864x1536');assert.match(f.calls[0].body.prompt,/portrait 9:16/);
- f.app.services.variables.IMAGE_SIZE='1440x2560';f.control.bytes=imageBytes('small.png');f.control.mime='image/png';f.control.download=true;
- response=await f.generate();assert.equal(response.status,200);assert.equal(f.calls[1].body.size,'1440x2560');assert.equal(f.calls[2].url,'https://images.example/result');
- assert.deepEqual(new Uint8Array(f.writes[1][1]),f.control.bytes);
-});
-
-test('admin rejects unsupported request configuration and corrupt bytes without changing the saved story',async t=>{
- const f=await adminFixture(t,'1024x1024');let response=await f.generate();assert.equal(response.status,503);assert.match((await response.json()).error,/IMAGE_SIZE/);assert.equal(f.calls.length,0);assert.equal(f.writes.length,0);
- f.app.services.variables.IMAGE_SIZE='864x1536';f.control.bytes=png.subarray(0,24);
- const before=await f.saved();response=await f.generate();assert.equal(response.status,502);assert.match((await response.json()).error,/有效图片/);assert.deepEqual(await f.saved(),before);assert.equal(f.writes.length,0);
-});

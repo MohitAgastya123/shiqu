@@ -1,5 +1,5 @@
 'use client';
-// Present saved stories with their own title, source and reading progress.
+// Present saved stories with their own title, source and reading progress after startup loads settle.
 import {useRef,useState} from 'react';
 import {ChevronLeft,ChevronRight,Play,BookOpen} from 'lucide-react';
 import type {Story} from '@/lib/content';
@@ -14,7 +14,7 @@ export default function RecentStories({items,loading,bookName,onOpen}:Props){
  const [index,setIndex]=useState(0);
  const active=Math.min(index,Math.max(0,items.length-1));
  function move(delta:number){const el=track.current;if(el)el.scrollTo({left:Math.max(0,Math.min(items.length-1,active+delta))*el.clientWidth,behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});}
- if(!items.length)return <div className="yu-feature-empty" role="status"><BookOpen size={32}/><strong>{loading?'正在打开故事…':'把下一篇故事留在这里'}</strong><p>{loading?'':'选择一本书，开启你的第一篇故事。'}</p></div>;
+ if(loading||!items.length)return <div className="yu-feature-empty" role="status" aria-busy={loading}><BookOpen size={32}/><strong>{loading?'正在打开故事…':'把下一篇故事留在这里'}</strong><p>{loading?'':'选择一本书，开启你的第一篇故事。'}</p></div>;
  return <section className="yu-recent-hero" aria-label="最近阅读的故事">
   <div className="yu-hero-track" ref={track} onScroll={e=>setIndex(Math.round(e.currentTarget.scrollLeft/e.currentTarget.clientWidth))}
    onPointerDown={e=>{if(e.pointerType==='mouse'){drag.current={x:e.clientX,left:e.currentTarget.scrollLeft,moved:false};suppressClick.current=false;}}}

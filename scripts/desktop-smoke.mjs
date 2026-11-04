@@ -45,20 +45,18 @@ try{
  assert.equal(first.url,origin);assert.equal(first.publicUrl,'');
  const headers={};
  const page=await request(origin);assert.equal(page.status,200);assert.ok(page.headers.get('content-type')?.startsWith('text/html'));await page.body?.cancel();
- assert.equal((await request(origin+'/api/stories')).status,200);
- assert.deepEqual(await (await request(origin+'/api/stories',{headers})).json(),[],'Fresh libraries must contain no stories');
- assert.deepEqual(await (await request(origin+'/api/me/progress',{headers})).json(),[]);
+ assert.equal((await request(origin+'/api/reader/sessions')).status,200);
+ assert.deepEqual(await (await request(origin+'/api/reader/sessions',{headers})).json(),[],'Fresh libraries must contain no stories');
  assert.equal((await request(origin+'/desktop/settings',{headers})).status,404);
  const provider=await (await request(origin+'/api/reader/status',{headers})).json();assert.equal(provider.configured,false);
  let lanAccessible=false;
  for(const link of first.phoneUrls){
-  try{assert.equal(link,new URL(link).origin);const response=await request(link+'/api/stories',{signal:AbortSignal.timeout(3000)});if(response.ok){lanAccessible=true;break;}}catch{/* Another interface may be a VPN or unavailable to this host. */}
+  try{assert.equal(link,new URL(link).origin);const response=await request(link+'/api/reader/sessions',{signal:AbortSignal.timeout(3000)});if(response.ok){lanAccessible=true;break;}}catch{/* Another interface may be a VPN or unavailable to this host. */}
  }
  if(first.phoneUrls.length)assert.ok(lanAccessible,'At least one advertised LAN address must be accessible from the host');
- await stop();await assert.rejects(request(origin+'/api/stories'));
- const second=await start(settings);assert.equal(second.url,origin);assert.equal((await request(origin+'/api/stories')).status,200);
- assert.deepEqual(await (await request(origin+'/api/stories')).json(),[]);
- assert.deepEqual(await (await request(origin+'/api/me/progress')).json(),[]);
+ await stop();await assert.rejects(request(origin+'/api/reader/sessions'));
+ const second=await start(settings);assert.equal(second.url,origin);assert.equal((await request(origin+'/api/reader/sessions')).status,200);
+ assert.deepEqual(await (await request(origin+'/api/reader/sessions')).json(),[]);
  await stop();
  console.log(JSON.stringify({edition:payload.edition,node:process.version,relocated:true,nodeBundled:true,systemNodeOnPath:false,books:catalog.books.length,emptyLibrary:true,directAccess:true,lanAccessible,restart:true,shutdown:true,paidCalls:0}));
 }finally{await stop();await rm(temporary,{recursive:true,force:true});}

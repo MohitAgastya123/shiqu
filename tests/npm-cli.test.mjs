@@ -49,7 +49,7 @@ for (const localOnly of [false, true]) test(`CLI startup serves the reader and p
     assert.match(run.output(), /Scan to open 拾趣 on your phone/);
     assert.match(run.output(), /[▀▄█]/);
     for (const url of urls) assert.ok(run.output().includes(url));
-    assert.equal((await fetch(urls[0]+'/api/stories', {signal:AbortSignal.timeout(5000)})).status, 200);
+    assert.equal((await fetch(urls[0]+'/api/reader/sessions', {signal:AbortSignal.timeout(5000)})).status, 200);
   } else {
     assert.doesNotMatch(run.output(), /Scan to open 拾趣 on your phone|[▀▄█]/);
   }

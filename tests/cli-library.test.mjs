@@ -136,7 +136,7 @@ test('CLI creates the saved desktop shelf, shares media/progress, rejects overla
  let current=cliProcess(root,args,context.home);t.after(()=>stopProcess(current));await ready(current);
  const request=(route,options={})=>fetch(origin+route,{signal:AbortSignal.timeout(5000),...options});
  assert.equal(current.logs().includes('请输入'),false);
- assert.deepEqual(await (await request('/api/stories')).json(),[]);
+ assert.deepEqual(await (await request('/api/reader/sessions')).json(),[]);
  await access(path.join(directory,'shiqu.sqlite'));
  const overlap=cliProcess(root,['--port',String(await freePort())],context.home);
  assert.equal((await once(overlap.child,'exit'))[0],1);assert.match(overlap.logs(),/DATA_BUSY/);
@@ -144,19 +144,19 @@ test('CLI creates the saved desktop shelf, shares media/progress, rejects overla
  const settings={nodePath:process.execPath,dataDirectory:directory,port:await freePort(),internetEnabled:false,cloudflaredPath:'',provider:'gemini',textModel:'test-text',imageModel:'test-image',codexPath:'',codexModel:'',codexHome:''};
  await assert.rejects(startDesktop(settings,'',root),/DATA_BUSY/);
  await stopProcess(current);
- const {openDatabase}=await import('../server/database.ts'),{FileMedia}=await import('../server/media.ts'),{insertStory}=await import('./fixtures/story.mjs');
- const database=openDatabase(directory,root);const story=await insertStory({services:{db:database.db}});database.close();
+ const {openDatabase}=await import('../server/database.ts'),{FileMedia}=await import('../server/media.ts'),{insertReaderStory}=await import('./fixtures/story.mjs');
+ const database=openDatabase(directory,root);const story=await insertReaderStory({services:{database:database.database}});database.close();
  const media=new FileMedia(path.join(directory,'media')),bytes=new Uint8Array([137,80,78,71]);
  await media.put('shared-test.png',bytes,{contentType:'image/png'});
  const desktop=await startDesktop(settings,'',root);
  try{
-  assert.equal((await (await fetch(desktop.status.url+'/api/stories')).json())[0].id,story.id);
-  await fetch(desktop.status.url+'/api/me/progress',{method:'POST',headers:{Origin:desktop.status.url,'Content-Type':'application/json'},body:JSON.stringify({storyId:story.id,page:2,saved:true})});
+  assert.equal((await (await fetch(desktop.status.url+'/api/reader/sessions')).json())[0].id,story.id);
+  await fetch(desktop.status.url+'/api/reader/sessions/'+story.id+'/progress',{method:'POST',headers:{Origin:desktop.status.url,'Content-Type':'application/json'},body:JSON.stringify({storyId:story.id,page:2,saved:true})});
   const blocked=cliProcess(root,args,context.home);assert.equal((await once(blocked.child,'exit'))[0],1);assert.match(blocked.logs(),/DATA_BUSY/);
  }finally{await desktop.stop();}
  current=cliProcess(root,args,context.home);await ready(current);
- assert.equal((await (await request('/api/stories')).json())[0].id,story.id);
- assert.equal((await (await request('/api/me/progress')).json())[0].page,2);
+ assert.equal((await (await request('/api/reader/sessions')).json())[0].id,story.id);
+ assert.equal((await (await request('/api/reader/sessions')).json())[0].page,2);
  assert.deepEqual(new Uint8Array(await (await request('/api/media/shared-test.png')).arrayBuffer()),bytes);
  await stopProcess(current);
  const {createServer}=await import('node:net'),occupied=createServer();occupied.listen(port,'127.0.0.1');await once(occupied,'listening');

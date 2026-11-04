@@ -3,7 +3,6 @@ import type {Story} from './content';
 import {browserExportRuntime,type ExportRuntime} from './story-export-runtime.ts';
 import type {GeneratedStory} from './reader-model';
 import {readerBooks} from './reader-books.ts';
-import {historicalBookTitle} from './story-book.ts';
 import {pdfFilename,wrapPdfText} from './reader-pdf.ts';
 import {publicationCredit} from './story-publication.ts';
 
@@ -20,7 +19,7 @@ export function layoutStoryPng(story:Story,measure:(text:string,size:number)=>nu
  const wrap=(text:string,size:number,limit:number)=>wrapPdfText(text,limit,value=>measure(value,size));
  const title=wrap(`${story.title} · ${count}幅故事总览`,52,width-2*M);
  const generated='generated'in story&&story.generated===true?story as GeneratedStory:null;
- const book=readerBooks.find(book=>book.id===story.bookId)?.title||historicalBookTitle(story.bookId)||'自选故事';
+ const book=readerBooks.find(book=>book.id===story.bookId)?.title||'自选故事';
  const subtitle=wrap([book,generated?.artStyleLabel,story.theme].filter(Boolean).join(' · '),26,width-2*M);
  const subtitleY=M+title.length*70+12;
  let y=subtitleY+subtitle.length*40+30;

@@ -71,39 +71,31 @@ export class ReaderRepository{
   ORDER BY COALESCE(last_read_at,created_at) DESC`).bind(uid).all<SessionRow>()).results;}
  async deletions(uid:string){
   return (await this.db.prepare(`SELECT d.story_id AS storyId,d.deleted_at AS deletedAt,d.kind,
-   CASE WHEN d.kind='generated' THEN COALESCE(json_extract(s.selection,'$.displayTitle'),json_extract(s.document,'$.plan.title'),json_extract(s.selection,'$.storyTitle'),'未命名故事') ELSE COALESCE(p.title,'未命名故事') END AS title
+   COALESCE(json_extract(s.selection,'$.displayTitle'),json_extract(s.document,'$.plan.title'),json_extract(s.selection,'$.storyTitle'),'未命名故事') AS title
    FROM library_deletions d
-   LEFT JOIN reader_sessions s ON d.kind='generated' AND s.id=d.story_id AND s.user_id=d.user_id
-   LEFT JOIN stories p ON d.kind='published' AND p.id=d.story_id AND p.status='published'
-   WHERE d.user_id=? AND (s.id IS NULL OR json_type(s.document,'$.reselection') IS NULL) ORDER BY d.deleted_at DESC,d.story_id`).bind(uid).all<{storyId:string;deletedAt:string;kind:'generated'|'published';title:string}>()).results;
+   LEFT JOIN reader_sessions s ON s.id=d.story_id AND s.user_id=d.user_id
+   WHERE d.user_id=? AND d.kind='generated' AND (s.id IS NULL OR json_type(s.document,'$.reselection') IS NULL)
+   ORDER BY d.deleted_at DESC,d.story_id`).bind(uid).all<{storyId:string;deletedAt:string;kind:'generated';title:string}>()).results;
  }
  async remove(id:string,uid:string){
-  const existing=await this.db.prepare('SELECT story_id AS storyId,deleted_at AS deletedAt FROM library_deletions WHERE user_id=? AND story_id=?').bind(uid,id).first<{storyId:string;deletedAt:string}>();if(existing)return existing;
   const owned=await this.db.prepare('SELECT id FROM reader_sessions WHERE id=? AND user_id=?').bind(id,uid).first();
-  if(!owned){const published=await this.db.prepare("SELECT id FROM stories WHERE id=? AND status='published'").bind(id).first();if(!published)throw new ReaderError(404,'这篇故事不在你的书架里');}
-  const deletedAt=new Date().toISOString();await this.db.prepare('INSERT INTO library_deletions(user_id,story_id,kind,deleted_at) VALUES(?,?,?,?) ON CONFLICT(user_id,story_id) DO NOTHING').bind(uid,id,owned?'generated':'published',deletedAt).run();
+  if(!owned)throw new ReaderError(404,'这篇故事不在你的书架里');
+  const existing=await this.db.prepare('SELECT story_id AS storyId,deleted_at AS deletedAt FROM library_deletions WHERE user_id=? AND story_id=?').bind(uid,id).first<{storyId:string;deletedAt:string}>();if(existing)return existing;
+  const deletedAt=new Date().toISOString();await this.db.prepare("INSERT INTO library_deletions(user_id,story_id,kind,deleted_at) VALUES(?,?,'generated',?) ON CONFLICT(user_id,story_id) DO NOTHING").bind(uid,id,deletedAt).run();
   return {storyId:id,deletedAt};
  }
  async restore(id:string,uid:string){
   const owned=await this.db.prepare('SELECT id FROM reader_sessions WHERE id=? AND user_id=?').bind(id,uid).first();
-  if(!owned){const published=await this.db.prepare("SELECT id FROM stories WHERE id=? AND status='published'").bind(id).first();if(!published)throw new ReaderError(404,'这篇故事不在你的书架里');}
+  if(!owned)throw new ReaderError(404,'这篇故事不在你的书架里');
   const result=await this.db.prepare('DELETE FROM library_deletions WHERE user_id=? AND story_id=?').bind(uid,id).run();
   return {storyId:id,restored:result.meta.changes>0};
  }
  async favorite(id:string,uid:string,saved:boolean){
-  // Favorites work before the first image and never move a reading checkpoint or enqueue production.
-  type FavoriteProgress={page:number;saved:number;updatedAt:string};
-  const generated=await this.db.prepare(`UPDATE reader_sessions SET saved=? WHERE id=? AND user_id=? AND ${visible} RETURNING page,saved,COALESCE(last_read_at,created_at) AS updatedAt`)
-   .bind(saved?1:0,id,uid).first<FavoriteProgress>();
-  if(generated)return {storyId:id,...generated};
-  const published=await this.db.prepare(`INSERT INTO progress(id,user_id,story_id,page,saved,updated_at)
-   SELECT ?,?,?,0,?,? FROM stories WHERE id=? AND status='published'
-   AND NOT EXISTS (SELECT 1 FROM library_deletions d WHERE d.story_id=stories.id AND d.user_id=?)
-   ON CONFLICT(user_id,story_id) DO UPDATE SET saved=excluded.saved
-   RETURNING page,saved,updated_at AS updatedAt`)
-   .bind(uid+':'+id,uid,id,saved?1:0,new Date().toISOString(),id,uid).first<FavoriteProgress>();
-  if(!published)throw new ReaderError(404,'这篇故事不在你的书架里');
-  return {storyId:id,...published};
+  // Favorites never move a reading checkpoint or enqueue production.
+  const row=await this.db.prepare(`UPDATE reader_sessions SET saved=? WHERE id=? AND user_id=? AND ${visible} RETURNING page,saved,COALESCE(last_read_at,created_at) AS updatedAt`)
+   .bind(saved?1:0,id,uid).first<{page:number;saved:number;updatedAt:string}>();
+  if(!row)throw new ReaderError(404,'这篇故事不在你的书架里');
+  return {storyId:id,...row};
  }
  async control(id:string,uid:string,action:ProductionAction,handoffOnly=false){
   const row=await this.get(id,uid);
