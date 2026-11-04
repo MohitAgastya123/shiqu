@@ -14,14 +14,39 @@ import {mediaKey} from './media.ts';
 export const consolidationMigration='0018_consolidate_story_storage.sql';
 const demos=new Set([...Array.from({length:10},(_,i)=>`legacy-art/pear-${i+1}.png`),...Array.from({length:30},(_,i)=>`legacy-art/dongguo-${i+1}.png`)]);
 export function localMediaKey(value:string):string|null{
- let key=value.startsWith('/api/reader/media/')?'reader/'+value.slice(18):value.startsWith('/api/media/')?value.slice(11):value.startsWith('/art/')?'legacy-art/'+value.slice(5):value;
+ const url=/^\/(?:api\/(?:reader\/)?media|art)\//.test(value);
+ const reference=url?value.split(/[?#]/,1)[0]:value;
+ let key=reference.startsWith('/api/reader/media/')?'reader/'+reference.slice(18):reference.startsWith('/api/media/')?reference.slice(11):reference.startsWith('/art/')?'legacy-art/'+reference.slice(5):reference;
  try{key=decodeURIComponent(key);mediaKey(key);}catch{return null;}
- return key.includes('/')||value.startsWith('/api/media/')?key:null;
+ // Bare filenames occur in historical checkpoints; prose/source ranges are not media keys.
+ return url||/\.(?:png|jpe?g|webp|json|mp3|wav)$/i.test(key)?key:null;
 }
-function references(value:unknown,result=new Set<string>()){
- if(typeof value==='string'){const key=localMediaKey(value);if(key)result.add(key);}
- else if(Array.isArray(value))for(const item of value)references(item,result);
- else if(value&&typeof value==='object')for(const item of Object.values(value))references(item,result);
+function protectedJson(text:string,context:string){
+ try{return JSON.parse(text);}catch{throw Error('LIBRARY_PROTECTED_JSON_INVALID: '+context);}
+}
+const mediaFields=new Set(['image','images','audio','reference','asset','assetKey','asset_key','key','value','file','filename','path','artifact','snapshot']);
+function references(value:unknown,result=new Set<string>(),roots:string[]=[],field='',includeUncertain=false){
+ if(typeof value==='string'){
+  const keys=new Set<string>(),local=localMediaKey(value);if(local)keys.add(local);
+  const absolute=path.isAbsolute(value)||/^[a-zA-Z]:[\\/]/.test(value);
+  if(!keys.size&&absolute){
+   for(const root of roots){const relative=path.relative(path.join(root,'media'),value);if(relative&&!relative.startsWith('..')&&!path.isAbsolute(relative)){try{keys.add(mediaKey(relative.split(path.sep).join('/')));}catch{/* Not a managed file. */}}}
+   if(!keys.size){
+    // Restored/imported artifacts retain their original absolute text. Preserve matching managed
+    // bytes in the destination without rewriting that text or trusting the old filesystem location.
+    const normalized=value.replaceAll('\\','/'),suffixes:string[]=[];
+    for(let index=normalized.indexOf('/media/');index>=0;index=normalized.indexOf('/media/',index+1)){
+     try{suffixes.push(mediaKey(normalized.slice(index+7)));}catch{/* Unsafe suffix is not local media. */}
+    }
+    for(const suffix of suffixes)if(roots.some(root=>existsSync(path.join(root,'media',suffix))))keys.add(suffix);
+    if(!keys.size&&suffixes.length)keys.add(suffixes.at(-1)!);
+   }
+  }
+  const certain=/^\/(?:api\/(?:reader\/)?media|art)\//.test(value)||mediaFields.has(field);
+  for(const key of keys)if(certain||includeUncertain&&roots.some(root=>existsSync(path.join(root,'media',key))))result.add(key);
+ }
+ else if(Array.isArray(value))for(const item of value)references(item,result,roots,field,includeUncertain);
+ else if(value&&typeof value==='object')for(const [name,item]of Object.entries(value))references(item,result,roots,/^\d+$/.test(name)?field:name,includeUncertain);
  return result;
 }
 function walk(folder:string,prefix=''):string[]{
@@ -31,7 +56,7 @@ function walk(folder:string,prefix=''):string[]{
  for(const entry of readdirSync(folder,{withFileTypes:true})){
   if(entry.name.toLowerCase()==='.ds_store'){rmSync(path.join(folder,entry.name));continue;}
   if(entry.isSymbolicLink())throw Error('LIBRARY_MEDIA_SYMLINK');
-  if(entry.name.startsWith('.desktop'))continue;
+  if(entry.name.startsWith('.desktop')||entry.name==='backups'||entry.name.endsWith('-backups'))continue;
   const key=prefix+entry.name;
   if(entry.isDirectory())result.push(...walk(path.join(folder,entry.name),key+'/'));
   else if(entry.isFile())result.push(key);else throw Error('LIBRARY_UNSUPPORTED_FILE');
@@ -39,18 +64,22 @@ function walk(folder:string,prefix=''):string[]{
  return result;
 }
 const hash=(file:string)=>createHash('sha256').update(readFileSync(file)).digest('hex');
-export function currentMediaKeys(db:DatabaseSync,directory:string,table='stories'){
+export function currentMediaKeys(db:DatabaseSync,directory:string,table='stories',originalDirectory=directory){
  // table is internal migration context, never user input.
- const rows=db.prepare(`SELECT * FROM ${table}`).all(),ids=new Set(rows.map(row=>String(row.id))),keep=new Set<string>();
- for(const row of rows){references(JSON.parse(String(row.selection)),keep);references(JSON.parse(String(row.document)),keep);}
+ const rows=db.prepare(`SELECT * FROM ${table}`).all(),ids=new Set(rows.map(row=>String(row.id))),keep=new Set<string>(),roots=[directory,originalDirectory];
+ for(const row of rows){references(protectedJson(String(row.selection),'selection '+row.id),keep,roots,'',true);references(protectedJson(String(row.document),'document '+row.id),keep,roots,'',true);}
  for(const table of ['production_jobs','reader_commands','reader_faults'])for(const row of db.prepare(`SELECT * FROM ${table}`).all())if(ids.has(String(row.session_id)))for(const field of ['payload','result','image'])if(typeof row[field]==='string'){
-  try{references(JSON.parse(String(row[field])),keep);}catch{references(String(row[field]),keep);}
+  const text=String(row[field]);
+  let value:unknown;
+  try{value=JSON.parse(text);}catch{if(text.trimStart().startsWith('{')||text.trimStart().startsWith('['))throw Error('LIBRARY_PROTECTED_JSON_INVALID: '+table+' '+field+' '+row.session_id);value=text;}
+  references(value,keep,roots,'',true);
  }
  for(const row of db.prepare('SELECT * FROM book_image_references').all())if(ids.has(String(row.story_id))&&!demos.has(String(row.asset_key)))keep.add(String(row.asset_key));
  const files=walk(path.join(directory,'media'));
  for(const key of walk(directory).filter(key=>!key.split('/').some(part=>part.startsWith('.desktop'))&&!key.startsWith('media/')&&/\.(json|html|md)$/.test(key))){
   const text=readFileSync(path.join(directory,key),'utf8');
-  try{references(JSON.parse(text),keep);}catch{for(const match of text.matchAll(/\/(?:api\/(?:reader\/)?media|art)\/[-a-zA-Z0-9_./]+/g))references(match[0],keep);}
+  if(key.endsWith('.json')){references(protectedJson(text,key),keep,roots,'',true);continue;}
+  for(const match of text.matchAll(/\/(?:api\/(?:reader\/)?media|art)\/[-a-zA-Z0-9_./]+/g))references(match[0],keep,roots,'',true);
  }
  // Saved originals/revision bases belong to the complete current namespace. Existing exports are
  // also protected roots; unknown files are never candidates for deletion.
@@ -60,16 +89,16 @@ export function currentMediaKeys(db:DatabaseSync,directory:string,table='stories
  for(let i=0;i<queue.length;i++){
   const key=queue[i];if(visited.has(key))continue;visited.add(key);
   if(!key.endsWith('.json')||!files.includes(key))continue;
-  let value;try{value=JSON.parse(readFileSync(path.join(directory,'media',key),'utf8'));}catch{continue;}
-  for(const ref of references(value))if(!keep.has(ref)){keep.add(ref);queue.push(ref);}
+  const value=protectedJson(readFileSync(path.join(directory,'media',key),'utf8'),key);
+  for(const ref of references(value,new Set<string>(),roots,'',true))if(!keep.has(ref)){keep.add(ref);queue.push(ref);}
  }
  return keep;
 }
-function purgePlan(db:DatabaseSync,directory:string){
+function purgePlan(db:DatabaseSync,directory:string,originalDirectory:string){
  const candidates=new Set(demos);
  for(const row of db.prepare('SELECT pages FROM stories').all()){
   let pages;try{pages=JSON.parse(String(row.pages));}catch{continue;}
-  references(pages,candidates);
+  references(pages,candidates,[directory,originalDirectory]);
  }
  const current=new Set(db.prepare('SELECT id FROM reader_sessions').all().map(row=>String(row.id)));
  for(const row of db.prepare('SELECT * FROM book_image_references').all()){
@@ -81,9 +110,12 @@ function purgePlan(db:DatabaseSync,directory:string){
    db.prepare('DELETE FROM book_image_references WHERE owner_id=? AND book_key=?').run(row.owner_id,row.book_key);
   }
  }
- const keep=currentMediaKeys(db,directory,'reader_sessions');
+ const keep=currentMediaKeys(db,directory,'reader_sessions',originalDirectory);
  const present=new Set(walk(path.join(directory,'media')));
- return {remove:[...candidates].filter(key=>{try{mediaKey(key);return present.has(key)&&!keep.has(key);}catch{return false;}}),keep:[...keep].filter(key=>present.has(key))};
+ const missing=[...keep].filter(key=>!present.has(key));
+ if(missing.length)throw Error('LIBRARY_PROTECTED_MEDIA_MISSING: '+missing.slice(0,10).join(', '));
+ const remove=[...candidates].filter(key=>{try{mediaKey(key);return present.has(key)&&!keep.has(key);}catch{return false;}});
+ return {remove,keep:[...keep],shared:[...candidates].filter(key=>keep.has(key)),uncertain:[...present].filter(key=>!keep.has(key)&&!remove.includes(key))};
 }
 function syncDirectory(directory:string){
  // Windows does not expose directory fsync through Node; file handles still sync before rename.
@@ -137,7 +169,7 @@ export function ensureLibraryReady(directory:string,root:string,options:{onStep?
    options.onStep?.('journal');
    if(backup)restoreLibraryBackup(backup,work);else mkdirSync(work,{mode:0o700});
    const sqlite=new DatabaseSync(path.join(work,'shiqu.sqlite'));
-   let removal:string[]=[],kept=new Map<string,string>();
+   let removal:string[]=[],kept=new Map<string,string>(),shared:string[]=[],uncertain:string[]=[];
    try{
     sqlite.exec('PRAGMA legacy_alter_table=OFF; PRAGMA foreign_keys=ON');
     migrate(sqlite,root,work,'0017_command_receipt_links.sql');
@@ -145,7 +177,7 @@ export function ensureLibraryReady(directory:string,root:string,options:{onStep?
     const rows=sqlite.prepare('SELECT * FROM reader_sessions ORDER BY id').all();
     const durableTables=['production_jobs','production_demand','reader_commands','reader_faults','reader_publication_defaults'];
     const values=durableTables.map(t=>sqlite.prepare(`SELECT * FROM ${t} ORDER BY rowid`).all());
-    const plan=purgePlan(sqlite,work);removal=plan.remove;kept=new Map(plan.keep.map(key=>[key,hash(path.join(work,'media',key))]));
+    const plan=purgePlan(sqlite,work,directory);removal=plan.remove;shared=plan.shared;uncertain=plan.uncertain;kept=new Map(plan.keep.map(key=>[key,hash(path.join(work,'media',key))]));
     migrate(sqlite,root,work);sqlite.exec(readFileSync(path.join(root,'docker/seed.sql'),'utf8'));
     if(!isDeepStrictEqual(rows,sqlite.prepare('SELECT * FROM stories ORDER BY id').all()))throw Error('LIBRARY_STORY_PRESERVATION_FAILED');
     for(let i=0;i<durableTables.length;i++)if(!isDeepStrictEqual(values[i],sqlite.prepare(`SELECT * FROM ${durableTables[i]} ORDER BY rowid`).all()))throw Error('LIBRARY_QUEUE_PRESERVATION_FAILED');
@@ -175,9 +207,9 @@ export function ensureLibraryReady(directory:string,root:string,options:{onStep?
    if(inspectLibraryWithoutJournal(directory)!=='current')throw Error('LIBRARY_PUBLICATION_FAILED');
    options.onStep?.('files-published');
    rmSync(work,{recursive:true,force:true});syncDirectory(directory);options.onStep?.('cleanup');
-   if(backup)durableFile(path.join(directory,'.desktop-upgrade-result.json'),JSON.stringify({backup})+'\n');
+   if(backup)durableFile(path.join(directory,'.desktop-upgrade-result.json'),JSON.stringify({backup,removed:removal,protected:[...kept.keys()],shared,uncertain})+'\n');
    rmSync(path.join(directory,upgradeJournal));syncDirectory(directory);
-   return {backup,removed:removal,retained:[...kept.keys()]};
+   return {backup,removed:removal,retained:[...kept.keys()],shared,uncertain};
   }catch(error){
    try{recover(directory);}catch(recovery){throw Error(`LIBRARY_RECOVERY_FAILED; backup: ${backup||'fresh library'}; ${String(recovery)}`,{cause:error});}
    throw Error(`LIBRARY_UPGRADE_FAILED; restored original library; backup: ${backup||'fresh library'}; ${String(error)}`,{cause:error});

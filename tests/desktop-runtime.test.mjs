@@ -1,4 +1,5 @@
 // Verify direct desktop reader access, private configuration, ownership, and real process cleanup without AI billing.
+import {historicalLibrary} from './fixtures/historical-library.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,mkdir,cp,readFile,writeFile,rm,symlink,access} from 'node:fs/promises';
@@ -118,4 +119,19 @@ test('parent EOF kills active detached Codex groups before releasing the data di
  await assert.rejects(fetch(url.origin+'/api/reader/sessions'));
  const release=await ownDesktopData(f.settings.dataDirectory);await release();
  assert.ok(!line.includes('GEMINI_API_KEY'));
+});
+
+test('one-shot desktop upgrade returns the verified backup without listeners, credentials or worker jobs',async t=>{
+ const f=await fixture(t),directory=path.join(f.root,'historical library');historicalLibrary(directory,f.root).close();
+ const file=path.join(f.root,'dist/server/desktop.js');
+ // Isolated server entry compilation follows the same production entry graph; no desktop package is built.
+ await build({entryPoints:['server/desktop.ts'],outfile:file,bundle:true,platform:'node',format:'esm',target:'node24',packages:'external',banner:{js:"globalThis.fetch=async()=>{throw Error('Unexpected provider request during upgrade')};"}});
+ await symlink(path.resolve('node_modules'),path.join(f.root,'node_modules'),'junction');await writeFile(path.join(f.root,'package.json'),'{"type":"module"}');
+ const child=spawn(process.execPath,['--no-warnings',file],{cwd:f.root,env:{PATH:path.dirname(process.execPath),HOME:f.root},stdio:['pipe','pipe','pipe']});t.after(()=>{if(child.exitCode===null)child.kill('SIGKILL');});
+ let output='',errors='';child.stdout.on('data',chunk=>output+=chunk);child.stderr.on('data',chunk=>errors+=chunk);const exited=once(child,'exit');
+ child.stdin.write(JSON.stringify({action:'upgrade',settings:{...f.settings,dataDirectory:directory,provider:'gemini'},key:''})+'\n');
+ const [code]=await exited;assert.equal(code,0,errors);const response=JSON.parse(output.trim());assert.equal(response.upgraded,true);assert.equal(response.started,false);assert.ok(response.backup);await access(response.backup);
+ const db=openDatabase(directory,f.root);assert.equal(db.sqlite.prepare('SELECT count(*) n FROM production_jobs').get().n,0);assert.equal(db.sqlite.prepare('PRAGMA user_version').get().user_version,1);db.close();
+ await assert.rejects(fetch('http://127.0.0.1:'+f.settings.port+'/api/reader/sessions'));
+ const release=await ownDesktopData(directory);await release();
 });

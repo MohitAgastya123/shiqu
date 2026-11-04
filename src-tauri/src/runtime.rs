@@ -311,7 +311,8 @@ pub fn launch(
     if let Some(message) = response.get("error").and_then(Value::as_str) {
         drop(child.stdin.take());
         let _ = wait(&mut child, Duration::from_secs(8));
-        return Err(message.chars().take(200).collect());
+        // stream_status already bounds the entire frame. Preserve the complete backup path.
+        return Err(message.to_string());
     }
     Ok((child, response, receive))
 }

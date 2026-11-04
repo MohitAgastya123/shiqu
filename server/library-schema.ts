@@ -20,7 +20,8 @@ export function inspectLibrary(directory:string):'missing'|'legacy'|'current'|'p
  if(lstatSync(filename).isSymbolicLink())throw Error('LIBRARY_UNSAFE_DATABASE');
  const db=new DatabaseSync(filename,{readOnly:true});
  try{
-  const version=Number(db.prepare('PRAGMA user_version').get()!.user_version);
+  let version:number;
+  try{version=Number(db.prepare('PRAGMA user_version').get()!.user_version);}catch(error){if(pending)return 'pending';throw error;}
   if(version>format.schemaVersion)throw Error(`LIBRARY_NEWER_SCHEMA: library ${version}, supported ${format.schemaVersion}; use a newer Shiqu app`);
   if(pending)return 'pending';
   const tables=new Set(db.prepare("SELECT name FROM sqlite_schema WHERE type='table'").all().map(row=>String(row.name)));

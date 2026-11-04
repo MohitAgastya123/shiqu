@@ -25,6 +25,7 @@ async function fixture(t,document){
  const root=await mkdtemp(path.join(os.tmpdir(),'shiqu summary ')),directory=path.join(root,'library'),oldRoot=path.join(root,'old');
  t.after(()=>rm(root,{recursive:true,force:true}));await cp('drizzle',path.join(oldRoot,'drizzle'),{recursive:true});await rm(path.join(oldRoot,'drizzle',storySummaryMigration));
  await mkdir(path.join(oldRoot,'docker'));await cp('docker/seed.sql',path.join(oldRoot,'docker/seed.sql'));
+ await mkdir(path.join(directory,'media'),{recursive:true});await writeFile(path.join(directory,'media/saved.png'),Buffer.from(encoded,'base64'));
  const sqlite=historicalLibrary(directory,oldRoot),local={sqlite,close:()=>sqlite.close()},id=crypto.randomUUID(),chosen=selectionSchema.parse(selection);
  local.sqlite.prepare("INSERT INTO reader_sessions(id,user_id,selection,document,generation_mode,generation_control,state,created_at,updated_at,page,saved) VALUES(?,?,?,?,'background','paused','idle','created','updated',1,1)")
   .run(id,owner,JSON.stringify(chosen),JSON.stringify(document));

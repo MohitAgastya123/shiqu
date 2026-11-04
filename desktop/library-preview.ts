@@ -57,7 +57,7 @@ export function desktopPreview():Plugin{
     if(!mutation||!match){response.statusCode=404;response.end(JSON.stringify({error:'书架操作不存在。'}));return;}
     setLibraryStoryDeleted(developmentLibraryDirectory(),decodeURIComponent(match[1]),request.method==='DELETE');
     response.end(JSON.stringify({ok:true}));
-   }catch{response.statusCode=500;response.end(JSON.stringify({error:mutation?'故事暂时无法更新，请重试。':'无法读取本地书架，请检查数据目录及数据库版本。'}));}
+   }catch(error){response.statusCode=500;const message=error instanceof Error&&/^(LIBRARY_|BACKUP_|DATA_BUSY)/.test(error.message)?error.message:mutation?'故事暂时无法更新，请重试。':'无法读取本地书架，请检查数据目录及数据库版本。';response.end(JSON.stringify({error:message}));}
   });
  }};
 }

@@ -38,6 +38,8 @@ function fileManifest(f){return Object.fromEntries(f.files.map(key=>[key,readFil
 function assertOriginal(f,manifest){assert.deepEqual(rawRows(f.directory,'reader_sessions'),f.before);for(const [key,bytes]of Object.entries(manifest))assert.equal(readFileSync(path.join(f.directory,'media',key)).toString('hex'),bytes);}
 test('fresh and mixed upgrades converge; all owners/revisions/states and current/shared/unknown bytes survive',t=>{
  const f=fixture(t),manifest=fileManifest(f),result=ensureLibraryReady(f.directory,root);
+ assert.ok(result.shared.includes('legacy-art/pear-1.png'));assert.ok(result.shared.includes('shared.png'));assert.ok(result.uncertain.includes('unknown.png'));
+ assert.deepEqual(JSON.parse(readFileSync(path.join(f.directory,'.desktop-upgrade-result.json'),'utf8')).uncertain,result.uncertain);
  assert.equal(inspectLibrary(f.directory),'current');assert.deepEqual(rawRows(f.directory,'stories'),f.before);verifyLibraryBackup(result.backup);
  const local=openDatabase(f.directory,root);
  try{
@@ -66,6 +68,7 @@ for(const point of ['journal','quarantined','database-retired','database-publish
  const f=fixture(t),manifest=fileManifest(f);
  const script=`import {ensureLibraryReady} from './server/library-upgrade.ts';ensureLibraryReady(process.argv[1],process.cwd(),{onStep(step){if(step===process.argv[2])process.kill(process.pid,'SIGKILL')}});`;
  const child=spawn(process.execPath,['--experimental-strip-types','--input-type=module','-e',script,f.directory,point],{cwd:root,stdio:'ignore'});const [code,signal]=await once(child,'exit');assert.equal(code,null);assert.equal(signal,'SIGKILL');
+ if(point==='database-published')writeFileSync(path.join(f.directory,'shiqu.sqlite'),'damaged publication');
  assert.equal(inspectLibrary(f.directory),'pending');
  // Fail immediately after recovery creates the next journal, proving original state was recovered first.
  assert.throws(()=>ensureLibraryReady(f.directory,root,{onStep(step){if(step==='journal')throw Error('retry stop');}}));assertOriginal(f,manifest);
@@ -99,4 +102,29 @@ test('normal restore upgrades before publication and current-use legacy art read
 test('a library containing only current stories preserves all raw row values and creates one verified backup',t=>{
  const f=fixture(t,false),db=new DatabaseSync(path.join(f.directory,'shiqu.sqlite'));assert.equal(db.prepare('SELECT count(*) n FROM stories').get().n,0);db.close();
  const result=ensureLibraryReady(f.directory,root);assert.deepEqual(rawRows(f.directory,'stories'),f.before);verifyLibraryBackup(result.backup);
+});
+
+for(const mode of ['missing image','missing receipt','corrupt original','corrupt revision'])test(mode+' blocks purge and restores original state with a backup path',t=>{
+ const f=fixture(t);
+ if(mode.startsWith('missing')){const key=mode==='missing image'?'shared.png':'legacy-art/pear-3.png';rmSync(path.join(f.directory,'media',key));f.files=f.files.filter(file=>file!==key);}
+ else{const key=mode==='corrupt original'?'reader/trash/source.json':'reader/revision/base.json';mkdirSync(path.dirname(path.join(f.directory,'media',key)),{recursive:true});writeFileSync(path.join(f.directory,'media',key),'{unreadable');if(!f.files.includes(key))f.files.push(key);}
+ const manifest=fileManifest(f);assert.throws(()=>ensureLibraryReady(f.directory,root),error=>error.message.includes('backup: ')&&error.message.includes(mode.startsWith('missing')?'PROTECTED_MEDIA_MISSING':'PROTECTED_JSON_INVALID'));
+ assertOriginal(f,manifest);assert.equal(inspectLibrary(f.directory),'legacy');assert.ok(existsSync(path.join(f.directory,'media/legacy-art/pear-2.png')));
+});
+test('a current saved original follows absolute library media references and protects their bytes',t=>{
+ const f=fixture(t),file=path.join(f.directory,'media/reader/trash/source.json');writeFileSync(file,JSON.stringify({image:path.join(f.directory,'media/legacy-art/pear-2.png')}));
+ const result=ensureLibraryReady(f.directory,root);assert.ok(result.shared.includes('legacy-art/pear-2.png'));assert.ok(existsSync(path.join(f.directory,'media/legacy-art/pear-2.png')));
+});
+
+test('titles, prompts and original prose that look like filenames do not become missing-media requirements',t=>{
+ const f=fixture(t),db=new DatabaseSync(path.join(f.directory,'shiqu.sqlite'));
+ db.exec("UPDATE reader_sessions SET selection=json_set(selection,'$.storyTitle','notes.json','$.displayTitle','cover.png','$.productionPrompt','instructions.json'),document=json_set(document,'$.original',json('{\"title\":\"notes.json\",\"text\":\"cover.png\"}'))");
+ f.before=db.prepare('SELECT * FROM reader_sessions ORDER BY id').all();db.close();
+ ensureLibraryReady(f.directory,root);assert.deepEqual(rawRows(f.directory,'stories'),f.before);
+});
+test('relocated restore protects absolute saved-original references without consulting the original path',t=>{
+ const f=fixture(t),file=path.join(f.directory,'media/reader/trash/source.json');writeFileSync(file,JSON.stringify({image:path.join(f.directory,'media/legacy-art/pear-2.png')}));
+ const backup=path.join(f.parent,'absolute-backup');createLibraryBackup(f.directory,backup);
+ rmSync(f.directory,{recursive:true});const target=path.join(f.parent,'relocated');restoreAndUpgradeLibrary(backup,target,root);
+ assert.ok(existsSync(path.join(target,'media/legacy-art/pear-2.png')));assert.equal(JSON.parse(readFileSync(path.join(target,'media/reader/trash/source.json'),'utf8')).image,JSON.parse(readFileSync(path.join(backup,'media/reader/trash/source.json'),'utf8')).image);
 });

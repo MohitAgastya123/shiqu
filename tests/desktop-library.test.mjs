@@ -1,4 +1,5 @@
 // Desktop summaries and reversible deletions must preserve shared stories, owners, and paid checkpoints.
+import {historicalLibrary} from './fixtures/historical-library.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
@@ -73,4 +74,16 @@ test('preview refuses foreign-origin and originless mutations before opening the
   const response={statusCode:200,end(){this.ended=true;}};
   handle(request,response);assert.equal(response.statusCode,403);assert.equal(response.ended,true);
  }
+});
+
+test('preview transports explicit version errors before creating ownership or backup files',()=>{
+ const directory=mkdtempSync(path.join(tmpdir(),'shiqu-preview-version-')),previous=process.env.SHIQU_DATA_DIR;
+ try{
+  const database=historicalLibrary(directory);database.exec('PRAGMA user_version=2');database.close();
+  const before=readdirSync(directory);process.env.SHIQU_DATA_DIR=directory;let handle;
+  desktopPreview().configureServer({middlewares:{use(_path,callback){handle=callback;}}});
+  let body;const response={statusCode:200,setHeader(){},end(text){body=JSON.parse(text);}};
+  handle({method:'GET',url:'/',headers:{host:'127.0.0.1:1420'}},response);
+  assert.equal(response.statusCode,500);assert.match(body.error,/LIBRARY_NEWER_SCHEMA.*newer Shiqu/);assert.deepEqual(readdirSync(directory),before);
+ }finally{if(previous===undefined)delete process.env.SHIQU_DATA_DIR;else process.env.SHIQU_DATA_DIR=previous;rmSync(directory,{recursive:true,force:true});}
 });
