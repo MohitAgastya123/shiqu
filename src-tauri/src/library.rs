@@ -4,11 +4,18 @@ use serde_json::{json, Value};
 use std::{path::Path, time::Duration};
 
 // The declaration is compiled into both distributions; no runtime asset lookup is needed.
+fn library_format() -> Value {
+    serde_json::from_str(include_str!("../../db/library-format.json")).unwrap()
+}
 fn supported_version() -> i64 {
-    serde_json::from_str::<Value>(include_str!("../../db/library-format.json")).unwrap()
-        ["schemaVersion"]
-        .as_i64()
+    library_format()["schemaVersion"].as_i64().unwrap()
+}
+// Node applies later migrations; native reads wait until the newest bundled one is recorded.
+fn latest_migration() -> String {
+    library_format()["latestMigration"]
+        .as_str()
         .unwrap()
+        .to_string()
 }
 pub fn needs_upgrade(directory: &Path) -> Result<bool, String> {
     let journal = directory.join(".desktop-upgrade.json");
@@ -46,8 +53,15 @@ pub fn needs_upgrade(directory: &Path) -> Result<bool, String> {
         )
         .map_err(|e| e.to_string())?;
     let retired: bool = database.query_row("SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE name IN ('reader_sessions','jobs','progress'))", [], |r| r.get(0)).map_err(|e| e.to_string())?;
-    if version == supported_version() && column && !retired {
-        return Ok(false);
+    if version >= 1 && column && !retired {
+        let migrated: bool = database
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM app_migrations WHERE name=?1)",
+                [latest_migration()],
+                |r| r.get(0),
+            )
+            .map_err(|e| e.to_string())?;
+        return Ok(!migrated);
     }
     let historical: bool = database.query_row("SELECT EXISTS(SELECT 1 FROM pragma_table_info('reader_sessions') WHERE name='document')", [], |r| r.get(0)).map_err(|e| e.to_string())?;
     if version == 0 && historical {
@@ -157,7 +171,12 @@ mod tests {
         std::fs::remove_file(folder.join(".desktop-upgrade.json")).unwrap();
         assert!(!folder.join(".desktop-upgrade-lock.sqlite").exists());
         let db = Connection::open(&file).unwrap();
-        db.execute_batch("PRAGMA user_version=1").unwrap();
+        db.execute_batch("PRAGMA user_version=1; CREATE TABLE app_migrations(name TEXT PRIMARY KEY, applied_at TEXT NOT NULL)").unwrap();
+        db.execute(
+            "INSERT INTO app_migrations VALUES (?1,'2026-11-04')",
+            [latest_migration()],
+        )
+        .unwrap();
         drop(db);
         let lock = Connection::open(folder.join(".desktop-upgrade-lock.sqlite")).unwrap();
         lock.execute_batch("BEGIN EXCLUSIVE").unwrap();
@@ -187,7 +206,17 @@ mod tests {
             database.execute_batch(migration).unwrap();
         }
         database.execute("INSERT INTO reader_sessions (id,user_id,selection,document,state,created_at,updated_at) VALUES ('test','owner','{\"bookId\":\"book\",\"storyTitle\":\"故事\"}','{\"plan\":null,\"images\":[]}', 'idle','2026-10-29','2026-10-29')", []).unwrap();
-        database.execute_batch("DROP TABLE stories; DROP TABLE jobs; DROP TABLE progress; ALTER TABLE reader_sessions RENAME TO stories; PRAGMA user_version=1;").unwrap();
+        database.execute_batch("DROP TABLE stories; DROP TABLE jobs; DROP TABLE progress; ALTER TABLE reader_sessions RENAME TO stories; PRAGMA user_version=1; CREATE TABLE app_migrations(name TEXT PRIMARY KEY, applied_at TEXT NOT NULL);").unwrap();
+        drop(database);
+        // A consolidated library missing a bundled migration must be upgraded by Node first.
+        assert!(summary(&folder).unwrap_err().contains("UPGRADE_REQUIRED"));
+        let database = Connection::open(&file).unwrap();
+        database
+            .execute(
+                "INSERT INTO app_migrations VALUES (?1,'2026-11-04')",
+                [latest_migration()],
+            )
+            .unwrap();
         drop(database);
         let before = std::fs::read(&file).unwrap();
         let result = summary(&folder).unwrap();

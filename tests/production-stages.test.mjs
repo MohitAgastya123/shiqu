@@ -7,6 +7,7 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {productionSteps} from '../lib/production-stages.ts';
 import {readLibrarySummary} from '../desktop/library-preview.ts';
+import {migrate} from '../server/database-migrations.ts';
 import {view} from '../lib/reader-model.ts';
 import {generationProgress} from '../lib/generation-progress.ts';
 const base={sourceReady:true,frameCountConfirmed:true,planReady:true,total:45,ready:0,reviewStatus:'pending',reviewRound:0};
@@ -46,7 +47,7 @@ test('native/preview SQL and reader show the same saved stages without exporting
  const directory=mkdtempSync(path.join(tmpdir(),'shiqu-stages-'));
  try{
   const database=new DatabaseSync(path.join(directory,'shiqu.sqlite'));
-  for(const file of readdirSync('drizzle').filter(f=>f.endsWith('.sql')).sort())database.exec(readFileSync(path.join('drizzle',file),'utf8'));
+  migrate(database,process.cwd(),directory);
   const original={title:'原文',text:'private-original',url:'https://example.org'},plan={title:'测试故事',pages:Array.from({length:45},()=>({caption:'测试',prompt:'private-image-prompt'}))};
   const selection={bookId:'liaozhai',storyTitle:'测试故事',theme:'人情冷暖',artStyle:'ink-pencil',length:45,narrativeDetail:'balanced',voice:false,productionPrompt:'private-production-prompt'};
   const review=(status,round,extra={})=>({status,round,repairs:round?1:0,issues:[],repaired:[],reports:[],...extra});

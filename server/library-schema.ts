@@ -25,7 +25,8 @@ export function inspectLibrary(directory:string):'missing'|'legacy'|'current'|'p
   if(version>format.schemaVersion)throw Error(`LIBRARY_NEWER_SCHEMA: library ${version}, supported ${format.schemaVersion}; use a newer Shiqu app`);
   if(pending)return 'pending';
   const tables=new Set(db.prepare("SELECT name FROM sqlite_schema WHERE type='table'").all().map(row=>String(row.name)));
-  if(version===format.schemaVersion){
+  // Consolidated formats up to the supported version are current; later migrations apply in place.
+  if(version>=1){
    const columns=new Set(db.prepare('PRAGMA table_info(stories)').all().map(row=>row.name));
    if(!columns.has('document')||!columns.has('user_id')||['reader_sessions','jobs','progress'].some(n=>tables.has(n)))throw Error('LIBRARY_INVALID_SCHEMA');
    return 'current';

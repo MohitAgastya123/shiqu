@@ -99,3 +99,10 @@ CR review round: 3; reviewer: reused.
 CR passed: no major findings.
 
 The independent reviewer examined all story commits plus the final affected graph/purge/recovery/reporting changes and tests; no reviewer tests were executed. Ports 3000/3002 remain closed. The user's production library was not migrated, packaged, or used for verification. No push.
+
+Post-commit CR fixes (uncommitted):
+- Consolidated libraries now take later `drizzle/` migrations in place after a verified backup. Versions 1 through `schemaVersion` count as current. Pre-consolidation hooks are never re-run. `db/library-format.json` records `latestMigration` so native reads wait for Node, and a test keeps it in sync. Book seeds run on every open again.
+- Legacy-art inventory runs lazily on the first `/art/` request rather than at app startup. If it fails, nothing is served and the app still starts.
+- Restoring an older backup no longer leaves a `<target>.restore-<uuid>-backups` snapshot. The report names the verified source backup, and a failed restore publishes nothing.
+- Safety backups record the real app version instead of a hard-coded `0.8.0`. `0018` resets the `liaozhai` note to the seed placeholder, so new and upgraded libraries have the same catalog row.
+- Verification: typecheck and ESLint pass, native library tests pass 2/2, and the unit suite passes 1204/1204. The obsolete `old-name failed publication…` test was deleted at the user's request. It deleted the `0016` receipt from an already-consolidated library and expected the pre-consolidation hook to run again, which consolidated libraries never do.

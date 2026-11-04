@@ -1,7 +1,7 @@
 // Exercise the production coordinator, including killed-process recovery, without opening a user library.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,readdirSync,rmSync,existsSync} from 'node:fs';
+import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,readdirSync,rmSync,existsSync,cpSync} from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import {spawn,spawnSync} from 'node:child_process';
@@ -48,6 +48,7 @@ test('fresh and mixed upgrades converge; all owners/revisions/states and current
   assert.deepEqual(local.sqlite.prepare('SELECT id FROM events').all().map(row=>row.id),['kept']);
   assert.equal(JSON.parse(local.sqlite.prepare("SELECT result FROM production_jobs WHERE id='paid'").get().result).requestId,'paid-receipt');
   assert.equal(local.sqlite.prepare("SELECT excerpt FROM books WHERE id='liaozhai'").get().excerpt,'');
+  assert.equal(local.sqlite.prepare("SELECT note FROM books WHERE id='liaozhai'").get().note,'待录入选定篇目的原文与来源。');
   assert.equal(local.sqlite.prepare("SELECT title FROM books WHERE id='zhongshanlang'").get().title,'中山狼传');
   assert.equal(local.sqlite.prepare("SELECT count(*) n FROM library_deletions WHERE kind='generated'").get().n,1);
  }finally{local.close();}
@@ -57,7 +58,9 @@ test('fresh and mixed upgrades converge; all owners/revisions/states and current
  const schema=db=>db.prepare("SELECT type,name,tbl_name,sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%' ORDER BY type,name").all();
  const current=new DatabaseSync(path.join(f.directory,'shiqu.sqlite'));const upgradedSchema=schema(current);current.close();
  const fresh=path.join(f.parent,'fresh');ensureLibraryReady(fresh,root);const db=new DatabaseSync(path.join(fresh,'shiqu.sqlite'));
- assert.equal(db.prepare('SELECT count(*) n FROM stories').get().n,0);assert.deepEqual(schema(db),upgradedSchema);db.close();
+ assert.equal(db.prepare('SELECT count(*) n FROM stories').get().n,0);assert.deepEqual(schema(db),upgradedSchema);
+ const books=database=>database.prepare('SELECT * FROM books ORDER BY id').all(),upgraded=new DatabaseSync(path.join(f.directory,'shiqu.sqlite'),{readOnly:true});
+ assert.deepEqual(books(db).filter(row=>row.id!=='zhongshanlang'),books(upgraded).filter(row=>row.id!=='zhongshanlang'));upgraded.close();db.close();
 });
 for(const point of ['journal','staged','quarantined','database-retired','database-published','files-published','cleanup'])test('exception at '+point+' restores original DB and media, then retries once',t=>{
  const f=fixture(t),manifest=fileManifest(f);assert.throws(()=>ensureLibraryReady(f.directory,root,{onStep(step){if(step===point)throw Error('injected');}}),/restored original library; backup:/);
@@ -89,6 +92,9 @@ test('a separate process cannot enter the brief gate during publication',async t
 test('normal restore upgrades before publication and current-use legacy art reads through HTTP and Node export',async t=>{
  const f=fixture(t),backup=path.join(f.parent,'saved');createLibraryBackup(f.directory,backup);
  const target=path.join(f.parent,'restored');restoreAndUpgradeLibrary(backup,target,root);assert.equal(inspectLibrary(target),'current');assert.deepEqual(rawRows(target,'stories'),f.before);
+ // The verified source is the reported rollback point; no staging snapshot is left beside the target.
+ assert.equal(JSON.parse(readFileSync(path.join(target,'.desktop-upgrade-result.json'),'utf8')).backup,backup);
+ assert.deepEqual(readdirSync(f.parent).filter(name=>name.includes('.restore-')),[]);
  const app=createApplication({root,dataDirectory:target,variables:{SHIQU_AI_PROVIDER:'readonly'},production:{autoStart:false}});
  try{
   const bytes=readFileSync(path.join(target,'media/legacy-art/pear-1.png'));
@@ -127,4 +133,28 @@ test('relocated restore protects absolute saved-original references without cons
  const backup=path.join(f.parent,'absolute-backup');createLibraryBackup(f.directory,backup);
  rmSync(f.directory,{recursive:true});const target=path.join(f.parent,'relocated');restoreAndUpgradeLibrary(backup,target,root);
  assert.ok(existsSync(path.join(target,'media/legacy-art/pear-2.png')));assert.equal(JSON.parse(readFileSync(path.join(target,'media/reader/trash/source.json'),'utf8')).image,JSON.parse(readFileSync(path.join(backup,'media/reader/trash/source.json'),'utf8')).image);
+});
+
+test('the format declaration names the newest bundled migration for native readers',()=>{
+ const names=readdirSync(path.join(root,'drizzle')).filter(name=>name.endsWith('.sql')).sort();
+ assert.equal(JSON.parse(readFileSync(path.join(root,'db/library-format.json'),'utf8')).latestMigration,names.at(-1));
+});
+test('a consolidated library applies a later migration in place after a verified backup',t=>{
+ const f=fixture(t);ensureLibraryReady(f.directory,root);
+ // A copied application root stands in for the next release; the user's library is never touched.
+ const next=path.join(f.parent,'next');for(const item of ['drizzle','docker','package.json'])cpSync(path.join(root,item),path.join(next,item),{recursive:true});
+ writeFileSync(path.join(next,'drizzle/9999_later_change.sql'),'CREATE TABLE later_change(id TEXT PRIMARY KEY);');
+ const result=ensureLibraryReady(f.directory,next);
+ assert.deepEqual(result.migrations,['9999_later_change.sql']);verifyLibraryBackup(result.backup);
+ assert.equal(JSON.parse(readFileSync(path.join(result.backup,'shiqu-backup.json'),'utf8')).appVersion,JSON.parse(readFileSync(path.join(root,'package.json'),'utf8')).version);
+ const local=openDatabase(f.directory,next);
+ try{assert.ok(local.sqlite.prepare("SELECT 1 FROM sqlite_schema WHERE name='later_change'").get());assert.deepEqual(local.sqlite.prepare('SELECT * FROM stories ORDER BY id').all(),f.before);}
+ finally{local.close();}
+ assert.equal(ensureLibraryReady(f.directory,next),undefined);
+});
+test('a failed restore publishes nothing and leaves no staging snapshot',t=>{
+ const f=fixture(t),key='shared.png';rmSync(path.join(f.directory,'media',key));
+ const backup=path.join(f.parent,'saved');createLibraryBackup(f.directory,backup);const target=path.join(f.parent,'restored');
+ assert.throws(()=>restoreAndUpgradeLibrary(backup,target,root),error=>error.message.startsWith('LIBRARY_RESTORE_FAILED')&&error.message.includes(backup));
+ assert.equal(existsSync(target),false);assert.deepEqual(readdirSync(f.parent).filter(name=>name.includes('.restore-')),[]);
 });

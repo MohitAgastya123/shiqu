@@ -1,5 +1,7 @@
-// Own the local SQLite connection and apply each schema migration exactly once.
+// Own the local SQLite connection after the library upgrader applies every pending migration.
+// Book seeds are idempotent and run on each open so catalog additions reach existing libraries.
 import {DatabaseSync} from 'node:sqlite';
+import {readFileSync} from 'node:fs';
 import path from 'node:path';
 import {drizzle} from 'drizzle-orm/sqlite-proxy';
 import type {SQLInputValue} from 'node:sqlite';
@@ -13,6 +15,9 @@ export function openDatabase(directory:string,root:string){
  const sqlite=new DatabaseSync(path.join(directory,'shiqu.sqlite'));
  try{
   sqlite.exec('PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON');
+  sqlite.exec('BEGIN IMMEDIATE');
+  try{sqlite.exec(readFileSync(path.join(root,'docker/seed.sql'),'utf8'));sqlite.exec('COMMIT');}
+  catch(error){sqlite.exec('ROLLBACK');throw error;}
   const db=drizzle(async(query,params,method)=>{
    const statement=sqlite.prepare(query),values=params as SQLInputValue[];
    if(method==='run'){statement.run(...values);return {rows:[]};}

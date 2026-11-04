@@ -1,5 +1,6 @@
 // Desktop summaries and reversible deletions must preserve shared stories, owners, and paid checkpoints.
 import {historicalLibrary} from './fixtures/historical-library.mjs';
+import {migrate} from '../server/database-migrations.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
@@ -12,7 +13,7 @@ test('desktop summaries include pending stories, counts and saved state, excludi
  const directory=mkdtempSync(path.join(tmpdir(),'shiqu-summary-'));
  try{
   const database=new DatabaseSync(path.join(directory,'shiqu.sqlite'));
-  for(const file of readdirSync('drizzle').filter(file=>file.endsWith('.sql')).sort())database.exec(readFileSync(path.join('drizzle',file),'utf8'));
+  migrate(database,process.cwd(),directory);
   const insert=database.prepare(`INSERT INTO stories(id,user_id,selection,document,state,page,saved,created_at,updated_at) VALUES(?,?,?,?,?,0,1,?,?)`);
   const selection=JSON.stringify({bookId:'book',theme:'回味',artStyle:'watercolor',storyTitle:'还没展开'}),document=JSON.stringify({plan:{title:'真实故事',pages:[{},{}]},images:['/image.png',''],audio:[]}),now='2026-10-29T10:00:00Z';
   insert.run('visible','owner',selection,document,'running',now,now);
@@ -43,7 +44,7 @@ test('desktop deletion hides the same story as the reader and undo restores it w
  const directory=mkdtempSync(path.join(tmpdir(),'shiqu-delete-'));
  try{
   const database=new DatabaseSync(path.join(directory,'shiqu.sqlite'));
-  for(const file of readdirSync('drizzle').filter(file=>file.endsWith('.sql')).sort())database.exec(readFileSync(path.join('drizzle',file),'utf8'));
+  migrate(database,process.cwd(),directory);
   database.prepare(`INSERT INTO stories(id,user_id,selection,document,state,page,saved,created_at,updated_at) VALUES('one','owner','{"bookId":"book","theme":"人情冷暖"}','{"plan":{"title":"可恢复的故事","pages":[{}]},"images":["/kept.png"]}','completed',0,0,'2026-10-29','2026-10-29')`).run();
   database.prepare('INSERT INTO library_deletions VALUES(?,?,?,?)').run('other-owner','one','generated','2026-10-28');
   const before=database.prepare('SELECT * FROM stories').all();

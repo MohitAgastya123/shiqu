@@ -136,22 +136,6 @@ test('a display-title change during publication cannot fail the already-paid ima
  f.control.hold=false;await until(async()=>(await f.read(id)).state==='completed');assert.equal(renamed,true);assert.equal(f.control.calls.length,2);assert.equal((await f.read(id)).story.title,'发布时改名');assert.equal((await f.read(id)).faults,undefined);
 });
 
-test('an old-name failed publication keeps and republishes its paid receipt after upgrading without another draw',async t=>{
- const {DatabaseSync}=await import('node:sqlite'),{inputVersion,productionJobId}=await import('../server/production-queue.ts');
- const f=await productionFixture(t),id=await f.create(2),get=f.app.services.media.get.bind(f.app.services.media);
- f.app.services.media.get=async key=>key.startsWith(`reader/${id}/artifacts/1-`)?Promise.reject(Error('old publication read failed')):get(key);
- f.control.hold=false;await until(async()=>(await f.read(id)).state==='failed');assert.equal(f.control.calls.length,2);const oldFault=(await f.read(id)).faults[0];await f.stop();
- const db=new DatabaseSync(path.join(f.dataDirectory,'shiqu.sqlite')),row=db.prepare('SELECT * FROM stories WHERE id=?').get(id),doc=JSON.parse(row.document),selection=JSON.parse(row.selection),named={...selection,displayTitle:'A'};
- const version=inputVersion({scriptVersion:inputVersion({selection:named}),plan:doc.plan,style:selection.artStyle,prompt:selection.productionPrompt}),jobs=db.prepare("SELECT * FROM production_jobs WHERE session_id=? AND kind IN ('image','image-publish') AND json_extract(payload,'$.page')=1").all(id),mapping=new Map();
- for(const job of jobs)mapping.set(job.id,productionJobId(id,job.kind,version,'1'));
- for(const job of jobs)db.prepare('UPDATE production_jobs SET id=?,version=?,dependencies=? WHERE id=?').run(mapping.get(job.id),version,JSON.stringify(JSON.parse(job.dependencies).map(id=>mapping.get(id)||id)),job.id);
- db.prepare('UPDATE reader_faults SET job_id=?,version=? WHERE id=?').run(mapping.get(jobs.find(j=>j.kind==='image-publish').id),version,oldFault.id);
- db.prepare("UPDATE stories SET selection=?,generation_control='paused' WHERE id=?").run(JSON.stringify({...selection,displayTitle:'B'}),id);
- db.prepare("DELETE FROM app_migrations WHERE name='0016_legacy_input_faults.sql'").run();db.close();
- await f.restart();let saved=await f.read(id);assert.equal(saved.faults[0].stage,'publication');await f.app.services.production.tick();assert.equal(f.control.calls.length,2);
- await f.json(`sessions/${id}/production-control`,'POST',{action:'resume'});await recover(f,id,saved.faults[0]);await until(async()=>(await f.read(id)).state==='completed');saved=await f.read(id);assert.equal(saved.story.title,'B');assert.equal(saved.ready,2);assert.equal(f.control.calls.length,2);assert.equal(saved.faults,undefined);
-});
-
 test('an uncertain reference read cannot reach a provider that has a separately readable media handle',async t=>{
  const f=await productionFixture(t,'codex',{SHIQU_IMAGE_WORKERS:'1'}),id=await f.create(4);await until(()=>f.control.calls.length===1);f.control.calls[0].resolve();await until(()=>f.control.calls.length===2);
  const image=(await f.read(id)).story.pages[0].image,key=`reader/${id}/${image.split(`/media/${id}/`)[1]}`,get=f.app.services.media.get.bind(f.app.services.media);f.app.services.media.get=async value=>{if(value===key)throw Error('temporarily cannot verify reference');return get(value);};

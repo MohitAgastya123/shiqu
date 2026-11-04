@@ -1,5 +1,7 @@
 // Publish one canonical story store only after a verified whole-library backup. The pending journal
 // survives every destructive step; recovery restores files in place so service/gate lock inodes stay stable.
+// Consolidated libraries take later migrations in place after their own verified backup. Restores report
+// the caller's source backup instead of keeping a second snapshot beside the staging directory.
 import {DatabaseSync} from 'node:sqlite';
 import {existsSync,mkdirSync,readFileSync,writeFileSync,renameSync,rmSync,readdirSync,lstatSync,openSync,closeSync,fsyncSync} from 'node:fs';
 import path from 'node:path';
@@ -8,7 +10,7 @@ import {isDeepStrictEqual} from 'node:util';
 import {createLibraryBackup,verifyLibraryBackup,restoreLibraryBackup,containsPath} from './library-backup.ts';
 import {inspectLibrary,withLibraryGate,pendingUpgrade,upgradeJournal,libraryFormat} from './library-schema.ts';
 import {ownsDesktopData,ownDesktopDataSync} from './desktop-owner.ts';
-import {migrate} from './database-migrations.ts';
+import {migrate,migrationNames} from './database-migrations.ts';
 import {mediaKey} from './media.ts';
 
 export const consolidationMigration='0018_consolidate_story_storage.sql';
@@ -147,22 +149,44 @@ function recover(directory:string){
  rmSync(path.join(directory,journal.work),{recursive:true,force:true});
  rmSync(path.join(directory,upgradeJournal));syncDirectory(directory);
 }
+function appVersion(root:string){
+ try{return String(JSON.parse(readFileSync(path.join(root,'package.json'),'utf8')).version||'unknown');}catch{return 'unknown';}
+}
+function safetyBackup(directory:string,root:string){
+ const backup=path.join(path.dirname(directory),path.basename(directory)+'-backups','pre-upgrade-'+new Date().toISOString().replace(/[:.]/g,'-')+'-'+randomUUID().slice(0,8));
+ createLibraryBackup(directory,backup,appVersion(root));const manifest=verifyLibraryBackup(backup);
+ for(const file of [...manifest.files.map(f=>f.path),'shiqu-backup.json']){const fd=openSync(path.join(backup,file),'r');try{fsyncSync(fd);}finally{closeSync(fd);}}
+ syncDirectory(backup);syncDirectory(path.dirname(backup));
+ console.warn('升级前备份已校验：'+backup);
+ return backup;
+}
+function pendingMigrations(directory:string,root:string){
+ const db=new DatabaseSync(path.join(directory,'shiqu.sqlite'),{readOnly:true});
+ try{const applied=new Set(db.prepare('SELECT name FROM app_migrations').all().map(row=>String(row.name)));return migrationNames(root).filter(name=>name>consolidationMigration&&!applied.has(name));}
+ finally{db.close();}
+}
+function applyPendingMigrations(directory:string,root:string){
+ // Each migration commits on its own; the verified backup is the rollback point for a partial failure.
+ const migrations=pendingMigrations(directory,root);if(!migrations.length)return;
+ const backup=safetyBackup(directory,root),sqlite=new DatabaseSync(path.join(directory,'shiqu.sqlite'));
+ try{sqlite.exec('PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON');migrate(sqlite,root,directory,undefined,consolidationMigration);sqlite.exec('PRAGMA wal_checkpoint(TRUNCATE)');}
+ catch(error){throw Error(`LIBRARY_MIGRATION_FAILED; backup: ${backup}; ${String(error)}`,{cause:error});}
+ finally{sqlite.close();}
+ if(inspectLibrary(directory)!=='current')throw Error(`LIBRARY_MIGRATION_FAILED; backup: ${backup}; invalid schema`);
+ return {backup,migrations};
+}
 export type UpgradePoint='journal'|'staged'|'quarantined'|'database-retired'|'database-published'|'files-published'|'cleanup';
 export function ensureLibraryReady(directory:string,root:string,options:{onStep?:(point:UpgradePoint)=>void}={}){
- const initial=inspectLibrary(directory);if(initial==='current')return;
+ const initial=inspectLibrary(directory);if(initial==='current'&&!pendingMigrations(directory,root).length)return;
  const release=ownsDesktopData(directory)?()=>{}:ownDesktopDataSync(directory);
  try{return withLibraryGate(directory,()=>{
   const pending=pendingUpgrade(directory);
   if(pending)try{recover(directory);}catch(error){throw Error(`LIBRARY_RECOVERY_FAILED; backup: ${pending.backup||'fresh library'}; ${String(error)}`,{cause:error});}
-  const state=inspectLibrary(directory);if(state==='current')return;
+  const state=inspectLibrary(directory);if(state==='current')return applyPendingMigrations(directory,root);
   const workName='.desktop-upgrade-'+randomUUID(),work=path.join(directory,workName);
   let backup:string|null=null;
   if(state==='legacy'){
-   backup=path.join(path.dirname(directory),path.basename(directory)+'-backups','pre-upgrade-'+new Date().toISOString().replace(/[:.]/g,'-')+'-'+randomUUID().slice(0,8));
-   createLibraryBackup(directory,backup,'0.8.0');const manifest=verifyLibraryBackup(backup);
-   for(const file of [...manifest.files.map(f=>f.path),'shiqu-backup.json']){const fd=openSync(path.join(backup,file),'r');try{fsyncSync(fd);}finally{closeSync(fd);}}
-   syncDirectory(backup);syncDirectory(path.dirname(backup));
-   console.warn('升级前备份已校验：'+backup);
+   backup=safetyBackup(directory,root);
   }
   durableFile(path.join(directory,upgradeJournal),JSON.stringify({version:libraryFormat.schemaVersion,work:workName,backup})+'\n');
   try{
@@ -178,10 +202,12 @@ export function ensureLibraryReady(directory:string,root:string,options:{onStep?
     const durableTables=['production_jobs','production_demand','reader_commands','reader_faults','reader_publication_defaults'];
     const values=durableTables.map(t=>sqlite.prepare(`SELECT * FROM ${t} ORDER BY rowid`).all());
     const plan=purgePlan(sqlite,work,directory);removal=plan.remove;shared=plan.shared;uncertain=plan.uncertain;kept=new Map(plan.keep.map(key=>[key,hash(path.join(work,'media',key))]));
-    migrate(sqlite,root,work);sqlite.exec(readFileSync(path.join(root,'docker/seed.sql'),'utf8'));
+    migrate(sqlite,root,work,consolidationMigration);
     if(!isDeepStrictEqual(rows,sqlite.prepare('SELECT * FROM stories ORDER BY id').all()))throw Error('LIBRARY_STORY_PRESERVATION_FAILED');
     for(let i=0;i<durableTables.length;i++)if(!isDeepStrictEqual(values[i],sqlite.prepare(`SELECT * FROM ${durableTables[i]} ORDER BY rowid`).all()))throw Error('LIBRARY_QUEUE_PRESERVATION_FAILED');
     if(sqlite.prepare("SELECT name FROM sqlite_schema WHERE type='trigger' AND sql LIKE '%reader_sessions%'").get())throw Error('LIBRARY_TRIGGER_RENAME_FAILED');
+    // Later migrations join the same staged publication, after preservation is proven on the consolidated shape.
+    migrate(sqlite,root,work);sqlite.exec(readFileSync(path.join(root,'docker/seed.sql'),'utf8'));
     if(sqlite.prepare('PRAGMA integrity_check').get()!.integrity_check!=='ok')throw Error('LIBRARY_DATABASE_CORRUPT');
     sqlite.exec('PRAGMA wal_checkpoint(TRUNCATE)');
    }finally{sqlite.close();}
@@ -220,17 +246,20 @@ function inspectLibraryWithoutJournal(directory:string){
  // Pending journal deliberately takes precedence in public preflight. Inspect the published DB
  // directly here without making the journal disappear before all file work is complete.
  const db=new DatabaseSync(path.join(directory,'shiqu.sqlite'),{readOnly:true});
- try{return Number(db.prepare('PRAGMA user_version').get()!.user_version)===libraryFormat.schemaVersion&&db.prepare("SELECT 1 FROM pragma_table_info('stories') WHERE name='document'").get()?'current':'invalid';}finally{db.close();}
+ try{const version=Number(db.prepare('PRAGMA user_version').get()!.user_version);return version>=1&&version<=libraryFormat.schemaVersion&&db.prepare("SELECT 1 FROM pragma_table_info('stories') WHERE name='document'").get()?'current':'invalid';}finally{db.close();}
 }
 export function restoreAndUpgradeLibrary(source:string,target:string,root:string){
  if(existsSync(target))throw Error('BACKUP_TARGET_EXISTS');
- const stage=target+'.restore-'+randomUUID();
+ const stage=target+'.restore-'+randomUUID(),stageBackups=stage+'-backups';
  try{
-  const manifest=restoreLibraryBackup(source,stage);ensureLibraryReady(stage,root);
-  // The original backup remains the recovery point; move the automatic safety snapshot alongside
-  // the final target so the reported path remains valid and no transient destination is published.
+  const manifest=restoreLibraryBackup(source,stage);
+  try{ensureLibraryReady(stage,root);}
+  catch(error){throw Error(`LIBRARY_RESTORE_FAILED; nothing restored; source backup unchanged: ${path.resolve(source)}; ${String(error)}`,{cause:error});}
+  // The verified source already holds the pre-upgrade state, so report it instead of the staging snapshot.
+  const report=path.join(stage,'.desktop-upgrade-result.json');
+  if(existsSync(report))durableFile(report,JSON.stringify({...JSON.parse(readFileSync(report,'utf8')),backup:path.resolve(source)})+'\n');
   renameSync(stage,target);return manifest;
- }finally{rmSync(stage,{recursive:true,force:true});}
+ }finally{rmSync(stage,{recursive:true,force:true});rmSync(stageBackups,{recursive:true,force:true});}
 }
 
 export function libraryUpgradeBackup(directory:string):string|undefined{

@@ -1,12 +1,15 @@
-// Apply immutable historical migrations; callers stage files and own recovery before invoking hooks.
+// Apply immutable migrations once each; callers stage files and own recovery before invoking hooks.
+// `through` limits historical fixtures and the consolidation stage; `after` keeps consolidated libraries
+// from re-running pre-consolidation hooks whose receipts are absent.
 import {readFileSync,readdirSync} from 'node:fs';
 import path from 'node:path';
 import type {DatabaseSync} from 'node:sqlite';
 import {storySummaryMigration,migrateStorySummary} from './story-summary-migration.ts';
 import {readerInputMigration,migrateReaderInputs,legacyInputFaultMigration,retainLegacyInputFaults} from './reader-input-migration.ts';
-export function migrate(sqlite:DatabaseSync,root:string,directory?:string,through='0018_consolidate_story_storage.sql'){
+export const migrationNames=(root:string)=>readdirSync(path.join(root,'drizzle')).filter(f=>f.endsWith('.sql')).sort();
+export function migrate(sqlite:DatabaseSync,root:string,directory?:string,through?:string,after?:string){
  sqlite.exec('CREATE TABLE IF NOT EXISTS app_migrations(name TEXT PRIMARY KEY, applied_at TEXT NOT NULL)');
- for(const name of readdirSync(path.join(root,'drizzle')).filter(f=>f.endsWith('.sql')&&f<=through).sort()){
+ for(const name of migrationNames(root).filter(f=>(!through||f<=through)&&(!after||f>after))){
   sqlite.exec('BEGIN IMMEDIATE');
   try{
    if(!sqlite.prepare('SELECT 1 FROM app_migrations WHERE name=?').get(name)){
