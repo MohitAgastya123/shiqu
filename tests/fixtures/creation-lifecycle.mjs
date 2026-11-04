@@ -12,7 +12,7 @@ export async function creationLifecycle(t){
   assert.equal(library.calls.catalog.length,0);await b.screenshot('before-start');
   await page.goto(b.url+'/?id='+initial.id);await dialog(page,'故事设置').getByRole('button',{name:'开始提取',exact:true}).waitFor();assert.equal(library.calls.catalog.length,0);
   await b.extract(initial,'乌龟报恩');assert.equal(f.control.plans.length,0);assert.equal(f.control.calls.length,0);
-  await page.getByRole('link',{name:'制作要求（可选）',exact:true}).click();let editor=dialog(page,'修改故事');
+  await page.getByRole('link',{name:'制作要求',exact:true}).click();let editor=dialog(page,'修改故事');
   await editor.getByLabel(/^制作要求/).fill('保留完整因果，动作清楚。');
   await editor.getByRole('button',{name:'验收要求',exact:true}).click();await editor.getByLabel(/^验收要求/).fill('关键反应落实到画面。');
   await editor.getByRole('button',{name:'画风',exact:true}).click();await editor.getByRole('radio',{name:'水彩绘本',exact:true}).check();

@@ -1,5 +1,6 @@
 // Attach each production fault, recovery action and review panel to its saved checkpoint.
 // Keep retries scoped to their original fault IDs and in the same footer as production controls.
+// Respect view-specific timing keys when preparation is separated from human confirmation.
 import {Fragment} from 'react';
 import type {ComponentProps,ReactNode} from 'react';
 import type {SessionView} from '@/lib/reader-model';
@@ -19,8 +20,9 @@ export default function StoryProductionTimeline({session,busy=false,error='',onR
  const review=stages.find(step=>['review','repair','recheck'].includes(step.id)&&step.state==='failed')?.id||stages.find(step=>['review','repair','recheck'].includes(step.id)&&step.state==='current')?.id||'review';
  const reviewBlocked=!!session.reviewIssues?.length||meta?.reviewStopReason==='requirements';
  const ownsReview=reviewBlocked&&!!reviewTools,intakePhase=session.intake?.phase;
+ const preparationStage=stages.some(step=>step.id==='prepare')?'prepare':'count';
  function stageFor(fault:FaultView){
-  return fault.stage==='source'?(intakePhase&&intakePhase!=='confirmed'?'count':'source'):fault.stage==='prepare'?'count':fault.stage==='review'?review:fault.stage==='publication'||fault.stage==='redraw'||fault.page!==null?'image':current;
+  return fault.stage==='source'?(intakePhase&&intakePhase!=='confirmed'?preparationStage:'source'):fault.stage==='prepare'?preparationStage:fault.stage==='review'?review:fault.stage==='publication'||fault.stage==='redraw'||fault.page!==null?'image':current;
  }
  const content:Record<string,ReactNode[]>={};
  const footer:Record<string,ReactNode[]>={};
@@ -42,5 +44,5 @@ export default function StoryProductionTimeline({session,busy=false,error='',onR
  for(const [stage,node] of Object.entries(stageContent))add(stage,node);
  if(currentContent)(footer[current]||=[]).push(<Fragment key="control">{currentContent}</Fragment>);
  for(const [stage,nodes] of Object.entries(footer))add(stage,<div key="footer" className="production-stage-footer">{nodes}</div>);
- return <ProductionTimeline {...props} stageDurations={meta?.stageDurations} stageTimes={{...props.stageTimes,[current]:currentTiming}} stageContent={Object.fromEntries(Object.entries(content).map(([stage,nodes])=>[stage,<Fragment key={stage}>{nodes.map((node,index)=><Fragment key={index}>{node}</Fragment>)}</Fragment>]))}/>;
+ return <ProductionTimeline {...props} stageDurations={props.stageDurations??meta?.stageDurations} stageTimes={{...props.stageTimes,[current]:currentTiming}} stageContent={Object.fromEntries(Object.entries(content).map(([stage,nodes])=>[stage,<Fragment key={stage}>{nodes.map((node,index)=><Fragment key={index}>{node}</Fragment>)}</Fragment>]))}/>;
 }

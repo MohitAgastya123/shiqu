@@ -1,4 +1,5 @@
 // Render production components and verify that errors and next actions belong to their step.
+// Source actions, measured preparation and editable confirmation each stay with their own step.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
@@ -129,6 +130,42 @@ test('confirmation puts its start action directly under the confirmation step',(
  const failedSearch=renderToStaticMarkup(createElement(Setup,{session:{...session,intake:{...session.intake,search:{state:'failed',error:searchError}}},book:'庄子',busy:false,onAction:noop,progress:defaults}));
  assert.ok(stage(failedSearch,'source').includes(searchError));assert.match(stage(failedSearch,'source'),/重试查找/);
  assert.ok(!beforeSteps(failedSearch).includes(searchError));
+});
+
+test('confirmation owns all four settings while extraction and preparation retain their real timing',()=>{
+ const session={...base,state:'idle',error:null,retryAllowed:false,generationControl:'paused',selection:{...base.selection,source:{sectionId:'chapter',firstUnit:'p1',lastUnit:'p2'},artStyle:'cinematic',narrativeDetail:'balanced'},frameRecommendation:{count:7,reason:'保留完整因果。',storySummary:'悟空三次识破白骨精，除妖后仍被唐僧逐走。'},intake:{phase:'confirming',generation:1,search:{state:'idle'},selected:{batch:0,index:0},batches:[{stories:[{title:'庄周梦蝶',description:'梦与醒的故事。'}],note:''}]},generationProgress:{...base.generationProgress,phase:'production-confirmation',frameCountConfirmed:false,stageDurations:{source:12,count:26}}};
+ const setup=value=>renderToStaticMarkup(createElement(Setup,{session:value,book:'庄子',busy:false,onAction:noop,progress:defaults}));
+ const html=setup(session),document=parseDocument(html);
+ const source=DomUtils.findOne(node=>node.name==='li'&&node.attribs?.['data-stage']==='source',document.children);
+ const count=DomUtils.findOne(node=>node.name==='li'&&node.attribs?.['data-stage']==='count',document.children);
+ assert.match(DomUtils.textContent(source),/提取故事.*《庄子》 · 不限定主题.*耗时 0分 12秒/s);
+ assert.equal((html.match(/《庄子》 · 不限定主题/g)||[]).length,1);
+ assert.doesNotMatch(beforeSteps(html),/《庄子》/);
+ const scoped=setup({...session,selection:{...session.selection,discoverySources:[session.selection.source]}});
+ assert.match(stage(scoped,'source'),/《庄子》 · 不限定主题 · 已选 1 段原文/);
+ assert.doesNotMatch(scoped,/已定位原文章节与段落/);
+ assert.deepEqual(DomUtils.findAll(node=>node.name==='a',source.children).map(node=>DomUtils.textContent(node)),['原文','重新选择故事']);
+ assert.doesNotMatch(beforeSteps(html),/原文<|重新选择故事/);
+ assert.doesNotMatch(html,/制作流程导航|（可选）/);
+ const heading=DomUtils.findOne(node=>node.name==='strong',count.children);
+ assert.equal(DomUtils.textContent(heading),'制作确认');
+ assert.equal(DomUtils.findOne(node=>node.name==='a',heading.children),null);
+ const settings=DomUtils.findOne(node=>node.attribs?.['aria-label']==='制作设置',count.children);
+ assert.deepEqual(DomUtils.findAll(node=>node.name==='a',settings.children).map(node=>node.attribs['aria-label']||DomUtils.textContent(node)),['制作要求','验收要求','修改画风','修改叙事详略']);
+ assert.match(DomUtils.textContent(settings),/画风：电影写实.*叙事详略：适中/s);
+ assert.match(stage(html,'prepare'),/准备故事.*原文与梗概已核对.*耗时 0分 26秒/s);
+ assert.doesNotMatch(DomUtils.textContent(count),/耗时|原文与梗概已核对/);
+ assert.ok(DomUtils.textContent(count).indexOf('制作要求')<DomUtils.textContent(count).indexOf('开始制作'));
+ const unknown=setup({...session,generationProgress:{...session.generationProgress,stageDurations:undefined}});
+ assert.doesNotMatch(unknown,/耗时/);assert.match(stage(unknown,'prepare'),/原文与梗概已核对/);
+ const legacy=setup({...session,frameRecommendation:{count:7,reason:'历史制作建议。'}});
+ assert.match(stage(legacy,'prepare'),/原文与制作建议已保存/);assert.doesNotMatch(stage(legacy,'prepare'),/梗概已核对/);
+ const preparing=setup({...session,intake:{...session.intake,phase:'preparing'},frameRecommendation:null,generationProgress:{...session.generationProgress,phase:'recommend'}});
+ assert.match(stage(preparing,'count'),/制作要求.*验收要求.*画风：电影写实.*叙事详略：适中/s);
+ assert.doesNotMatch(stage(preparing,'prepare'),/梗概已核对|耗时|开始制作/);
+ assert.doesNotMatch(stage(preparing,'count'),/耗时|开始制作/);
+ const failed=setup({...session,state:'failed',error:'原文准备失败。',intake:{...session.intake,phase:'preparing'},frameRecommendation:null,faults:[{id:'prepare-fault',stage:'prepare',page:null,message:'原文准备失败。',state:'pending',retryAllowed:true}],generationProgress:{...session.generationProgress,phase:'recommend'}});
+ assert.match(stage(failed,'prepare'),/原文准备失败/);assert.doesNotMatch(stage(failed,'count'),/原文准备失败/);
 });
 
 test('active steps show only their timeout countdown below the current step',()=>{

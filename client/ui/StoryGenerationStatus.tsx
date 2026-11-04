@@ -2,8 +2,9 @@
 // Failed work offers recovery in the control slot; only active work offers pause.
 // Standalone flows name the story; embedded settings reuse the title already shown above.
 // Changing progress shares the navigation row in both presentations.
+// Creation may split saved preparation timing from its separate confirmation gate.
 import {useEffect,useState} from 'react';
-import type {ReactNode} from 'react';
+import type {ComponentProps,ReactNode} from 'react';
 import {Check,Clock3,Feather,Pause,X} from 'lucide-react';
 import type {ProductionAction,SessionView} from '@/lib/reader-model';
 import {shelfGenerationStatus} from '@/lib/shelf-generation';
@@ -16,7 +17,7 @@ import StoryGenerationControl from './StoryGenerationControl';
 import StoryFlowHeader from './StoryFlowHeader';
 import type {StoryFlowNavigation} from './StoryFlowHeader';
 
-export default function StoryGenerationStatus({session,busy,controlBusy,error,onControl,onRetry,onBack,onHistory,onAcceptance,navigation,timeline,stages,control,compact=false,reviewTools,stageContent,children,hideBack=false,showSummary=true}:{reviewTools?:ReactNode;stageContent?:Record<string,ReactNode>;compact?:boolean;children?:ReactNode;control?:ReactNode;timeline?:ProductionTimelineNavigation;stages?:ProductionStage[];session:SessionView;busy:boolean;controlBusy:boolean;error:string;onControl:(id:string,action:ProductionAction)=>Promise<void>;onRetry:(faultId?:string)=>void;onBack:()=>void;hideBack?:boolean;showSummary?:boolean;onHistory?:()=>void;onAcceptance?:()=>void;navigation?:StoryFlowNavigation}){
+export default function StoryGenerationStatus({session,busy,controlBusy,error,onControl,onRetry,onBack,onHistory,onAcceptance,navigation,timeline,stages,control,compact=false,reviewTools,stageContent,children,hideBack=false,showSummary=true}:{reviewTools?:ReactNode;stageContent?:Record<string,ReactNode>;compact?:boolean;children?:ReactNode;control?:ReactNode;timeline?:ProductionTimelineNavigation&Pick<ComponentProps<typeof StoryProductionTimeline>,'stageDurations'>;stages?:ProductionStage[];session:SessionView;busy:boolean;controlBusy:boolean;error:string;onControl:(id:string,action:ProductionAction)=>Promise<void>;onRetry:(faultId?:string)=>void;onBack:()=>void;hideBack?:boolean;showSummary?:boolean;onHistory?:()=>void;onAcceptance?:()=>void;navigation?:StoryFlowNavigation}){
  const status=shelfGenerationStatus(session),stopped=status.group==='生成失败'||status.group==='生成已暂停';
  const [,setNow]=useState(Date.now);
  const progress=generationProgress(session,Date.now()),moving=progress.running&&!error&&!stopped;

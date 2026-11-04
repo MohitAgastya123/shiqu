@@ -1,4 +1,5 @@
 /* Keep the same stage semantics and readable layout in the phone reader and desktop queue. */
+/* Source actions sit with extraction; a two-column settings group belongs to confirmation. */
 ol.production-timeline{list-style:none;padding:0;margin:0;display:grid;gap:5px;text-align:left}
 .production-timeline>li{display:flex;align-items:center;gap:10px;min-height:52px;padding:8px;border:1px solid transparent;border-radius:9px;font-size:12px;line-height:1.6;color:#718064}
 .production-stage-icon{display:grid;place-items:center;flex:none;width:24px;height:24px;border:1px solid #d3ddc7;border-radius:50%;font:11px system-ui,sans-serif}
@@ -43,6 +44,9 @@ ol.production-timeline--horizontal{grid-template-columns:repeat(7,minmax(0,1fr))
 .production-timeline>li.has-stage-content{flex-wrap:wrap}.production-stage-notice{display:grid;gap:8px;flex-basis:calc(100% - 34px);min-width:0;margin-left:34px;line-height:1.7}.production-acceptance-notice>strong{font-weight:600}.production-acceptance-notice>p{margin:6px 0}.production-acceptance-notice>button{min-height:40px}
 
 .production-stage-notice .yu-retry-control{margin:0}.production-stage-notice .yu-review-tools.has-issues{padding:0;border:0;background:none}.production-stage-notice .yu-review-tools{margin:8px 0}.production-stage-notice .yu-batch-error{margin:8px 0}.production-stage-notice>.yu-primary{margin-top:10px}
+.yu-confirmation-settings{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));justify-items:start;align-items:baseline;gap:4px 16px;min-width:0}
+.yu-creation-setup [data-stage=count]>.production-stage-notice>.story-flow-link{justify-self:end}
+.yu-extraction-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;align-items:baseline;gap:4px 16px}
 
 .production-stage-footer{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:4px 12px;min-width:0}
 .production-stage-timing{display:inline-flex;align-items:center;gap:4px;margin:0;font-size:11px;line-height:1.7;color:#617254;font-variant-numeric:tabular-nums}
