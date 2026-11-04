@@ -28,4 +28,4 @@ All tests used temporary libraries; the user's library was never touched. No des
 
 ## Compatibility
 
-Desktop and CLI 0.8.0 or later are required. Older released versions don't check the schema version and must not open a consolidated library. To roll back, restore the pre-upgrade backup with the matching older app. The one-time upgrade needs free disk space of about twice the library size.
+Desktop and CLI 0.8.0 or later are required. Older released versions don't check the schema version. Migration `0019` adds a trigger that aborts their first seed write (the `liaozhai` row with its source URL), so CLI and browser 0.2–0.7 refuse the library with `BACKUP_APP_TOO_OLD: this library requires Shiqu 0.8.0 or later…`, and nothing is written. This was checked against the real 0.7.0 source. The 0.7.x desktop app still shows its generic startup error. A Codex skill copy installed by 0.7.x keeps calling CLI 0.7.x until `skill update` is run with 0.8.0. To roll back, restore the pre-upgrade backup with the matching older app. The one-time upgrade needs free disk space of about twice the library size.

@@ -158,3 +158,24 @@ test('a failed restore publishes nothing and leaves no staging snapshot',t=>{
  assert.throws(()=>restoreAndUpgradeLibrary(backup,target,root),error=>error.message.startsWith('LIBRARY_RESTORE_FAILED')&&error.message.includes(backup));
  assert.equal(existsSync(target),false);assert.deepEqual(readdirSync(f.parent).filter(name=>name.includes('.restore-')),[]);
 });
+// Released 0.2-0.7 seeds start with this liaozhai row on every open; the consolidated schema must refuse it.
+const releasedSeed="INSERT INTO books (id,title,author,era,source_url,excerpt,note) VALUES ('liaozhai','聊斋志异','蒲松龄','清','https://zh.wikisource.org/wiki/聊齋志異/卷一','种梨','演示') ON CONFLICT(id) DO NOTHING;";
+function assertRefusesReleasedSeed(directory){
+ const db=new DatabaseSync(path.join(directory,'shiqu.sqlite')),row=()=>db.prepare("SELECT * FROM books WHERE id='liaozhai'").get();
+ try{const before=row();assert.throws(()=>db.exec(releasedSeed),/BACKUP_APP_TOO_OLD: this library requires Shiqu 0\.8\.0 or later/);assert.deepEqual(row(),before);}
+ finally{db.close();}
+}
+test('fresh and upgraded libraries refuse pre-0.8 seeding while current opens keep seeding',t=>{
+ const f=fixture(t);ensureLibraryReady(f.directory,root);assertRefusesReleasedSeed(f.directory);
+ const fresh=path.join(f.parent,'fresh');ensureLibraryReady(fresh,root);assertRefusesReleasedSeed(fresh);
+ for(let n=0;n<2;n++){const local=openDatabase(fresh,root);assert.equal(local.sqlite.prepare("SELECT note FROM books WHERE id='liaozhai'").get().note,'待录入选定篇目的原文与来源。');local.close();}
+});
+test('a library consolidated before the refusal guard receives it in place',t=>{
+ const f=fixture(t),previous=path.join(f.parent,'previous');
+ for(const item of ['docker','package.json'])cpSync(path.join(root,item),path.join(previous,item),{recursive:true});
+ cpSync(path.join(root,'drizzle'),path.join(previous,'drizzle'),{recursive:true,filter:source=>!path.basename(source).startsWith('0019_')});
+ ensureLibraryReady(f.directory,previous);
+ const db=new DatabaseSync(path.join(f.directory,'shiqu.sqlite'));db.exec(releasedSeed);db.close();
+ const result=ensureLibraryReady(f.directory,root);assert.deepEqual(result.migrations,['0019_refuse_pre_consolidation_apps.sql']);verifyLibraryBackup(result.backup);
+ assertRefusesReleasedSeed(f.directory);assert.deepEqual(rawRows(f.directory,'stories'),f.before);
+});

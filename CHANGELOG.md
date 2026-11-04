@@ -10,6 +10,7 @@
 - Before upgrading an existing library, create and verify a whole-library backup and print its path. Interrupted upgrades recover the original database and media before retrying. Fresh installations, restores and legacy imports use the same upgrader.
 - **Minimum compatible desktop and CLI: 0.8.0.** Both share library schema version 1. Do not open a consolidated library with 0.7.x or earlier: those released binaries do not have the new refusal guard. To roll back, stop every app and restore the pre-upgrade backup using its matching older application. New releases refuse schemas newer than they support before writing to the library.
 - Reader API paths, story IDs, saved settings, progress, favorites and exports remain unchanged. No provider work is started by migration or passive desktop summaries.
+- Released CLI and browser versions 0.2–0.7 refuse an upgraded library with `BACKUP_APP_TOO_OLD: this library requires Shiqu 0.8.0 or later…` instead of opening it and failing story requests. The 0.7.x desktop app still shows its generic startup error. A Codex skill copy installed by 0.7.x keeps calling CLI 0.7.x; run `skill update` with 0.8.0.
 - The one-time upgrade needs free disk space of about twice the library size: one verified backup plus one staged working copy. Later schema changes apply in place after their own verified backup.
 
 ## [0.7.0](https://github.com/yysun/shiqu/releases/tag/v0.7.0) - 2026-11-03
