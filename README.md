@@ -1,17 +1,17 @@
 # 拾趣
 
-**还有剩余的 Codex token？不妨用来读读故事。**
+用拾趣，把中国古典故事变成你自己的连环画。内置 24 部书籍、15 种画风，支持电脑与手机阅读，以及 PDF、PNG 长图和 ZIP 导出。故事、图片和阅读进度保存在你的电脑上。
 
-用拾趣，把中国古典故事变成你自己的连环画。
-
-[![拾趣作品《黛玉葬花与宝黛释疑》第 15–18 幅：宝玉兜着落花走近花冢，黛玉葬花吟诗、掩面落泪](.docs/assets/hero-story.webp)](https://yysun.github.io/awesome-shiqu/)
+[![拾趣作品《黛玉葬花与宝黛释疑》第 15–18 幅：宝玉兜着落花走近花冢，黛玉葬花吟诗、掩面落泪](.docs/assets/hero-story.webp)](https://yysun.github.io/awesome-shiqu/books/红楼梦/黛玉葬花与宝黛释疑/)
 
 [在线阅读拾趣好故事 →](https://yysun.github.io/awesome-shiqu/)
 
 
 ## 快速开始制作
 
-三种方式，任选一种：
+AI 生成服务可选 Codex 订阅、OpenAI API 或 Gemini。Codex 订阅需 macOS / Linux 并安装和登录 Codex CLI；OpenAI API 与 Gemini 使用各自 API 密钥并单独计费。[如何选择后端](.docs/user-guide.md#如何选择后端)
+
+三种方式开始制作你的连环画，任选一种：
 
 ### 1. npx：一条命令启动
 
@@ -23,7 +23,7 @@ npx @apprun/shiqu
 
 按提示选择书库和生成服务，打开终端打印的网址即可使用。同一 Wi-Fi 下，手机可扫描终端二维码接着读；保持终端运行，按 Ctrl+C 停止。
 
-> 生成服务可选 Codex 订阅、OpenAI API 或 Gemini。Codex 订阅需 macOS 并安装和登录 Codex CLI；OpenAI API 与 Gemini 使用各自 API 密钥并单独计费。[如何选择后端](.docs/user-guide.md#如何选择后端)
+> 默认对局域网开放，所有可连接设备共享书架和生成权限，仅限可信网络使用；只允许本机访问时加 `--host 127.0.0.1`。API 密钥以明文保存在本机设置数据库中。详见[使用前了解](.docs/user-guide.md#使用前了解)。
 
 [CLI 使用说明](.docs/user-guide.md#cli-启动)
 
@@ -54,7 +54,7 @@ $shiqu 从《庄子》中找一个关于善意与误解的故事，用水墨写�
 
 
 
-## 界面预览
+## 制作与阅读界面
 
 以《黛玉葬花与宝黛释疑》为例：发现 → 制作流程 → 书架 → 阅读。
 
@@ -62,9 +62,21 @@ $shiqu 从《庄子》中找一个关于善意与误解的故事，用水墨写�
 
 [制作与阅读指南 →](.docs/user-guide.md#制作与阅读故事)
 
+## 导出与发布
+
+全部插图生成后，在「故事设置」或故事末页导出：
+
+- **PDF**：逐幅阅读，适合打印或发送。
+- **PNG**：全部插图排成一张总览长图，适合社交分享。
+- **ZIP**：原文、分镜、全部 WebP 原图及制作提示词，可用于投稿。
+
+导出在本地完成，不再调用 AI。先在「我的 → 署名与转载」设置制作署名和转载条件；各格式都保留署名与 AI 披露，WebP 另带可见署名水印。[导出说明](.docs/user-guide.md#阅读和导出) · [署名与转载](.docs/user-guide.md#署名与转载)
+
+想让更多人读到？下载 ZIP，按[贡献指南](https://github.com/yysun/awesome-shiqu/blob/main/CONTRIBUTING.md)向 [awesome-shiqu · 拾趣好故事](https://github.com/yysun/awesome-shiqu) 提交 PR，审核通过后收录到[在线作品集](https://yysun.github.io/awesome-shiqu/)。ZIP 中的提示词也会随投稿公开，投稿前请检查整个存档。[发布你的拾趣作品](.docs/user-guide.md#发布你的拾趣作品)
+
 ## 更多说明
 
-[使用指南](.docs/user-guide.md) · [使用前了解](.docs/user-guide.md#使用前了解) · [升级到 0.8.0](.docs/user-guide.md#升级到-080) · [书库说明](data/README.md) · [画风](.docs/user-guide.md#画风) · [手机阅读](.docs/user-guide.md#在手机上阅读) · [发布作品](.docs/user-guide.md#发布你的拾趣作品) · [常见问题](.docs/user-guide.md#常见问题)
+[使用指南](.docs/user-guide.md) · [使用前了解](.docs/user-guide.md#使用前了解) · [升级到 0.8.0（发布后适用）](.docs/user-guide.md#升级到-080) · [书库说明](data/README.md) · [画风](.docs/user-guide.md#画风) · [手机阅读](.docs/user-guide.md#在手机上阅读) · [常见问题](.docs/user-guide.md#常见问题)
 
 ## 开发者
 

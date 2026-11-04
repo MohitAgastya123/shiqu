@@ -10,7 +10,9 @@
 
 ## 0.8.0 书库格式
 
-桌面端和 CLI 均须升级到 0.8.0。唯一故事表为 `stories`，格式版本为 1。概览发现旧书库或未完成的升级时，使用内置 Node 单次升级；不启动监听、不设置提供方、不执行生成。升级前完整备份的路径显示在概览中，随后摘要保持只读。新书库为空，不含样篇。0.7.x 及更旧的已发布程序不具备新格式保护，不能打开合并后的书库；回退需使用升级前备份与对应旧版本。
+桌面端和 CLI 均须升级到 0.8.0。唯一故事表为 `stories`，格式版本为 1。概览发现旧书库或未完成的升级时，使用内置 Node 单次升级；不启动监听、不设置提供方、不执行生成。升级前完整备份的路径显示在概览中，随后摘要保持只读。新书库为空，不含样篇。一次性升级约需额外两倍书库大小的可用磁盘空间，用于备份和暂存副本；后续普通迁移在完整备份后原地执行。
+
+0.7.x 及更旧程序不兼容合并后的书库；0.2–0.7 的 CLI／浏览器服务会被种子写入保护拒绝并提示 `BACKUP_APP_TOO_OLD`，0.7.x 桌面版可能只显示通用启动错误。回退需停止所有应用，使用升级前备份与对应旧版本恢复到新目录，不可覆盖活动书库。旧版 Codex 技能还需用 0.8.0 显式更新；完整步骤见[升级说明](../.docs/user-guide.md#升级到-080)。
 
 ## 用户运行要求
 
@@ -126,7 +128,7 @@ CLI 复用共享数据库中的书库目录，没有时可导入原 `cli-library
 pnpm run hooks:install
 ```
 
-推送 `v*` 标签时，hook 为每个不同的标签提交创建临时独立 worktree，使用该提交固定的 Node / pnpm 版本执行 `pnpm install --frozen-lockfile` 和 `pnpm run release:check`（typecheck → lint → 完整 JavaScript 测试 → 关键用户流程 E2E → Rust 格式检查）。E2E 使用隔离书库，覆盖浏览器制作、无服务 CLI、技能、备份恢复、诊断和配置，不调用真实 AI。同次推送的多个标签若指向同一提交只测一次；普通分支推送及标签删除不运行测试。任何检查失败都会阻止本次推送，临时 worktree 随后删除；本地未提交修改不会混入检查。标签所在提交必须包含 `release:check` 脚本。可单独运行 `pnpm run release:check` 检查当前目录，但发布 hook 始终重新核对实际标签提交。
+推送 `v*` 标签时，hook 为每个不同的标签提交创建临时独立 worktree，使用该提交固定的 Node / pnpm 版本执行 `pnpm install --frozen-lockfile` 和 `pnpm run release:check`（typecheck → lint → 关键冒烟门禁 → Rust 格式检查）。冒烟门禁运行 `pnpm test:e2e --gate=release`，覆盖 8 个测试文件，包括一条完整浏览器制作与阅读流程、生产恢复与重放、无服务 CLI/导出/备份、CLI 启动、配置和发布保护；使用隔离书库，不调用真实 AI。完整回归可按需运行 `pnpm test:full`。同次推送的多个标签若指向同一提交只测一次；普通分支推送及标签删除不运行测试。任何检查失败都会阻止本次推送，临时 worktree 随后删除；本地未提交修改不会混入检查。标签所在提交必须包含 `release:check` 脚本。可单独运行 `pnpm run release:check` 检查当前目录，但发布 hook 始终重新核对实际标签提交。
 
 hook 是每个克隆的本地配置，不能约束网页创建标签、其他未安装 hook 的克隆或 `git push --no-verify`。正式标签应从已启用 hook 的 Unix 开发环境推送；GitHub 不会补跑共享测试，仍检查两个平台的原生 Rust 测试与最终安装资源。
 
@@ -135,8 +137,8 @@ hook 是每个克隆的本地配置，不能约束网页创建标签、其他未
 发布前将 `package.json`、`src-tauri/tauri.conf.json` 和 `src-tauri/Cargo.toml` 的版本更新为同一个 `X.Y.Z`，同步 `src-tauri/Cargo.lock` 中的本应用版本，并提交源码。然后推送对应标签，例如当前版本：
 
 ```bash
-git tag v0.7.0
-git push origin v0.7.0
+git tag v0.8.0
+git push origin v0.8.0
 ```
 
 标签所在提交必须包含该工作流及要发布的源码；GitHub 不会打包未提交的本地修改。每个版本使用新的标签。README 的 `/releases/latest/download/` 链接依赖以下固定文件名：

@@ -4,14 +4,34 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
-## 0.8.0 — unreleased
+## [0.8.0](https://github.com/yysun/shiqu/releases/tag/v0.8.0) - 2026-11-04
 
-- Consolidate all current production stories and revisions in one `stories` table. Retired studio rows, demo artwork without current use, and obsolete browser history are removed.
-- Before upgrading an existing library, create and verify a whole-library backup and print its path. Interrupted upgrades recover the original database and media before retrying. Fresh installations, restores and legacy imports use the same upgrader.
-- **Minimum compatible desktop and CLI: 0.8.0.** Both share library schema version 1. Do not open a consolidated library with 0.7.x or earlier: those released binaries do not have the new refusal guard. To roll back, stop every app and restore the pre-upgrade backup using its matching older application. New releases refuse schemas newer than they support before writing to the library.
-- Reader API paths, story IDs, saved settings, progress, favorites and exports remain unchanged. No provider work is started by migration or passive desktop summaries.
-- Released CLI and browser versions 0.2–0.7 refuse an upgraded library with `BACKUP_APP_TOO_OLD: this library requires Shiqu 0.8.0 or later…` instead of opening it and failing story requests. The 0.7.x desktop app still shows its generic startup error. A Codex skill copy installed by 0.7.x keeps calling CLI 0.7.x; run `skill update` with 0.8.0.
-- The one-time upgrade needs free disk space of about twice the library size: one verified backup plus one staged working copy. Later schema changes apply in place after their own verified backup.
+统一当前故事与历史版本的存储，移除停用的旧工作室与无用示例数据；升级前校验完整书库备份，支持中断恢复，并改用生产 Node 运行时导出公开作品。
+
+### Changed
+
+- 当前故事及所有归属用户、历史版本和制作状态统一保存到 `stories`；阅读 API 路径、故事编号、设置、阅读进度、收藏和导出规则保持不变。
+- 首次打开旧书库时，先创建并校验完整书库备份、显示备份路径，再在暂存副本上完成升级；中断后先恢复原数据库与媒体，再重试。新安装、恢复备份及旧版导入使用同一升级入口，升级和桌面概览不会调用生成服务。
+- `pnpm export:story` 通过运行中应用的只读 API 选择当前完整版本，调用 CLI 共用的生产 Node 导出器，不再依赖浏览器或 Playwright，也不改写阅读进度。公开 ZIP 转换保留生产导出器生成的 WebP、水印与 XMP；ZIP 输入模式不重新编码，Node 与浏览器编码不保证字节相同。
+- 发布检查改为关键冒烟门禁：标签检查运行 8 个测试文件，npm 检查运行其中 7 个，每个文件只执行一次；完整回归保留在 `pnpm test:full`，不再在每次发布时重复执行。
+
+### Removed
+
+- 移除停用的旧工作室界面、专用 HTTP API 及历史工作室数据。书库升级清理不被当前故事使用的示例插图、旧工作室媒体及过时浏览器缓存；当前故事、历史版本、回收站和仍被引用的媒体保留。
+
+### Fixed
+
+- 阅读端启动只加载一次当前故事列表，等待删除记录与完整库存核对后清理缓存，避免旧示例内容重新出现或误删隐藏版本的离线数据。
+- 新版在写入书库前拒绝不支持的更新格式；升级后的书库通过种子写入保护拒绝 0.2–0.7 的 CLI／浏览器服务，提示 `BACKUP_APP_TOO_OLD`。0.7.x 桌面版仍可能只显示通用启动错误。
+- npm 安装包冒烟使用实际保存的故事验证重启后数据仍然存在。
+
+### Upgrade notes
+
+- **桌面版与 CLI 均须使用 0.8.0 或更新版本。** 升级前停止所有共用书库的桌面、CLI 和开发服务，保留并记录升级前完整备份；升级完成后刷新浏览器。0.7.x 及更旧程序不兼容合并后的书库，不要用旧版继续读写。
+- 一次性升级约需额外两倍书库大小的可用磁盘空间，用于校验备份和暂存副本。备份或媒体校验失败时不继续清理；后续普通迁移在完整备份后原地执行，不重复合并。
+- 升级会移除旧工作室数据与无用示例内容。若需回退，先停止所有应用，用升级前备份和对应旧版本恢复到新目录，不能只替换程序或把旧备份覆盖到正在使用的书库。
+- 书库外的共享设置数据库 `desktop.sqlite` 需另行私密备份，其中含明文凭据；作品 ZIP 不能代替完整书库备份。
+- 0.7.x 安装的 Codex 技能副本仍固定调用旧 CLI；发布后需用 0.8.0 的 `skill update` 显式更新对应项目或全局副本，再重新读取技能。
 
 ## [0.7.0](https://github.com/yysun/shiqu/releases/tag/v0.7.0) - 2026-11-03
 

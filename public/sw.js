@@ -1,5 +1,5 @@
 // Refresh shell assets independently of the reader's explicitly saved offline stories.
-const SHELL='yiyu-shell-v9';
+const SHELL='yiyu-shell-v10';
 const OFFLINE='yiyu-offline-v1';
 const ICONS=['/icon.svg','/shiqu-home-180.png','/shiqu-home-192.png','/shiqu-home-512.png'];
 self.addEventListener('install',event=>{event.waitUntil(caches.open(SHELL).then(cache=>cache.addAll(['/offline.html',...ICONS])).then(()=>self.skipWaiting()));});
