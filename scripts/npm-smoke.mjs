@@ -12,6 +12,7 @@ import {withLocalBooks} from '../server/local-generation.ts';
 import {executeHeadless} from '../server/headless-cli.ts';
 import os from 'node:os';
 import {SystemSettingsStore} from '../server/system-settings.ts';
+import {emptyPublication} from '../lib/story-publication.ts';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
@@ -173,9 +174,13 @@ try {
   assert.equal(foreignHostStatus, 403);
   assert.equal((await request(origin + '/api/reader/sessions', {method:'POST',headers:{Origin:'https://foreign.example'}})).status, 403);
   assert.equal((await request(origin + '/api/reader/sessions', {method:'POST'})).status, 403);
-  const beforeRestart=await (await request(origin+'/api/reader/sessions')).json();
-  await stop(); await start(bin,parameters);
-  assert.deepEqual(await (await request(origin+'/api/reader/sessions')).json(),beforeRestart);
+  // A non-inference write through the current API must survive restarting the installed release.
+  const publication = {...emptyPublication, author:'Survives npm cache cleanup'};
+  const savedDefaults = await request(origin + '/api/reader/publication-defaults', {method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({publication,expected:null})});
+  assert.equal(savedDefaults.status, 200);
+  await stop(); await start(bin, parameters);
+  assert.deepEqual((await (await request(origin + '/api/reader/publication-defaults')).json()).publication, publication);
+  assert.deepEqual(await (await request(origin + '/api/reader/sessions')).json(), []);
   await stop();
   // Env-file settings are used when no flag overrides them; shell variables still win over the file.
   await start(bin, ['--config','selected.env'], {PORT:String(port), SHIQU_BIND_IP:'127.0.0.1'});
