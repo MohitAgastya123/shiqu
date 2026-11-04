@@ -6,7 +6,7 @@ import {spawn} from 'node:child_process';
 import {once} from 'node:events';
 import {existsSync} from 'node:fs';
 import os from 'node:os';
-import {mkdir,mkdtemp,rm,writeFile,cp,symlink} from 'node:fs/promises';
+import {mkdir,mkdtemp,rm,writeFile,cp,symlink,readdir} from 'node:fs/promises';
 import {createServer} from 'node:net';
 async function freePort(){const server=createServer();await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const port=server.address().port;await new Promise(resolve=>server.close(resolve));return port;}
 test('STORY-LIFECYCLE-C007: pnpm dev local ignores shared data settings and denies private database downloads',{timeout:30000},async t=>{
@@ -17,7 +17,11 @@ test('STORY-LIFECYCLE-C007: pnpm dev local ignores shared data settings and deni
   if(existsSync(name))await cp(name,path.join(checkout,name),{recursive:true,filter:source=>!/(?:^|\/)\.env(?:\.|$)/.test(source)});
  }
  await mkdir(path.join(checkout,'data'));await symlink(path.resolve('data/library'),path.join(checkout,'data/library'),process.platform==='win32'?'junction':'dir');
- await symlink(path.resolve('node_modules'),path.join(checkout,'node_modules'),process.platform==='win32'?'junction':'dir');
+ // Reuse installed dependencies, but keep Vite's default cache inside this disposable checkout.
+ await mkdir(path.join(checkout,'node_modules'));
+ for(const entry of await readdir('node_modules',{withFileTypes:true})){
+  if(!entry.name.startsWith('.vite')&&(entry.isDirectory()||entry.isSymbolicLink()))await symlink(path.resolve('node_modules',entry.name),path.join(checkout,'node_modules',entry.name),process.platform==='win32'?'junction':'dir');
+ }
  const sentinel=path.join(directory,'must-not-open'),local=path.join(checkout,'.data/dev-local');let output='';
  const child=spawn('pnpm',['dev','local','--port',String(port)],{cwd:checkout,env:{...process.env,SHIQU_DATA_DIR:sentinel,SHIQU_API_PORT:String(apiPort),SHIQU_AI_PROVIDER:'readonly'},detached:process.platform!=='win32',stdio:['ignore','pipe','pipe']});
  child.stdout.on('data',chunk=>output+=chunk);child.stderr.on('data',chunk=>output+=chunk);

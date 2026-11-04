@@ -30,7 +30,7 @@ test('title, theme and original scope are independently optional in the creation
  const reservation=createHttpServer(async()=>new Response('reserved'));
  await new Promise(resolve=>reservation.listen(0,'127.0.0.1',resolve));const uiPort=reservation.address().port;
  await new Promise(resolve=>reservation.close(resolve));
- const vite=await createServer({envFile:false,logLevel:'error',server:{host:'127.0.0.1',port:uiPort,strictPort:true,proxy:{'/api':{target},'/art':{target}}}});
+ const vite=await createServer({envFile:false,cacheDir:path.join(f.root,'vite-cache'),logLevel:'error',server:{host:'127.0.0.1',port:uiPort,strictPort:true,proxy:{'/api':{target},'/art':{target}}}});
  await vite.listen();t.after(()=>vite.close());
  const browser=await chromium.launch({headless:true});t.after(()=>browser.close());
  const context=await browser.newContext({viewport:{width:1280,height:900}}),page=await context.newPage();

@@ -33,7 +33,7 @@ export async function storyBrowser(t,caseId){
  f.options.generation=withLocalBooks(f.generation,library.books,f.media);await f.restart();f.app.services.localBooks=library.books;
  const port=await reservePort();api=createHttpServer(developmentAccess(request=>f.app.handle(request),{SHIQU_DEV_FRONTEND_PORT:String(port)},0));
  await new Promise(resolve=>api.listen(0,'127.0.0.1',resolve));
- vite=await createServer({envFile:false,logLevel:'error',plugins:[protectDevelopmentLibrary(f.dataDirectory)],server:developmentServerOptions({port,apiPort:api.address().port,library:f.dataDirectory})});
+ vite=await createServer({envFile:false,cacheDir:path.join(f.root,'vite-cache'),logLevel:'error',plugins:[protectDevelopmentLibrary(f.dataDirectory)],server:developmentServerOptions({port,apiPort:api.address().port,library:f.dataDirectory})});
  await vite.listen();browser=await chromium.launch({headless:true});
  const context=await browser.newContext({viewport:{width:1280,height:1000}});await context.tracing.start({screenshots:true,snapshots:true,sources:true});
  await context.addInitScript(()=>localStorage.setItem('shiqu-last-tab','shelf'));

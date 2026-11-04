@@ -1,6 +1,7 @@
 // Disposable reader preview using real UI, REST and SQLite with controlled model responses only.
 import {createServer} from 'vite';
 import {writeFile,rm} from 'node:fs/promises';
+import path from 'node:path';
 import {productionFixture,until,selection} from './production.mjs';
 import {createHttpServer} from '../../server/http.ts';
 import {developmentServerOptions,protectDevelopmentLibrary} from '../../scripts/development-server.mjs';
@@ -18,7 +19,7 @@ await f.json(`sessions/${setupId}/setup`,'POST',{requestId:crypto.randomUUID(),g
 const pausedId=await f.createLegacyReader(3,{acceptancePrompt:criteria});await f.json(`sessions/${pausedId}/production-control`,'POST',{action:'pause'});
 const server=createHttpServer(request=>f.app.handle(request));await new Promise(resolve=>server.listen(3142,'127.0.0.1',resolve));
 const options=developmentServerOptions({port:3140,apiPort:3142,library:f.dataDirectory});options.host='127.0.0.1';
-const frontend=await createServer({envFile:false,plugins:[protectDevelopmentLibrary(f.dataDirectory)],server:options});await frontend.listen();
+const frontend=await createServer({envFile:false,cacheDir:path.join(f.root,'vite-cache'),plugins:[protectDevelopmentLibrary(f.dataDirectory)],server:options});await frontend.listen();
 await writeFile('/tmp/shiqu-requirements-preview.json',JSON.stringify({dataDirectory:f.dataDirectory,completeId,historicalId,setupId,pausedId,url:'http://127.0.0.1:3140/'}));
 console.log('Controlled requirements preview: http://127.0.0.1:3140/');
 let stopping=false;async function stop(){if(stopping)return;stopping=true;await frontend.close();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));await f.stop();await rm(f.root,{recursive:true,force:true});}

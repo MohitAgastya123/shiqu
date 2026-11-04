@@ -1,6 +1,7 @@
 // Loopback-only, disposable UI fixture. No .env, credentials, live providers, or production data.
 import {createServer} from 'vite';
 import {writeFile,rm} from 'node:fs/promises';
+import path from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {createHttpServer} from '../../server/http.ts';
 import {developmentServerOptions,protectDevelopmentLibrary} from '../../scripts/development-server.mjs';
@@ -20,7 +21,7 @@ const progressId=await create('多章进度演示'),unknownId=await create('无�
 const server=createHttpServer(async request=>{if(new URL(request.url).pathname==='/__test/release'){release();return Response.json({ok:true});}return f.app.handle(request);});
 await new Promise(resolve=>server.listen(3142,'127.0.0.1',resolve));
 const options=developmentServerOptions({port:3140,apiPort:3142,library:f.dataDirectory});options.host='127.0.0.1';options.proxy['/__test']={target:'http://127.0.0.1:3142'};
-const frontend=await createServer({envFile:false,plugins:[protectDevelopmentLibrary(f.dataDirectory)],server:options});await frontend.listen();
+const frontend=await createServer({envFile:false,cacheDir:path.join(f.root,'vite-cache'),plugins:[protectDevelopmentLibrary(f.dataDirectory)],server:options});await frontend.listen();
 await writeFile('/tmp/shiqu-discovery-preview.json',JSON.stringify({dataDirectory:f.dataDirectory,progressId,unknownId,readerUrl:'http://127.0.0.1:3140/',apiUrl:'http://127.0.0.1:3142/'}));
 console.log('Controlled preview ready at http://127.0.0.1:3140/');
 let stopping=false;async function stop(){if(stopping)return;stopping=true;release();await frontend.close();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));await f.stop();await rm(f.root,{recursive:true,force:true});}

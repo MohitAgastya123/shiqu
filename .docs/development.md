@@ -33,6 +33,8 @@ pnpm dev
 SHIQU_API_PORT=3003 pnpm dev --port 3001
 ```
 
+`pnpm dev` 使用 Vite 默认缓存 `node_modules/.vite`；桌面预览保留独立的 `.vite-desktop` 缓存。浏览器测试和受控预览使用各自临时目录内的缓存，避免重建依赖时删掉正在使用的 React 文件。新增测试／预览服务也应使用独立缓存；升级依赖后重启开发服务，清理缓存前先停止对应服务。
+
 独立开发书库可用：
 
 ```bash
