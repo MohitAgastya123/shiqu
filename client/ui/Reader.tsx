@@ -1,6 +1,7 @@
 // Hydrate the owner library once, preserve current reading caches, and coordinate reader actions.
 'use client';
 // Coordinate story discovery, resumable generation, and the reading sheets.
+// Display-name editing uses a saved session even before a generated story exists.
 // Swipe offsets live in a drag store and frames render through a memoized filmstrip, so pointer moves
 // do not re-render Reader. Identical poll snapshots keep their previous story and progress references.
 
@@ -428,7 +429,7 @@ export default function Reader(){
  {panelOpen&&!configure&&<StorySettingsPanel
   story={panelStory} session={workflowSession} busy={gen.setupBusy||revision.busy||creating} disabled={creating}
   onClose={()=>{setSettings(false);closeWorkflow();}} onBack={backToShelf}
-  onRename={isGenerated(panelStory)?(id,title)=>setRenameTarget({id,title}):undefined}
+  onRename={workflowSession||isGenerated(panelStory)?(id,title)=>setRenameTarget({id,title}):undefined}
   downloads={(['pdf','png','zip'] as const).map(format=>exportControl(format,'yu-settings-download',panelStory))}
   exportStatus={exportProgress} exporting={!!exporting} onPublicationEdit={isGenerated(panelStory)?()=>setPublicationTarget(panelStory):undefined}
   workflow={workflowSession||workflowTarget?workflowContent:undefined}

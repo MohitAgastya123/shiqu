@@ -179,3 +179,28 @@ test('phase recovery compares local source ranges canonically and rejects partia
  }
  assert.equal(f.control.recommendations.length,1);assert.equal(f.control.plans.length,0);assert.equal(f.control.calls.length,0);
 });
+
+
+test('a paused source-and-summary story can be renamed without changing preparation or starting generation',async t=>{
+ const f=await fixture(t),id=await create(f);
+ await until(async()=>(await f.read(id)).intake.phase==='choosing');
+ await setup(f,id,{action:'choose',batch:0,index:0});
+ await until(async()=>(await f.read(id)).intake.phase==='confirming');
+ await f.json(`sessions/${id}/production-control`,'POST',{action:'pause'});
+ const before=await f.app.services.database.prepare('SELECT * FROM stories WHERE id=?').bind(id).first();
+ const original=await f.json(`sessions/${id}/source`),jobs=await f.app.services.database.prepare('SELECT * FROM production_jobs').all();
+ const calls=[f.control.recommendations.length,f.control.plans.length,f.control.calls.length];
+ f.generation.status=async()=>({configured:false});
+ const saved=await f.json(`sessions/${id}/title`,'POST',{title:'  梦醒之后  '});
+ assert.equal(saved.selection.displayTitle,'梦醒之后');assert.equal(saved.selection.storyTitle,'庄周梦蝶');
+ assert.equal(saved.story,null);assert.equal(saved.ready,0);assert.equal(saved.generationControl,'paused');assert.equal(saved.intake.phase,'confirming');
+ const after=await f.app.services.database.prepare('SELECT * FROM stories WHERE id=?').bind(id).first();
+ assert.equal(after.document,before.document);assert.equal(after.state,before.state);assert.equal(after.generation_control,before.generation_control);
+ assert.deepEqual(JSON.parse(after.selection),{...JSON.parse(before.selection),displayTitle:'梦醒之后'});
+ assert.deepEqual(await f.json(`sessions/${id}/source`),original);
+ assert.deepEqual(await f.app.services.database.prepare('SELECT * FROM production_jobs').all(),jobs);
+ assert.deepEqual([f.control.recommendations.length,f.control.plans.length,f.control.calls.length],calls);
+ await f.restart();
+ const reopened=await f.read(id);assert.equal(reopened.selection.displayTitle,'梦醒之后');assert.equal(reopened.generationControl,'paused');assert.equal(reopened.story,null);
+ assert.equal((await f.json('sessions')).find(s=>s.id===id).selection.displayTitle,'梦醒之后');
+});

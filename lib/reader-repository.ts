@@ -34,12 +34,13 @@ export class ReaderRepository{
   const latest=await this.db.prepare(`SELECT s.id FROM stories s WHERE s.user_id=? AND ${familyRoot('s')}=? ORDER BY ${familyNumber('s')} DESC,s.created_at DESC LIMIT 1`).bind(uid,root).first<{id:string}>();
   if(!latest)throw new ReaderError(404,'家族当前版本不可用。');return this.get(latest.id,uid);
  }
+ // Names belong to saved sessions, including source-only drafts; naming never starts production.
  // Target selection metadata only: an in-flight generation checkpoint cannot overwrite this name.
  async rename(id:string,uid:string,title:string){
   await this.get(id,uid);
-  const result=await this.db.prepare(`UPDATE stories SET selection=json_set(selection,'$.displayTitle',?),updated_at=? WHERE id=? AND user_id=? AND json_type(document,'$.plan')='object' AND ${visible}`)
+  const result=await this.db.prepare(`UPDATE stories SET selection=json_set(selection,'$.displayTitle',?),updated_at=? WHERE id=? AND user_id=? AND ${visible}`)
    .bind(title,new Date().toISOString(),id,uid).run();
-  if(!result.meta.changes)throw new ReaderError(409,'分镜保存后才能修改故事名。');
+  if(!result.meta.changes)throw new ReaderError(404,'这篇故事不在你的书架里');
   return this.get(id,uid);
  }
  // Compare only publication metadata; independent image/progress saves must not conflict.
