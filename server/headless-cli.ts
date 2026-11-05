@@ -9,7 +9,7 @@ import {existsSync} from 'node:fs';
 import {randomUUID} from 'node:crypto';
 import {setTimeout as delay} from 'node:timers/promises';
 import {createApplication} from './app.ts';
-import {copyReviewedStory} from './reader-copy.ts';
+import {copySavedStory} from './reader-copy.ts';
 import {ownDesktopData} from './desktop-owner.ts';
 import {desktopLibraryPaths,savedDesktopLibraryDirectory} from './library-directory.ts';
 import {SystemSettingsStore} from './system-settings.ts';
@@ -38,7 +38,7 @@ const commands=[
  ['stories create','Save intake intent; input is a selection or {selection,intake:true,requestId}.','stories create --input selection.json --request-id UUID'],
  ['stories setup|search|choose|confirm','Persist intake actions with explicit --generation or input.generation; inference requires run.','stories choose ID --batch 0 --index 0 --generation N'],
  ['run / stories run','Run only one current story to candidates, prepared, reviewed or completed; never resumes a pause/fault implicitly.','run ID --until reviewed --timeout 900'],
- ['stories copy','Copy saved text and passed review from an offline library without inference or prompts. Omit images for a text-only paused copy; --copy-images or input.copyImages explicitly includes existing images in the same style.','stories copy ID --from-data-dir SOURCE --request-id UUID'],
+ ['stories copy','Copy saved text and review from an offline library without inference. --draft explicitly preserves unreviewed text as a paused copy without images; default requires passed review.','stories copy ID --from-data-dir SOURCE --request-id UUID'],
  ['stories copy-images','Attach source images to an existing paused text copy without inference or prompts. Safe to repeat; retains text and review.','stories copy-images TARGET_ID --from-data-dir SOURCE --input source.json'],
  ['stories edit','Commit a revision using production token/changes validation; does not generate.','stories edit ID --input revision.json --request-id UUID'],
  ['stories pause|resume|stop|retry|override','Control or explicitly recover the current fault; input faultId is required for retry/override.','stories retry ID --input recovery.json --request-id UUID'],
@@ -58,7 +58,7 @@ export class CliCommandError extends Error{
 function need(ok:unknown,code:string,message:string):asserts ok{if(!ok)throw new CliCommandError(code,message);}
 const uuid=(s:string)=>/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(s);
 const inputs={
- copy:{copyImages:false,artStyle:'clay',note:'CLI never prompts. Omitted copyImages defaults to text only. Use stories copy-images for a later explicit image step; copying images requires the same artStyle.'},
+ copy:{copyImages:false,draft:false,artStyle:'clay',note:'CLI never prompts. Default requires passed review. --draft or draft:true preserves unreviewed text and audit checkpoints as a paused independent copy, without images. Use stories copy-images only for reviewed copies in the same style.'},
  copyImages:{sourceId:'source story UUID',note:'stories copy-images TARGET_ID --from-data-dir SOURCE_LIBRARY --input source.json; TARGET_ID is the existing text copy, not a new creation request.'},
  setup:{note:'stories setup ID accepts an action; requestId defaults to a new UUID; generation is required from stories get ID. Keep both fixed for replay.',examples:[{action:'conditions',conditions:{bookId:'zhuangzi',theme:'善意与误解',productionPrompt:''}},{action:'more'},{action:'draft',settings:{artStyle:'ink-pencil',productionPrompt:'',acceptancePrompt:'',narrativeDetail:'balanced',length:'auto'}}]},
  confirm:{settings:{productionPrompt:'保留关键行动',acceptancePrompt:'人物回应落实到画面'}},
@@ -70,7 +70,7 @@ const inputs={
 type Context={cwd?:string;home?:string;generation?:ReaderProvider;localBooks?:LocalBooks;variables?:Record<string,string|undefined>;input?:unknown;signal?:AbortSignal;skill?:{transport?:typeof fetch;now?:()=>number}};
 function parse(args:string[]){return parseArgs({args,allowPositionals:true,strict:true,options:Object.fromEntries([
  ...['data-dir','from-data-dir','input','output','format','until','timeout','title','request-id','query','batch','index','scope','generation','auto-update'].map(k=>[k,{type:'string'}]),
- ...['json','help','allow-unsigned','include-prompts','no-intake','refresh','automatic','copy-images','no-copy-images'].map(k=>[k,{type:'boolean'}]),
+ ...['json','help','allow-unsigned','include-prompts','no-intake','refresh','automatic','copy-images','no-copy-images','draft'].map(k=>[k,{type:'boolean'}]),
  ]) as Record<string,{type:'string'|'boolean'}>});}
 async function readInput(filename?:string){
  if(!filename)return {};
@@ -93,7 +93,7 @@ export async function executeHeadless(root:string,args:string[],context:Context=
  const {values:v,positionals:p}=parse(args);const command=p[0]||'help',action=p[1],id=p[2],value=(name:string)=>typeof v[name]==='string'?v[name] as string:undefined;
  need(commandNames.has(command),'UNKNOWN_COMMAND','Use help --json for available commands.');
  const appVersion=JSON.parse(await readFile(path.join(root,'package.json'),'utf8')).version||'unknown';
- if(command==='help'||v.help)return {schemaVersion:1,appVersion,default:'No subcommand starts the existing browser service.',commands,inputs,options:{'--data-dir':'Private library, otherwise saved desktop/CLI location.','--input':'JSON file or - for stdin.','--output':'New output path; never overwrites.','--request-id':'Stable UUID for mutation replay; retain original generation/token/faultId and input.','--generation':'Required intake generation from stories get ID for setup/search/choose/confirm.','--until':'candidates|prepared|reviewed|completed (default completed).','--timeout':'Explicit run timeout in seconds, default 900, max 86400.','--allow-unsigned':'Explicitly permit an unsigned export.','--json':'Subcommands always return one JSON receipt on stdout.'},selectionExample:{bookId:'zhuangzi',theme:'原典故事',artStyle:'ink-pencil',narrativeDetail:'balanced'},editExample:{token:'from stories revisions ID',changes:{productionPrompt:'保留关键人物回应'}},runResults:['completed','candidates','prepared','choice','frame_count_required','already_prepared','already_selected','reviewed','paused','blocked','superseded'],execution:'Only explicit run performs inference. All other commands save or inspect local state.'};
+ if(command==='help'||v.help)return {schemaVersion:1,appVersion,default:'No subcommand starts the existing browser service.',commands,inputs,options:{'--data-dir':'Private library, otherwise saved desktop/CLI location.','--input':'JSON file or - for stdin.','--output':'New output path; never overwrites.','--request-id':'Stable UUID for mutation replay; retain original generation/token/faultId and input.','--generation':'Required intake generation from stories get ID for setup/search/choose/confirm.','--until':'candidates|prepared|reviewed|completed (default completed).','--timeout':'Explicit run timeout in seconds, default 900, max 86400.','--allow-unsigned':'Explicitly permit an unsigned export.','--draft':'Copy an unreviewed saved storyboard as a paused independent text draft; no images.','--json':'Subcommands always return one JSON receipt on stdout.'},selectionExample:{bookId:'zhuangzi',theme:'原典故事',artStyle:'ink-pencil',narrativeDetail:'balanced'},editExample:{token:'from stories revisions ID',changes:{productionPrompt:'保留关键人物回应'}},runResults:['completed','candidates','prepared','choice','frame_count_required','already_prepared','already_selected','reviewed','paused','blocked','superseded'],execution:'Only explicit run performs inference. All other commands save or inspect local state.'};
  if(command==='catalog'||command==='themes'||command==='styles'||command==='books'&&action!=='contents'){
   return command==='books'?readerBooks:command==='themes'?themes:command==='styles'?artStyles.map(({prompt,...style})=>style):{books:readerBooks,themes,styles:artStyles.map(({prompt,...style})=>style),styleGroups:artStyleGroups};
  }
@@ -191,17 +191,22 @@ export async function executeHeadless(root:string,args:string[],context:Context=
   if(action==='copy'||action==='copy-images'){
    const source=value('from-data-dir');need(source,'SOURCE_REQUIRED','Specify --from-data-dir SOURCE_LIBRARY.');
    if(action==='copy-images'){
+    need(!v.draft&&(input as any).draft===undefined,'INVALID_INPUT','--draft applies only to text copy.');
     const sourceId=(input as any).sourceId;need(typeof sourceId==='string'&&uuid(sourceId),'SOURCE_REQUIRED','Specify sourceId in JSON input.');
     const current=await api(app,'GET',`sessions/${id}`);
-    try{return {session:await copyReviewedStory(app,root,directory,path.resolve(source),sourceId,id,current.selection.artStyle,{images:true,existing:true})};}
+    try{return {session:await copySavedStory(app,root,directory,path.resolve(source),sourceId,id,current.selection.artStyle,{images:true,existing:true})};}
     catch(error){if(error instanceof ReaderError)throw new CliCommandError(error.status===409?'CONFLICT':'COPY_FAILED',error.message,error.status>=500?4:2,{storyId:id});throw error;}
    }
+   const draft=(input as any).draft;
+   need(draft===undefined||typeof draft==='boolean','INVALID_INPUT','draft must be a boolean.');
+   need(!v.draft||draft!==false,'INVALID_INPUT','draft conflicts with --draft.');
+   const copyDraft=draft??!!v.draft;
    const choice=(input as any).copyImages;
    need(choice===undefined||typeof choice==='boolean','INVALID_INPUT','copyImages must be a boolean.');
    need(!(v['copy-images']&&v['no-copy-images']),'INVALID_INPUT','Choose --copy-images or --no-copy-images.');
    const flag=v['copy-images']?true:v['no-copy-images']?false:undefined;
    need(choice===undefined||flag===undefined||choice===flag,'INVALID_INPUT','copyImages conflicts with the command-line image choice.');
-   try{return {requestId,session:await copyReviewedStory(app,root,directory,path.resolve(source),id,requestId,(input as any).artStyle,{images:choice??flag})};}
+   try{return {requestId,session:await copySavedStory(app,root,directory,path.resolve(source),id,requestId,(input as any).artStyle,{images:choice??flag,draft:copyDraft})};}
    catch(error){if(error instanceof ReaderError)throw new CliCommandError(error.status===409?'CONFLICT':'COPY_FAILED',error.message,error.status>=500?4:2,{requestId});throw error;}
   }
   const route=`sessions/${id}`,data={...(input as any)};

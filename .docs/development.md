@@ -88,6 +88,8 @@ Claude Code 文本提供方仅通过本次环境变量启用，不修改桌面�
 
 ### 真实审核对比
 
+未审完的文本可用 `pnpm cli stories copy SOURCE_ID --from-data-dir /absolute/source/library --data-dir /absolute/target/library --draft --request-id UUID` 保存为独立草稿。来源须已停止且保存完整分镜、原文及审核检查点；复制保留原审核状态、历史与模型记录，新故事暂停，不复制来源故障、任务或图片。它不代表审核通过，不调用模型；后续需要显式恢复制作并完成审核。草稿模式拒绝复制图片及 `copy-images`，普通 `copy` 的已通过审核要求不变。
+
 显式真实审核对比（会使用现有 Codex 订阅；普通测试不会运行）：
 
 ```bash

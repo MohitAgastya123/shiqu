@@ -29,6 +29,46 @@ async function fixture(t){
  const inspect=()=>new DatabaseSync(path.join(f.dataDirectory,'shiqu.sqlite'),{readOnly:true});
  return {f,library,call,context,inspect};
 }
+for(const status of ['pending','repair'])test(`explicit draft copy preserves ${status} review, source text and provenance without inference`,{timeout:30000},async t=>{
+ const source=await fixture(t),target=await fixture(t);
+ source.f.control.beforeText=async kind=>{
+  if(kind==='review'){if(status==='pending')throw Error('controlled service stop');return {issues:[{page:2,category:'action',problem:'动作不明确。',instruction:'明确人物拿起物件的动作。'}]};}
+  if(kind==='repair')throw Error('controlled repair stop');
+ };
+ const created=await source.call(['stories','create','--no-intake'],{...selection,length:3,source:source.library.stories[0].source,storyTitle:source.library.stories[0].title});
+ const sourceId=created.session.id,id=crypto.randomUUID(),args=['stories','copy',sourceId,'--from-data-dir',source.f.dataDirectory,'--request-id',id];
+ assert.equal((await source.call(['run',sourceId,'--until','reviewed','--timeout','10'])).reason,'blocked');
+ const sourceDb=source.inspect(),before=sourceDb.prepare('SELECT * FROM stories WHERE id=?').get(sourceId),saved=JSON.parse(before.document);sourceDb.close();
+ assert.equal(saved.visualReview.status,status);await assert.rejects(target.call(args),/只能复制/);
+ const copied=await target.call([...args,'--draft']);assert.equal(copied.session.generationControl,'paused');assert.equal(copied.session.generationProgress.reviewStatus,status);assert.equal(copied.session.generationProgress.reviewOverridden,false);assert.equal(copied.session.ready,0);assert.equal(copied.session.story.pages.length,3);assert.deepEqual(copied.session.faults||[],[]);
+ const db=target.inspect(),doc=JSON.parse(db.prepare('SELECT document FROM stories WHERE id=?').get(id).document);assert.equal(db.prepare('SELECT count(*) AS n FROM production_jobs WHERE session_id=?').get(id).n,0);db.close();
+ assert.deepEqual(doc.plan,saved.plan);assert.deepEqual(doc.original,saved.original);assert.deepEqual(doc.visualReview,saved.visualReview);assert.deepEqual(doc.storyboard,saved.storyboard);assert.deepEqual(doc.usage,saved.usage.map(call=>({...call,originId:call.originId||sourceId})));assert.equal(doc.copiedFrom.draft,true);assert.deepEqual(doc.images,[]);assert.equal(doc.revision,undefined);
+ assert.deepEqual((await target.call(['stories','review-history',id])).entries,(await source.call(['stories','review-history',sourceId])).entries);
+ assert.equal((await target.call(args,{draft:true})).session.id,id);assert.equal((await target.call(['stories','list'])).length,1);
+ await assert.rejects(target.call([...args,'--draft'],{draft:false}),error=>error.code==='INVALID_INPUT');
+ await assert.rejects(target.call([...args,'--draft','--copy-images']),error=>error.code==='COPY_FAILED');
+ await assert.rejects(target.call(['stories','copy-images',id,'--from-data-dir',source.f.dataDirectory],{sourceId}),/只能复制/);
+ assert.equal((await target.call(['run',id,'--until','reviewed','--timeout','10'])).reason,'paused');assert.equal(target.f.control.calls.length,0);assert.equal(target.f.control.reviews.length,0);assert.equal(target.f.control.plans.length,0);
+ const afterDb=source.inspect();assert.deepEqual(afterDb.prepare('SELECT * FROM stories WHERE id=?').get(sourceId),before);afterDb.close();
+});
+
+test('draft copies reject images and invalid checkpoints and retain explicit mode in replay identity',{timeout:30000},async t=>{
+ const source=await fixture(t),target=await fixture(t);
+ const created=await source.call(['stories','create','--no-intake'],{...selection,length:3,source:source.library.stories[0].source,storyTitle:source.library.stories[0].title});
+ const sourceId=created.session.id,id=crypto.randomUUID(),args=['stories','copy',sourceId,'--from-data-dir',source.f.dataDirectory,'--request-id',id];
+ assert.equal((await source.call(['run',sourceId,'--until','reviewed','--timeout','10'])).reason,'reviewed');
+ const db=new DatabaseSync(path.join(source.f.dataDirectory,'shiqu.sqlite')),row=db.prepare('SELECT * FROM stories WHERE id=?').get(sourceId),saved=JSON.parse(row.document);
+ try{
+  for(const [state,doc] of [['running',saved],['idle',{...saved,plan:null}],['idle',{...saved,original:undefined}],['idle',{...saved,visualReview:undefined}],['idle',{...saved,plan:{...saved.plan,pages:[]}}]]){
+   db.prepare('UPDATE stories SET state=?,document=? WHERE id=?').run(state,JSON.stringify(doc),sourceId);await assert.rejects(target.call([...args,'--draft']));assert.equal((await target.call(['stories','list'])).length,0);
+  }
+ }finally{db.prepare('UPDATE stories SET state=?,document=? WHERE id=?').run(row.state,row.document,sourceId);db.close();}
+ await assert.rejects(target.call([...args,'--draft','--copy-images']),error=>error.code==='COPY_FAILED');
+ await target.call([...args,'--draft']);await assert.rejects(target.call(args),/此创建编号/);
+ await assert.rejects(target.call(['stories','copy-images',id,'--from-data-dir',source.f.dataDirectory],{sourceId}),/草稿副本/);
+ assert.equal(target.f.control.calls.length,0);assert.equal(target.f.control.reviews.length,0);
+});
+
 test('copy preserves a passed storyboard and evidence; only images run in the destination', {timeout:30000},async t=>{
  const source=await fixture(t),target=await fixture(t);
  const created=await source.call(['stories','create','--no-intake'],{...selection,length:3,source:source.library.stories[0].source,storyTitle:source.library.stories[0].title});
