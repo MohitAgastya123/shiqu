@@ -9,8 +9,10 @@ import {stopCodexProcesses} from './codex-runner.ts';
 import {stopClaudeProcesses} from './claude-runner.ts';
 import {ownDesktopData} from './desktop-owner.ts';
 import {installDiagnostics,recordDiagnostic,safeErrorCode} from './diagnostics.ts';
+import {browserProviderSettings} from './browser-provider-settings.ts';
+import {providerSettingsPath} from '../lib/provider-settings.ts';
 
-export async function startServer({root,variables=process.env,localAccess=false}:{root:string;variables?:NodeJS.ProcessEnv;localAccess?:boolean}){
+export async function startServer({root,variables=process.env,localAccess=false,settingsOverrides}:{root:string;variables?:NodeJS.ProcessEnv;localAccess?:boolean;settingsOverrides?:Record<string,string|undefined>}){
  const config=serverConfig(variables);
  const release=await ownDesktopData(config.dataDirectory);
  const removeDiagnostics=installDiagnostics(config.dataDirectory);
@@ -19,7 +21,8 @@ export async function startServer({root,variables=process.env,localAccess=false}
  catch(error){recordDiagnostic(config.dataDirectory,'service_start_failed',{code:safeErrorCode(error)});removeDiagnostics();await release();throw error;}
  const urls=phoneUrls(config.host,config.port);
  const handle=localAccess?desktopAccess(app.handle,{hosts:[`localhost:${config.port}`,`127.0.0.1:${config.port}`,`[::1]:${config.port}`,...urls.map(url=>new URL(url).host)]}).handle:developmentAccess(app.handle,variables,config.port);
- const server=createHttpServer(handle);
+ const providerSettings=settingsOverrides?browserProviderSettings({variables,overrides:settingsOverrides,ports:[config.port,...(variables.SHIQU_DEV_FRONTEND_PORT?[Number(variables.SHIQU_DEV_FRONTEND_PORT)]:[])],status:()=>app.services.generation.status()}):undefined;
+ const server=createHttpServer((request,peer)=>providerSettings&&new URL(request.url).pathname===providerSettingsPath?providerSettings(request,peer):handle(request));
  let closing:Promise<void>|undefined,stopping=false;
  function closeApplication(){
   return closing??=(async()=>{

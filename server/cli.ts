@@ -64,11 +64,11 @@ export async function runCli(root:string, args = process.argv.slice(2)) {
   const library=await cliConfiguration(options);
   inspectLibrary(library.SHIQU_DATA_DIR!);
   if((options.dataDirectory||process.env.SHIQU_DATA_DIR)&&process.env.SHIQU_AI_PROVIDER&&providerReady(library)){
-    const {startServer}=await import('./start.ts');return startServer({root,variables:library,localAccess:true});
+    const {startServer}=await import('./start.ts');return startServer({root,variables:library,localAccess:true,settingsOverrides:{...library}});
   }
   const store=new SystemSettingsStore(locations.settings,locations.library);
   let variables:Record<string,string|undefined>;
   try{if(!options.port&&!process.env.PORT)library.PORT=String(store.settings().port);variables=await cliProviderConfiguration(store,library);}finally{store.close();}
   const {startServer}=await import('./start.ts');
-  return startServer({root,variables,localAccess:true});
+  return startServer({root,variables,localAccess:true,settingsOverrides:{...library}});
 }

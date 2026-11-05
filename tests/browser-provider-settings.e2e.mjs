@@ -1,0 +1,34 @@
+// Use real pnpm dev and production shared settings; only fake keys and status/persistence requests.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {get} from 'node:http';
+import {networkInterfaces} from 'node:os';
+import {checkoutFixture,startDevelopment,assertStopped,saveGoogle} from './fixtures/development.mjs';
+import {savedStartupState} from './fixtures/startup.mjs';
+import {providerSettingsPath} from '../lib/provider-settings.ts';
+
+test('browser settings save through actual Vite/backend, preserve overrides and adopt changes only after restart',{timeout:60000},async t=>{
+ const f=await checkoutFixture(t);saveGoogle(f);
+ const variables={GEMINI_IMAGE_MODEL:'shell-image-model',GEMINI_API_KEY:'fake-shell-key'};
+ let server=await startDevelopment(t,f,{variables});
+ const load=async()=>{const response=await fetch(server.origin+providerSettingsPath);assert.equal(response.status,200);return response.json();};
+ const save=async view=>fetch(server.origin+providerSettingsPath,{method:'POST',headers:{Origin:server.origin,'Content-Type':'application/json'},body:JSON.stringify(view)});
+ let current=await load();assert.equal(current.settings.provider,'gemini');assert.equal(current.runtime.models.image,'shell-image-model');assert.equal(current.restartRequired,false);assert.ok(current.overrides.includes('GEMINI_API_KEY'));assert.ok(!JSON.stringify(current).includes('fake-shell-key'));
+ let response=await save({settings:{...current.settings,textModel:'browser-saved-text',taskReasoningEfforts:{...current.settings.taskReasoningEfforts,plan:'low'}},expectedRevision:current.revision,keyAction:'replace',key:'fake-browser-key'});
+ assert.equal(response.status,200);current=await response.json();assert.equal(current.restartRequired,true);assert.equal(current.runtime.models.text,'saved-google-text');assert.ok(!JSON.stringify(current).includes('fake-browser-key'));
+ let persisted=await savedStartupState(f);assert.equal(persisted.settings.textModel,'browser-saved-text');assert.equal(persisted.settings.taskReasoningEfforts.plan,'low');assert.equal(persisted.gemini,'fake-browser-key');
+ const running=await (await fetch(server.origin+'/api/reader/status')).json();assert.equal(running.models.text,'saved-google-text');
+ const conflict=await save({settings:{...current.settings,textModel:'must-not-save'},expectedRevision:current.revision-1,keyAction:'keep'});assert.equal(conflict.status,409);assert.equal((await savedStartupState(f)).settings.textModel,'browser-saved-text');
+ assert.equal((await fetch(server.origin+providerSettingsPath,{headers:{Origin:'https://foreign.example'}})).status,403);assert.equal((await fetch(server.origin+providerSettingsPath,{headers:{'Sec-Fetch-Site':'cross-site'}})).status,403);
+ const direct=await fetch(`http://127.0.0.1:${server.apiPort}`+providerSettingsPath);assert.equal(direct.status,200);
+ const lan=Object.values(networkInterfaces()).flat().find(address=>address?.family==='IPv4'&&!address.internal)?.address;
+ if(lan){
+  for(const route of [providerSettingsPath,'/api/x/%2e%2e/local/provider-settings','/art/../api/local/provider-settings']){
+   const status=await new Promise((resolve,reject)=>get({hostname:lan,port:server.port,path:route,headers:{Host:`127.0.0.1:${server.port}`,'X-Forwarded-For':'127.0.0.1',Origin:server.origin}},res=>{res.resume();res.on('end',()=>resolve(res.statusCode));}).on('error',reject));assert.equal(status,403,route);
+  }
+ }else t.diagnostic('No external IPv4 interface; original-peer denial remains covered by production guard tests.');
+ await assertStopped(server);server=await startDevelopment(t,f,{variables});current=await load();assert.equal(current.runtime.models.text,'browser-saved-text');assert.equal(current.runtime.models.image,'shell-image-model');assert.equal(current.runtime.taskReasoningEfforts.plan,'low');assert.equal(current.restartRequired,false);
+ response=await save({settings:{...current.settings,provider:'openai',openaiTextModel:'browser-openai-text',openaiImageModel:'browser-openai-image'},expectedRevision:current.revision,keyAction:'replace',key:'fake-openai-browser-key'});assert.equal(response.status,200);current=await response.json();assert.equal(current.runtime.provider,'gemini');assert.equal(current.restartRequired,true);
+ persisted=await savedStartupState(f);assert.equal(persisted.settings.provider,'openai');assert.equal(persisted.gemini,'fake-browser-key');assert.equal(persisted.openai,'fake-openai-browser-key');assert.ok(!server.output().includes('fake-browser-key'));assert.ok(!server.output().includes('fake-openai-browser-key'));
+ await assertStopped(server);
+});

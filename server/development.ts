@@ -8,4 +8,4 @@ import {startServer} from './start.ts';
 const locations=desktopLibraryPaths(),store=new SystemSettingsStore(locations.settings,locations.library);
 let variables:Record<string,string|undefined>;
 try{variables=effectiveProviderVariables(store,process.env);}finally{store.close();}
-await startServer({root:process.cwd(),variables});
+await startServer({root:process.cwd(),variables,settingsOverrides:{...process.env}});

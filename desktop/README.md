@@ -116,6 +116,8 @@ CLI 复用共享数据库中的书库目录，没有时可导入原 `cli-library
 
 `pnpm dev` 默认复用桌面/CLI 保存的书库、生成服务、对应密钥、模型和任务推理设置；`pnpm dev local` 只隔离书库，生成配置仍共享。显式 shell 变量覆盖本次运行，不改保存值；开发后端不自动加载项目 `.env`。技能通过 CLI 使用同一配置，无需再保存一套密钥。修改保存配置后重启已运行的服务，CLI 下一次执行时读取。局域网 API 可直接访问，所有可连接地址的设备共享书架和生成权限；终端启动不依赖桌面 GUI 正在运行。`pnpm build` 和 `pnpm start` 入口继续独立运行，显式数据目录配置优先。
 
+开发/CLI 浏览器模式可在本机回环地址的「我的 → 生成服务与模型」编辑共享生成设置，页面显示当前运行配置与保存值的差异、启动覆盖和重启提示。已存密钥不返回浏览器。此入口不向局域网/互联网开放；原生桌面服务仍使用原生设置页，不新增浏览器凭据入口。
+
 ## GitHub macOS / Windows 发布
 
 [版本化的 pre-push hook](../.githooks/pre-push) 在推送 `v*` 标签前执行一次共享检查；[Desktop 工作流](../.github/workflows/desktop-macos.yml) 随后并行构建 macOS 和 Windows 安装包，不再重复共享测试。PR 和手动运行仍通过 macOS 的独立 `Shared checks` 任务执行类型检查、lint、完整 JavaScript 测试与 Rust 格式检查，通过后才打包。Unix Codex CLI / helper 模拟进程测试需要 Unix 环境。

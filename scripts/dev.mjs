@@ -5,7 +5,7 @@ import {context} from 'esbuild';
 import {spawn} from 'node:child_process';
 import {printPhoneAccess,phoneUrls} from '../server/phone-access.ts';
 import {developmentLibraryDirectory} from '../server/library-directory.ts';
-import {developmentArguments,developmentServerOptions,protectDevelopmentLibrary} from './development-server.mjs';
+import {developmentArguments,developmentServerOptions,protectDevelopmentLibrary,protectLocalProviderSettings} from './development-server.mjs';
 const {port,apiPort,library}=developmentArguments(process.argv.slice(2));
 process.env.SHIQU_DATA_DIR=library||developmentLibraryDirectory();
 const build=await context({entryPoints:['server/development.ts'],outfile:'dist/dev/server.js',bundle:true,platform:'node',format:'esm',target:'node24',packages:'external',sourcemap:true});
@@ -14,7 +14,7 @@ async function stop(code=0){if(stopping)return;stopping=true;backend?.kill('SIGT
 for(const signal of ['SIGINT','SIGTERM'])process.on(signal,()=>void stop());
 try{
  await build.rebuild();await build.watch();
- frontend=await createServer({plugins:[protectDevelopmentLibrary(process.env.SHIQU_DATA_DIR)],server:developmentServerOptions({port,apiPort,library:process.env.SHIQU_DATA_DIR})});
+ frontend=await createServer({plugins:[protectLocalProviderSettings(),protectDevelopmentLibrary(process.env.SHIQU_DATA_DIR)],server:developmentServerOptions({port,apiPort,library:process.env.SHIQU_DATA_DIR})});
  await frontend.listen();if(stopping)throw Error('Development startup stopped');
  // Validate public paths and bind the frontend before opening the shared database in a child.
  backend=spawn(process.execPath,['--watch','dist/dev/server.js'],{stdio:'inherit',env:{...process.env,PORT:String(apiPort),SHIQU_BIND_IP:'127.0.0.1',SHIQU_DEV_FRONTEND_PORT:String(port)}});
