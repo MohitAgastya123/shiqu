@@ -12,7 +12,7 @@ Use an invocation-only `claude` provider, like DeepSeek, leaving saved desktop s
 3. [x] Add fake-process tests for auth/billing isolation, protocol/structured output, model/effort receipts, timeout, cancellation, no tools/images, and production reviewed boundary.
 4. [x] Run Node 24 typecheck, lint and applicable unit/integration suites; review the final integration independently.
 5. [ ] Create an isolated comparison via CLI using preserved selection; prepare, confirm and run to reviewed; inspect checkpoints on failure rather than blindly rerunning. Validate selected-source/context hashes against saved inputs, zero images and passed production review.
-6. [ ] Save snapshots, prompts, review history, runtime/model metadata and evidence-based four-way comparison report. If live authentication/service blocks completion, record exact limits and continuation state.
+6. [x] Save snapshots, prompts, review history, runtime/model metadata and evidence-based four-way comparison report. If live authentication/service blocks completion, record exact limits and continuation state.
 
 Validation: `.docs/tests/test-claude-cli-comparison.md`; production CLI boundary plus fake runner tests. No Docker/desktop packaging. Live run may require network/keychain access outside the sandbox. Do not expose credentials or private account fields.
 
@@ -31,3 +31,23 @@ CR risk: non-low — subscription subprocess integration affects production rout
 CR review round: 2; reviewer: reused (`claude_review`).
 
 Live run: `.data/comparisons/huoyanshan-claude-2026-11-05T13-21-32.932Z`, story `ada313b9-9c00-4d2b-a1f6-7d15730ac01f`, public `pnpm cli run --until reviewed` with no-intake selection matching prior independent runs. This already-selected source needs no new discovery/confirmation step. Saved source JSON hashes match selected text `9343ce896671e37839be659bc9b1971601c0b8f03cba763d4e19e5518f1199f0` and chapter context `7d6d382fd8fa2782853f8a87458a6e59a174363eb3f41dea69f99615f3f1ea79`.
+
+Implementation milestone: local commit `17a00d5` (tested provider, diagnostics, documentation; no push). Unrelated working changes remain outside the milestone.
+
+Live outcome: blocked by the subscription's five-hour usage limit, not an editorial stop. CLI reported reset `2026-11-05 13:20 America/Toronto`. Initial recommendation 42, outline 78, structural repairs 78→78→73→67. Fourth count audit proposes 65; that repair did not execute. Four count audits, three structural repairs, no full-story audit, no override, 0 images. Runtime to block ~18 minutes. Original/context hashes and selection equal the preserved inputs. All successful calls report `claude-opus-5-5`.
+
+Runtime repair: Claude service-error assistants use model `<synthetic>` and error `rate_limit`. Handle that before successful model validation; save `RATE_LIMITED` with safe user guidance, never accept it as a model receipt or fall back to API billing. 18 focused quota/diagnostic checks, final typecheck and scoped lint pass. No paid whole-story retry while quota is exhausted.
+
+Evidence collection repair: the temporary task program concatenated UTF-8 Buffers individually, corrupting some captured stdout. This did not affect the production source or model inputs. Final session/source/prompts/history were re-read through public CLI with streaming UTF-8 decoding; both original hashes verified. Removed corrupt captured run JSON. Private `summary-final.json`, `quota-probe.json`, `resume-input.json`, `resume.md` preserve the actual block and fixed recovery identity. Report: `.docs/reports/2026/11/05/model-comparison-huoyanshan.md`.
+
+Task 5 remains incomplete: no reviewed Claude result exists yet. Resume the saved current fault after quota reset, then run the same story to reviewed and revalidate; do not recreate, change providers, bypass review or generate images.
+
+Quota-handling milestone: local commit `837862e`; no push.
+
+CR passed: no major findings.
+CR risk: non-low — subscription subprocess integration affects production routing and shutdown.
+CR review round: 3; reviewer: reused (`claude_review`).
+
+VR incomplete: the Claude story has not reached `reviewed`. The remaining requirement is the passed live review boundary; the 67-frame checkpoint and report are explicitly unfinished. Complete criterion-by-criterion VR evidence is preserved in `.docs/done/2026/11/05/claude-cli-comparison.md`. Verification logs are copied under the private comparison directory's `verification/`.
+
+Follow-up user instruction (2026-11-05): comparison reports consolidated into `model-comparison-huoyanshan.md`; Claude and DeepSeek drafts saved as separate paused desktop-library copies. User explicitly requested both stories remain paused. Do not resume generation automatically when quota resets; wait for an explicit resume request. Exact copy/pause evidence is recorded in `plan-copy-comparison-drafts.md` and the consolidated report.
