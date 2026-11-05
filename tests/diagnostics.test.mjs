@@ -47,8 +47,8 @@ test('production Gemini failures persist safe rejection details and survive diag
  }finally{restore();console.error=original;}
  const events=diagnosticReport(directory,'0.8.0').events;
  assert.deepEqual(events.map(({time,...event})=>event),[
-  {event:'gemini_request_rejected',httpStatus:400,status:'INVALID_ARGUMENT',reason:'SCHEMA_TOO_COMPLEX'},
-  {event:'reader_generation_error',code:'PROVIDER_ERROR',status:400},
+  {event:'gemini_request_rejected',httpStatus:400,status:'INVALID_ARGUMENT',reason:'SCHEMA_TOO_COMPLEX',task:'suggest'},
+  {event:'reader_generation_error',code:'SCHEMA_TOO_COMPLEX',status:400},
  ]);
  recordDiagnostic(directory,'gemini_request_rejected',{httpStatus:502,status:privateText,reason:privateText,model:privateText,message:privateText,unknownFields:[privateText]});
  recordDiagnostic(directory,'reader_generation_error',{code:'INVALID_JSON',status:502,message:privateText});

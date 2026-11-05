@@ -28,8 +28,8 @@ test('OpenAI rejects a mismatched actual matching model and accepts an omitted m
 for(const provider of ['codex','openai','gemini'])test(`${provider}: catalog output limits follow the extraction request, independently of display`,async()=>{
  const caps=[],response={stories:[],note:'',scan:{blockComplete:true,pendingEvents:[],resolvedEventIds:[]}};
  const runner={status:async()=>({configured:true}),run:async job=>{caps.push(job.schema.properties.stories.maxItems);return {text:JSON.stringify(response),model:'controlled'};}};
- const transport=async(_url,init)=>{const body=JSON.parse(init.body),api=provider==='openai';caps.push((api?body.text.format.schema:body.generationConfig.responseFormat.text.schema).properties.stories.maxItems);return Response.json(api?{status:'completed',model:body.model,output:[{type:'message',content:[{type:'output_text',text:JSON.stringify(response)}]}]}:{candidates:[{finishReason:'STOP',content:{parts:[{text:JSON.stringify(response)}]}}]});};
+ const transport=async(_url,init)=>{const body=JSON.parse(init.body),api=provider==='openai',list=(api?body.text.format.schema:body.generationConfig.responseFormat.text.schema).properties.stories;caps.push(api?list.maxItems:list.description);return Response.json(api?{status:'completed',model:body.model,output:[{type:'message',content:[{type:'output_text',text:JSON.stringify(response)}]}]}:{candidates:[{finishReason:'STOP',content:{parts:[{text:JSON.stringify(response)}]}}]});};
  const p=createReaderProvider({SHIQU_AI_PROVIDER:provider,OPENAI_API_KEY:'controlled',GEMINI_API_KEY:'controlled'}, {},transport,runner);
  for(const cap of [1,4,32])await p.suggestions({bookId:'zhuangzi',theme:'主题',length:'auto',artStyle:'ink-pencil',voice:false},[],{title:'原典',edition:'a'.repeat(64),text:'原文。',purpose:'catalog',scan:{maxStories:cap,excludedSources:[],pendingEvents:[],contextText:''}});
- assert.deepEqual(caps,[1,4,32]);
+ assert.deepEqual(caps,provider==='gemini'?['At most 1 items.','At most 4 items.','At most 32 items.']:[1,4,32]);
 });

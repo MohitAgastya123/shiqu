@@ -17,10 +17,10 @@ function generator(answer,inspect=()=>{}){
 }
 const repair=gen=>gen.restructure(selection,plan,original,[issue]);
 
-test('Gemini removes only the inner counted-array bound and preserves the shared schema',async()=>{
+test('Gemini keeps structural repair counts in guidance and preserves the shared schema',async()=>{
  const shared=JSON.stringify(structuralEditsJson(12)),answer={characters:null,edits:[{from:2,to:2,pages:[page,page]}]};let sent;
  const result=await repair(generator(answer,schema=>{
-  sent=schema;assert.equal(schema.properties.edits.maxItems,readerStoryboardBatchSize);
+  sent=schema;assert.equal(schema.properties.edits.maxItems,undefined);assert.match(schema.properties.edits.description,new RegExp(`At most ${readerStoryboardBatchSize} items`));
   const pages=schema.properties.edits.items.properties.pages;
   assert.equal(pages.maxItems,undefined);assert.match(pages.description,/At most 20 items/);
   assert.deepEqual(pages.items,structuralEditsJson(12).properties.edits.items.properties.pages.items);

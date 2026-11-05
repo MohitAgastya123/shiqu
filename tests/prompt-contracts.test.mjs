@@ -8,6 +8,7 @@ import {defaultProductionDirection,defaultProductionPrompt,normalizeProductionPr
 import {legacyProductionDirection} from '../lib/reader-legacy-prompts.ts';
 import {legacyLocalReadingPrompt,legacyLocalScanJson} from '../lib/reader-local-contract.ts';
 import {makePlan,makeReflectionCandidates,makeRequirements,encoded} from './fixtures/production.mjs';
+import {geminiEvidenceAnswer} from './fixtures/gemini-evidence.mjs';
 
 const hash=value=>createHash('sha256').update(typeof value==='string'?value:JSON.stringify(value)).digest('hex');
 const plain=text=>text.replace(/^\s*- /gm,'').replace(/\s/g,'');
@@ -40,7 +41,7 @@ function responseFor(payload,schema){
  if(schema.properties.count)return {count:8,reason:'关键言行和回应各有空间。',...(schema.properties.storySummary?{storySummary:plan.summary,storyMatchReason:'原文包含梦与醒的经历。'}:{}),...(schema.properties.requirements?{requirements:makeRequirements(payload.chosenStory)}:{})};
  if(schema.properties.requirements)return {frameCountReview:{decision:'keep',proposedCount:payload.plan.pages.length,reason:'关键叙事任务已有空间。'},requirements:[]};
  if(schema.properties.artStyle)return candidate.artRecommendation;
- if(schema.properties.issues)return {...(payload.acceptanceCriteria?.length?{acceptanceResults:payload.acceptanceCriteria.map((_,index)=>({criterion:index+1,status:'passed',pages:[1],evidence:'第一幅保留了要求中的可见反应。'}))}:{}),titleReview:{title:plan.title,reason:'符合实际范围。'},issues:[],...(payload.reflectionCandidates?{reflectionChoice:{index:2,reason:'保留关键关系。'}}:{})};
+ if(schema.properties.issues)return {...(payload.acceptanceCriteria?.length?{acceptanceResults:payload.acceptanceCriteria.map((_,index)=>({criterion:index+1,status:'passed',pages:[1],evidence:'第一幅保留了要求中的可见反应。'}))}:{}),titleReview:{title:plan.title,reason:'符合实际范围。'},coverage:[{quote:'昔者庄周梦为胡蝶。',task:'庄周梦蝶',pages:[1],assessment:'adequate',reason:'第一幅保留梦中经历。',issuePage:0}],issues:[],...(payload.reflectionCandidates?{reflectionChoice:{index:2,reason:'保留关键关系。'}}:{})};
  if(payload.requestedPages)return {pages:payload.requestedPages.map(page=>({page,...plan.pages[page-1]}))};
  if(schema.properties.candidates)return {title:plan.title,candidates:makeReflectionCandidates(plan.reflection)};
  if(payload.draft)return {reflection:plan.reflection};
@@ -67,7 +68,8 @@ async function requestsFor(provider,acceptancePrompt){
   }
   assert.match(String(url),/^https:\/\/generativelanguage.googleapis.com\//);
   if(body.generationConfig.responseModalities){seen.set(stage,{prompt:body.contents[0].parts.find(p=>p.text).text});return Response.json({candidates:[{finishReason:'STOP',content:{parts:[{inlineData:{mimeType:'image/png',data:encoded}}]}}]});}
-  const value=record(body.systemInstruction.parts[0].text,body.contents[0].parts[0].text,body.generationConfig.responseFormat.text.schema);
+  const payload=JSON.parse(body.contents[0].parts[0].text),schema=body.generationConfig.responseFormat.text.schema;
+  const value=geminiEvidenceAnswer(record(body.systemInstruction.parts[0].text,body.contents[0].parts[0].text,schema),payload,schema);
   return Response.json({candidates:[{finishReason:'STOP',content:{parts:[{text:JSON.stringify(value)}]}}]});
  };
  const media={get(){throw Error('Unexpected media read');},async put(...args){stored.push(args);}};
@@ -109,10 +111,20 @@ test('all providers send the same stage-specific instructions, data and strict o
  const [codex,...others]=captures;
  for(const other of others)for(const [stage,request] of codex){
   if(stage==='image'){assert.equal(other.get(stage).prompt,request.prompt);continue;}
-  assert.equal(other.get(stage).instructions,request.instructions,stage);
-  assert.deepEqual(other.get(stage).payload,request.payload,stage);
-  // Responses rebuilds required arrays in property order; JSON Schema treats their order as immaterial.
-  const canonical=value=>value&&typeof value==='object'&&/^At most (\d+) (?:additional source ranges|items)\.$/.test(value.description||'')?canonical({...Object.fromEntries(Object.entries(value).filter(([key])=>key!=='description')),maxItems:Number(value.description.match(/\d+/)[0])}):Array.isArray(value)?value.map(canonical):value&&typeof value==='object'?Object.fromEntries(Object.entries(value).map(([key,item])=>[key,key==='required'?[...item].sort():canonical(item)])):value;
+  const actual=other.get(stage),{reviewQuoteSources,...payload}=actual.payload;
+  if(reviewQuoteSources){
+   assert.ok(actual.instructions.startsWith(request.instructions+'\n\n'),stage);assert.match(actual.instructions.slice(request.instructions.length),/quoteId/);
+   assert.ok(reviewQuoteSources.every(source=>original.text.includes(source.quote)),stage);
+   for(const field of ['coverage','requirements'])if(actual.schema.properties[field]){
+    assert.equal(actual.schema.properties[field].items.properties.quoteId.type,'integer');assert.equal(actual.schema.properties[field].items.properties.quote,undefined);
+   }
+  }else assert.equal(actual.instructions,request.instructions,stage);
+  assert.deepEqual(payload,request.payload,stage);
+  // Compare the common structural contract: Gemini uses exact quote references and advisory bounds.
+  // Dedicated adapter tests verify both wire limits and strict local validation of those bounds.
+  const canonical=value=>Array.isArray(value)?value.map(canonical):value&&typeof value==='object'?Object.fromEntries(Object.entries(value)
+   .filter(([key])=>!['description','minItems','maxItems','minimum','maximum'].includes(key))
+   .map(([key,item])=>key==='quoteId'?['quote',{type:'string',minLength:2,maxLength:120}]:[key,key==='required'?[...item].map(name=>name==='quoteId'?'quote':name).sort():canonical(item)])):value;
   assert.deepEqual(canonical(other.get(stage).schema),canonical(request.schema),stage);
  }
  const get=stage=>codex.get(stage);

@@ -6,6 +6,7 @@ import {configuredTaskReasoning,taskReasoningDefaults,reasoningTasks} from '../l
 import {desktopSettings,desktopVariables} from '../server/desktop.ts';
 import {withLocalBooks} from '../server/local-generation.ts';
 import {makePlan,makeReflectionCandidates,selection as baseSelection,productionFixture,until} from './fixtures/production.mjs';
+import {geminiEvidenceAnswer} from './fixtures/gemini-evidence.mjs';
 
 const selection={...baseSelection,length:8},plan=makePlan(8),{pages,...metadata}=plan;
 const outline={...metadata,beats:pages.map((_,i)=>`第${i+1}幅的动作。`)};
@@ -18,7 +19,7 @@ function output(payload,schema){
  if(schema.properties.stories)return {stories:[],note:''};
  if(schema.properties.artStyle)return {artStyle:'ink-pencil',reason:'适合本篇动作。'};
  if(schema.properties.count)return {count:8,reason:'保留完整因果。'};
- if(schema.properties.issues)return {issues:[],titleReview:{title:payload.plan.title,reason:'标题准确对应当前故事。'}};
+ if(schema.properties.issues)return {issues:[],titleReview:{title:payload.plan.title,reason:'标题准确对应当前故事。'},coverage:[{quote:payload.verifiedOriginal.text,task:'核对梦醒结果',pages:[1],assessment:'adequate',reason:'受控原文引用',issuePage:0}]};
  if(payload.requestedPages)return {pages:payload.requestedPages.map(page=>({page,...plan.pages[page-1]}))};
  if(schema.properties.beats)return outline;
  if(payload.batch)return {pages:plan.pages.slice(payload.batch.first-1,payload.batch.last)};
@@ -30,7 +31,8 @@ for(const name of ['codex','gemini'])for(const custom of [false,true])test(`${na
  const runner={status:async()=>({configured:true}),async run(job){calls.push(job.reasoningEffort);return {text:JSON.stringify(output(JSON.parse(job.prompt),job.schema)),model:'controlled',requestId:'controlled',usage:{calls:1},reasoningEffort:job.reasoningEffort};}};
  const transport=async(_url,init)=>{
   const body=JSON.parse(init.body);calls.push(body.generationConfig.thinkingConfig.thinkingLevel.toLowerCase());
-  return Response.json({candidates:[{finishReason:'STOP',content:{parts:[{text:JSON.stringify(output(JSON.parse(body.contents[0].parts[0].text),body.generationConfig.responseFormat.text.schema))}]}}]});
+  const payload=JSON.parse(body.contents[0].parts[0].text),schema=body.generationConfig.responseFormat.text.schema;
+  return Response.json({candidates:[{finishReason:'STOP',content:{parts:[{text:JSON.stringify(geminiEvidenceAnswer(output(payload,schema),payload,schema))}]}}]});
  };
  const provider=createReaderProvider(variables,{},transport,runner),g=provider.generator();
  await provider.suggestions(selection,[]);await provider.matchStories(selection.theme,[{id:'a'.repeat(64),title:'故事',text:'完整因果和结局。'}]);await provider.recommendArt(selection,original);

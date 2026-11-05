@@ -223,7 +223,8 @@ test('Gemini plans structured scenes and Nano Banana carries the first picture i
  assert.equal(result.value.title,plan.title);assert.equal(result.requestId,'test-response');
  assert.match(requests[0].url,/gemini-3.8-flash:generateContent$/);assert.equal(requests[0].body.store,false);
  assert.equal(requests[0].init.headers['x-goog-api-key'],'unit-test-only');assert.ok(!requests[0].url.includes('unit-test-only'));
- assert.equal(requests[0].body.generationConfig.responseFormat.text.schema.properties.pages.minItems,8);
+ assert.equal(requests[0].body.generationConfig.responseFormat.text.schema.properties.pages.minItems,undefined);
+ assert.match(requests[0].body.generationConfig.responseFormat.text.schema.properties.pages.description,/At least 8 items.*At most 8 items/);
  const a=await g.image(plan,0,'test-id','');await g.image(plan,1,'test-id',a.value);
  assert.equal(a.value,'/api/reader/media/test-id/0.png');assert.equal(assets.stored.size,2);
  assert.equal(assets.stored.get('reader/test-id/0.png').options.contentType,'image/png');
@@ -316,7 +317,8 @@ test('five story choices are requested and accepted without inventing a missing 
  let body;const choices=Array.from({length:5},(_,i)=>({title:'已知篇目'+i,description:'一个不剧透的故事简介。'}));
  const result=await suggestStories('unit-test-only',selection,{},async(url,init)=>{body=JSON.parse(init.body);return geminiResponse([{text:JSON.stringify({stories:choices,note:''})}]);});
  assert.equal(result.stories.length,5);
- assert.equal(body.generationConfig.responseFormat.text.schema.properties.stories.maxItems,5);
+ assert.equal(body.generationConfig.responseFormat.text.schema.properties.stories.maxItems,undefined);
+ assert.match(body.generationConfig.responseFormat.text.schema.properties.stories.description,/At most 5 items/);
  assert.match(body.systemInstruction.parts[0].text,/未提供时至多5篇/);
  assert.match(body.systemInstruction.parts[0].text,/为1时只寻找一篇，找到即返回/);
  const unknown=await suggestStories('unit-test-only',selection,{},async()=>geminiResponse([{text:JSON.stringify({stories:[],note:'请补充原文。'})}]));

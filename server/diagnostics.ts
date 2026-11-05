@@ -7,7 +7,7 @@ import {geminiResponseDiagnostic} from '../lib/reader-gemini-diagnostics.ts';
 
 export const diagnosticLimit=128*1024;
 const names=new Set(['service_started','service_stopped','service_start_failed','service_uncaught','request_failed','codex_generation_error','reader_generation_error','gemini_request_rejected','gemini_response','production_job_unreadable','production_job_unsaved','production_story_unreadable','production_tick_failed','story_discovery_search']);
-const geminiCodes=new Set(['INVALID_OUTPUT','PROVIDER_ERROR','UNSUPPORTED_REASONING_EFFORT','SOURCE_UNAVAILABLE','INVALID_SOURCE','CONTENT_BLOCKED','INVALID_MODEL','INCOMPLETE_RESPONSE','INVALID_TEXT','INVALID_JSON']);
+const geminiCodes=new Set(['INVALID_OUTPUT','PROVIDER_ERROR','SCHEMA_TOO_COMPLEX','UNSUPPORTED_FIELD','UNSUPPORTED_REASONING_EFFORT','SOURCE_UNAVAILABLE','INVALID_SOURCE','CONTENT_BLOCKED','INVALID_MODEL','INCOMPLETE_RESPONSE','INVALID_TEXT','INVALID_JSON']);
 const providerStatuses=new Set(['INVALID_ARGUMENT','FAILED_PRECONDITION','OUT_OF_RANGE','UNAUTHENTICATED','PERMISSION_DENIED','NOT_FOUND','RESOURCE_EXHAUSTED','CANCELLED','INTERNAL','UNKNOWN','UNAVAILABLE','DEADLINE_EXCEEDED']);
 const rejectionReasons=new Set(['SCHEMA_TOO_COMPLEX','UNSUPPORTED_FIELD']);
 const codes=new Set(['UNKNOWN','Error','TypeError','RangeError','SyntaxError','AbortError','ReaderError','CodexError','ZodError','ENOENT','EACCES','EPERM','EIO','ENOSPC','EMFILE','EROFS','EBUSY','EADDRINUSE','DATA_BUSY','INVALID_OUTPUT','TIMEOUT','MODEL_UNAVAILABLE','REASONING_EFFORT_UNAVAILABLE','INTERRUPTED','SQLITE_BUSY','SQLITE_ERROR','SQLITE_CORRUPT','ERR_SQLITE_ERROR']);
@@ -22,6 +22,7 @@ function project(event:string,value:unknown={},time=new Date().toISOString()):Ev
   if(typeof raw.httpStatus==='number'&&Number.isInteger(raw.httpStatus)&&raw.httpStatus>=100&&raw.httpStatus<=599)out.httpStatus=raw.httpStatus;
   if(typeof raw.status==='string'&&providerStatuses.has(raw.status))out.status=raw.status;
   if(typeof raw.reason==='string'&&rejectionReasons.has(raw.reason))out.reason=raw.reason;
+  if(typeof raw.task==='string'&&['suggest','art','frames','outline','plan','review','repair','image'].includes(raw.task))out.task=raw.task;
  }
  if(typeof raw.id==='string'&&/^(?:[a-f0-9]{64}|[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12})$/i.test(raw.id))out.id=raw.id;
  for(const name of ['calls','isolationCalls','inputTokens','outputTokens','unknownUsage','firstStoredMs','firstMatchMs'])if(typeof raw[name]==='number'&&Number.isFinite(raw[name])&&raw[name]>=0)out[name]=raw[name];
