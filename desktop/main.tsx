@@ -3,9 +3,11 @@ import {useEffect,useRef,useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {invoke,isTauri} from '@tauri-apps/api/core';
 import QRCode from 'qrcode';
-import {LayoutDashboard,Layers3,Server,Settings2} from 'lucide-react';
+import {LayoutDashboard,Layers3,Settings2} from 'lucide-react';
 import {LibraryPane} from './LibraryPane';
 import {OverviewPane} from './OverviewPane';
+import {ServiceCard} from './ServiceCard';
+import {PhoneAccessCard} from './PhoneAccessCard';
 import {localReaderUrl} from './reader-url';
 import type {ServiceState} from './library-summary';
 import {codexReasoningEfforts} from '../lib/codex-settings';
@@ -59,7 +61,7 @@ function Desktop(){
   setSettings(previous=>previous?{...previous,provider,taskReasoningEfforts:provider==='gemini'?Object.fromEntries(Object.entries(previous.taskReasoningEfforts).map(([task,value])=>[task,(geminiReasoningEfforts as readonly string[]).includes(value)?value:taskReasoningDefaults[task as keyof typeof taskReasoningDefaults]])) as Settings['taskReasoningEfforts']:previous.taskReasoningEfforts}:previous);
  }
  async function copy(value:string){await navigator.clipboard.writeText(value);setMessage('访问链接已复制。');}
- const links=[status.publicUrl,...status.phoneUrls].filter((link):link is string=>!!link),internet=!!phone&&phone===status.publicUrl;
+ const links=[status.publicUrl,...status.phoneUrls].filter((link):link is string=>!!link);
  const apiProvider=settings?.provider==='gemini'||settings?.provider==='openai',openai=settings?.provider==='openai',keyPresent=settings?.provider==='gemini'?!!view?.providerKeys.gemini:settings?.provider==='openai'?!!view?.providerKeys.openai:false;
  const locked=!native||!!busy||status.running,dirty=!!settings&&!!view&&(JSON.stringify(settings)!==JSON.stringify(view.settings)||keyAction!=='keep');
  const configured=!!(view?.settings.providerConfigured||view?.runtimeConfigured);
@@ -132,25 +134,8 @@ function Desktop(){
     </div>
    </div>
    <aside className="service-stack">
-    <section className="runtime-card"><div className="runtime-heading"><span><Server size={20} strokeWidth={1.5}/></span><div><h2>本机服务</h2><p>电脑是故事的家。</p></div></div>
-     {serviceState!=='preview'&&<div className={'runtime-state is-'+serviceState}><span aria-hidden="true"/>{serviceState==='running'?'服务运行中':serviceState==='stopped'?'服务已停止':serviceState==='loading'?'正在读取服务状态':'服务状态暂不可用'}</div>}
-     <dl className="runtime-facts"><div><dt>运行时</dt><dd>{!native?'—':node?`Node ${node.version} · 就绪`:nodeError?'运行时不可用':'正在检查…'}</dd></div><div><dt>故事目录</dt><dd className="runtime-path">{native?view?.settings.dataDirectory||settings.dataDirectory:'—'}</dd></div>{serviceState==='running'&&status.url&&<div><dt>访问地址</dt><dd><button className="text-button" onClick={()=>void action('复制链接',()=>copy(status.url!))}>{new URL(status.url).origin}</button></dd></div>}</dl>
-     {(status.error||statusReadError)&&!busy&&<p className="runtime-error" role="alert">{statusReadError||status.error}</p>}
-     <button id="desktop-service-toggle" className={'runtime-toggle'+(status.running?' is-stop':'')} disabled={!!busy||!native||configured&&!statusKnown} onClick={()=>{if(!configured){setTab('settings');return;}void action(status.running?'停止服务':'启动服务',async()=>{if(status.running)acceptStatus(await invoke<Status>('stop_server'));else await startService();});}}>{busy?busy+'…':!native?'启动服务':!configured?'先完成设置':status.running?'停止服务':'启动服务'}</button>
-     {serviceState==='running'&&<button className="runtime-browser" type="button" disabled={!!busy} onClick={openReader}>在浏览器打开 ↗</button>}
-     <p className="runtime-foot">关闭窗口后留在托盘。退出应用时停止服务。</p>
-    </section>
-    <section className="card phone-card"><div className="section-heading"><span className="phone-glyph" aria-hidden="true">↗</span><div><h2>手机接着读</h2><p>无需安装手机应用。</p></div></div>
-     <fieldset className="phone-sharing" disabled={locked}><legend className="sr-only">手机访问设置</legend>
-      <label className="switch-row"><input type="checkbox" checked={settings.internetEnabled} onChange={e=>update('internetEnabled',e.target.checked)}/><span><strong>允许互联网访问</strong><small>{status.running?'停止服务后可修改互联网访问。':'使用免费 Cloudflare 临时隧道，手机可在其他 Wi-Fi 或蜂窝网络中连接。无需账户或域名。'}</small></span></label>
-      {settings.internetEnabled&&<><label>cloudflared 可执行文件<input value={settings.cloudflaredPath} placeholder="留空自动查找，或填写绝对路径" onChange={e=>update('cloudflaredPath',e.target.value)} spellCheck={false}/></label><p className="help">需先安装 cloudflared。macOS：brew install cloudflared。需另行安装此工具。</p></>}
-     </fieldset>
-     <p className="help lan-status">局域网访问始终开启 · 无需配对 ID</p>
-     {status.internetError&&<p className="error" role="status">{status.internetError}</p>}
-     {serviceState==='running'&&phone?<>{links.length>1&&<label>访问方式<select aria-label="手机访问方式" value={phone} onChange={e=>setPhone(e.target.value)}>{links.map(url=><option key={url} value={url}>{url===status.publicUrl?'互联网 · ':'局域网 · '}{new URL(url).hostname}</option>)}</select></label>}<p className="phone-url">{internet?'互联网 · 私密配对链接':'局域网 · 直接访问'}</p><div className="qr-wrap">{qr?<img src={qr} width="240" height="240" alt={internet?'扫描私密二维码，通过互联网连接书架':'扫描二维码，通过局域网打开书架'}/>:<p>正在生成二维码…</p>}</div><p className="phone-url">{new URL(phone).origin}</p><button className="secondary full" onClick={()=>void action('复制链接',()=>copy(phone))}>{internet?'复制私密互联网链接':'复制局域网访问链接'}</button></>:<div className="qr-placeholder"><span aria-hidden="true">▦</span><p>{status.running?'未找到可用的访问地址。':'启动服务后显示二维码。'}</p></div>}
-     <p className="help network-note">电脑需保持唤醒，拾趣服务需保持运行。局域网使用 HTTP，仅限可信网络；可连接的设备共享书架和生成权限。</p>
-     {settings.internetEnabled&&<p className="help network-note">互联网通过 Cloudflare 转发 HTTPS。完整二维码和私密链接可授权访问书架与生成服务，请勿公开分享。配对有效期为 12 小时；停服立即失效，重启后需重新扫码。免费隧道地址会变化，无可用性保证。</p>}
-    </section>
+    <ServiceCard state={serviceState} running={status.running} busy={busy} native={native} configured={configured} toggleDisabled={!!busy||!native||configured&&!statusKnown} url={status.url} nodeVersion={node?.version} nodeError={nodeError} directory={view?.settings.dataDirectory||settings.dataDirectory} error={statusReadError||status.error||''} onOpen={openReader} onCopy={()=>{if(status.url)void action('复制链接',()=>copy(status.url!));}} onToggle={()=>{if(!configured){setTab('settings');return;}void action(status.running?'停止服务':'启动服务',async()=>{if(status.running)acceptStatus(await invoke<Status>('stop_server'));else await startService();});}}/>
+    <PhoneAccessCard state={serviceState} running={status.running} busy={!!busy} locked={locked} links={links} phone={phone} publicUrl={status.publicUrl} qr={qr} internetEnabled={settings.internetEnabled} cloudflaredPath={settings.cloudflaredPath} internetError={status.internetError} onChoose={setPhone} onInternetChange={enabled=>update('internetEnabled',enabled)} onCloudflaredChange={value=>update('cloudflaredPath',value)} onCopy={()=>void action('复制链接',()=>copy(phone))}/>
    </aside>
   </div>}
   <footer><span>拾趣 · 内置 Node 24 · 不需要 Docker</span><button className="text-button" disabled={!!busy||!native} onClick={()=>void action('退出',async()=>{await invoke('quit_app');})}>退出拾趣</button></footer>
