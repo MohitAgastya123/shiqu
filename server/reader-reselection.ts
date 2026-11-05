@@ -1,5 +1,6 @@
 // Draft discovery stays off the shelf; one current-family CAS promotes only an explicit new choice.
 // Existing rows are the durable version receipts, so replay never reapplies inherited control.
+import {requirementsForReselection} from '../lib/reader-requirements.ts';
 import {ReaderError,selectionSchema} from '../lib/reader-model.ts';
 import type {Document,SessionRow} from '../lib/reader-model.ts';
 import type {ReaderRepository} from '../lib/reader-repository.ts';
@@ -19,9 +20,9 @@ export async function openReselection(repo:ReaderRepository,parentId:string,owne
  }
  if(await commandReceipt(repo.db,ownerId,requestId))throw new ReaderError(409,'这个操作编号已用于其他内容。');
  const row=await repo.get(parentId,ownerId),{epoch,rootId}=await revisionBasis(repo,row,true);
- const selection=selectionSchema.parse(JSON.parse(row.selection));
+ const reset=requirementsForReselection(selectionSchema.parse(JSON.parse(row.selection)),(JSON.parse(row.document) as Document).setupRequirements),selection=reset.selection;
  const {displayTitle:_,storyTitle:__,source:___,...settings}=selection;void _;void __;void ___;
- return createIntake(repo,requestId,ownerId,{...settings,length:'auto'},books,{parentId,rootId,epoch,baseToken:replacementToken(row.selection,epoch)});
+ return createIntake(repo,requestId,ownerId,{...settings,length:'auto'},books,{parentId,rootId,epoch,baseToken:replacementToken(row.selection,epoch)},reset.setup);
 }
 
 export async function commitReselection(repo:ReaderRepository,parentId:string,draftId:string,ownerId:string,choice:ReplacementChoice,attempt=0):Promise<SessionRow>{
@@ -41,7 +42,18 @@ export async function commitReselection(repo:ReaderRepository,parentId:string,dr
  const previous=selectionSchema.parse(JSON.parse(parent.selection));
  const same=!!candidate.source&&!!previous.source&&localSourceKey(candidate.source)===localSourceKey(previous.source);
  if(same){await recordNoop(repo.db,ownerId,parentId,choice.requestId,'same-selection',fingerprint);await repo.remove(draftId,ownerId);return repo.current(parentId,ownerId);}
- const selection=selectionSchema.parse({...JSON.parse(row.selection),...choice.settings,storyTitle:candidate.title,source:candidate.source,length:'auto'});
+ const baseline=selectionSchema.parse(JSON.parse(row.selection)),inherited=(JSON.parse(parent.document) as Document).setupRequirements?.suggestions;
+ const settings={...doc.intake.draft,...choice.settings},overrides={...doc.setupRequirements?.overrides};
+ // A draft starts with inherited automatic text removed. Preserve edits to that baseline,
+ // including blanks; older callers may still submit the parent's unchanged suggestions.
+ for(const key of ['productionPrompt','acceptancePrompt'] as const){
+  const value=settings[key];
+  if(value===undefined)continue;
+  if(value===inherited?.[key]){settings[key]='';delete overrides[key];}
+  else if(value!==(baseline[key]||''))overrides[key]=value;
+ }
+ const selection=selectionSchema.parse({...baseline,...settings,storyTitle:candidate.title,source:candidate.source,length:'auto'});
+ doc.setupRequirements={overrides};
  delete selection.displayTitle;
  if(!doc.intake.manualArt&&!choice.settings&&candidate.artRecommendation)selection.artStyle=candidate.artRecommendation.artStyle;
  delete doc.reselection;delete doc.original;delete doc.frameRecommendation;delete doc.storyboard;delete doc.draft;delete doc.visualReview;

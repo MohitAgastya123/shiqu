@@ -104,10 +104,10 @@ export function withLocalBooks(provider:ReaderProvider,books:LocalBooks,media:Me
      }
      const original=await books.storyOriginal(selection);return persist(original!,id);
     },
-    async recommend(selection,id,original){
+    async recommend(selection,id,original,prepareRequirements=false){
      if(localBookId(selection))verifyOriginal(selection,original);
      if(!generator.recommend)throw new ReaderError(503,'生成服务暂不支持画幅建议，请更新服务后重试。');
-     return generator.recommend(selection,id,original);
+     return generator.recommend(selection,id,original,prepareRequirements);
     },
     async plan(selection,id,original){
      if(!localBookId(selection))return generator.plan(selection,id,original);

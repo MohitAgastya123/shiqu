@@ -15,12 +15,13 @@ export const supersededSql=(alias='stories')=>`EXISTS(SELECT 1 FROM stories newe
 export const latestVersionMessage='这是旧版本，请打开书架中的最新版本继续生成。';
 // A failed write says nothing about the work, so callers must not report it as a provider failure.
 export const persistenceError=(error:unknown)=>(error as {code?:string}|null)?.code==='ERR_SQLITE_ERROR';
-// Full checkpoints own only the intake phase; art results merge through a targeted write.
+// Full checkpoints own the intake phase and may initialize an absent setup draft.
+// A draft saved beside inference, including empty fields, wins as a complete object.
 // Candidates, search and drafts change beside a running step,
 // and the generation fence on every write below rejects a worker whose selection was replaced.
 // Keep public metadata written during inference out of stale full-worker snapshots.
 const checkpoint="json_patch(?,CASE WHEN json_type(document,'$.publication')='object' THEN json_object('publication',json_extract(document,'$.publication')) ELSE '{}' END)";
-const workerDocument=`CASE WHEN json_type(document,'$.intake')='object' THEN json_set(${checkpoint},'$.intake',json(json_set(json_extract(document,'$.intake'),'$.phase',json_extract(?,'$.intake.phase')))) ELSE ${checkpoint} END`;
+const workerDocument=`CASE WHEN json_type(document,'$.intake')='object' THEN json_set(${checkpoint},'$.intake',json(json_patch(json_set(json_extract(document,'$.intake'),'$.phase',json_extract(?,'$.intake.phase')),CASE WHEN json_type(document,'$.intake.draft') IS NOT 'object' AND json_type(?,'$.intake.draft')='object' THEN json_object('draft',json_extract(?,'$.intake.draft')) ELSE '{}' END))) ELSE ${checkpoint} END`;
 export class ReaderRepository{
  db:Database;
  constructor(db:Database){this.db=db;}
@@ -159,10 +160,10 @@ export class ReaderRepository{
  async saveImageProgress(row:SessionRow,token:string,snapshot:Document){
   // Deletion hides the session but must still retain results of calls already in flight.
   const saved=JSON.stringify(snapshot),result=await this.db.prepare(`UPDATE stories SET document=${workerDocument},updated_at=? WHERE id=? AND user_id=? AND state='running' AND lock_token=? AND COALESCE(json_extract(document,'$.intake.generation'),-1)=?`)
-   .bind(saved,saved,saved,new Date().toISOString(),row.id,row.user_id,token,snapshot.intake?.generation??-1).run();
+   .bind(saved,saved,saved,saved,saved,new Date().toISOString(),row.id,row.user_id,token,snapshot.intake?.generation??-1).run();
   if(result.meta.changes!==1)throw new ReaderError(409,'故事状态已更新，请重新打开后继续。');
  }
- async save(row:SessionRow,token:string,doc:Document,complete:boolean,error:string|null=null,progressMap?:number[]){const saved=JSON.stringify(doc),map=progressMap?JSON.stringify(progressMap):null,r=await this.db.prepare(`UPDATE stories SET document=${workerDocument},state=CASE WHEN ? THEN 'failed' WHEN ? AND NOT EXISTS(SELECT 1 FROM reader_faults f WHERE f.session_id=stories.id AND f.owner_id=stories.user_id AND f.state IN ('pending','recovering')) THEN 'completed' ELSE 'idle' END,error=?,page=CASE WHEN ? IS NULL THEN page ELSE COALESCE(json_extract(?, '$['||page||']'),MAX(0,MIN(page,?))) END,lock_token=NULL,lock_until=0,updated_at=? WHERE id=? AND user_id=? AND lock_token=? AND COALESCE(json_extract(document,'$.intake.generation'),-1)=?`).bind(saved,saved,saved,error?1:0,complete?1:0,error,map,map,Math.max(0,(doc.plan?.pages.length||1)-1),new Date().toISOString(),row.id,row.user_id,token,doc.intake?.generation??-1).run();if(!r.meta.changes)throw new ReaderError(409,'故事状态已更新，请重新打开后继续。');return this.get(row.id,row.user_id);}
+ async save(row:SessionRow,token:string,doc:Document,complete:boolean,error:string|null=null,progressMap?:number[]){const saved=JSON.stringify(doc),map=progressMap?JSON.stringify(progressMap):null,r=await this.db.prepare(`UPDATE stories SET document=${workerDocument},state=CASE WHEN ? THEN 'failed' WHEN ? AND NOT EXISTS(SELECT 1 FROM reader_faults f WHERE f.session_id=stories.id AND f.owner_id=stories.user_id AND f.state IN ('pending','recovering')) THEN 'completed' ELSE 'idle' END,error=?,page=CASE WHEN ? IS NULL THEN page ELSE COALESCE(json_extract(?, '$['||page||']'),MAX(0,MIN(page,?))) END,lock_token=NULL,lock_until=0,updated_at=? WHERE id=? AND user_id=? AND lock_token=? AND COALESCE(json_extract(document,'$.intake.generation'),-1)=?`).bind(saved,saved,saved,saved,saved,error?1:0,complete?1:0,error,map,map,Math.max(0,(doc.plan?.pages.length||1)-1),new Date().toISOString(),row.id,row.user_id,token,doc.intake?.generation??-1).run();if(!r.meta.changes)throw new ReaderError(409,'故事状态已更新，请重新打开后继续。');return this.get(row.id,row.user_id);}
  async progress(id:string,uid:string,page:number,saved:boolean){
   const row=await this.get(id,uid),doc=JSON.parse(row.document) as Document;if(!doc.plan||!doc.images[page])throw new ReaderError(400,'这幅画面还没有展开');
   // A late reader cannot overwrite a structural save's remapped position. Image publication is independent.

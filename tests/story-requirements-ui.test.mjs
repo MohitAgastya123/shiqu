@@ -18,8 +18,8 @@ test('production and acceptance are sibling links/tabs; acceptance editing is an
  const html=render(Editor,{tab:'acceptance',settings:{productionPrompt:'保留对白',artStyle:'ink-pencil',narrativeDetail:'balanced',length:'auto'},disabled:false,onChange:noop});assert.match(html,/每行一条/);assert.match(html,/重新审核/);
 });
 test('prompt history distinguishes inherited/current records, previews and missing history; model data is escaped',()=>{
- const production=render(Details,{data,kind:'production',sessionId:'current',preferences:{productionPrompt:'编辑中的要求'}});
- assert.match(production,/沿用旧版本记录/);assert.doesNotMatch(production,/review:0/);assert.match(production,/预览/);assert.match(production,/编辑中的要求/);assert.match(production,/复制完整提示词/);assert.doesNotMatch(production,/<script>bad/);
+ const production=render(Details,{data,kind:'production',sessionId:'current',preferences:{productionPrompt:'编辑中的要求',acceptancePrompt:'验收专用标记',acceptanceCriteria:['验收专用标记']}});
+ assert.match(production,/沿用旧版本记录/);assert.doesNotMatch(production,/review:0/);assert.match(production,/预览/);assert.match(production,/编辑中的要求/);assert.doesNotMatch(production,/验收专用标记/);assert.match(production,/复制完整提示词/);assert.doesNotMatch(production,/<script>bad/);
  const acceptance=render(Details,{data,kind:'acceptance',sessionId:'current',preferences:{}});assert.match(acceptance,/本版本实际使用/);assert.match(acceptance,/第 1 条 · 通过/);assert.match(acceptance,/第 2 条 · 无法判断/);assert.match(acceptance,/文字分镜不能判断实际成图/);assert.match(acceptance,/可见反应/);assert.match(acceptance,/第 2 幅/);
  const missing=render(Details,{data:{...data,records:[],results:[]},kind:'acceptance',sessionId:'old',preferences:{}});assert.match(missing,/未留存/);assert.match(missing,/旧版本不会补造历史记录/);assert.match(missing,/尚无本篇验收条目的审核结果/);
 });

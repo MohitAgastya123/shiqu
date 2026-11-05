@@ -6,6 +6,7 @@ import {persistenceError} from './reader-repository.ts';
 import type {ReaderRepository} from './reader-repository.ts';
 import type {ArtStyleId} from './reader-styles.ts';
 import type {OriginalSource,SourceResult,SourceHint} from './reader-source-types.ts';
+import {suggestedSettings} from './reader-requirements.ts';
 import {frameRecommendationOutputSchema} from './reader-frame-recommendation.ts';
 import {storyBriefSchema,storyBriefVerified} from './reader-story-brief.ts';
 import {storyEditorialContext} from './reader-prompts.ts';
@@ -22,7 +23,7 @@ import type {EditorialCoverage} from './reader-editorial.ts';
 import type {ReviewIssue,ReviewReport,RepairedPage,FrameCountReport,FrameCountContext} from './reader-review.ts';
 import type {PromptRecord} from './reader-prompt-records.ts';
 export type Generated<T>={promptRecord?:PromptRecord;value:T;model:string;requestId:string|null;usage:unknown;reasoningEffort?:string};
-export interface StoryGenerator{recommendArt?(selection:Selection,original:OriginalSource):Promise<ArtRecommendation>;prepareOriginal?(selection:Selection,id:string):Promise<OriginalSource|null>;recommend?(selection:Selection,id:string,original:OriginalSource):Promise<Generated<FrameRecommendation>>;outline?(selection:Selection,id:string,original?:OriginalSource):Promise<Generated<StoryboardOutline>>;planBatch?(selection:Selection,id:string,storyboard:Storyboard,original:OriginalSource):Promise<Generated<Plan['pages']>>;reviewFrameCount?(selection:Selection,plan:Plan,original:OriginalSource):Promise<Generated<FrameCountReport>>;review?(selection:Selection,plan:Plan,original:OriginalSource,outline?:StoryboardOutline,candidates?:ReflectionCandidates):Promise<Generated<ReviewReport>>;restructure?(selection:Selection,plan:Plan,original:OriginalSource,issues:ReviewIssue[],coverage?:EditorialCoverage[],frameCountContext?:FrameCountContext):Promise<Generated<StructuralEdits>>;repair?(selection:Selection,plan:Plan,original:OriginalSource,issues:ReviewIssue[],outline?:StoryboardOutline):Promise<Generated<RepairedPage[]>>;reflectionCandidates(selection:Selection,draft:StoryDraft,original:OriginalSource):Promise<Generated<StoryPresentation>>;reflection(selection:Selection,draft:StoryDraft,original:OriginalSource,revision?:{reflection:string;issues:ReviewIssue[]}):Promise<Generated<string>>;plan(selection:Selection,id:string,original?:OriginalSource):Promise<Generated<StoryDraft>>;original(selection:Selection,plan:SourceHint,id:string):Promise<SourceResult>;image(plan:Plan,page:number,id:string,reference:string,style?:ArtStyleId,productionPrompt?:string,artifactId?:string):Promise<Generated<string>>;audio(caption:string,id:string,page:number):Promise<Generated<string>>;safeError(error:unknown):string;}
+export interface StoryGenerator{recommendArt?(selection:Selection,original:OriginalSource):Promise<ArtRecommendation>;prepareOriginal?(selection:Selection,id:string):Promise<OriginalSource|null>;recommend?(selection:Selection,id:string,original:OriginalSource,prepareRequirements?:boolean):Promise<Generated<FrameRecommendation>>;outline?(selection:Selection,id:string,original?:OriginalSource):Promise<Generated<StoryboardOutline>>;planBatch?(selection:Selection,id:string,storyboard:Storyboard,original:OriginalSource):Promise<Generated<Plan['pages']>>;reviewFrameCount?(selection:Selection,plan:Plan,original:OriginalSource):Promise<Generated<FrameCountReport>>;review?(selection:Selection,plan:Plan,original:OriginalSource,outline?:StoryboardOutline,candidates?:ReflectionCandidates):Promise<Generated<ReviewReport>>;restructure?(selection:Selection,plan:Plan,original:OriginalSource,issues:ReviewIssue[],coverage?:EditorialCoverage[],frameCountContext?:FrameCountContext):Promise<Generated<StructuralEdits>>;repair?(selection:Selection,plan:Plan,original:OriginalSource,issues:ReviewIssue[],outline?:StoryboardOutline):Promise<Generated<RepairedPage[]>>;reflectionCandidates(selection:Selection,draft:StoryDraft,original:OriginalSource):Promise<Generated<StoryPresentation>>;reflection(selection:Selection,draft:StoryDraft,original:OriginalSource,revision?:{reflection:string;issues:ReviewIssue[]}):Promise<Generated<string>>;plan(selection:Selection,id:string,original?:OriginalSource):Promise<Generated<StoryDraft>>;original(selection:Selection,plan:SourceHint,id:string):Promise<SourceResult>;image(plan:Plan,page:number,id:string,reference:string,style?:ArtStyleId,productionPrompt?:string,artifactId?:string):Promise<Generated<string>>;audio(caption:string,id:string,page:number):Promise<Generated<string>>;safeError(error:unknown):string;}
 
 async function drawRequestedImages(repo:ReaderRepository,generator:StoryGenerator,row:SessionRow,token:string,doc:Document,selection:Selection,throughPage:number){
  const pages=doc.plan!.pages.map((_,page)=>page).filter(page=>page<=throughPage&&!doc.images[page]);
@@ -78,9 +79,15 @@ export async function advanceStory(repo:ReaderRepository,generator:StoryGenerato
     const recommendation=artRecommendationSchema.parse(await generator.recommendArt(selection,doc.original));
     await repo.saveArtRecommendation(row,ownedToken,doc,recommendation);
     candidate.artRecommendation=recommendation;
+    if(!doc.intake!.manualArt)selection.artStyle=recommendation.artStyle;
    }
    if(!generator.recommend)throw new ReaderError(503,'生成服务暂不支持画幅建议，请更新服务后重试。');
-   const result=await generator.recommend(selection,id,doc.original),recommendation=frameRecommendationOutputSchema(doc.original).parse(result.value);
+   const prepareRequirements=!!doc.intake&&!doc.setupRequirements?.suggestions;
+   const result=await generator.recommend(selection,id,doc.original,prepareRequirements),recommendation=frameRecommendationOutputSchema(doc.original,prepareRequirements).parse(result.value);
+   if(prepareRequirements){
+    doc.setupRequirements={...doc.setupRequirements,suggestions:recommendation.requirements!};
+    doc.intake!.draft??=suggestedSettings(selection,doc.setupRequirements.suggestions!,doc.setupRequirements.overrides);
+   }
    if(doc.original.storyBrief)doc.original.storyBrief={summary:recommendation.storySummary!,matchReason:recommendation.storyMatchReason!,verified:true};
    doc.frameRecommendation=recommendation;if(selection.length==='auto'&&!doc.intake)doc.frameCountConfirmed=true;return result;
   }

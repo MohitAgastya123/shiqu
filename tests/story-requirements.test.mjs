@@ -49,7 +49,7 @@ test('failed criteria enter existing targeted repair and must pass a fresh audit
  const f=await productionFixture(t);f.control.hold=false;
  f.control.beforeText=async kind=>kind==='review'?f.control.reviews.length===1?{issues:[{page:2,category:'action',problem:'缺少可见反应。',instruction:'第二幅保留原事件，增加可见的手部回应。',requiresReplan:false}],acceptanceResults:results('failed')}:{issues:[],acceptanceResults:results('passed')}:undefined;
  const id=await f.create(3,{acceptancePrompt:criteria});await until(async()=>(await f.read(id)).state==='completed');
- assert.equal(f.control.repairs.length,1);assert.equal(f.control.repairs[0].acceptancePrompt,criteria);assert.equal(f.control.reviews.length,2);assert.equal((await f.json(`sessions/${id}/prompts`)).results[0].status,'passed');
+ assert.equal(f.control.repairs.length,1);assert.equal(f.control.repairs[0].acceptancePrompt,undefined);assert.equal(f.control.reviews.length,2);assert.equal((await f.json(`sessions/${id}/prompts`)).results[0].status,'passed');
 });
 test('unknown/conflicting criteria stop immediately with evidence, no fabricated repair or drawing',async t=>{
  const f=await productionFixture(t);f.control.hold=false;f.control.beforeText=async kind=>kind==='review'?{issues:[],acceptanceResults:results('unknown')}:undefined;
@@ -62,7 +62,7 @@ test('unknown/conflicting criteria stop immediately with evidence, no fabricated
 test('historical rows have no invented capture history, and previews do not commission inference',async t=>{
  const f=await productionFixture(t),id=await f.createLegacyReader(3);f.app.stopGeneration();
  await f.app.services.database.prepare("UPDATE stories SET document=json_remove(document,'$.usage') WHERE id=?").bind(id).run();
- const initial=await f.json(`sessions/${id}/prompts`);assert.deepEqual(initial.records,[]);assert.deepEqual(initial.results,[]);assert.ok(initial.previews.production.instructions.includes('本篇验收要求'));assert.equal(f.control.plans.length,0);
+ const initial=await f.json(`sessions/${id}/prompts`);assert.deepEqual(initial.records,[]);assert.deepEqual(initial.results,[]);assert.ok(initial.previews.production.instructions.includes('默认制作标准'));assert.equal(f.control.plans.length,0);
  assert.deepEqual(initial.missingRecords,[]);assert.equal(initial.productionPrompt,selection.productionPrompt);assert.equal(initial.acceptancePrompt,'');
 });
 
@@ -92,5 +92,5 @@ test('confirmation drafts retain both requirements through restart and apply the
  await f.json(`sessions/${id}/setup`,'POST',{requestId:crypto.randomUUID(),generation:(await f.read(id)).intake.generation,action:'draft',settings});await f.restart();
  const resumed=await f.read(id);assert.deepEqual(resumed.intake.draft,settings);assert.equal(f.control.plans.length,0);assert.equal(f.control.calls.length,0);
  await f.json(`sessions/${id}/setup`,'POST',{requestId:crypto.randomUUID(),generation:resumed.intake.generation,action:'confirm',settings});await until(async()=>(await f.read(id)).state==='completed');
- const saved=await f.read(id);assert.equal(saved.selection.productionPrompt,settings.productionPrompt);assert.equal(saved.selection.acceptancePrompt,criteria);assert.equal(f.control.outlines.at(-1).acceptancePrompt,criteria);
+ const saved=await f.read(id);assert.equal(saved.selection.productionPrompt,settings.productionPrompt);assert.equal(saved.selection.acceptancePrompt,criteria);assert.equal(f.control.outlines.at(-1).acceptancePrompt,undefined);
 });

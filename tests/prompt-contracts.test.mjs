@@ -4,10 +4,10 @@ import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {createReaderProvider} from '../server/generation.ts';
 import {selectionSchema} from '../lib/reader-model.ts';
-import {defaultProductionPrompt,normalizeProductionPrompt,titleDirection,storyScopeDirection,storyOpeningDirection,narrativeMeaningDirection,sourceFidelityDirection,storyboardDirection} from '../lib/reader-prompts.ts';
+import {defaultProductionDirection,defaultProductionPrompt,normalizeProductionPrompt,titleDirection,storyScopeDirection,storyOpeningDirection,narrativeMeaningDirection,sourceFidelityDirection,storyboardDirection} from '../lib/reader-prompts.ts';
 import {legacyProductionDirection} from '../lib/reader-legacy-prompts.ts';
 import {legacyLocalReadingPrompt,legacyLocalScanJson} from '../lib/reader-local-contract.ts';
-import {makePlan,makeReflectionCandidates,encoded} from './fixtures/production.mjs';
+import {makePlan,makeReflectionCandidates,makeRequirements,encoded} from './fixtures/production.mjs';
 
 const hash=value=>createHash('sha256').update(typeof value==='string'?value:JSON.stringify(value)).digest('hex');
 const plain=text=>text.replace(/^\s*- /gm,'').replace(/\s/g,'');
@@ -19,7 +19,7 @@ test('pre-cleanup v2 fingerprints and automatic presets remain byte-compatible',
  assert.equal(hash(legacyLocalScanJson),'45fcc92b6e872dac4f0f8f638bf40a49346c3551addc7e69f6215ab514701d9c');
  assert.equal(hash(faithfulPrefix+legacyProductionDirection),'6f8b18696d3d955ed54654ae40c2931c9c1f7d7cfe008e5e0d0e0c7d5205c72a');
  const oldTheme='让人物因执念陷入困境，再通过一次具体遭遇看见另一种可能；转变要自然，保留放下之前的挣扎。';
- for(const body of [legacyProductionDirection,defaultProductionPrompt().slice(faithfulPrefix.length)]){
+ for(const body of [legacyProductionDirection,defaultProductionDirection.slice(faithfulPrefix.length)]){
   assert.equal(normalizeProductionPrompt(oldTheme+body,'放下执念'),defaultProductionPrompt());
   assert.equal(normalizeProductionPrompt(faithfulPrefix+body,'原典故事'),defaultProductionPrompt());
  }
@@ -37,7 +37,8 @@ const candidate={title:plan.title,description:'人物经历梦与醒。',summary
 function responseFor(payload,schema){
  if(schema.properties.matches)return {matches:payload.stories.map(story=>({id:story.id,verdict:'yes',reason:'原文事件与结果支持本次选题。'}))};
  if(schema.properties.stories)return {stories:[candidate],note:'',...(schema.properties.scan?{scan:{blockComplete:false,pendingEvents:[],resolvedEventIds:[]}}:{})};
- if(schema.properties.count)return {count:8,reason:'关键言行和回应各有空间。'};
+ if(schema.properties.count)return {count:8,reason:'关键言行和回应各有空间。',...(schema.properties.storySummary?{storySummary:plan.summary,storyMatchReason:'原文包含梦与醒的经历。'}:{}),...(schema.properties.requirements?{requirements:makeRequirements(payload.chosenStory)}:{})};
+ if(schema.properties.requirements)return {frameCountReview:{decision:'keep',proposedCount:payload.plan.pages.length,reason:'关键叙事任务已有空间。'},requirements:[]};
  if(schema.properties.artStyle)return candidate.artRecommendation;
  if(schema.properties.issues)return {...(payload.acceptanceCriteria?.length?{acceptanceResults:payload.acceptanceCriteria.map((_,index)=>({criterion:index+1,status:'passed',pages:[1],evidence:'第一幅保留了要求中的可见反应。'}))}:{}),titleReview:{title:plan.title,reason:'符合实际范围。'},issues:[],...(payload.reflectionCandidates?{reflectionChoice:{index:2,reason:'保留关键关系。'}}:{})};
  if(payload.requestedPages)return {pages:payload.requestedPages.map(page=>({page,...plan.pages[page-1]}))};
@@ -86,6 +87,8 @@ async function requestsFor(provider,acceptancePrompt){
  await call('theme-match',()=>p.matchStories(inputSelection.theme,[{id:'a'.repeat(64),title:candidate.title,text:original.text}]));
  await call('art',()=>p.recommendArt(inputSelection,original));
  await call('frames',()=>g.recommend(inputSelection,'fixed-id',original));
+ await call('setup',()=>g.recommend(inputSelection,'fixed-id',{...original,storyBrief:{summary:plan.summary,matchReason:'原文包含梦与醒的经历。',verified:false}},true));
+ await call('frame-review',()=>g.reviewFrameCount({...inputSelection,length:'auto'},plan,original));
  await call('draft',()=>g.plan(inputSelection,'fixed-id',original));
  const outline=await call('outline',()=>g.outline(inputSelection,'fixed-id',original));
  await call('batch',()=>g.planBatch(inputSelection,'fixed-id',{outline,pages:[]},original));
@@ -109,7 +112,7 @@ test('all providers send the same stage-specific instructions, data and strict o
   assert.equal(other.get(stage).instructions,request.instructions,stage);
   assert.deepEqual(other.get(stage).payload,request.payload,stage);
   // Responses rebuilds required arrays in property order; JSON Schema treats their order as immaterial.
-  const canonical=value=>Array.isArray(value)?value.map(canonical):value&&typeof value==='object'?Object.fromEntries(Object.entries(value).map(([key,item])=>[key,key==='required'?[...item].sort():canonical(item)])):value;
+  const canonical=value=>value&&typeof value==='object'&&/^At most (\d+) (?:additional source ranges|items)\.$/.test(value.description||'')?canonical({...Object.fromEntries(Object.entries(value).filter(([key])=>key!=='description')),maxItems:Number(value.description.match(/\d+/)[0])}):Array.isArray(value)?value.map(canonical):value&&typeof value==='object'?Object.fromEntries(Object.entries(value).map(([key,item])=>[key,key==='required'?[...item].sort():canonical(item)])):value;
   assert.deepEqual(canonical(other.get(stage).schema),canonical(request.schema),stage);
  }
  const get=stage=>codex.get(stage);
@@ -158,12 +161,19 @@ test('all providers send the same stage-specific instructions, data and strict o
  assert.match(get('image').instructions,/native image generation tool directly/);
 });
 
-for(const provider of ['codex','gemini','openai'])test(`${provider}: story-specific acceptance criteria reach production, review and repairs with exact prompt captures`,async()=>{
+for(const provider of ['codex','gemini','openai'])test(`${provider}: story-specific acceptance criteria reach only full validation with exact prompt captures`,async()=>{
  const prompt='关键反应落实到画面。\n保留对白的条件。',requests=await requestsFor(provider,prompt);
- for(const stage of ['frames','draft','outline','batch','batch-later','candidates','reflection','reflection-repair','review','review-candidates','repair']){
+ for(const stage of ['frames','setup','frame-review','draft','outline','batch','batch-later','candidates','reflection','reflection-repair','repair']){
+  assert.equal(requests.get(stage).payload.acceptancePrompt,undefined,stage);
+  assert.equal(requests.get(stage).payload.acceptanceCriteria,undefined,stage);
+  assert.equal(requests.get(stage).payload.productionPrompt,selection.productionPrompt,stage);
+ }
+ for(const stage of ['review','review-candidates']){
   assert.equal(requests.get(stage).payload.acceptancePrompt,prompt,stage);
   assert.deepEqual(requests.get(stage).payload.acceptanceCriteria,prompt.split('\n'),stage);
  }
+ assert.equal(requests.get('setup').payload.prepareRequirements,true);
+ assert.ok(requests.get('setup').schema.required.includes('requirements'));
  assert.ok(requests.get('review').schema.required.includes('acceptanceResults'));
  assert.match(requests.get('review').instructions,/passed\/failed\/unknown/);
 });

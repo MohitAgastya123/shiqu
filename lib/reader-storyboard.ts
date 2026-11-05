@@ -1,5 +1,4 @@
 // Save source-grounded scene batches, then finalize the title and ending from the complete story.
-import {acceptanceInput,acceptanceDirection} from './reader-acceptance.ts';
 import {normalizeProductionPrompt} from './reader-prompts.ts';
 import {storyboardOutlineSchema,storyboardBatchSchema,planSchema,storyPresentationSchema} from './reader-model.ts';
 import type {Selection,Storyboard,StoryDraft} from './reader-model.ts';
@@ -22,20 +21,20 @@ export const outlineDirection=`只制定全篇提纲，以beats替代pages，不
 export const batchDirection='只细化outline.beats中batch.first至batch.last，按原编号依次返回对应pages，数量为last-first+1。全篇范围、总幅数、事件顺序与元数据已定，不重新选题、分配全篇幅数或修改提纲。将各节点的行动、回应与停顿落实成可画瞬间；查阅完整原文核实表达，保留本批外的任务，不重复前批或提前收尾。接续previousPages末幅的朝向、接触、状态和未完行动；技术批次不是剧情分幕，不重新开场或强造高潮。';
 const reflectionSystemPrompt=promptSections(
  ['任务','你是古典连环画的标题与结语编辑。完整阅读verifiedOriginal和draft.pages；原文约束事实，分镜说明读者已知什么。只处理本次指定字段，保留其余元数据与全部分镜，不输出理解过程。'],
- ['本篇验收要求',acceptanceDirection],['余味标准',reflectionMeaningDirection],
+ ['余味标准',reflectionMeaningDirection],
  ['修订原则','有revision时逐项解决结语问题：误读校准认识，情节或动机重复则重新提炼，铺垫冗余则删解释、保留有效判断。更换立意须有原文依据及具体意味收益，不靠同义词、堆细节或扩大结论显示变化；无实质问题时保留。末幅与结语连读，修结语不改末幅。'],
  ['语言','每句最多100字，不套固定句式。'],['输入与输出',inputBoundaryDirection]);
 
 const reflectionCandidatesDirection='依据完整原文与分镜拟定title，再生成三个独立成立的结语候选。候选在有据的观察角度、着重点或表达上有真实区别，不拆同一句、不设陪衬或排名；只支持同一层认识时可比较不同表达，不为差异造新事实或拔高。只返回{title,candidates:[第一句,第二句,第三句]}。';
 
 export function storyboardGenerator(book:(selection:Selection)=>string,call:Call){
- function payload(selection:Selection,id:string,original?:OriginalSource){assertStoryBriefReady(original);return {book:book(selection),chosenStory:selection.storyTitle,...(selection.storyTitle?{}:{theme:selection.theme}),editorialContext:storyEditorialContext(selection.theme),exactPageCount:selection.length,narrativeDetail:selection.narrativeDetail,...acceptanceInput(selection),productionPrompt:normalizeProductionPrompt(selection.productionPrompt||'',selection.theme),artDirection:getArtStyle(selection.artStyle).prompt,variationSeed:id,...(original?{verifiedOriginal:verifiedOriginalPayload(original)}:{})};}
+ function payload(selection:Selection,id:string,original?:OriginalSource){assertStoryBriefReady(original);return {book:book(selection),chosenStory:selection.storyTitle,...(selection.storyTitle?{}:{theme:selection.theme}),editorialContext:storyEditorialContext(selection.theme),exactPageCount:selection.length,narrativeDetail:selection.narrativeDetail,productionPrompt:normalizeProductionPrompt(selection.productionPrompt||'',selection.theme),artDirection:getArtStyle(selection.artStyle).prompt,variationSeed:id,...(original?{verifiedOriginal:verifiedOriginalPayload(original)}:{})};}
  function instructions(original:OriginalSource|undefined,stage:'outline'|'batch',opening=false){return stage==='outline'?promptSections(
   ['任务','你是古典连环画编剧，本次只制定全篇提纲。'],['编排标准',storyPlanningDirection],['元数据',storyMetadataDirection],
   ['本地原文',original?.localSource?localPlanConstraint:''],['本次输出',storyDraftMetadataDirection+'\n'+outlineDirection]):promptSections(
   ['任务','你是古典连环画分镜导演，本次只细化指定批次。'],['共同标准',storySceneDirection],['展开程度',narrativeDetailInstructions],
   ['首幅要求',opening?storyOpeningDirection:''],
-  ['逐幅要求',storyPageDirection],['本篇验收要求',acceptanceDirection],['本地原文',original?.localSource?localPlanConstraint:''],
+  ['逐幅要求',storyPageDirection],['本地原文',original?.localSource?localPlanConstraint:''],
   ['批次边界',batchDirection],['输入与输出',inputBoundaryDirection]);}
  return {
   ...storyboardReviewGenerator(call),

@@ -104,8 +104,8 @@ test('concurrent batch advances and replayed queue receipts do not repeat saved 
 
 for(const provider of ['codex','gemini'])test(`${provider}: selected-story stages retain theme context without restoring legacy automatic scene prescriptions`,async t=>{
  const f=await productionFixture(t,provider),generator=f.generation.generator();
- const {defaultProductionPrompt}=await import('../lib/reader-prompts.ts');
- const faithful=defaultProductionPrompt(),shared=faithful.slice('按原文自身的事件、人物与因果展开，不额外套入主题或要求反转。'.length);
+ const {defaultProductionDirection,defaultProductionPrompt}=await import('../lib/reader-prompts.ts');
+ const faithful=defaultProductionPrompt(),shared=defaultProductionDirection.slice('按原文自身的事件、人物与因果展开，不额外套入主题或要求反转。'.length);
  const legacy='让人物因执念陷入困境，再通过一次具体遭遇看见另一种可能；转变要自然，保留放下之前的挣扎。'+shared;
  const selection={bookId:'zhuangzi',storyTitle:'庄周梦蝶',theme:'放下执念',length:8,artStyle:'ink-pencil',voice:false,productionPrompt:legacy};
  const original={title:'《庄子·齐物论》',text:'昔者庄周梦为胡蝶。',url:'https://example.org',kind:'passage',provider:'controlled',retrievedAt:'2026-11-01'};

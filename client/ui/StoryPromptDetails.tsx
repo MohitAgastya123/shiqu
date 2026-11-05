@@ -14,7 +14,8 @@ function PromptText({record}:{record:PromptRecord}){
 }
 export function PromptDetailsContent({data,kind,sessionId,preferences}:{data:PromptDetails;kind:'production'|'acceptance';sessionId:string;preferences:Record<string,unknown>}){
  const records=data.records.filter(item=>(item.step.startsWith('review'))===(kind==='acceptance'));
- const preview={...data.previews[kind],input:JSON.stringify(preferences,null,2)};
+ const previewInput=kind==='production'?Object.fromEntries(Object.entries(preferences).filter(([key])=>!['acceptancePrompt','acceptanceCriteria'].includes(key))):preferences;
+ const preview={...data.previews[kind],input:JSON.stringify(previewInput,null,2)};
  const labels={passed:'通过',failed:'未通过',unknown:'无法判断'};
  return <section className="yu-prompt-details" aria-label={kind==='acceptance'?'验收规则与结果':'制作提示词'}>
   {kind==='acceptance'&&<section aria-label="已保存的验收结果"><h3>上次验收结果</h3><p className="yu-count-help">以下结果属于已保存版本，编辑要求后须重新审核。</p>{data.overridden&&<p role="status">此前曾选择跳过审片问题并绘图；跳过不代表验收通过。</p>}{data.results.length?<ol>{data.results.map(result=><li key={result.criterion}><strong>第 {result.criterion} 条 · {labels[result.status]}</strong><p>{data.criteria[result.criterion-1]}</p><p>{result.evidence}</p>{result.pages.length>0&&<small>{result.pages.map(page=>page===0?'结语':`第 ${page} 幅`).join('、')}</small>}</li>)}</ol>:<p>尚无本篇验收条目的审核结果。</p>}</section>}

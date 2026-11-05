@@ -2,6 +2,8 @@
 // Continuation and setting drafts preserve the chosen story; title changes reset only unselected intake.
 // Changing discovery conditions updates the same task, fencing obsolete searches without starting a new one.
 // An explicit query keeps the original scope and controls, and never bypasses a production lock.
+import type {RequirementsSetup} from '../lib/reader-requirements.ts';
+import {requirementsForReselection} from '../lib/reader-requirements.ts';
 import {directBookChoice,selectedChapterScope} from './local-book-contents.ts';
 import type {LocalBooks} from './local-books.ts';
 import {localBookId} from './local-books.ts';
@@ -31,10 +33,11 @@ async function intakeSelection(input:Selection,books?:LocalBooks){
  if(selection.bookId==='other'&&!selection.customBook?.trim())throw new ReaderError(400,'请先填写书名或 URL。');
  return {selection,choice};
 }
-export async function createIntake(repo:ReaderRepository,id:string,uid:string,input:Selection,books?:LocalBooks,reselection?:ReselectionDraft){
+export async function createIntake(repo:ReaderRepository,id:string,uid:string,input:Selection,books?:LocalBooks,reselection?:ReselectionDraft,setupRequirements?:RequirementsSetup){
  const {selection,choice}=await intakeSelection(input,books);
  const creationHash=hash(selection),doc:Document={...emptyDocument(),intake:{phase:'choosing',generation:0,creationHash,batches:[],briefRequired:true,search:{round:0,state:'idle'}}};
  if(choice){doc.original=choice.original;doc.intake!.phase='preparing';doc.intake!.search={round:0,state:'idle'};doc.intake!.selected={batch:0,index:0};doc.intake!.batches=[{stories:[{title:choice.entry.title,description:choice.entry.excerpt,source:choice.entry.source,sourceLabel:choice.original.title.slice(0,150)}],note:''}];}
+ if(setupRequirements)doc.setupRequirements=setupRequirements;
  if(reselection){doc.reselection=reselection;doc.intake!.manualArt=true;}
  const row=await repo.create(id,uid,selection,doc);
  if((JSON.parse(row.document) as Document).intake?.creationHash!==creationHash)throw new ReaderError(409,'此创建编号已用于其他内容，请重新创建。');
@@ -114,7 +117,10 @@ export async function changeIntake(repo:ReaderRepository,id:string,uid:string,ac
  if(action.action==='choose'){
   const candidate=intake.batches[action.batch]?.stories[action.index];if(!candidate)throw new ReaderError(400,'请选择已保存的候选故事。');
   if(intake.selected?.batch===action.batch&&intake.selected.index===action.index&&['preparing','confirming'].includes(intake.phase))return row;
-  if(action.settings){intake.manualArt=manual(action.settings.artStyle);Object.assign(selection,action.settings);}
+  const settings=action.settings||intake.draft;
+  if(settings){intake.manualArt=manual(settings.artStyle);Object.assign(selection,settings);}
+  const reset=requirementsForReselection(selection,doc.setupRequirements);
+  Object.assign(selection,reset.selection);doc.setupRequirements=reset.setup;
   selection.storyTitle=candidate.title;selection.source=candidate.source;
   if(!intake.manualArt&&candidate.artRecommendation)selection.artStyle=candidate.artRecommendation.artStyle;
   intake.selected={batch:action.batch,index:action.index};intake.phase='preparing';
@@ -123,7 +129,7 @@ export async function changeIntake(repo:ReaderRepository,id:string,uid:string,ac
  }else{
   if(!intake.selected||intake.phase!=='confirming')throw new ReaderError(409,'请先选择故事并等待制作建议保存。');
   intake.manualArt=manual(action.settings.artStyle);Object.assign(selection,action.settings);
-  if(action.action==='recommend'){delete doc.frameRecommendation;doc.frameCountConfirmed=false;intake.phase='preparing';selection.length='auto';}
+  if(action.action==='recommend'){intake.draft={...action.settings,length:'auto'};delete doc.frameRecommendation;doc.frameCountConfirmed=false;intake.phase='preparing';selection.length='auto';}
   else{
    if(!doc.original||!doc.frameRecommendation)throw new ReaderError(409,'原文和制作建议尚未保存。');
    const chosen=intake.batches[intake.selected.batch]?.stories[intake.selected.index];
@@ -133,7 +139,7 @@ export async function changeIntake(repo:ReaderRepository,id:string,uid:string,ac
    intake.search={...intakeSearch(intake),state:'idle',error:null};
   }
  }
- delete intake.draft;
+ if(action.action!=='recommend')delete intake.draft;
  intake.generation++;intake.lastAction={id:action.requestId,hash:fingerprint};
  const result=await repo.db.prepare(`UPDATE stories SET selection=?,document=?,state='idle',error=NULL,lock_token=NULL,lock_until=0,step_key=NULL,step_attempts=0,updated_at=?${action.action==='confirm'?",generation_mode='background',generation_control='active'":''}
   WHERE id=? AND user_id=? AND document=? AND selection=? AND state=? AND ${visible}`)

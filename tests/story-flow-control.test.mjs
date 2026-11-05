@@ -263,13 +263,13 @@ test('art recommendations apply until the reader really changes the style',async
  const third=await f.read(id);assert.equal(third.selection.artStyle,'ink-pencil');assert.equal(third.intake.manualArt,true);
 });
 
-test('saved settings survive a search and a restart, and reset only with the story or a new recommendation',async t=>{
+test('saved settings survive search, restart and re-preparation, and confirmation applies the draft',async t=>{
  const f=await fixture(t),id=await prepared(f);await reuseSource(f,id);
  const draft={...settings,length:5},s=await setup(f,id,{action:'draft',settings:draft});assert.deepEqual(s.intake.draft,draft);assert.equal(s.selection.artStyle,'paper-cut','Selection stays put, so no job version changes');assert.equal(s.intake.manualArt,true);
  await setup(f,id,{action:'more'});await searchIs(f,id,'idle');await f.restart();
  assert.deepEqual((await f.read(id)).intake.draft,draft);
  assert.equal((await f.request(`sessions/${id}/setup`,'POST',{requestId:crypto.randomUUID(),generation:s.intake.generation-1,action:'draft',settings:draft})).status,409,'A stale device cannot save onto a newer selection');
- const recommended=await setup(f,id,{action:'recommend',settings});assert.equal(recommended.intake.draft,undefined);
+ const recommended=await setup(f,id,{action:'recommend',settings});assert.deepEqual(recommended.intake.draft,{...settings,length:'auto'});
  await phase(f,id,'confirming');await setup(f,id,{action:'draft',settings:draft});
  const changed=await setup(f,id,{action:'choose',batch:0,index:1,settings});assert.equal(changed.intake.draft,undefined);
  await phase(f,id,'confirming');await setup(f,id,{action:'draft',settings:draft});

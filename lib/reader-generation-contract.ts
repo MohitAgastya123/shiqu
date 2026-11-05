@@ -1,11 +1,10 @@
 // Share story/image contracts across providers; shot direction stays independent of art style and cast identity.
-import {acceptanceDirection} from './reader-acceptance.ts';
 import {imageSizeDirection} from './reader-image-dimensions.ts';
 import {readerBooks,ReaderError} from './reader-model.ts';
 import type {Plan,Selection} from './reader-model.ts';
 import {getArtStyle} from './reader-styles.ts';
 import type {ArtStyleId} from './reader-styles.ts';
-import {promptSections,inputBoundaryDirection,sourceFidelityDirection,narrativeMeaningDirection,storyboardDirection,imageCompositionDirection,storyScopeDirection,storyOpeningDirection,storySourceDirection,storyKnowledgeDirection} from './reader-prompts.ts';
+import {promptSections,inputBoundaryDirection,defaultProductionDirection,sourceFidelityDirection,narrativeMeaningDirection,storyboardDirection,imageCompositionDirection,storyScopeDirection,storyOpeningDirection,storySourceDirection,storyKnowledgeDirection} from './reader-prompts.ts';
 import {artRecommendationJson,artRecommendationInstructions} from './reader-art-recommendation.ts';
 import {storySummaryDirection} from './reader-story-brief.ts';
 import {narrativeDetailInstructions} from './reader-frame-recommendation.ts';
@@ -33,9 +32,9 @@ export const storyPlanningDirection=promptSections(
  ['叙事与轻重',narrativeMeaningDirection],
  ['事实边界',sourceFidelityDirection],
  ['幅数与制作要求',narrativeDetailInstructions+`exactPageCount为数字时遵守；为auto时按叙事任务决定${readerMinFrames}至${readerMaxFrames}幅，不预设数量区间。仅一幅时用核心瞬间配必要旁白保留因果与结果。productionPrompt优先于默认表达建议，仍服从原文、选定故事、幅数策略、artDirection和schema。`],
- ['本篇验收要求',acceptanceDirection],['输入与输出',inputBoundaryDirection]);
+ ['默认制作标准',defaultProductionDirection],['输入与输出',inputBoundaryDirection]);
 // Scene execution shares quality standards without instructions to choose a new story scope or count.
-export const storySceneDirection=promptSections(['原文依据',storySourceDirection],['作品知识与补文',storyKnowledgeDirection],['叙事标准',narrativeMeaningDirection],['事实边界',sourceFidelityDirection],['静态画面与衔接',storyboardDirection]);
+export const storySceneDirection=promptSections(['默认制作标准',defaultProductionDirection],['原文依据',storySourceDirection],['作品知识与补文',storyKnowledgeDirection],['叙事标准',narrativeMeaningDirection],['事实边界',sourceFidelityDirection],['静态画面与衔接',storyboardDirection]);
 export const storyMetadataDirection=storySummaryDirection+'\n'+'summary只作归档，不决定分镜顺序与轻重。sourceReference用书名及chapterContext.title，缺省用verifiedOriginal.title；不伪造引文或网址。adaptationNote说明压缩、改写及视觉补足，明确AI演绎。characters用简体中文记录有据的时代、年龄、外貌、服饰、辨识特征及关键物件；身份稳定，动态状态按剧情阶段描述。不混入画风或构图，也不要求每幅全员全身。';
 export const storyPageDirection=promptSections(
  ['配文','caption用现代旁白、对白或两者，目标8至55字、最多3个短句，必要时可到90字硬上限。与本幅瞬间和上下文对应，不为凑字数解释画面。'],

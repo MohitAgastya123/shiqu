@@ -2,7 +2,7 @@
 import {acceptanceInput} from './reader-acceptance.ts';
 import {normalizeProductionPrompt} from './reader-prompts.ts';
 import {z} from 'zod';
-import {acceptanceCriteria,acceptanceDirection,acceptanceReviewDirection,acceptanceResultSchema,acceptanceResultsJson} from './reader-acceptance.ts';
+import {acceptanceCriteria,acceptanceReviewDirection,acceptanceResultSchema,acceptanceResultsJson} from './reader-acceptance.ts';
 import type {AcceptanceResult} from './reader-acceptance.ts';
 import {planSchema,reflectionCandidatesSchema} from './reader-model.ts';
 import type {Plan,Selection,StoryboardOutline,ReflectionCandidates} from './reader-model.ts';
@@ -106,16 +106,17 @@ export const reviewSystemPrompt=promptSections(
  ['结语标准',reflectionMeaningDirection],
  ['结语审核','结语在全篇之后独立展示；末幅可停在动作、对白或停顿，不因缺总结而报错。候选存在时只审核最终所选句；与末幅及前文连读，具体指出事实误读、重复解释或被泛化抹掉的意味。立意有效但铺垫冗余时只删解释；更换立意须说明原文依据、值得保留的判断及实质收益。不指定最终金句，不把问题转嫁给末幅。'],
  ['本篇验收要求',acceptanceReviewDirection],
+ ['制作与验收职责','productionPrompt仅用于理解本篇改编意图，不将其中每项偏好自动升级为额外验收门槛。自定义验收按acceptanceCriteria逐条判定；默认质量仍按上述系统审核标准检查。'],
  ['报告契约','优先报告事实与因果错误、关键结果缺失，再报告有据的连续性与表达损失。issues只列需修问题，不评分或另列建议；为空且全部验收条目passed才通过。幅号从1开始，结语用page=0、category=reflection；同幅全部问题合一条，每条返回requiresReplan。problem引用原文、配文或prompt并说明损失；instruction写最小可执行修法及须保留的有效对白、性格与画面。跨幅协同时逐幅列不同任务，只改后幅即可时只报后幅；不以“更深刻、加强冲突、更有感染力”代替证据。纯caption问题保留无问题的prompt。'],
  ['输入与输出',inputBoundaryDirection]);
 const repairDirection=`只修issues指出且在requestedPages内的画幅，返回{pages:[{page,caption,prompt}]}，原编号一一对应，不增删幅、不改未指定页或任何元数据。
 逐项解决同幅全部问题，保留有效的对白口气、条件、反差、回应及停顿。默认沿用提纲事件，只有问题明确要求时才在本批指定幅内协同调整原有事件，不转移问题或新增动机。画面重复须在动作、接触、状态或第一焦点上有可见区别，不能只换近义词或景别。
 纯配文问题只改caption、原样返回prompt；修画面才调整瞬间与空间。修后结合全篇检查语义与衔接，不用心理解说补事实，不把独立结语写进末幅。只返回指定JSON。`;
-export const repairSystemPrompt=promptSections(['任务','你是静态连环画修订编辑，只定向修复指定画幅，不重新编排全篇。'],['共同标准',storySceneDirection],['首幅要求',storyOpeningDirection],['逐幅要求',storyPageDirection],['本篇验收要求',acceptanceDirection],['修订范围与输出',repairDirection],['输入边界',inputBoundaryDirection]);
+export const repairSystemPrompt=promptSections(['任务','你是静态连环画修订编辑，只定向修复指定画幅，不重新编排全篇。'],['共同标准',storySceneDirection],['首幅要求',storyOpeningDirection],['逐幅要求',storyPageDirection],['修订范围与输出',repairDirection],['输入边界',inputBoundaryDirection]);
 
 type Call=(task:ReasoningTask,instructions:string,payload:unknown,schema:unknown,maxOutputTokens:number,original?:OriginalSource)=>Promise<Generated<unknown>>;
 export function storyboardReviewGenerator(call:Call){
- function payload(selection:Selection,plan:Plan,original:OriginalSource,outline?:StoryboardOutline,reviewing=true){assertStoryBriefReady(original);return {book:selection.customBook||selection.bookId,chosenStory:selection.storyTitle,editorialContext:storyEditorialContext(selection.theme),...(reviewing?storyBriefPayload(original):{}),exactPageCount:plan.pages.length,narrativeDetail:selection.narrativeDetail||'balanced',countPolicy:selection.length==='auto'?'adaptive':'fixed',...acceptanceInput(selection),productionPrompt:normalizeProductionPrompt(selection.productionPrompt||'',selection.theme),artDirection:getArtStyle(selection.artStyle).prompt,verifiedOriginal:verifiedOriginalPayload(original),plan:reviewing?plan:withoutStorySummary(plan),...(outline?{outline:reviewing?outline:withoutStorySummary(outline)}:{})};}
+ function payload(selection:Selection,plan:Plan,original:OriginalSource,outline?:StoryboardOutline,reviewing=true){assertStoryBriefReady(original);return {book:selection.customBook||selection.bookId,chosenStory:selection.storyTitle,editorialContext:storyEditorialContext(selection.theme),...(reviewing?storyBriefPayload(original):{}),exactPageCount:plan.pages.length,narrativeDetail:selection.narrativeDetail||'balanced',countPolicy:selection.length==='auto'?'adaptive':'fixed',...(reviewing?acceptanceInput(selection):{}),productionPrompt:normalizeProductionPrompt(selection.productionPrompt||'',selection.theme),artDirection:getArtStyle(selection.artStyle).prompt,verifiedOriginal:verifiedOriginalPayload(original),plan:reviewing?plan:withoutStorySummary(plan),...(outline?{outline:reviewing?outline:withoutStorySummary(outline)}:{})};}
  return {
   async reviewFrameCount(selection:Selection,plan:Plan,original:OriginalSource){
    if(selection.length!=='auto')throw Error('FRAME_COUNT_REVIEW_MODE');
@@ -139,7 +140,7 @@ export function storyboardReviewGenerator(call:Call){
    const direction=`按原文及issues返回{edits:[{from,to,pages:[{caption,prompt}]}]}。from/to指修改前1起始幅号，按from递增且范围不重叠；替换from至to，from=k,to=k-1在原第k幅前插入，from=原幅数+1末尾追加，pages为空则删除。
 只改需协同的连续段落，一次合计最多${readerStoryboardBatchSize}个新/替换画幅，总数1–80；覆盖关键言行、回应与结果，删合无任务重复，不截断结局凑预算。coverage仅是线索，原文才是依据。结构修后全篇复核，结语及局部问题留待后续处理；不返回完整稿、封面或独立结束页。
 必要时可返回characters修正与正确pages冲突的全局说明，或因重排而过期的幅号、状态；按剧情阶段描述动态痕迹，保留稳定身份、服色及正确pages，不编新事件。仅改characters时edits可空；缺省或null保留原说明，其他元数据不改。`;
-   const instructions=promptSections(['任务','你是古典静态连环画结构修订编辑。'],['共同标准',storySceneDirection],['故事范围',storyScopeDirection],['逐幅要求',storyPageDirection],['本篇验收要求',acceptanceDirection],['结构输出',direction+(frameCountContext?'\n逐项落实frameCountContext完整requirements，不只照截短issues处理；frameCountReview不是新硬锁，先补任务再计数。':'')],['输入边界',inputBoundaryDirection]);
+   const instructions=promptSections(['任务','你是古典静态连环画结构修订编辑。'],['共同标准',storySceneDirection],['故事范围',storyScopeDirection],['逐幅要求',storyPageDirection],['结构输出',direction+(frameCountContext?'\n逐项落实frameCountContext完整requirements，不只照截短issues处理；frameCountReview不是新硬锁，先补任务再计数。':'')],['输入边界',inputBoundaryDirection]);
    const result=await call('repair',instructions+(original.localSource?'\n'+localPlanConstraint:''),{...payload(selection,plan,original,undefined,false),issues,...(coverage?{coverage}:{}),...(frameCountContext?{frameCountContext}:{})},structuralEditsJson(plan.pages.length),16000,original);
    return {...result,value:structuralEditsSchema.parse(result.value)};
   },

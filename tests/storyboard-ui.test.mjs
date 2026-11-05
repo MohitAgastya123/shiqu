@@ -5,7 +5,7 @@ import {createRequire} from 'node:module';
 import {build} from 'esbuild';
 import {createElement} from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
-import {defaultProductionPrompt} from '../lib/reader-prompts.ts';
+import {defaultProductionDirection} from '../lib/reader-prompts.ts';
 
 test('reader renders saved directory, batch range, honest progress and automatic frame controls',async()=>{
  const bundle=await build({stdin:{contents:"export {default as Status} from './client/ui/StoryGenerationStatus.tsx';export {default as Count} from './client/ui/StoryFrameCount.tsx';export {default as Retry} from './client/ui/StoryRetry.tsx';export {default as Review} from './client/ui/StoryReviewTools.tsx';export {default as Editor} from './client/ui/StoryRevisionEditor.tsx';",resolveDir:process.cwd(),loader:'tsx'},bundle:true,write:false,platform:'node',format:'cjs',packages:'external',loader:{'.css':'empty'}});
@@ -44,10 +44,10 @@ test('reader renders saved directory, batch range, honest progress and automatic
  const incomplete=renderToStaticMarkup(createElement(Review,{...reviewProps,onReplan(){},session:{...reviewProps.session,retryAllowed:false,reviewIssues:[{page:18,requiresReplan:true,problem:'缺少原文已有的结局。',instruction:'重新分配全篇画幅。'}],generationProgress:{reviewStopReason:'replan',repairPasses:0,reviewAudits:1}}}));
  assert.match(incomplete,/修改制作要求/);assert.match(incomplete,/整篇结构/);assert.match(incomplete,/局部自动修补与绘图已停止/);
  assert.doesNotMatch(incomplete,/继续自动修复|手动修改第 18 幅|已完成 20 轮/);
- const legacy=defaultProductionPrompt().replace('按原文自身的事件、人物与因果展开，不额外套入主题或要求反转。','用相遇、犹疑与错过的具体细节表现感情，克制煽情，让未说出口的话和选择留下余味。');
+ const legacy=defaultProductionDirection.replace('按原文自身的事件、人物与因果展开，不额外套入主题或要求反转。','用相遇、犹疑与错过的具体细节表现感情，克制煽情，让未说出口的话和选择留下余味。');
  const editor={tab:'requirements',base:{selection:{artStyle:'chibi',theme:'爱情与错过',productionPrompt:legacy,length:18},plan:null},changes:{},impact:null,setTab(){},setChanges(){}};
  const neutral=renderToStaticMarkup(createElement(compiled.exports.Editor,{editor}));
- assert.match(neutral,/按原文自身的事件、人物与因果展开/);assert.doesNotMatch(neutral,/用相遇、犹疑与错过/);
+ assert.doesNotMatch(neutral,/按原文自身的事件、人物与因果展开/);assert.doesNotMatch(neutral,/用相遇、犹疑与错过/);
  const authored=renderToStaticMarkup(createElement(compiled.exports.Editor,{editor:{...editor,changes:{productionPrompt:'保留人物原话，并在第一幅介绍当前处境。'}}}));
  assert.match(authored,/保留人物原话，并在第一幅介绍当前处境/);
  const oldLimit=renderToStaticMarkup(createElement(Review,{...reviewProps,session:{...reviewProps.session,generationProgress:{reviewStopReason:'limit',repairPasses:3,reviewAudits:4}}}));

@@ -1,7 +1,6 @@
 // Select a complete provider explicitly; subscription mode never falls back to API billing.
 import {formatSystemPrompt} from '../lib/reader-prompt-format.ts';
 import {promptRecord} from '../lib/reader-prompt-records.ts';
-import {acceptanceInput} from '../lib/reader-acceptance.ts';
 import {discoveryCall} from '../lib/reader-discovery-call.ts';
 import {normalizeProductionPrompt,storyEditorialContext} from '../lib/reader-prompts.ts';
 import {verifiedOriginalPayload} from '../lib/reader-source-types.ts';
@@ -97,13 +96,13 @@ export function createReaderProvider(variables:Record<string,string|undefined>,m
     return {value:JSON.parse(result.text),model:result.model,requestId:result.requestId,usage:result.usage,promptRecord:result.promptRecord,reasoningEffort:result.reasoningEffort};
    }),
    original:(selection,plan,id)=>saveStoryOriginal(media,selection,plan,id,transport),
-   async recommend(selection,id,original){
-    const result=await run({instructions:frameRecommendationPrompt,prompt:JSON.stringify(frameRecommendationPayload(selection,original)),schema:frameRecommendationOutputJson(original),reasoningEffort:taskReasoningEfforts.frames});
-    return {value:frameRecommendationOutputSchema(original).parse(JSON.parse(result.text)),model:result.model,requestId:result.requestId,usage:result.usage,promptRecord:result.promptRecord,reasoningEffort:result.reasoningEffort};
+   async recommend(selection,id,original,prepareRequirements=false){
+    const result=await run({instructions:frameRecommendationPrompt,prompt:JSON.stringify(frameRecommendationPayload(selection,original,prepareRequirements)),schema:frameRecommendationOutputJson(original,prepareRequirements),reasoningEffort:taskReasoningEfforts.frames});
+    return {value:frameRecommendationOutputSchema(original,prepareRequirements).parse(JSON.parse(result.text)),model:result.model,requestId:result.requestId,usage:result.usage,promptRecord:result.promptRecord,reasoningEffort:result.reasoningEffort};
    },
    async plan(selection,id,original){
     assertStoryBriefReady(original);
-    const result=await run({instructions:draftInstructions(!!original?.localSource),prompt:JSON.stringify({book:book(selection),chosenStory:selection.storyTitle,...(selection.storyTitle?{}:{theme:selection.theme}),editorialContext:storyEditorialContext(selection.theme),exactPageCount:selection.length,narrativeDetail:selection.narrativeDetail,...acceptanceInput(selection),productionPrompt:normalizeProductionPrompt(selection.productionPrompt||'',selection.theme),artDirection:getArtStyle(selection.artStyle).prompt,variationSeed:id,...(original?{verifiedOriginal:verifiedOriginalPayload(original)}:{})}),schema:storyDraftJson(selection.length),timeoutMs:codexGenerationTimeoutMs,reasoningEffort:taskReasoningEfforts.plan});
+    const result=await run({instructions:draftInstructions(!!original?.localSource),prompt:JSON.stringify({book:book(selection),chosenStory:selection.storyTitle,...(selection.storyTitle?{}:{theme:selection.theme}),editorialContext:storyEditorialContext(selection.theme),exactPageCount:selection.length,narrativeDetail:selection.narrativeDetail,productionPrompt:normalizeProductionPrompt(selection.productionPrompt||'',selection.theme),artDirection:getArtStyle(selection.artStyle).prompt,variationSeed:id,...(original?{verifiedOriginal:verifiedOriginalPayload(original)}:{})}),schema:storyDraftJson(selection.length),timeoutMs:codexGenerationTimeoutMs,reasoningEffort:taskReasoningEfforts.plan});
     const value=storyDraftSchema.parse(JSON.parse(result.text));if(selection.length!=='auto'&&value.pages.length!==selection.length)throw new CodexError('INVALID_PLAN');
     return {value,model:result.model,requestId:result.requestId,usage:result.usage,promptRecord:result.promptRecord,reasoningEffort:result.reasoningEffort};
    },
