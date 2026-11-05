@@ -36,13 +36,15 @@ export async function askHiddenKey(question:string){
 export const terminalSetupPrompt:SetupPrompt={text:askSetupText,secret:askHiddenKey};
 export function effectiveProviderVariables(store:SystemSettingsStore,variables:Record<string,string|undefined>){
  const saved=store.settings(),name=variables.SHIQU_AI_PROVIDER?.trim()||saved.provider;
- if(!(providerNames as readonly string[]).includes(name))throw Error('SHIQU_AI_PROVIDER must be gemini, codex, openai or readonly');
+ // DeepSeek is invocation-only: preserve saved task settings without loading another provider's key.
+ if(name==='deepseek')return {...settingsVariables(saved,''),...variables,SHIQU_AI_PROVIDER:name};
+ if(!(providerNames as readonly string[]).includes(name))throw Error('SHIQU_AI_PROVIDER must be gemini, codex, openai, deepseek or readonly');
  const provider=name as ProviderName;
  return {...settingsVariables({...saved,provider},store.key(provider)),...variables,SHIQU_AI_PROVIDER:provider};
 }
 export function providerReady(variables:Record<string,string|undefined>){
  if(variables.SHIQU_AI_PROVIDER==='readonly'||variables.SHIQU_AI_PROVIDER==='codex')return true;
- const key=variables.SHIQU_AI_PROVIDER==='openai'?variables.OPENAI_API_KEY:variables.GEMINI_API_KEY;
+ const key=variables.SHIQU_AI_PROVIDER==='deepseek'?variables.DEEPSEEK_API_KEY:variables.SHIQU_AI_PROVIDER==='openai'?variables.OPENAI_API_KEY:variables.GEMINI_API_KEY;
  if(!key?.trim())return false;validApiKey(key);return true;
 }
 export async function configureProvider(store:SystemSettingsStore,prompt:SetupPrompt=terminalSetupPrompt,platform=process.platform){
@@ -70,6 +72,7 @@ export async function configureProvider(store:SystemSettingsStore,prompt:SetupPr
 export async function cliProviderConfiguration(store:SystemSettingsStore,variables:Record<string,string|undefined>,prompt?:SetupPrompt){
  let effective=effectiveProviderVariables(store,variables);
  if(!providerReady(effective)){
+  if(effective.SHIQU_AI_PROVIDER==='deepseek')throw Error('请通过 DEEPSEEK_API_KEY 提供 DeepSeek 密钥；不会使用其他提供方的密钥。');
   await configureProvider(store,prompt);
   effective=effectiveProviderVariables(store,variables);
   if(!providerReady(effective))throw Error('本次环境变量仍覆盖为未完整配置的服务；请修正或移除相应环境变量。保存的配置仍然保留。');

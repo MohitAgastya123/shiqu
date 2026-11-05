@@ -62,6 +62,12 @@ $shiqu 从《庄子》中找一个关于善意与误解的故事，用水墨写�
 
 [制作与阅读指南 →](.docs/user-guide.md#制作与阅读故事)
 
+## Gemini 与 Codex 实作对比
+
+同一段《西游记·路阻火焰山》原文、适中详略、自动幅数，Gemini Flash、Gemini 4 Argon 与 Codex 分别完成 **16、41、70 幅**。差别落在关键交锋、人物回应和结尾履约如何展开；已完成的 Flash 与 Codex 分镜版插图均由 Gemini 生成。
+
+[阅读中文对比：制作条件、具体情节差异与三版完整 127 幅分镜清单 →](.docs/reports/2026/11/05/gemini-vs-codex-huoyanshan.md)
+
 ## 导出与发布
 
 全部插图生成后，在「故事设置」或故事末页导出：

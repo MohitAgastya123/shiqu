@@ -66,6 +66,14 @@ test('reset clears only provider settings, keeping library/network state and no 
  store.resetProviders();assert.equal(store.key('openai'),'');assert.equal(store.settings().providerConfigured,false);assert.equal(store.settings().port,3400);assert.equal(store.settings().internetEnabled,true);assert.equal(store.settings().dataDirectory,f.library);assert.equal(store.settings().libraryConfigured,true);
  await assert.rejects(stat(f.library));
 });
+test('DeepSeek invocation needs its own key and leaves shared provider settings and credentials unchanged',async t=>{
+ const f=await fixture(t),store=new SystemSettingsStore(f.file,f.library);t.after(()=>store.close());
+ store.save({provider:'gemini',providerConfigured:true},{provider:'gemini',value:'saved-gemini'});const before=store.settings(),revision=store.revision();
+ const effective=await cliProviderConfiguration(store,{SHIQU_AI_PROVIDER:'deepseek',DEEPSEEK_API_KEY:'deepseek-only'});
+ assert.equal(effective.DEEPSEEK_API_KEY,'deepseek-only');assert.notEqual(effective.GEMINI_API_KEY,'saved-gemini');assert.equal(effective.SHIQU_REASONING_FRAMES,before.taskReasoningEfforts.frames);
+ await assert.rejects(cliProviderConfiguration(store,{SHIQU_AI_PROVIDER:'deepseek',OPENAI_API_KEY:'wrong-provider'}),/DEEPSEEK_API_KEY/);
+ assert.deepEqual(store.settings(),before);assert.equal(store.revision(),revision);assert.equal(store.key('gemini'),'saved-gemini');
+});
 test('unknown/corrupt/future databases and symlinks are not silently replaced',async t=>{
  const f=await fixture(t);await mkdir(path.dirname(f.file),{recursive:true});
  for(const kind of ['corrupt','future','unknown','malformed-v1']){

@@ -5,7 +5,7 @@ import {discoveryCall} from '../lib/reader-discovery-call.ts';
 import {normalizeProductionPrompt,storyEditorialContext} from '../lib/reader-prompts.ts';
 import {verifiedOriginalPayload} from '../lib/reader-source-types.ts';
 import {assertStoryBriefReady} from '../lib/reader-story-brief.ts';
-import {createOpenAIProvider} from './openai-provider.ts';
+import {createOpenAIProvider,createDeepSeekProvider} from './openai-provider.ts';
 import {frameRecommendationOutputSchema,frameRecommendationOutputJson,frameRecommendationPrompt,frameRecommendationPayload} from '../lib/reader-frame-recommendation.ts';
 import {configuredModels,makeGenerator,suggestStories,safeGeminiError,recommendStoryArt,matchStoryThemes} from '../lib/reader-gemini.ts';
 import {storyDraftSchema,ReaderError} from '../lib/reader-model.ts';
@@ -47,7 +47,8 @@ export function createReaderProvider(variables:Record<string,string|undefined>,m
   return {async status(){return {configured:false,provider:'readonly',models:{text:'',image:''},voiceEnabled:false};},suggestions:async()=>unavailable(),generator:()=>({plan:async()=>unavailable(),original:async()=>unavailable(),image:async()=>unavailable(),audio:async()=>unavailable(),reflection:async()=>unavailable(),reflectionCandidates:async()=>unavailable(),safeError:()=> '当前为只读模式，请先配置生成服务。'}),safeError:()=> '当前为只读模式，请先配置生成服务。'};
  }
  if(name==='openai')return createOpenAIProvider(variables,media,transport);
- if(name!=='gemini'&&name!=='codex')throw Error('SHIQU_AI_PROVIDER must be gemini, codex, openai or readonly');
+ if(name==='deepseek')return createDeepSeekProvider(variables,media,transport);
+ if(name!=='gemini'&&name!=='codex')throw Error('SHIQU_AI_PROVIDER must be gemini, codex, openai, deepseek or readonly');
  const taskReasoningEfforts=configuredTaskReasoning(variables);
  if(name==='gemini'){
   const key=variables.GEMINI_API_KEY?.trim()||'',models=configuredModels(variables);
