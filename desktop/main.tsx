@@ -138,7 +138,7 @@ function Desktop(){
     <PhoneAccessCard state={serviceState} running={status.running} busy={!!busy} locked={locked} links={links} phone={phone} publicUrl={status.publicUrl} qr={qr} internetEnabled={settings.internetEnabled} cloudflaredPath={settings.cloudflaredPath} internetError={status.internetError} onChoose={setPhone} onInternetChange={enabled=>update('internetEnabled',enabled)} onCloudflaredChange={value=>update('cloudflaredPath',value)} onCopy={()=>void action('复制链接',()=>copy(phone))}/>
    </aside>
   </div>}
-  <footer><span>拾趣 · 内置 Node 24 · 不需要 Docker</span><button className="text-button" disabled={!!busy||!native} onClick={()=>void action('退出',async()=>{await invoke('quit_app');})}>退出拾趣</button></footer>
+  <footer><span>拾趣 · 内置 Node 24</span><button className="text-button" disabled={!!busy||!native} onClick={()=>void action('退出',async()=>{await invoke('quit_app');})}>退出拾趣</button></footer>
  </main>;
 }
 createRoot(document.getElementById('root')!).render(<Desktop/>);

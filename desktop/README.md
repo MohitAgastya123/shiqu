@@ -2,7 +2,7 @@
 
 书库备份恢复与诊断由[共用维护命令](../.docs/user-guide.md#书库维护命令)提供：源码目录运行 `pnpm library:maintain --help`，安装后的拾趣 CLI 使用相同参数。备份前停止本机服务；诊断可以运行中导出。桌面服务直接保存安全诊断事件，原始 stderr 和凭据不进入诊断包。已有书库升级前会自动生成并验证快照；恢复到新目录后需在设置中明确选择，不自动切换或启动。
 
-桌面版是现有 Node 应用的 Tauri 2 控制台：填写生成配置，启动服务，在默认浏览器中阅读与创作，或让手机通过局域网 / 免费互联网隧道扫码加入。故事、图片和阅读进度仍存放在电脑上的同一份 SQLite/媒体目录。无需 Docker。**桌面版统一内置 Node 24.22.1，安装后直接运行。**
+桌面版是现有 Node 应用的 Tauri 2 控制台：填写生成配置，启动服务，在默认浏览器中阅读与创作，或让手机通过局域网 / 免费互联网隧道扫码加入。故事、图片和阅读进度仍存放在电脑上的同一份 SQLite/媒体目录。**桌面版统一内置 Node 24.22.1，安装后直接运行。**
 
 日常创作步骤见[使用指南](../.docs/user-guide.md#制作与阅读故事)：浏览器中选择故事、画风与叙事详略，设置制作和验收要求；文字审片通过后绘图。提示词查看、故事改名、每书星标参考图及 PDF / PNG / ZIP 导出也在同一浏览器界面完成，与 CLI 启动的界面一致。
 
@@ -96,7 +96,7 @@ Windows 本地构建需安装 Microsoft C++ Build Tools 的「使用 C++ 的桌�
 
 `desktop:dev` 也会先完成这些准备步骤，再编译和启动原生应用；准备钩子必须设置 `wait: true`，避免原生应用提前读取旧资源或尚未复制完成的运行时。仅修改界面时使用 `desktop:preview`，无需等待资源准备。
 
-安装包使用 `shiqu-standard-*` 文件名，产物在 `src-tauri/target/release/bundle/`；macOS 可用 `pnpm desktop:build --bundles app` 只生成 `.app`。不构建 Docker 镜像。
+安装包使用 `shiqu-standard-*` 文件名，产物在 `src-tauri/target/release/bundle/`；macOS 可用 `pnpm desktop:build --bundles app` 只生成 `.app`。
 
 本地检查（不准备或打包桌面资源；缺少内置 Node 时，`desktop:test` 的已准备资源用例须留待 CI 或显式准备后验证）：
 
@@ -114,7 +114,7 @@ pnpm desktop:smoke
 
 CLI 复用共享数据库中的书库目录，没有时可导入原 `cli-library.json` 或查找已有默认书库，否则询问后存入共享数据库。CLI 不运行 `desktop.ts` 或 Tauri；只复用存储/提供方核心。CLI 与桌面服务使用共享 Node 事务锁与 owner 标记，拒绝同一目录的另一个运行服务。旧 CLI 独立书库不会自动搬移；可用 `--data-dir` 指定。历史设置中的 `nodePath` 字段继续兼容，但不能覆盖内置 Node。
 
-`pnpm dev` 默认复用桌面/CLI 保存的书库、生成服务、对应密钥、模型和任务推理设置；`pnpm dev local` 只隔离书库，生成配置仍共享。显式 shell 变量覆盖本次运行，不改保存值；开发后端不自动加载项目 `.env`。技能通过 CLI 使用同一配置，无需再保存一套密钥。修改保存配置后重启已运行的服务，CLI 下一次执行时读取。局域网 API 可直接访问，所有可连接地址的设备共享书架和生成权限；终端启动不依赖桌面 GUI 正在运行。`pnpm build`、`pnpm start` 和 Docker 入口继续独立运行，显式数据目录配置优先。
+`pnpm dev` 默认复用桌面/CLI 保存的书库、生成服务、对应密钥、模型和任务推理设置；`pnpm dev local` 只隔离书库，生成配置仍共享。显式 shell 变量覆盖本次运行，不改保存值；开发后端不自动加载项目 `.env`。技能通过 CLI 使用同一配置，无需再保存一套密钥。修改保存配置后重启已运行的服务，CLI 下一次执行时读取。局域网 API 可直接访问，所有可连接地址的设备共享书架和生成权限；终端启动不依赖桌面 GUI 正在运行。`pnpm build` 和 `pnpm start` 入口继续独立运行，显式数据目录配置优先。
 
 ## GitHub macOS / Windows 发布
 

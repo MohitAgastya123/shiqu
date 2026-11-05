@@ -33,7 +33,7 @@ function codexMessage(code:string){
  if(code==='MODEL_UNAVAILABLE')return 'Codex 未采用指定的主题匹配模型，请检查 Luna 模型权限后重试。';
  if(code==='REASONING_EFFORT_UNAVAILABLE')return 'Codex 未采用指定推理档位，请检查 CLI 版本及模型支持后重试。';
  if(code==='CHATGPT_LOGIN_REQUIRED')return '请先运行 codex login，使用 ChatGPT 账号登录 Codex。订阅模式不会使用 API 密钥。';
- if(code==='UNSUPPORTED_PLATFORM')return 'Codex 订阅模式目前支持 macOS 和 Linux；Windows 请使用 Docker 或 Gemini 模式。';
+ if(code==='UNSUPPORTED_PLATFORM')return 'Codex 订阅模式目前支持 macOS 和 Linux；Windows 请使用 OpenAI API、Gemini 或只读模式。';
  if(code==='CLI_UNAVAILABLE')return '未找到 Codex CLI。请安装 Codex，或设置 CODEX_BIN 后重启服务。';
  if(code==='TIMEOUT')return 'Codex 生成等待超时，已保留前面的内容。可稍后重试。';
  if(code==='UNSAFE_CONFIGURATION')return 'Codex 的工具隔离配置不可用，请使用支持的 Codex 版本并检查设置。';

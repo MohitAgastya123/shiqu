@@ -45,13 +45,13 @@ SHIQU_API_PORT=3005 pnpm dev local --port 3004
 
 `local` 强制使用当前 checkout 的 `.data/dev-local`（SQLite、媒体和缓存），忽略环境变量里的 `SHIQU_DATA_DIR` 和桌面书库路径；生成配置仍复用共享设置。普通 `pnpm dev` 跟随已保存的书库目录，可用 shell 中的 `SHIQU_DATA_DIR` 显式覆盖。私有书库及备份不得放入 Vite 的 `public` 目录。
 
-开发后端与桌面、浏览器 CLI、技能调用的 CLI 共用 `desktop.sqlite` 中保存的提供方、对应密钥、模型和任务推理档位；显式 shell 环境变量仅覆盖本次运行，不写回数据库。开发后端不自动加载项目 `.env`，避免旧配置把已选择的 Google 切回 Codex。Vite 的前端环境文件规则仍独立适用，不要把密钥放入 `VITE_` 变量。独立 `pnpm start` / Docker 的环境配置方式不变。
+开发后端与桌面、浏览器 CLI、技能调用的 CLI 共用 `desktop.sqlite` 中保存的提供方、对应密钥、模型和任务推理档位；显式 shell 环境变量仅覆盖本次运行，不写回数据库。开发后端不自动加载项目 `.env`，避免旧配置把已选择的 Google 切回 Codex。Vite 的前端环境文件规则仍独立适用，不要把密钥放入 `VITE_` 变量。独立 `pnpm start` 的环境配置方式不变。
 
 `pnpm run setup` 只检查运行时、安装锁定依赖并安装 hooks，不再创建提供方 `.env`。首次使用在桌面设置中保存服务，或运行 `pnpm cli --configure`；该命令保存后退出，不启动生成。修改后重启开发/桌面/浏览器 CLI 服务；技能与 CLI 的下一次 `run` 读取新配置。两端使用同一书库时先停止占用它的服务，再切换入口。
 
 ## 生成服务配置
 
-开发、CLI 和桌面普通运行无需预设环境变量：首次问答/设置页面保存后复用。下面变量可在 shell 中显式设置，用于本次调用覆盖；CLI 也支持 `--config /absolute/private.env`，已有 shell 变量优先。开发后端不自动读取 `.env`；复制 [.env.example](../.env.example) 仅用于明确需要该文件的 Docker/独立服务。
+开发、CLI 和桌面普通运行无需预设环境变量：首次问答/设置页面保存后复用。下面变量可在 shell 中显式设置，用于本次调用覆盖；CLI 也支持 `--config /absolute/private.env`，已有 shell 变量优先。开发后端不自动读取 `.env`；复制 [.env.example](../.env.example) 仅用于明确需要该文件的独立服务。
 
 OpenAI API 示例：
 
@@ -114,7 +114,7 @@ pnpm lint
 
 `pre-push` 只对推送的 `refs/tags/v*` 执行发布检查：解析标签目标提交，在隔离 checkout 中验证 Node/pnpm 固定版本，安装锁定依赖，再运行 `pnpm release:check`。同一提交的多个发布标签只检查一次；普通分支、非 v 标签和删除标签不触发。可通过 `pnpm hooks:install` 为新 checkout 启用 hook。
 
-`release:check` 在类型、lint 检查后执行 `pnpm test:e2e --gate=release`，只运行 8 个关键冒烟测试文件；`npm:check` 使用 `--gate=npm`，运行其中 7 个文件。冒烟覆盖一条完整浏览器制作与阅读流程、生产恢复与重放、无服务 CLI/导出/备份、CLI 启动、配置安全与发布门禁；标签门禁额外验证 Git pre-push。每个文件只运行一次，标签门禁仍检查 Rust 格式。完整矩阵、全书扫描、PTY、其他浏览器与 CLI 边界测试移至按需命令 `pnpm test:full`，不再阻塞每次发布。任一冒烟失败即阻止发布；门禁只检查，不构建桌面/Docker或发布作品，平台 CI 保留安装包构建职责。完整套件的 C007 在一次性源码根目录启动真正的 `pnpm dev local`，不打开人工开发书库。
+`release:check` 在类型、lint 检查后执行 `pnpm test:e2e --gate=release`，只运行 8 个关键冒烟测试文件；`npm:check` 使用 `--gate=npm`，运行其中 7 个文件。冒烟覆盖一条完整浏览器制作与阅读流程、生产恢复与重放、无服务 CLI/导出/备份、CLI 启动、配置安全与发布门禁；标签门禁额外验证 Git pre-push。每个文件只运行一次，标签门禁仍检查 Rust 格式。完整矩阵、全书扫描、PTY、其他浏览器与 CLI 边界测试移至按需命令 `pnpm test:full`，不再阻塞每次发布。任一冒烟失败即阻止发布；门禁只检查，不构建桌面应用或发布作品，平台 CI 保留安装包构建职责。完整套件的 C007 在一次性源码根目录启动真正的 `pnpm dev local`，不打开人工开发书库。
 
 维护命令无需打包：`pnpm library:maintain --help`。备份/恢复/诊断入口复用正式 CLI 与服务实现；运行锁覆盖开发、CLI 和桌面。备份是私有数据，不能放入 `public`、`dist/client` 或公开作品集，详见[维护说明](user-guide.md#书库维护命令)。
 
@@ -129,7 +129,7 @@ pnpm test:e2e
 
 测试使用模拟模型响应，不发起付费生成。桌面 UI 使用 Vite 开发服务器验证；只有需要打包时才运行构建命令。桌面开发、平台依赖和打包说明见 [desktop/README.md](../desktop/README.md)。主要代码位于 `client/`（界面）、`lib/`（业务逻辑）、`server/`（HTTP 与存储）、`db/` 与 `drizzle/`（数据库）、`desktop/` 与 `src-tauri/`（桌面版）。
 
-桌面版只保留内置 Node 的一个发行，不再提供系统 Node 版本；构建脚本与 CI 也只打包这一版本。桌面 UI 使用 `pnpm desktop:preview`，在应用内浏览器验证。Docker 镜像和桌面应用只在明确需要构建或打包时执行相应命令。
+桌面版只保留内置 Node 的一个发行，不再提供系统 Node 版本；构建脚本与 CI 也只打包这一版本。桌面 UI 使用 `pnpm desktop:preview`，在应用内浏览器验证。桌面应用只在明确需要构建或打包时执行相应命令。
 
 ## 故事生成机制
 

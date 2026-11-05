@@ -38,7 +38,6 @@ test('only original downloads are versioned, preserve their bytes and have match
 
  await assert.rejects(access('data/library/texts'));
  assert.match(await readFile('.gitattributes','utf8'),/data\/library\/\*\* -text/);
- assert.match(await readFile('Dockerfile','utf8'),/COPY --from=build.*\/app\/data\/library/);
 });
 test('the two whole-book inputs contain every parsed body unit, including the final passages',async()=>{
  for(const [id,sections,count,start,end] of [['zhuangzi',33,1769,'北冥有魚','是窮響以聲'],['shishuo',36,1129,'陳仲舉言','不忍見行此事']]){

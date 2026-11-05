@@ -27,7 +27,6 @@
     "npm:smoke": "node scripts/npm-smoke.mjs",
     "npm:check": "pnpm typecheck && pnpm lint && pnpm test:e2e --gate=npm",
     "npm:publish": "node scripts/publish-npm.mjs",
-    "build:runtime": "docker build --target runtime --tag shiqu:local .",
     "start": "node --env-file-if-exists=.env dist/server/index.js",
     "import:legacy": "node dist/server/import-legacy.js",
     "lint": "eslint .",

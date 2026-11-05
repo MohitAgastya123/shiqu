@@ -42,12 +42,11 @@ yarn-error.log*
 /.codex/
 /outputs/
 /work/
-/shiqu-image.tar
 
 # OS metadata
 .DS_Store
 
-# Host bind-mounted application data and local package cache
+# Local application data and package cache
 /data/*
 !/data/README.md
 !/data/library/
