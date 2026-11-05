@@ -72,6 +72,8 @@ export function createClaudeRunner(variables:Record<string,string|undefined>,opt
       initialized=true;started=true;
      }
      if(message.type==='assistant'){
+      // CLI service failures use a synthetic assistant with no model receipt.
+      if(message.error)throw new ClaudeError(message.error==='rate_limit'?'RATE_LIMITED':message.error==='authentication_failed'?'CLAUDE_LOGIN_REQUIRED':'GENERATION_FAILED');
       const value=message.message;
       if(typeof value?.model!=='string'||!/^[\w.-]{1,100}$/.test(value.model))throw new ClaudeError('INVALID_PROTOCOL');
       if(actualModel&&actualModel!==value.model)throw new ClaudeError('MODEL_UNAVAILABLE');

@@ -46,6 +46,7 @@ export function safeClaudeError(error:unknown){
  console.error('claude_generation_error',JSON.stringify({code}));
  if(code==='CLAUDE_LOGIN_REQUIRED'||code==='SUBSCRIPTION_REQUIRED')return '请运行 claude auth login，使用 Claude 订阅账号登录；不会使用 API 计费。';
  if(code==='CLI_UNAVAILABLE')return '未找到 Claude Code CLI，请安装或设置 CLAUDE_BIN。';
+ if(code==='RATE_LIMITED')return 'Claude 订阅使用额度已达上限，请等待额度重置后重试；已保留进度，不会切换到 API 计费。';
  if(code==='TEXT_ONLY')return 'Claude Code 提供方仅支持文本；请在生图前停止。';
  if(code==='TIMEOUT')return 'Claude Code 生成等待超时，已保留前面的内容。';
  if(code==='UNSAFE_CONFIGURATION'||code==='UNEXPECTED_TOOL')return 'Claude Code 的工具隔离配置不可用，已停止本次调用。';

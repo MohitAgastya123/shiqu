@@ -29,7 +29,7 @@ if(mode==='hang'){setInterval(()=>{},1000);}
 else if(mode==='oversize'){console.log('x'.repeat(33*1024*1024));}
 else if(mode==='malformed'){console.log('private raw error and key');}
 else{
- emit({type:'assistant',message:{model:mode==='wrong-model'?'claude-other':'claude-test',content:mode==='tool'?[{type:'tool_use',name:'Bash',input:{}}]:[{type:'text',text:'hello'}]}});
+ emit({type:'assistant',...(mode==='rate-limit'?{error:'rate_limit'}:{}),message:{model:mode==='rate-limit'?'<synthetic>':mode==='wrong-model'?'claude-other':'claude-test',content:mode==='tool'?[{type:'tool_use',name:'Bash',input:{}}]:[{type:'text',text:'hello'}]}});
  emit({type:'result',subtype:mode==='error'?'error_during_execution':'success',is_error:mode==='error',session_id:'fixture-request',usage:{input_tokens:10,output_tokens:5},modelUsage:{'claude-test':{inputTokens:10,outputTokens:5}},...(mode==='missing-output'?{}:{structured_output:{answer:'ok'}}),result:'hello',total_cost_usd:0.01,duration_ms:10,num_turns:1});
  if(mode==='nonzero')process.exitCode=2;
 }
@@ -43,9 +43,9 @@ const job={instructions:'Production instructions',prompt:'Private source text',s
 test('Claude failures survive production diagnostic export without raw data or arbitrary error codes',async t=>{
  const directory=await mkdtemp(path.join(os.tmpdir(),'shiqu claude diagnostics '));t.after(()=>rm(directory,{recursive:true,force:true}));
  const original=console.error;console.error=()=>{};const restore=installDiagnostics(directory);
- try{safeClaudeError(new ClaudeError('CLAUDE_LOGIN_REQUIRED'));safeClaudeError(new ClaudeError('INVALID_PROTOCOL'));console.error('claude_generation_error',JSON.stringify({code:'private-key /Users/private 原文',stderr:'private-key',prompt:'原文'}));}
+ try{safeClaudeError(new ClaudeError('CLAUDE_LOGIN_REQUIRED'));safeClaudeError(new ClaudeError('INVALID_PROTOCOL'));assert.match(safeClaudeError(new ClaudeError('RATE_LIMITED')),/额度/);console.error('claude_generation_error',JSON.stringify({code:'private-key /Users/private 原文',stderr:'private-key',prompt:'原文'}));}
  finally{restore();console.error=original;}
- const report=diagnosticReport(directory,'0.8.5');assert.deepEqual(report.events.map(event=>event.code),['CLAUDE_LOGIN_REQUIRED','INVALID_PROTOCOL','UNKNOWN']);assert.equal(safeErrorCode(new ClaudeError('INVALID_PROTOCOL')),'ClaudeError');
+ const report=diagnosticReport(directory,'0.8.5');assert.deepEqual(report.events.map(event=>event.code),['CLAUDE_LOGIN_REQUIRED','INVALID_PROTOCOL','RATE_LIMITED','UNKNOWN']);assert.equal(safeErrorCode(new ClaudeError('INVALID_PROTOCOL')),'ClaudeError');
  const filename=path.join(directory,'.diagnostics/events.jsonl');assert.doesNotMatch(await readFile(filename,'utf8'),/private-key|Users|原文/);
  await writeFile(filename,JSON.stringify({...report.events[0],code:'private-key',stderr:'private-key',prompt:'原文'})+'\n');assert.doesNotMatch(JSON.stringify(diagnosticReport(directory,'0.8.5')),/private-key|Users|原文/);
 });
@@ -78,7 +78,7 @@ test('Claude validates models, efforts and text-only jobs before spawning',async
 });
 
 test('Claude rejects invalid protocol, unsafe tools, model changes and failed results',async t=>{
- for(const [mode,code] of [['malformed','INVALID_PROTOCOL'],['unsafe','UNSAFE_CONFIGURATION'],['tool','UNEXPECTED_TOOL'],['wrong-model','MODEL_UNAVAILABLE'],['error','GENERATION_FAILED'],['nonzero','GENERATION_FAILED'],['missing-output','INVALID_OUTPUT'],['oversize','OUTPUT_LIMIT']]){
+ for(const [mode,code] of [['malformed','INVALID_PROTOCOL'],['unsafe','UNSAFE_CONFIGURATION'],['tool','UNEXPECTED_TOOL'],['wrong-model','MODEL_UNAVAILABLE'],['rate-limit','RATE_LIMITED'],['error','GENERATION_FAILED'],['nonzero','GENERATION_FAILED'],['missing-output','INVALID_OUTPUT'],['oversize','OUTPUT_LIMIT']]){
   const fake=await fakeCli(t,mode),runner=createClaudeRunner({CLAUDE_BIN:fake.binary,CLAUDE_MODEL:'claude-test'});
   await assert.rejects(runner.run(job),error=>error instanceof ClaudeError&&error.message===code,mode);
  }
