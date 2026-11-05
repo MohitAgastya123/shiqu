@@ -5,6 +5,7 @@ import {productionFixture,until,makePlan,selection} from './fixtures/production.
 import {revisionImpact,reusableRevisionImages,checkedRevision} from '../lib/reader-revision.ts';
 import {forkRevision} from '../server/reader-revisions.ts';
 import {ReaderRepository} from '../lib/reader-repository.ts';
+import {flowProviders} from './fixtures/test-tier.mjs';
 const owner='docker-local-owner';
 async function completed(t,provider='codex'){
  const f=await productionFixture(t,provider);f.control.hold=false;const id=await f.create();await until(async()=>(await f.read(id)).state==='completed');return {f,id};
@@ -42,7 +43,7 @@ test('image-only redraw validates page selection and cannot conceal content edit
  assert.throws(()=>checkedRevision({...base,plan:null},{redrawPages:[1]}),/完整分镜/);
 });
 
-for(const provider of ['codex','gemini'])test(`${provider}: image-only redraw replaces selected pages including anchor without review or touching other images`,async t=>{
+for(const provider of flowProviders(['codex','gemini']))test(`${provider}: image-only redraw replaces selected pages including anchor without review or touching other images`,async t=>{
  const {f,id}=await completed(t,provider),base=await snapshot(f,id),old=await f.read(id);
  const readDoc=async storyId=>JSON.parse((await f.app.services.database.prepare('SELECT document FROM stories WHERE id=?').bind(storyId).first()).document);
  const original=await readDoc(id),before=f.control.calls.length,reviews=f.control.reviews.length,frameReviews=f.control.frameReviews.length,plans=f.control.plans.length;
@@ -80,7 +81,7 @@ test('image-only redraw refuses an unreviewed story and missing unselected media
  const children=await f.app.services.database.prepare("SELECT id FROM stories WHERE json_extract(document,'$.revision.parentId')=?").bind(id).all();assert.equal(children.results.length,0);
 });
 
-for(const provider of ['codex','gemini'])test(`${provider}: caption-only revision reuses every copied image, original and deleted-parent independence`,async t=>{
+for(const provider of flowProviders(['codex','gemini']))test(`${provider}: caption-only revision reuses every copied image, original and deleted-parent independence`,async t=>{
  const {f,id}=await completed(t,provider),old=await f.read(id),base=await snapshot(f,id),plan=structuredClone(base.plan);
  plan.pages[3].caption='庄周醒来，看着窗外，仍记得梦中自在飞翔的感觉。';
  const before=f.control.calls.length,plans=f.control.plans.length,reviews=f.control.reviews.length;
@@ -155,7 +156,7 @@ for(const kind of ['missing','corrupt','transient'])test(`reusable ${kind} asset
  assert.equal((await f.read(id)).ready,8,'The original keeps what it has');
 });
 
-for(const provider of ['codex','gemini'])test(`${provider}: style changes preserve planning and review; requirements and counts re-audit`,async t=>{
+for(const provider of flowProviders(['codex','gemini']))test(`${provider}: style changes preserve planning and review; requirements and counts re-audit`,async t=>{
  const {f,id}=await completed(t,provider);let before=f.control.calls.length,plans=f.control.plans.length,reviews=f.control.reviews.length,frameReviews=f.control.frameReviews.length;
  const readDoc=async storyId=>JSON.parse((await f.app.services.database.prepare('SELECT document FROM stories WHERE id=?').bind(storyId).first()).document);
  const old=await readDoc(id);

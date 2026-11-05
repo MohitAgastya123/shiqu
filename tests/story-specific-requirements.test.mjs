@@ -5,6 +5,7 @@ import {productionFixture,until,selection,makeRequirements} from './fixtures/pro
 import {storyRequirementsSchema} from '../lib/reader-requirements.ts';
 import {defaultProductionPrompt,defaultProductionDirection,normalizeProductionPrompt} from '../lib/reader-prompts.ts';
 import {draftInstructions} from '../lib/reader-generation-contract.ts';
+import {flowProviders} from './fixtures/test-tier.mjs';
 
 const action=async(f,id,command)=>f.json(`sessions/${id}/setup`,'POST',{requestId:crypto.randomUUID(),generation:(await f.read(id)).intake.generation,...command});
 async function create(f){
@@ -25,7 +26,7 @@ test('generic defaults are system rules; blank and historical automatic fields r
  for(const changed of [{...pair,productionPrompt:''},{...pair,productionPrompt:'长'.repeat(1201)},{...pair,acceptancePrompt:'只有一条'},{...pair,acceptancePrompt:'一\n二\n三\n四\n五'}])assert.equal(storyRequirementsSchema.safeParse(changed).success,false);
 });
 
-for(const provider of ['codex','gemini'])test(`${provider}: source-specific setup suggestions survive restart, edits and confirmation, then route to their own stages`,async t=>{
+for(const provider of flowProviders(['codex','gemini']))test(`${provider}: source-specific setup suggestions survive restart, edits and confirmation, then route to their own stages`,async t=>{
  const f=await productionFixture(t,provider);f.control.hold=false;const id=await prepared(f),before=await f.read(id),pair=makeRequirements('庄周梦蝶');
  assert.equal(before.selection.productionPrompt,'');assert.equal(before.intake.draft.productionPrompt,pair.productionPrompt);assert.equal(before.intake.draft.acceptancePrompt,pair.acceptancePrompt);assert.equal(before.intake.draft.artStyle,'paper-cut');
  assert.equal(f.control.recommendations.length,1);assert.equal(f.control.recommendations[0].prepareRequirements,true);assert.equal(f.control.plans.length,0);assert.equal(f.control.calls.length,0);

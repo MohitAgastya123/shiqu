@@ -8,11 +8,12 @@ import os from 'node:os';
 import {LocalBooks} from '../server/local-books.ts';
 import {parseWygVolume} from '../server/local-book-wyg.ts';
 import {bookInputs} from '../server/local-book-inputs.ts';
+import {books} from './fixtures/test-tier.mjs';
 const selection={bookId:'太平广记',theme:'聪明与糊涂',artStyle:'ink-pencil',length:8,voice:false};
 const root=process.cwd(),library=new LocalBooks(root),entry=JSON.parse(await readFile('data/library/catalog.json','utf8')).books.find(b=>b.id===selection.bookId),directory=path.join('data/library',entry.originalFile);
 const reference=(book,section,first,last=first)=>({edition:book.edition,sectionId:section.id,firstUnit:section.units[first].id,lastUnit:section.units[last].id});
 
-test('500 original WYG volumes preserve all narrative lines, glyphs and final volume in bounded reading',async()=>{
+test('500 original WYG volumes preserve all narrative lines, glyphs and final volume in bounded reading',books,async()=>{
  const book=await library.book(selection);assert.equal(book.sections.length,500);assert.equal(entry.supplements.length,0);assert.equal(entry.originalFiles.length,502);
  assert.deepEqual((await readdir(directory)).sort(),entry.originalFiles.map(f=>f.file));
  for(const item of entry.originalFiles){const bytes=await readFile(path.join(directory,item.file));assert.equal(createHash('sha256').update(bytes).digest('hex'),item.sha256);}

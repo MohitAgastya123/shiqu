@@ -118,6 +118,18 @@ pnpm typecheck
 pnpm lint
 ```
 
+`pnpm test`（以及 PR 的 CI「Shared checks」）是快速层：制作流程类测试只用受控 Codex 适配器跑一次，跳过超长用例（多处 80 幅流程、完整幅数矩阵、真实 PTY 与无服务 CLI 子命令全流程）。提供方适配器契约测试（`prompt-contracts`、`story-brief`、`task-reasoning`、各提供方 schema/错误测试等）始终覆盖全部提供方。随应用附带的 24 部原著只在手动增补或替换时变化，逐字、版本与章节完整性检查不在 CI 中运行；原文加载、校验与失败即停的逻辑测试仍在快速层。
+
+```bash
+pnpm test:books       # 增补或替换原著后：全部原著内容检查（含 24 部目录、世说全书扫描）
+pnpm test:providers   # 修改提供方或发布前：Gemini 与 Codex 制作流程矩阵、超长用例及原著检查
+pnpm test:full        # 上述完整层，再加浏览器与 CLI 用户流程
+```
+
+分层由 `tests/fixtures/test-tier.mjs` 控制：新的制作流程矩阵用 `flowProviders([...])`，超长用例加 `heavy`，原著内容检查加 `books`；不要删除用例来提速。发布与 npm 门禁（`pnpm test:e2e --gate=…`）和 `pnpm test:pty` 按完整层运行。
+
+CI 对所有 PR 报告「Shared checks」，只改文档（`*.md`、`.docs/**`、`LICENSE`、`NOTICE`）时跳过实际检查并按通过处理，可设为 `main` 的必需检查。桌面安装包只在推送 `v*` 标签或手动运行时构建。
+
 `pre-push` 只对推送的 `refs/tags/v*` 执行发布检查：解析标签目标提交，在隔离 checkout 中验证 Node/pnpm 固定版本，安装锁定依赖，再运行 `pnpm release:check`。同一提交的多个发布标签只检查一次；普通分支、非 v 标签和删除标签不触发。可通过 `pnpm hooks:install` 为新 checkout 启用 hook。
 
 `release:check` 在类型、lint 检查后执行 `pnpm test:e2e --gate=release`，只运行 8 个关键冒烟测试文件；`npm:check` 使用 `--gate=npm`，运行其中 7 个文件。冒烟覆盖一条完整浏览器制作与阅读流程、生产恢复与重放、无服务 CLI/导出/备份、CLI 启动、配置安全与发布门禁；标签门禁额外验证 Git pre-push。每个文件只运行一次，标签门禁仍检查 Rust 格式。完整矩阵、全书扫描、PTY、其他浏览器与 CLI 边界测试移至按需命令 `pnpm test:full`，不再阻塞每次发布。任一冒烟失败即阻止发布；门禁只检查，不构建桌面应用或发布作品，平台 CI 保留安装包构建职责。完整套件的 C007 在一次性源码根目录启动真正的 `pnpm dev local`，不打开人工开发书库。

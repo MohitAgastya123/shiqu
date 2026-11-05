@@ -1,5 +1,6 @@
 // Verify the two adopted editions, exact original glyphs, reviewed exceptions and source-integrity failures.
 import test from'node:test';import assert from'node:assert/strict';import{readFile,writeFile,readdir,mkdtemp,cp,rm,symlink}from'node:fs/promises';import path from'node:path';import os from'node:os';import{createHash}from'node:crypto';
+import {books} from './fixtures/test-tier.mjs';
 import{LocalBooks}from'../server/local-books.ts';import{parseWikiStories}from'../server/local-book-wiki-stories.ts';import{readWikiBody}from'../server/local-book-html.ts';import{hasSourceAnomaly,hasBlockingSourceAnomaly}from'../server/local-source-quality.ts';import{bookInputs}from'../server/local-book-inputs.ts';import{withLocalBooks}from'../server/local-generation.ts';
 import{localReadingPrompt}from'../lib/reader-local-contract.ts';
 const catalog=JSON.parse(await readFile('data/library/catalog.json')),library=new LocalBooks(process.cwd()),ids=['红楼梦','喻世明言'],selection=bookId=>({bookId,theme:'理解与体谅',length:8,voice:false,artStyle:'ink-pencil'}),entry=id=>catalog.books.find(b=>b.id===id),squash=s=>s.replace(/\s/g,''),parts=async id=>Promise.all(entry(id).originalFiles.map(async item=>({item,raw:await readFile(path.join('data/library',entry(id).originalFile,item.file),'utf8')})));
@@ -11,7 +12,7 @@ test('legacy numeric chapter labels still locate the pinned original, and every 
  for(const purpose of [undefined,'scan']){const prompt=localReadingPrompt({title:'红楼梦',edition:b.edition,text:'原文',purpose});assert.match(prompt,/红楼第58回/);assert.match(prompt,/喻世第37卷/);assert.match(prompt,/缺少完整上下文时仍不选/);}
 });
 
-test('all 120/40 chapters preserve every reading glyph, source heading and final verse from pinned originals',async()=>{
+test('all 120/40 chapters preserve every reading glyph, source heading and final verse from pinned originals',books,async()=>{
  for(const id of ids){const e=entry(id),b=await library.book(selection(id)),raw=await parts(id),honglou=id==='红楼梦';assert.equal(b.sections.length,honglou?120:40);assert.equal(raw.length,honglou?13:41);assert.equal(b.edition,e.source.sha256);
   assert.deepEqual(await readdir(path.join('data/library',e.originalFile)),e.originalFiles.map(f=>f.file));
   for(const p of raw)assert.equal(createHash('sha256').update(await readFile(path.join('data/library',e.originalFile,p.item.file))).digest('hex'),p.item.sha256);

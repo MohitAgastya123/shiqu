@@ -42,7 +42,8 @@ async function runUserFlows(gate){
  for(const filename of untracked){fingerprint.update(filename);fingerprint.update(await readFile(filename));}
  const build=commit+'+worktree.'+fingerprint.digest('hex').slice(0,12),startedAt=new Date().toISOString(),log=createWriteStream(path.join(directory,'test.log'));
  console.log(`Story E2E: ${runId}\nBuild: ${build}\nEvidence: ${directory}`);
- const env={...process.env,SHIQU_E2E_RUN_ID:runId,SHIQU_E2E_BUILD_ID:build};
+ // Gates and user flows run the full test tier: every production-flow provider and heavy case in their files.
+ const env={...process.env,SHIQU_E2E_RUN_ID:runId,SHIQU_E2E_BUILD_ID:build,SHIQU_TEST_TIER:'full'};
  // A nested gate must run its suites, rather than Node treating it as a recursive test and skipping them.
  delete env.NODE_TEST_CONTEXT;
  const child=spawn(process.execPath,['--experimental-strip-types','--test','--test-concurrency=2',...tests],{env,stdio:['ignore','pipe','pipe']});

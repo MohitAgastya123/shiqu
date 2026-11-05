@@ -3,10 +3,11 @@ import test from 'node:test';import assert from 'node:assert/strict';import path
 import {readFile,writeFile,mkdtemp,cp,rm,access} from 'node:fs/promises';import {createHash} from 'node:crypto';
 import {LocalBooks} from '../server/local-books.ts';import {licensedBookSpecs,loadLicensedCollection,parseKanripoChapter} from '../server/local-book-licensed.ts';
 import {hasSourceAnomaly} from '../server/local-source-quality.ts';import {verifiedPassage} from '../lib/reader-source.ts';
+import {books} from './fixtures/test-tier.mjs';
 const catalog=JSON.parse(await readFile('data/library/catalog.json','utf8')),baseline=JSON.parse(await readFile('tests/fixtures/publication-source-baseline.json','utf8')),library=new LocalBooks(process.cwd()),choose=bookId=>({bookId,theme:'人情冷暖',length:8,voice:false});
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
 
-test('all17 uncertain editions are replaced and seven retained collections keep original bytes with explicit errata versions',async()=>{
+test('all17 uncertain editions are replaced and seven retained collections keep original bytes with explicit errata versions',books,async()=>{
  assert.equal(catalog.books.length,24);assert.equal(Object.keys(licensedBookSpecs).length,17);let replaced=0,retained=0;
  for(const e of catalog.books){const old=baseline[e.id],b=await library.book(choose(e.id));
   if(e.source.url.includes('/kanripo/'))assert.match(e.source.attribution,/Kanripo/);else if(new URL(e.source.url).hostname==='zh.wikisource.org')assert.match(e.source.attribution,/维基文库/);
@@ -36,7 +37,7 @@ test('Kanripo edition and chapter identities reject mismatches, and first/final 
  const w=await library.book(choose('战国策'));assert.match(w.sections[0].title,/秦興師臨周/);assert.match(w.sections.at(-1).title,/昭王既息民繕兵/);assert.doesNotMatch(w.input.text,/# src:|<pb:|¶|#\+PROPERTY/);
 });
 
-test('same-source narrative appendices preserve coverage and numbered chapter identities',async()=>{
+test('same-source narrative appendices preserve coverage and numbered chapter identities',books,async()=>{
  const xy=await library.book(choose('西游记'));assert.equal(xy.sections.length,101);assert.match(xy.sections[0].title,/第一回.*靈根育孕源流出/);assert.equal(xy.sections[7].id,'xiyou-008');assert.equal(xy.sections[8].id,'xiyou-000');assert.match(xy.sections[8].units.map(u=>u.text).join(''),/陳光蕊/);assert.equal(xy.sections[9].id,'xiyou-009');assert.equal(xy.sections.at(-1).id,'xiyou-100');
  const yw=await library.book(choose('阅微草堂笔记'));assert.equal(yw.sections.length,25);assert.match(yw.sections.at(-1).units.map(u=>u.text).join(''),/亡兒汝佶/);
 });

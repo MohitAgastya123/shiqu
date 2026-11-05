@@ -1,20 +1,48 @@
-# Release tags use the local pre-push checks; CI verifies each native installer before publishing.
+# Pull requests run shared checks only. Release tags use the local pre-push checks; CI builds and verifies each native installer before publishing.
 name: Desktop
 
 on:
   push:
     tags: ['v*']
   workflow_dispatch:
+  # Every pull request reports "Shared checks" so it can be a required status check; docs-only changes skip the work.
   pull_request:
-    paths: ['client/**', 'public/**', 'desktop/**', 'src-tauri/**', 'server/**', 'lib/**', 'components/**', 'db/**', 'drizzle/**', 'data/library/**', 'docker/seed.sql', 'scripts/**', 'tests/**', '*.config.*', 'tsconfig.json', '.nvmrc', 'rust-toolchain.toml', 'package.json', 'pnpm-lock.yaml', '.github/workflows/desktop-macos.yml']
 
 permissions:
   contents: read
 
 jobs:
+  scope:
+    name: Change scope
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.changes.outputs.code }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - id: changes
+        name: Detect code changes
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          changed=$(git diff --name-only "$BASE...$HEAD")
+          printf '%s\n' "$changed"
+          # Docs-only means every changed file is documentation; anything else runs the checks.
+          if [ -n "$changed" ] && ! printf '%s\n' "$changed" | grep -Evq '\.md$|^\.docs/|^LICENSE$|^NOTICE$'; then
+            echo code=false >> "$GITHUB_OUTPUT"
+          else
+            echo code=true >> "$GITHUB_OUTPUT"
+          fi
+
   checks:
     name: Shared checks
-    if: github.event_name != 'push'
+    needs: scope
+    # A job skipped by this condition reports success, so docs-only pull requests satisfy a required check.
+    # Only a successful scope result of docs-only skips it; a failed scope job still runs the checks.
+    if: ${{ !cancelled() && github.event_name != 'push' && (github.event_name != 'pull_request' || needs.scope.outputs.code != 'false') }}
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v6
@@ -38,7 +66,8 @@ jobs:
   build:
     name: Desktop / ${{ matrix.platform }} ${{ matrix.arch }}
     needs: checks
-    if: ${{ !cancelled() && (needs.checks.result == 'success' || (github.event_name == 'push' && needs.checks.result == 'skipped')) }}
+    # Installers are built for release tags (and manual runs), never for pull requests.
+    if: ${{ !cancelled() && github.event_name != 'pull_request' && (needs.checks.result == 'success' || (github.event_name == 'push' && needs.checks.result == 'skipped')) }}
     strategy:
       fail-fast: false
       matrix:

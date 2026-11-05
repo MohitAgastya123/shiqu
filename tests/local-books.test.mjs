@@ -18,6 +18,7 @@ import {ReaderRepository} from '../lib/reader-repository.ts';
 import {advanceStory} from '../lib/reader-engine.ts';
 import {selectionSchema} from '../lib/reader-model.ts';
 import {suggestionBatchSchema} from '../lib/reader-suggestions.ts';
+import {books} from './fixtures/test-tier.mjs';
 
 const library=new LocalBooks(process.cwd());
 const selected=selectionSchema.parse({bookId:'zhuangzi',theme:'放下执念',storyTitle:'庄周梦蝶',length:8});
@@ -39,7 +40,7 @@ test('only original downloads are versioned, preserve their bytes and have match
  await assert.rejects(access('data/library/texts'));
  assert.match(await readFile('.gitattributes','utf8'),/data\/library\/\*\* -text/);
 });
-test('the two whole-book inputs contain every parsed body unit, including the final passages',async()=>{
+test('the two whole-book inputs contain every parsed body unit, including the final passages',books,async()=>{
  for(const [id,sections,count,start,end] of [['zhuangzi',33,1769,'北冥有魚','是窮響以聲'],['shishuo',36,1129,'陳仲舉言','不忍見行此事']]){
   const book=await library.book({...selected,bookId:id});assert.equal(book.sections.length,sections);assert.equal(book.sections.flatMap(s=>s.units).length,count);
   assert.match(book.input.text,new RegExp(start));assert.match(book.input.text,new RegExp(end));
@@ -83,7 +84,7 @@ test('both providers directly select from the full original and only verified pa
   assert.equal(planned.verifiedOriginal.text,original.text);assert.equal(planned.localBook,undefined);assert.ok(store.values.has('reader/test/source.json'));
  }
 });
-test('token-based chapter manifests cover all shipped units without splitting small chapters',async()=>{
+test('token-based chapter manifests cover all shipped units without splitting small chapters',books,async()=>{
  for(const bookId of ['聊斋志异','太平广记','红楼梦']){
   const book=await library.book({...selected,bookId}),manifest=buildReadingPlan(book,'codex'),blocks=hydrateReadingPlan(book,manifest);
   assert.deepEqual(blocks.flatMap(b=>[...b.visible]),book.sections.flatMap(s=>s.units.map(u=>u.id)));

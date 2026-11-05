@@ -3,10 +3,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {productionFixture,until} from './fixtures/production.mjs';
 import {storyEditorialContext} from '../lib/reader-prompts.ts';
+import {flowProviders} from './fixtures/test-tier.mjs';
 
 const candidates=['梦与醒各有真实，不必急着抹去其中一种。','自在的一刻，可以照见平日未察的拘束。','熟悉的身份，也未必穷尽一个人的感受。'];
 const document=async(f,id)=>JSON.parse((await f.app.services.database.prepare('SELECT document FROM stories WHERE id=?').bind(id).first()).document);
-for(const provider of ['codex','gemini'])for(const theme of ['放下执念','原典故事'])test(`${provider}: ${theme} edits title and ending after saved scenes, then independently audits both`,async t=>{
+for(const provider of flowProviders(['codex','gemini']))for(const theme of ['放下执念','原典故事'])test(`${provider}: ${theme} edits title and ending after saved scenes, then independently audits both`,async t=>{
  const f=await productionFixture(t,provider),id=await f.createLegacyReader(8,{theme}),context=theme==='原典故事'?{mode:'source'}:{mode:'theme',theme};
  const proposed=theme==='原典故事'?'梦中的片段':'放下所有执念才有自由',finalTitle=theme==='原典故事'?'庄周梦蝶':'梦醒，还认得自己吗';let savedDraft;
  f.control.beforeText=async(kind,payload,schema)=>{

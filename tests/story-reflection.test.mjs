@@ -7,13 +7,14 @@ import {advanceStory} from '../lib/reader-engine.ts';
 import {reviewReportSchema} from '../lib/reader-review.ts';
 import {readLibrarySummary} from '../desktop/library-preview.ts';
 import {generationProgress} from '../lib/generation-progress.ts';
+import {flowProviders} from './fixtures/test-tier.mjs';
 
 const owner='docker-local-owner';
 const document=async(f,id)=>JSON.parse((await f.app.services.database.prepare('SELECT document FROM stories WHERE id=?').bind(id).first()).document);
 const endingIssue={page:0,category:'reflection',problem:'结语把已还阳奉母的处境误写成荣誉与责任不能兼顾。',instruction:'结合已死三日、还阳九年及母丧后赴任的完整因果，只重写结语。'};
 const ending='生死本无宽限，未尽的亲情却让它通融了九年。';
 
-for(const provider of ['codex','gemini'])for(const length of [8,25])test(`${provider}: ${length} saved frames precede the separate ending and whole-story audit`,async t=>{
+for(const provider of flowProviders(['codex','gemini']))for(const length of [8,25])test(`${provider}: ${length} saved frames precede the separate ending and whole-story audit`,async t=>{
  const f=await productionFixture(t,provider),id=await f.createLegacyReader(length),events=[];
  f.control.beforeText=async(kind,payload,schema)=>{
   events.push(kind);
@@ -41,7 +42,7 @@ for(const provider of ['codex','gemini'])for(const length of [8,25])test(`${prov
  assert.equal(doc.usage.filter(u=>u.step==='reflection').length,1);
 });
 
-for(const provider of ['codex','gemini'])test(`${provider}: failed ending resumes after restart without re-planning saved scenes`,async t=>{
+for(const provider of flowProviders(['codex','gemini']))test(`${provider}: failed ending resumes after restart without re-planning saved scenes`,async t=>{
  const f=await productionFixture(t,provider),id=await f.createLegacyReader(25);let fail=true;
  f.control.beforeText=async kind=>{if(kind==='reflection'&&fail)throw Error('ending unavailable');};
  await f.demand(id);await until(async()=>(await f.read(id)).state==='failed');
@@ -53,7 +54,7 @@ for(const provider of ['codex','gemini'])test(`${provider}: failed ending resume
  assert.equal(doc.usage.filter(u=>u.step==='reflection').length,1);
 });
 
-for(const provider of ['codex','gemini'])test(`${provider}: ending-only repair is audited again and preserves every scene`,async t=>{
+for(const provider of flowProviders(['codex','gemini']))test(`${provider}: ending-only repair is audited again and preserves every scene`,async t=>{
  const f=await productionFixture(t,provider),id=await f.createLegacyReader();let before;
  f.control.beforeText=async(kind,payload)=>{
   if(kind==='review'){

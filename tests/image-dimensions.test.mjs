@@ -5,6 +5,7 @@ import {imageDimensions,imageRequestSize} from '../lib/reader-image-dimensions.t
 import {createReaderProvider} from '../server/generation.ts';
 import {imageBytes,png,jpeg} from './fixtures/images.mjs';
 import {productionFixture,makePlan,until} from './fixtures/production.mjs';
+import {flowProvider} from './fixtures/test-tier.mjs';
 
 const formats=[['portrait.png','image/png','.png'],['portrait.jpg','image/jpeg','.jpg'],['portrait-progressive.jpg','image/jpeg','.jpg'],['portrait.webp','image/webp','.webp'],['portrait-lossy.webp','image/webp','.webp'],['portrait-alpha.webp','image/webp','.webp']];
 const nativeImages=['square.png','landscape.png','small.png','rotated.png','rotated.jpg','rotated.webp','legacy-2-3.png','native.png','gemini.png','codex-native.png','codex-requested.png'];
@@ -54,7 +55,7 @@ for(const name of ['codex','gemini']){
   if(name==='gemini')assert.deepEqual(request.generationConfig.imageConfig,{aspectRatio:'9:16',imageSize:'1K'});
  });
 
- test(`${name}: only corrupt media fails the queue; explicit retry preserves completed work`,async t=>{
+ test(`${name}: only corrupt media fails the queue; explicit retry preserves completed work`,flowProvider(name),async t=>{
   const f=await productionFixture(t,name),id=await f.createLegacyReader(),viewer=crypto.randomUUID();
   await f.demand(id,viewer);await until(()=>f.control.calls.length===1);
   f.control.calls[0].bytes=Buffer.from(png.subarray(0,24)).toString('base64');f.control.calls[0].resolve();
