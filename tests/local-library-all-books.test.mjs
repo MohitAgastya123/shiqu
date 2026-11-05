@@ -1,9 +1,10 @@
-// Exercise every shipped book through exhaustive reading and source-before-plan HTTP checkpoints.
+// 通过正式阅读与 HTTP 制作检查全部原著，单书故障用例只复制对应原著。
+import {copyBookLibrary} from './fixtures/book-library.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import os from 'node:os';
-import {readFile,mkdtemp,rm,writeFile,cp} from 'node:fs/promises';
+import {readFile,mkdtemp,rm,writeFile} from 'node:fs/promises';
 import {LocalBooks} from '../server/local-books.ts';
 import {bookInputs} from '../server/local-book-inputs.ts';
 import {withLocalBooks} from '../server/local-generation.ts';
@@ -52,7 +53,7 @@ test('all catalogs use originals without cross-source supplements; Erke final pl
 });
 
 test('original corruption and unreadable source ranges fail closed',async t=>{
- const folder=await temp(t);await cp('data/library',path.join(folder,'data/library'),{recursive:true});const erkeEntry=catalog.books.find(entry=>entry.id==='二刻拍案惊奇');await writeFile(path.join(folder,'data/library',erkeEntry.originalFile,erkeEntry.originalFiles.at(-1).file),'broken');await assert.rejects(new LocalBooks(folder).book(select('二刻拍案惊奇')),e=>e.status===503);
+ const folder=await temp(t);await copyBookLibrary(folder,['二刻拍案惊奇']);assert.ok(await new LocalBooks(folder).book(select('二刻拍案惊奇')));const erkeEntry=catalog.books.find(entry=>entry.id==='二刻拍案惊奇');await writeFile(path.join(folder,'data/library',erkeEntry.originalFile,erkeEntry.originalFiles.at(-1).file),'broken');await assert.rejects(new LocalBooks(folder).book(select('二刻拍案惊奇')),e=>e.status===503);
  const shanhai=await library.book(select('山海经'));const section=shanhai.sections[0],unit=section.units.find(unit=>unit.narrative);const corrupted={...shanhai,sections:[{...section,units:[{...unit,text:'有獸焉，其狀如【上鹿下旨】，讀不出其原字，不可猜補。'}]}]};assert.throws(()=>library.resolve(corrupted,{edition:shanhai.edition,sectionId:section.id,firstUnit:unit.id,lastUnit:unit.id}),e=>e.status===400);
 });
 

@@ -1,7 +1,8 @@
-// Compare all shipped Wiki source glyphs and table cells, and exercise identity/edition failures.
+// 对原著字形、表格和出处完整性进行验证；故障测试仅复制涉及的三部原著。
+import {copyBookLibrary} from './fixtures/book-library.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';import path from 'node:path';import os from 'node:os';
 import {books} from './fixtures/test-tier.mjs';
-import{readFile,writeFile,mkdtemp,cp,rm,symlink}from'node:fs/promises';import{createHash}from'node:crypto';import{parseDocument}from'htmlparser2';
+import{readFile,writeFile,mkdtemp,rm,symlink}from'node:fs/promises';import{createHash}from'node:crypto';import{parseDocument}from'htmlparser2';
 import{LocalBooks}from'../server/local-books.ts';import{readWikiBody,parseWikiOriginal}from'../server/local-book-html.ts';import{bookInputs}from'../server/local-book-inputs.ts';
 const root=process.cwd(),catalog=JSON.parse(await readFile('data/library/catalog.json','utf8')),ids=['山海经','酉阳杂俎','史记'],library=new LocalBooks(root),choose=bookId=>({bookId,theme:'机智',length:8,artStyle:'ink-pencil',voice:false});
 const entry=id=>catalog.books.find(e=>e.id===id),file=(e,item)=>path.join(root,'data/library',e.originalFile,item.file),squash=s=>s.replace(/\s/g,''),stripMeta=s=>s.replace(/〔(?:表格版式：[\s\S]*?|列\d+[^〕]*|版式：小字|小字止|原件字形图：\d+)〕/g,'');
@@ -84,7 +85,8 @@ test('Wiki headings cannot independently authorize a narrative receipt',async()=
 });
 
 test('missing, swapped, tampered or escaped originals fail closed',async t=>{
- const temp=await mkdtemp(path.join(os.tmpdir(),'shiqu-clean-'));t.after(()=>rm(temp,{recursive:true,force:true}));const dir=path.join(temp,'data/library');await cp('data/library',dir,{recursive:true});
+ const temp=await mkdtemp(path.join(os.tmpdir(),'shiqu-clean-'));t.after(()=>rm(temp,{recursive:true,force:true}));const dir=path.join(temp,'data/library');await copyBookLibrary(temp,ids);
+ for(const id of ids)assert.ok(await new LocalBooks(temp).book(choose(id)));
  for(const id of ids){const e=entry(id),target=path.join(dir,e.originalFile,e.originalFiles.find(x=>x.file==='001.html').file),bytes=await readFile(target);await writeFile(target,'broken');await assert.rejects(new LocalBooks(temp).book(choose(id)),e=>e.status===503);await writeFile(target,bytes);}
  const e=entry('酉阳杂俎'),target=path.join(dir,e.originalFile,'index.html'),bytes=await readFile(target);await rm(target);await assert.rejects(new LocalBooks(temp).book(choose(e.id)),e=>e.status===503);await writeFile(path.join(temp,'outside.html'),bytes);await symlink(path.join(temp,'outside.html'),target);await assert.rejects(new LocalBooks(temp).book(choose(e.id)),e=>e.status===503);await rm(target);await writeFile(target,bytes);
  const wiki=entry('史记'),one=path.join(dir,wiki.originalFile,'001.html'),two=path.join(dir,wiki.originalFile,'002.html'),original=await readFile(one);await writeFile(one,await readFile(two));await assert.rejects(new LocalBooks(temp).book(choose(wiki.id)),e=>e.status===503);await writeFile(one,original);

@@ -1,4 +1,4 @@
-// Own disposable CLI homes and runtime roots. Never inherit user configuration or provider credentials.
+// 隔离测试用的配置与运行目录；设置测试不复制运行资源，CLI 测试仍使用正式迁移和种子。
 import assert from 'node:assert/strict';
 import {mkdtemp,mkdir,cp,writeFile,rm,readFile} from 'node:fs/promises';
 import path from 'node:path';
@@ -9,14 +9,11 @@ import {createServer} from 'node:net';
 import {desktopLibraryPaths} from '../../server/library-directory.ts';
 import {SystemSettingsStore} from '../../server/system-settings.ts';
 
-export async function startupFixture(t){
+export async function settingsFixture(t){
  const root=await mkdtemp(path.join(os.tmpdir(),'shiqu-startup-test-')),home=path.join(root,'home');
  const cleanups=[];
  t.after(async()=>{try{for(const cleanup of cleanups.reverse())await cleanup();}finally{await rm(root,{recursive:true,force:true});}});
- await mkdir(home);await cp(new URL('../../drizzle/',import.meta.url),path.join(root,'drizzle'),{recursive:true});
- await mkdir(path.join(root,'docker'));await cp(new URL('../../docker/seed.sql',import.meta.url),path.join(root,'docker/seed.sql'));
- await mkdir(path.join(root,'dist/client'),{recursive:true});await writeFile(path.join(root,'dist/client/index.html'),'<html>isolated startup fixture</html>');
- await writeFile(path.join(root,'package.json'),JSON.stringify({version:'0.0.0-test'}));
+ await mkdir(home);
  const env={PATH:path.dirname(process.execPath),HOME:home,USERPROFILE:home,APPDATA:path.join(home,'roaming'),LOCALAPPDATA:path.join(home,'local'),XDG_CONFIG_HOME:path.join(home,'config'),XDG_DATA_HOME:path.join(home,'data'),LANG:'en_US.UTF-8'};
  for(const name of ['SystemRoot','SYSTEMROOT','WINDIR','COMSPEC','PATHEXT','TMPDIR','TMP','TEMP'])if(process.env[name])env[name]=process.env[name];
  const locations=desktopLibraryPaths({home,variables:env});
@@ -25,6 +22,14 @@ export async function startupFixture(t){
   const store=new SystemSettingsStore(locations.settings,locations.library),close=store.close.bind(store);let closed=false;
   store.close=()=>{if(!closed){closed=true;close();}};cleanups.push(()=>store.close());return store;
  }};
+}
+export async function startupFixture(t){
+ const fixture=await settingsFixture(t),{root}=fixture;
+ await cp(new URL('../../drizzle/',import.meta.url),path.join(root,'drizzle'),{recursive:true});
+ await mkdir(path.join(root,'docker'));await cp(new URL('../../docker/seed.sql',import.meta.url),path.join(root,'docker/seed.sql'));
+ await mkdir(path.join(root,'dist/client'),{recursive:true});await writeFile(path.join(root,'dist/client/index.html'),'<html>isolated startup fixture</html>');
+ await writeFile(path.join(root,'package.json'),JSON.stringify({version:'0.0.0-test'}));
+ return fixture;
 }
 export async function freeStartupPort(){
  const socket=createServer();socket.listen(0,'127.0.0.1');await once(socket,'listening');const port=socket.address().port;

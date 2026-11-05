@@ -1,7 +1,8 @@
-// Verify a uniform original edition, layout-only parsing, and strict local citation receipts.
+// 验证原著版本、版式解析和出处凭据；故障测试仅复制太平广记。
+import {copyBookLibrary} from './fixtures/book-library.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFile,mkdtemp,rm,cp,writeFile,unlink,readdir} from 'node:fs/promises';
+import {readFile,mkdtemp,rm,writeFile,unlink,readdir} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 import path from 'node:path';
 import os from 'node:os';
@@ -43,7 +44,7 @@ test('unpunctuated originals resolve exactly; titles, stale editions and invalid
 });
 
 test('missing, damaged, extra and escaped collection members cannot load',async t=>{
- const folder=await mkdtemp(path.join(os.tmpdir(),'shiqu-wyg-'));t.after(()=>rm(folder,{recursive:true,force:true}));await cp('data/library',path.join(folder,'data/library'),{recursive:true});
+ const folder=await mkdtemp(path.join(os.tmpdir(),'shiqu-wyg-'));t.after(()=>rm(folder,{recursive:true,force:true}));await copyBookLibrary(folder,[selection.bookId]);assert.ok(await new LocalBooks(folder).book(selection));
  const file=path.join(folder,'data/library',entry.originalFile,'KR3l0118_174.txt'),bytes=await readFile(file);
  await writeFile(file,'broken');await assert.rejects(new LocalBooks(folder).book(selection),e=>e.status===503);
  await unlink(file);await assert.rejects(new LocalBooks(folder).book(selection),e=>e.status===503);

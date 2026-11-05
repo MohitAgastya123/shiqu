@@ -1,5 +1,6 @@
-// Verify the two adopted editions, exact original glyphs, reviewed exceptions and source-integrity failures.
-import test from'node:test';import assert from'node:assert/strict';import{readFile,writeFile,readdir,mkdtemp,cp,rm,symlink}from'node:fs/promises';import path from'node:path';import os from'node:os';import{createHash}from'node:crypto';
+// 验证两部采用版本、原字、例外和出处完整性；临时书库只复制涉及的原著。
+import {copyBookLibrary} from './fixtures/book-library.mjs';
+import test from'node:test';import assert from'node:assert/strict';import{readFile,writeFile,readdir,mkdtemp,rm,symlink}from'node:fs/promises';import path from'node:path';import os from'node:os';import{createHash}from'node:crypto';
 import {books} from './fixtures/test-tier.mjs';
 import{LocalBooks}from'../server/local-books.ts';import{parseWikiStories}from'../server/local-book-wiki-stories.ts';import{readWikiBody}from'../server/local-book-html.ts';import{hasSourceAnomaly,hasBlockingSourceAnomaly}from'../server/local-source-quality.ts';import{bookInputs}from'../server/local-book-inputs.ts';import{withLocalBooks}from'../server/local-generation.ts';
 import{localReadingPrompt}from'../lib/reader-local-contract.ts';
@@ -47,7 +48,8 @@ test('page identities, chapter sequence, index order and pinned revision cannot 
 });
 
 test('missing, altered, extra and escaped original members fail before a book is exposed',async t=>{
- const root=await mkdtemp(path.join(os.tmpdir(),'shiqu-priority-'));t.after(()=>rm(root,{recursive:true,force:true}));const directory=path.join(root,'data/library');await cp('data/library',directory,{recursive:true});
+ const root=await mkdtemp(path.join(os.tmpdir(),'shiqu-priority-'));t.after(()=>rm(root,{recursive:true,force:true}));const directory=path.join(root,'data/library');await copyBookLibrary(root,ids);
+ for(const id of ids)assert.ok(await new LocalBooks(root).book(selection(id)));
  for(const id of ids){const e=entry(id),folder=path.join(directory,e.originalFile),target=path.join(folder,'001.html'),bytes=await readFile(target);await writeFile(target,'tampered');await assert.rejects(new LocalBooks(root).book(selection(id)),e=>e.status===503);await writeFile(target,bytes);
   const index=path.join(folder,'index.html'),indexBytes=await readFile(index);await rm(index);await assert.rejects(new LocalBooks(root).book(selection(id)),e=>e.status===503);await writeFile(index,indexBytes);
   await writeFile(path.join(folder,'extra.txt'),'extra');await assert.rejects(new LocalBooks(root).book(selection(id)),e=>e.status===503);await rm(path.join(folder,'extra.txt'));

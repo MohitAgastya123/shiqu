@@ -1,4 +1,5 @@
-// Exercise real persistence and HTTP contracts without provider billing or a Cloudflare runtime.
+// 不调用外部 AI，以隔离数据验证正式存储与 HTTP 契约；按需复制原著。
+import {copyBookLibrary} from './fixtures/book-library.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,mkdir,writeFile,readFile,cp,rm,symlink,readdir} from 'node:fs/promises';
@@ -79,7 +80,7 @@ test('media validates keys, MIME and symlinks; replacing files is atomic and lea
 test('real SQLite locks prevent duplicate paid requests through concurrent REST advances and survive restart',async t=>{
  const options=await fixture(t);let calls=0,release;const hold=new Promise(resolve=>release=resolve);
  const plan={title:'庄周梦蝶',summary:'梦醒之后',sourceReference:'《庄子·齐物论》庄周梦蝶',adaptationNote:'现代改编',reflection:'谁在梦中？',characters:'An adult Chinese philosopher in a plain linen robe in ancient China.',pages:Array.from({length:8},()=>({caption:'庄周梦见自己成为一只蝴蝶，自由自在地飞来飞去。',prompt:'An adult philosopher dreams of becoming a butterfly in an ancient garden.'}))};
- await cp('data/library',path.join(options.root,'data/library'),{recursive:true});
+ await copyBookLibrary(options.root,['zhuangzi']);
  const book=await new LocalBooks(options.root).book({bookId:'zhuangzi'}),section=book.sections[1],unit=section.units.at(-1);
  const source={edition:book.edition,sectionId:section.id,firstUnit:unit.id,lastUnit:unit.id};
  options.variables={GEMINI_API_KEY:'mock-only'};options.transport=async(_url,init)=>{calls++;await hold;const body=JSON.parse(init.body),schema=body.generationConfig.responseFormat.text.schema;if(schema.properties.candidates)await app.services.database.prepare("UPDATE stories SET generation_control='paused' WHERE id=?").bind(id).run();const result=schema.properties.count?{count:8,reason:'按完整故事编排。',storySummary:plan.summary,storyMatchReason:'按原文主线展开。'}:schema.properties.candidates?{title:plan.title,candidates:[plan.reflection,'醒来之后，梦中的自在仍值得回味。','梦与醒的分界，也未必是心境的分界。']}:plan;return Response.json({candidates:[{finishReason:'STOP',content:{parts:[{text:JSON.stringify(result)}]}}]});};

@@ -128,7 +128,11 @@ pnpm test:full        # 上述完整层，再加浏览器与 CLI 用户流程
 
 分层由 `tests/fixtures/test-tier.mjs` 控制：新的制作流程矩阵用 `flowProviders([...])`，超长用例加 `heavy`，原著内容检查加 `books`；不要删除用例来提速。发布与 npm 门禁（`pnpm test:e2e --gate=…`）和 `pnpm test:pty` 按完整层运行。
 
+快速层仍包含真实 CLI、HTTP、SQLite 与辅助进程集成检查。纯配置测试使用 `settingsFixture()`，需要迁移、种子和静态资源的进程测试使用 `startupFixture()`；单书故障测试通过 `copyBookLibrary()` 只复制涉及的原著和补卷，保留正式目录和原始字节。锁超时测试断言正式两秒配置后缩短测试连接的等待；隧道超时测试等辅助进程启动后直接触发正式超时回调，继续验证进程和配置清理。不要通过跳过这些检查来提速。
+
 合并到 `main` 后，CI 的「Pipeline flows」在 macOS 上运行 `pnpm test:flows`（不阻塞 PR，新的推送会取消旧的运行）。CI 对所有 PR 报告「Shared checks」（macOS：安装、类型检查、lint、快速层 `pnpm test`），只改文档（`*.md`、`.docs/**`、`LICENSE`、`NOTICE`）时跳过实际检查并按通过处理，可设为 `main` 的必需检查。Rust 格式、`desktop:test`（含 `cargo test`）以及 macOS/Windows 安装包构建与冒烟只在推送 `v*` 标签或手动运行时执行；发布标签的本地 pre-push 门禁仍检查 Rust 格式。
+
+「Shared checks」与「Pipeline flows」缓存 pnpm store，以系统、架构、固定的 Node/pnpm 版本和锁文件区分缓存；命中缓存后仍执行 `pnpm install --frozen-lockfile`。缓存不包含用户书库、密钥或 `node_modules`。
 
 `pre-push` 只对推送的 `refs/tags/v*` 执行发布检查：解析标签目标提交，在隔离 checkout 中验证 Node/pnpm 固定版本，安装锁定依赖，再运行 `pnpm release:check`。同一提交的多个发布标签只检查一次；普通分支、非 v 标签和删除标签不触发。可通过 `pnpm hooks:install` 为新 checkout 启用 hook。
 

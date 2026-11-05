@@ -1,4 +1,4 @@
-// Inject storage failures only into disposable databases; exercise SQLite rollback, timeout and hot-journal recovery.
+// 仅在临时设置库注入故障，验证真实 SQLite 回滚、锁超时和热日志恢复。
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
@@ -8,10 +8,17 @@ import {spawn} from 'node:child_process';
 import {once} from 'node:events';
 import {SystemSettingsStore} from '../server/system-settings.ts';
 import {defaultSystemSettings} from '../lib/system-settings.ts';
-import {startupFixture,savedStartupState} from './fixtures/startup.mjs';
+import {settingsFixture,savedStartupState} from './fixtures/startup.mjs';
 
 test('settings lock timeouts preserve state and allow subsequent save/reset/open',{timeout:20000},async t=>{
- const f=await startupFixture(t),store=f.store();t.after(()=>store.close());
+ // 保留对正式两秒配置的断言，仅缩短本用例 SQLite 实际等待，三个操作仍争用真实写锁。
+ const exec=DatabaseSync.prototype.exec;let configured=0;
+ t.mock.method(DatabaseSync.prototype,'exec',function(sql){
+  const timeout=sql.match(/PRAGMA busy_timeout=(\d+)/);
+  if(timeout){assert.equal(Number(timeout[1]),2000);configured++;sql=sql.replace(timeout[0],'PRAGMA busy_timeout=50');}
+  return exec.call(this,sql);
+ });
+ const f=await settingsFixture(t),store=f.store();t.after(()=>store.close());
  store.save({provider:'openai',providerConfigured:true},{provider:'openai',value:'test-only-lock-key'});
  const before=await savedStartupState(f),bytes=await readFile(f.locations.settings),lock=new DatabaseSync(f.locations.settings);f.defer(()=>lock.close());
  lock.exec('BEGIN IMMEDIATE');
@@ -23,11 +30,11 @@ test('settings lock timeouts preserve state and allow subsequent save/reset/open
  }finally{lock.exec('ROLLBACK');}
  assert.deepEqual(await savedStartupState(f),before);store.save({port:3456});assert.equal(store.settings().port,3456);
  store.resetProviders();assert.equal(store.key('openai'),'');assert.equal(store.settings().port,3456);
- const reopened=f.store();assert.equal(reopened.settings().port,3456);reopened.close();
+ const reopened=f.store();assert.equal(reopened.settings().port,3456);reopened.close();assert.ok(configured>=2);
 });
 
 test('a failed settings write rolls back an already-written replacement key',async t=>{
- const f=await startupFixture(t),store=f.store();t.after(()=>store.close());
+ const f=await settingsFixture(t),store=f.store();t.after(()=>store.close());
  store.save({provider:'openai',providerConfigured:true},{provider:'openai',value:'test-only-original-key'});
  const before=await savedStartupState(f),db=new DatabaseSync(f.locations.settings);
  db.exec("CREATE TRIGGER fail_settings BEFORE UPDATE ON desktop_settings BEGIN SELECT RAISE(ABORT,'test-only-storage-failure'); END;");
@@ -40,7 +47,7 @@ test('a failed settings write rolls back an already-written replacement key',asy
 test('unwritable settings parent is rejected without changing sibling data',{
  skip:process.platform==='win32'||process.getuid?.()===0?'requires POSIX permissions and a non-root user':false,
 },async t=>{
- const f=await startupFixture(t),sealed=path.join(f.root,'sealed'),sentinel=path.join(sealed,'preserved.txt');
+ const f=await settingsFixture(t),sealed=path.join(f.root,'sealed'),sentinel=path.join(sealed,'preserved.txt');
  await mkdir(sealed);await writeFile(sentinel,'test-only-preserved-data');await chmod(sealed,0o500);
  try{
   assert.throws(()=>new SystemSettingsStore(path.join(sealed,'missing','desktop.sqlite'),f.locations.library));
@@ -49,7 +56,7 @@ test('unwritable settings parent is rejected without changing sibling data',{
 });
 
 test('a file blocking the settings directory fails without overwriting it on every platform',async t=>{
- const f=await startupFixture(t),blocked=path.join(f.root,'blocked');await writeFile(blocked,'test-only-preserve-this-file');
+ const f=await settingsFixture(t),blocked=path.join(f.root,'blocked');await writeFile(blocked,'test-only-preserve-this-file');
  assert.throws(()=>new SystemSettingsStore(path.join(blocked,'desktop.sqlite'),f.locations.library));
  assert.equal(await readFile(blocked,'utf8'),'test-only-preserve-this-file');
 });
@@ -71,7 +78,7 @@ function inspectOld(f,settings){
  }finally{db.close();}
 }
 test('late migration failure rolls back DDL, settings, credentials and schema version',async t=>{
- const f=await startupFixture(t),settings=await oldDatabase(f),db=new DatabaseSync(f.locations.settings);
+ const f=await settingsFixture(t),settings=await oldDatabase(f),db=new DatabaseSync(f.locations.settings);
  db.exec("CREATE TRIGGER fail_migration BEFORE UPDATE ON desktop_settings BEGIN SELECT RAISE(ABORT,'test-only-migration-failure'); END;");db.close();
  assert.throws(()=>f.store());inspectOld(f,settings);
  const cleanup=new DatabaseSync(f.locations.settings);cleanup.exec('DROP TRIGGER fail_migration');cleanup.close();
@@ -79,7 +86,7 @@ test('late migration failure rolls back DDL, settings, credentials and schema ve
 });
 
 test('killing migration after real DDL recovers the original v1 database and permits a clean upgrade',{timeout:20000},async t=>{
- const f=await startupFixture(t),settings=await oldDatabase(f),source=new URL('../server/system-settings.ts',import.meta.url).href;
+ const f=await settingsFixture(t),settings=await oldDatabase(f),source=new URL('../server/system-settings.ts',import.meta.url).href;
  // Stall after actual v2 DDL but before COMMIT; no production failpoints or real application paths.
  const program=`import {DatabaseSync} from 'node:sqlite';const original=DatabaseSync.prototype.exec;DatabaseSync.prototype.exec=function(sql){const result=original.call(this,sql);if(sql.includes('ALTER TABLE desktop_settings ADD COLUMN revision')){process.stdout.write('MIGRATION_DDL_UNCOMMITTED\\n');Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0)}return result};const {SystemSettingsStore}=await import(${JSON.stringify(source)});new SystemSettingsStore(process.argv[1],process.argv[2]);`;
  const child=spawn(process.execPath,['--experimental-strip-types','--input-type=module','-e',program,f.locations.settings,f.locations.library],{env:f.env,cwd:f.root,stdio:['ignore','pipe','pipe']});

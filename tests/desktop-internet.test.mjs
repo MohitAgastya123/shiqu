@@ -1,4 +1,4 @@
-// Exercise public authentication and helper lifecycle with disposable libraries and no AI requests.
+// 在临时书库验证公网认证与辅助进程生命周期，不发起 AI 请求。
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,mkdir,cp,readFile,writeFile,rm,access,symlink} from 'node:fs/promises';
@@ -98,8 +98,14 @@ test('helper receives isolated config/environment, handles split output and stop
 test('helper missing, timeout and startup cancellation leave no process or config',nativeOnly,async t=>{
  await assert.rejects(startDesktopTunnel('http://127.0.0.1:12345','/missing/cloudflared'),/未找到 cloudflared/);
  const f=await fake(t,{ready:false});
+ // 辅助进程写出启动记录后再触发正式超时回调，保留清理路径而不空等五秒。
+ const schedule=globalThis.setTimeout;let expire;
+ const clock=t.mock.method(globalThis,'setTimeout',(callback,delay,...args)=>{
+  if(delay===5000){assert.equal(expire,undefined);expire=callback;}
+  return schedule(callback,delay,...args);
+ });
  const timedOut=assert.rejects(startDesktopTunnel('http://127.0.0.1:12345',f.binary,{timeoutMs:5000}),/未能连接/);
- let info=await f.info();await timedOut;assert.equal(alive(info.pid),false);await assert.rejects(access(info.args[info.args.indexOf('--config')+1]));
+ let info=await f.info();assert.equal(typeof expire,'function');expire();await timedOut;clock.mock.restore();assert.equal(alive(info.pid),false);await assert.rejects(access(info.args[info.args.indexOf('--config')+1]));
  const second=await fake(t,{ready:false}),abort=new AbortController();
  const starting=startDesktopTunnel('http://127.0.0.1:12345',second.binary,{signal:abort.signal});const rejected=assert.rejects(starting,/取消/);
  info=await second.info();abort.abort();await rejected;assert.equal(alive(info.pid),false);

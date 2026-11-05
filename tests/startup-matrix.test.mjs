@@ -1,4 +1,4 @@
-// Exercise configuration precedence through real isolated CLI processes and explicit provider/library tables.
+// 通过隔离的设置库和真实 CLI 进程验证配置优先级；纯设置矩阵无需服务器资源。
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdir,writeFile,readFile,access} from 'node:fs/promises';
@@ -6,12 +6,12 @@ import path from 'node:path';
 import {DatabaseSync} from 'node:sqlite';
 import {cliConfiguration} from '../server/cli-options.ts';
 import {cliProviderConfiguration} from '../server/cli-setup.ts';
-import {startupFixture,freeStartupPort,startFixtureCli,savedStartupState,fixtureBytes} from './fixtures/startup.mjs';
+import {settingsFixture,startupFixture,freeStartupPort,startFixtureCli,savedStartupState,fixtureBytes} from './fixtures/startup.mjs';
 
 const providers=process.platform==='win32'?['gemini','openai','readonly']:['gemini','openai','codex','readonly'];
 for(const saved of providers)for(const override of [undefined,...providers])for(const keySource of ['saved','explicit','empty','unrelated']){
  test(`provider matrix: saved=${saved}, override=${override||'none'}, key=${keySource}`,async t=>{
-  const f=await startupFixture(t),store=f.store();t.after(()=>store.close());
+  const f=await settingsFixture(t),store=f.store();t.after(()=>store.close());
   store.save({provider:'gemini',providerConfigured:true},{provider:'gemini',value:'test-only-saved-gemini'});
   store.save({provider:'openai'},{provider:'openai',value:'test-only-saved-openai'});store.save({provider:saved});
   const active=override||saved,isApi=['gemini','openai'].includes(active),keyName=active==='openai'?'OPENAI_API_KEY':'GEMINI_API_KEY';
@@ -73,7 +73,7 @@ for(const row of launches)test('CLI startup matrix: '+row.name,{timeout:30000},a
 });
 
 for(const source of ['saved','legacy','default','prompt','unconfirmed'])test('library discovery matrix: '+source,async t=>{
- const f=await startupFixture(t),legacy=path.join(f.root,'legacy shelf'),saved=path.join(f.root,'saved shelf');let questions=0;
+ const f=await settingsFixture(t),legacy=path.join(f.root,'legacy shelf'),saved=path.join(f.root,'saved shelf');let questions=0;
  if(source==='saved'||source==='unconfirmed'){const store=f.store();store.save({dataDirectory:saved,libraryConfigured:source==='saved'});store.close();}
  if(source==='saved'||source==='legacy'){await mkdir(path.dirname(f.locations.cliSelection),{recursive:true});await writeFile(f.locations.cliSelection,JSON.stringify({dataDirectory:legacy}));}
  if(source==='default'){await mkdir(f.locations.library,{recursive:true});const db=new DatabaseSync(path.join(f.locations.library,'shiqu.sqlite'));db.close();}
