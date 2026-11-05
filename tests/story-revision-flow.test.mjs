@@ -75,6 +75,16 @@ test('review edit targets survive initial loading, reopening and ending selectio
  assert.equal(h.requests.length,0);assert.equal(h.submitted.length,0);
 });
 
+test('style-only edits keep a rejected review blocked without restarting automatic repairs',async t=>{
+ const h=await harness(t,{blocked:true,initialTab:'style'}),before=await h.f.read(h.id),reviews=h.f.control.reviews.length,repairs=h.f.control.repairs.length;
+ h.render().setChanges({artStyle:'paper-cut'});await h.render().submit();
+ const child=h.submitted[0];await h.f.app.services.production.tick();await h.f.app.services.production.queue.settle();
+ const saved=await h.f.read(child.id);
+ assert.equal(saved.state,'failed');assert.equal(saved.generationProgress.reviewStatus,'blocked');
+ assert.equal(saved.generationProgress.reviewAudits,before.generationProgress.reviewAudits);
+ assert.equal(h.f.control.reviews.length,reviews);assert.equal(h.f.control.repairs.length,repairs);assert.equal(h.f.control.calls.length,0);
+});
+
 test('completed story count edits remain a draft until confirmation starts the new version',async t=>{
  const h=await harness(t);
  h.render().setChanges({length:5});

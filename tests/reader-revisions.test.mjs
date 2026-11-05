@@ -25,6 +25,10 @@ test('image dependencies exclude narration, include scene/anchor/global inputs, 
  const first=structuredClone(plan);first.pages[0].prompt+=' A changed anchor.';
  assert.deepEqual(reusableRevisionImages(base,selection,first),['','','','']);
  assert.equal(revisionImpact(base,{artStyle:'paper-cut'}).redraw,4);
+ assert.equal(revisionImpact(base,{artStyle:'paper-cut'}).review,false);
+ assert.equal(revisionImpact(base,{artStyle:'paper-cut',plan:structuredClone(plan),productionPrompt:selection.productionPrompt,length:4}).review,false);
+ for(const changes of [{plan:caption},{acceptancePrompt:'核对关键行动。'},{productionPrompt:'新的制作要求'},{length:3},{narrativeDetail:'brief'}])assert.equal(revisionImpact(base,{artStyle:'paper-cut',...changes}).review,true);
+ assert.equal(revisionImpact({...base,plan:null},{artStyle:'paper-cut'}).review,true,'An unfinished script still needs its first review');
  assert.equal(revisionImpact(base,{length:3}).reusePending,true);
  assert.equal(revisionImpact(base,{productionPrompt:'new',plan:caption}).conflict,true);
 });
@@ -104,12 +108,19 @@ for(const kind of ['missing','corrupt','transient'])test(`reusable ${kind} asset
  assert.equal((await f.read(id)).ready,8,'The original keeps what it has');
 });
 
-test('style changes preserve planning; requirements replan; count changes reuse exact scenes after planning',async t=>{
- const {f,id}=await completed(t);let before=f.control.calls.length,plans=f.control.plans.length;
+for(const provider of ['codex','gemini'])test(`${provider}: style changes preserve planning and review; requirements and counts re-audit`,async t=>{
+ const {f,id}=await completed(t,provider);let before=f.control.calls.length,plans=f.control.plans.length,reviews=f.control.reviews.length,frameReviews=f.control.frameReviews.length;
+ const readDoc=async storyId=>JSON.parse((await f.app.services.database.prepare('SELECT document FROM stories WHERE id=?').bind(storyId).first()).document);
+ const old=await readDoc(id);
  const style=await revise(f,id,{artStyle:'paper-cut'});await until(async()=>(await f.read(style.id)).state==='completed');assert.equal(f.control.plans.length,plans);assert.equal(f.control.calls.length-before,8);
+ assert.equal(f.control.reviews.length,reviews);assert.equal(f.control.frameReviews.length,frameReviews);
+ assert.deepEqual((await readDoc(style.id)).visualReview,old.visualReview);assert.deepEqual((await readDoc(style.id)).plan,old.plan);
+ assert.match(f.control.calls[before].prompt,/paper.cut|剪纸/i);
  before=f.control.calls.length;plans=f.control.plans.length;const count=await revise(f,style.id,{length:5});await until(async()=>(await f.read(count.id)).state==='completed');
- assert.equal((await f.read(count.id)).story.pages.length,5);assert.equal(f.control.plans.length,plans+1);assert.equal(f.control.calls.length,before);
+ assert.equal((await f.read(count.id)).story.pages.length,5);assert.equal(f.control.plans.length,plans+1);assert.equal(f.control.calls.length,before);assert.ok(f.control.reviews.length>reviews);
+ reviews=f.control.reviews.length;
  before=f.control.calls.length;plans=f.control.plans.length;f.control.autoLength=6;const requirements=await revise(f,count.id,{productionPrompt:'Keep actions clear and captions natural.'});await until(async()=>(await f.read(requirements.id)).state==='completed');assert.equal(f.control.plans.length,plans+1);assert.equal((await f.read(requirements.id)).selection.length,'auto');assert.equal((await f.read(requirements.id)).story.pages.length,6);assert.equal(f.control.calls.length-before,6);
+ assert.ok(f.control.reviews.length>reviews);
 });
 
 test('review repair invalidates newly changed staging but preserves caption-only repair images',async t=>{

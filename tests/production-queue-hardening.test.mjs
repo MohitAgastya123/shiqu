@@ -7,6 +7,7 @@ import {revisionSnapshot,forkRevision} from '../server/reader-revisions.ts';
 import {revisionImpact} from '../lib/reader-revision.ts';
 import {nextStep} from '../lib/reader-model.ts';
 import {shelfView} from '../lib/reader-api.ts';
+import {newReview} from '../lib/reader-review.ts';
 const original={title:'庄周梦蝶',text:'庄周梦为胡蝶。',url:'https://example.com',kind:'passage',provider:'fixture',retrievedAt:new Date().toISOString()};
 async function seeded(t,plan=makePlan(8)){
  const f=await productionFixture(t);f.app.stopGeneration();await f.app.services.production.close();
@@ -99,6 +100,15 @@ for(const paused of [true,false])test(`atomic fork publishes ${paused?'paused':'
  await repo.control(child,owner,paused?'resume':'pause');
  const replay=await forkRevision(repo,f.media,owner,id,child,base.token,changes,paused);
  assert.equal(replay.generation_control,paused?'active':'paused');
+});
+for(const status of ['pending','repair','passed','blocked',undefined])test(`style-only fork preserves ${status||'legacy'} review checkpoint`,async t=>{
+ const {f,repo,id,owner}=await seeded(t),review=status?{...newReview(),status,round:3,repairs:2,...(status==='passed'?{overridden:true}:{}),...(status==='blocked'?{stopReason:'unchanged'}:{}),reports:[{round:2,issues:[]}]}:undefined;
+ const candidates=['梦醒时，仍记得自在。','自在也许留在梦外。','蝴蝶飞过，梦仍在心中。'];
+ await repo.db.prepare('UPDATE stories SET document=json_patch(document,?) WHERE id=?').bind(JSON.stringify({visualReview:review??null,reflectionCandidates:candidates}),id).run();
+ const base=await revisionSnapshot(repo,id,owner),child=await forkRevision(repo,f.media,owner,id,crypto.randomUUID(),base.token,{artStyle:'paper-cut'}),doc=JSON.parse(child.document);
+ assert.equal(base.reviewStatus,status);assert.deepEqual(doc.visualReview,review);assert.deepEqual(doc.reflectionCandidates,candidates);
+ assert.equal(child.state,status==='blocked'?'failed':'idle');
+ assert.equal(nextStep(doc,JSON.parse(child.selection),0).kind,status==='repair'?'repair':status==='pending'||status==='blocked'?'review':'image');
 });
 test('seeded legacy paused handoff still resumes and clears its flag without touching parent',async t=>{
  const {f,repo,id,owner}=await seeded(t),base=await revisionSnapshot(repo,id,owner),child=crypto.randomUUID();

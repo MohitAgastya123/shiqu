@@ -1,9 +1,11 @@
 // Plan revisions from actual image inputs. Captions/reflection never invalidate artwork;
 // a changed anchor, cast, style or global image preference invalidates its dependants.
+// Style alone preserves the saved script's review; content and acceptance edits invalidate it.
 import {z} from 'zod';
 import {acceptancePromptSchema} from './reader-acceptance.ts';
 import {planSchema,ReaderError} from './reader-model.ts';
 import type {Document,Plan,Selection} from './reader-model.ts';
+import type {ReviewCheckpoint} from './reader-review.ts';
 import {artStyleIds} from './reader-styles.ts';
 import {readerMinFrames,readerMaxFrames} from './reader-limits.ts';
 import {narrativeDetailSchema} from './reader-frame-recommendation.ts';
@@ -17,7 +19,7 @@ export type RevisionChanges=z.infer<typeof revisionChangesSchema>;
 export type RevisionInfo={parentId:string;rootId:string;number:number};
 export type RevisionView=RevisionInfo&{redraw?:RevisionRedraw};
 export type RevisionRecord=RevisionInfo&{kind?:'selection';selectionRequest?:string;baseToken:string;requestHash:string;handoff?:boolean;base:RevisionBase;previewedRedraw?:number;actualRedraw?:number;lostPages?:number[]};
-export type RevisionSnapshot=RevisionBase&{token:string;epoch:number;revision?:RevisionInfo};
+export type RevisionSnapshot=RevisionBase&{token:string;epoch:number;reviewStatus?:ReviewCheckpoint['status'];revision?:RevisionInfo};
 export type RevisionImpact={changed:boolean;replan:boolean;preserveScript:boolean;review:boolean;reused:number;redraw:number;total:number;reusePending:boolean;conflict:boolean};
 export const revisionFrameCount=(base:RevisionBase)=>base.plan?.pages.length??(typeof base.selection.length==='number'?base.selection.length:base.frameRecommendation?.count??8);
 export const preserveRevisionScript=(base:RevisionBase,changes:RevisionChanges)=>!base.plan&&base.savedFrameCount===revisionFrameCount(base)&&(changes.productionPrompt??base.selection.productionPrompt)===base.selection.productionPrompt&&(changes.narrativeDetail??base.selection.narrativeDetail??'balanced')===(base.selection.narrativeDetail||'balanced')&&(changes.length===undefined||changes.length===base.selection.length||changes.length===revisionFrameCount(base));
@@ -32,7 +34,7 @@ export function revisionImpact(base:RevisionBase,changes:RevisionChanges):Revisi
  const changed=acceptance||requirements||detail||count||manual||selection.artStyle!==base.selection.artStyle;
  const total=typeof changes.length==='number'?changes.length:revisionFrameCount(base);
  const reusable=plan?reusableRevisionImages(base,selection,plan).filter(Boolean).length:0;
- return {changed,replan,preserveScript:preserveRevisionScript(base,changes),review:changed,reused:replan?0:reusable,redraw:replan?total:total-reusable,total,reusePending:!!base.plan&&replan&&!requirements&&selection.artStyle===base.selection.artStyle,conflict:replan&&manual};
+ return {changed,replan,preserveScript:preserveRevisionScript(base,changes),review:replan||acceptance||manual,reused:replan?0:reusable,redraw:replan?total:total-reusable,total,reusePending:!!base.plan&&replan&&!requirements&&selection.artStyle===base.selection.artStyle,conflict:replan&&manual};
 }
 export function checkedRevision(base:RevisionBase,changes:RevisionChanges){
  const parsed=revisionChangesSchema.safeParse(changes);

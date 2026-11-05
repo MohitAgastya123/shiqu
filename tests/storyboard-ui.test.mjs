@@ -6,6 +6,23 @@ import {build} from 'esbuild';
 import {createElement} from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {defaultProductionDirection} from '../lib/reader-prompts.ts';
+import {revisionImpact} from '../lib/reader-revision.ts';
+import {makePlan,selection} from './fixtures/production.mjs';
+
+test('style-only revision UI preserves review progress and offers drawing without a fresh audit',async()=>{
+ const bundle=await build({stdin:{contents:"export {StoryRevisionActions,revisionDraftSteps} from './client/ui/StoryRevisionEditor.tsx';",resolveDir:process.cwd(),loader:'tsx'},bundle:true,write:false,platform:'node',format:'cjs',packages:'external',loader:{'.css':'empty'}});
+ const compiled={exports:{}};new Function('require','module','exports',bundle.outputFiles[0].text)(createRequire(import.meta.url),compiled,compiled.exports);
+ const {StoryRevisionActions,revisionDraftSteps}=compiled.exports,base={selection,plan:makePlan(3),images:[],reviewStatus:'passed'},changes={artStyle:'paper-cut'};
+ const editor={base,changes,impact:revisionImpact(base,changes),busy:false,submit(){},discard(){}};
+ const html=renderToStaticMarkup(createElement(StoryRevisionActions,{editor,reviewOnSave:true}));
+ assert.match(html,/不重新审核/);assert.match(html,/审片已通过时直接重绘/);assert.match(html,/保存修改/);assert.doesNotMatch(html,/保存并重新审核|重新审片/);
+ const steps=revisionDraftSteps(base,changes);
+ assert.equal(steps.find(s=>s.id==='count').state,'done');assert.equal(steps.find(s=>s.id==='review').state,'done');assert.equal(steps.find(s=>s.id==='image').state,'current');
+ assert.match(steps.find(s=>s.id==='review').detail,/不重新审核/);
+ assert.notEqual(revisionDraftSteps({...base,reviewStatus:'blocked'},changes).find(s=>s.id==='image').state,'current');
+ const mixed={...changes,acceptancePrompt:'保留关键行动。'},mixedEditor={...editor,changes:mixed,impact:revisionImpact(base,mixed)};
+ assert.match(renderToStaticMarkup(createElement(StoryRevisionActions,{editor:mixedEditor,reviewOnSave:true})),/保存并重新审核/);
+});
 
 test('reader renders saved directory, batch range, honest progress and automatic frame controls',async()=>{
  const bundle=await build({stdin:{contents:"export {default as Status} from './client/ui/StoryGenerationStatus.tsx';export {default as Count} from './client/ui/StoryFrameCount.tsx';export {default as Retry} from './client/ui/StoryRetry.tsx';export {default as Review} from './client/ui/StoryReviewTools.tsx';export {default as Editor} from './client/ui/StoryRevisionEditor.tsx';",resolveDir:process.cwd(),loader:'tsx'},bundle:true,write:false,platform:'node',format:'cjs',packages:'external',loader:{'.css':'empty'}});
