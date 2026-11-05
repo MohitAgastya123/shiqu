@@ -128,7 +128,7 @@ pnpm test:full        # 上述完整层，再加浏览器与 CLI 用户流程
 
 分层由 `tests/fixtures/test-tier.mjs` 控制：新的制作流程矩阵用 `flowProviders([...])`，超长用例加 `heavy`，原著内容检查加 `books`；不要删除用例来提速。发布与 npm 门禁（`pnpm test:e2e --gate=…`）和 `pnpm test:pty` 按完整层运行。
 
-CI 对所有 PR 报告「Shared checks」（macOS：安装、类型检查、lint、快速层 `pnpm test`），只改文档（`*.md`、`.docs/**`、`LICENSE`、`NOTICE`）时跳过实际检查并按通过处理，可设为 `main` 的必需检查。Rust 格式、`desktop:test`（含 `cargo test`）以及 macOS/Windows 安装包构建与冒烟只在推送 `v*` 标签或手动运行时执行；发布标签的本地 pre-push 门禁仍检查 Rust 格式。
+合并到 `main` 后，CI 的「Pipeline flows」在 macOS 上运行 `pnpm test:flows`（不阻塞 PR，新的推送会取消旧的运行）。CI 对所有 PR 报告「Shared checks」（macOS：安装、类型检查、lint、快速层 `pnpm test`），只改文档（`*.md`、`.docs/**`、`LICENSE`、`NOTICE`）时跳过实际检查并按通过处理，可设为 `main` 的必需检查。Rust 格式、`desktop:test`（含 `cargo test`）以及 macOS/Windows 安装包构建与冒烟只在推送 `v*` 标签或手动运行时执行；发布标签的本地 pre-push 门禁仍检查 Rust 格式。
 
 `pre-push` 只对推送的 `refs/tags/v*` 执行发布检查：解析标签目标提交，在隔离 checkout 中验证 Node/pnpm 固定版本，安装锁定依赖，再运行 `pnpm release:check`。同一提交的多个发布标签只检查一次；普通分支、非 v 标签和删除标签不触发。可通过 `pnpm hooks:install` 为新 checkout 启用 hook。
 
