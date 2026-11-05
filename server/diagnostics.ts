@@ -3,9 +3,10 @@
 import {DatabaseSync} from 'node:sqlite';
 import {constants,existsSync,mkdirSync,lstatSync,openSync,writeSync,closeSync,renameSync,rmSync,readFileSync,chmodSync,fchmodSync} from 'node:fs';
 import path from 'node:path';
+import {geminiResponseDiagnostic} from '../lib/reader-gemini-diagnostics.ts';
 
 export const diagnosticLimit=128*1024;
-const names=new Set(['service_started','service_stopped','service_start_failed','service_uncaught','request_failed','codex_generation_error','reader_generation_error','gemini_request_rejected','production_job_unreadable','production_job_unsaved','production_story_unreadable','production_tick_failed','story_discovery_search']);
+const names=new Set(['service_started','service_stopped','service_start_failed','service_uncaught','request_failed','codex_generation_error','reader_generation_error','gemini_request_rejected','gemini_response','production_job_unreadable','production_job_unsaved','production_story_unreadable','production_tick_failed','story_discovery_search']);
 const geminiCodes=new Set(['INVALID_OUTPUT','PROVIDER_ERROR','UNSUPPORTED_REASONING_EFFORT','SOURCE_UNAVAILABLE','INVALID_SOURCE','CONTENT_BLOCKED','INVALID_MODEL','INCOMPLETE_RESPONSE','INVALID_TEXT','INVALID_JSON']);
 const providerStatuses=new Set(['INVALID_ARGUMENT','FAILED_PRECONDITION','OUT_OF_RANGE','UNAUTHENTICATED','PERMISSION_DENIED','NOT_FOUND','RESOURCE_EXHAUSTED','CANCELLED','INTERNAL','UNKNOWN','UNAVAILABLE','DEADLINE_EXCEEDED']);
 const rejectionReasons=new Set(['SCHEMA_TOO_COMPLEX','UNSUPPORTED_FIELD']);
@@ -14,6 +15,7 @@ type Event={time:string;event:string;code?:string;id?:string;[key:string]:string
 function project(event:string,value:unknown={},time=new Date().toISOString()):Event|undefined{
  if(!names.has(event)||!/^\d{4}-\d\d-\d\dT[\d:.]+Z$/.test(time))return;
  const raw=value&&typeof value==='object'?value as Record<string,unknown>:{code:value},out:Event={time,event};
+ if(event==='gemini_response')Object.assign(out,geminiResponseDiagnostic(raw));
  if(raw.code!==undefined)out.code=typeof raw.code==='string'&&(codes.has(raw.code)||event==='reader_generation_error'&&geminiCodes.has(raw.code))?raw.code:'UNKNOWN';
  if(event==='reader_generation_error'&&typeof raw.status==='number'&&Number.isInteger(raw.status)&&raw.status>=100&&raw.status<=599)out.status=raw.status;
  if(event==='gemini_request_rejected'){

@@ -9,7 +9,7 @@ import {createOpenAIProvider} from './openai-provider.ts';
 import {frameRecommendationOutputSchema,frameRecommendationOutputJson,frameRecommendationPrompt,frameRecommendationPayload} from '../lib/reader-frame-recommendation.ts';
 import {configuredModels,makeGenerator,suggestStories,safeGeminiError,recommendStoryArt,matchStoryThemes} from '../lib/reader-gemini.ts';
 import {storyDraftSchema,ReaderError} from '../lib/reader-model.ts';
-import {readerGenerationTimeoutMs,readerStoryboardTimeoutMs} from '../lib/reader-limits.ts';
+import {geminiGenerationTimeoutMs} from '../lib/reader-limits.ts';
 import {codexGenerationTimeoutMs} from '../lib/codex-settings.ts';
 import {choicesJson,storyDraftJson,suggestionSystemPrompt,draftInstructions,imagePrompt,nativeImageInstructions,imageTypes,mediaType,storySource} from '../lib/reader-generation-contract.ts';
 import {freshSuggestions,suggestionBatchSchema} from '../lib/reader-suggestions.ts';
@@ -51,7 +51,7 @@ export function createReaderProvider(variables:Record<string,string|undefined>,m
  const taskReasoningEfforts=configuredTaskReasoning(variables);
  if(name==='gemini'){
   const key=variables.GEMINI_API_KEY?.trim()||'',models=configuredModels(variables);
-  return {generationTimeoutMs:phase=>['plan','reflection','review','repair'].includes(phase)?readerStoryboardTimeoutMs:['recommend','image'].includes(phase)?readerGenerationTimeoutMs:null,async status(){return {configured:!!key,provider:'gemini',models,voiceEnabled:false,taskReasoningEfforts,themeMatching:{model:models.text,reasoningEffort:themeMatchEffort}};},suggestions:(selection,excluded,localBook,reading)=>suggestStories(key,selection,models,transport,excluded,localBook,taskReasoningEfforts,reading?.maxStories,reading),matchStories:(theme,stories,context)=>matchStoryThemes(key,theme,stories,models,transport,context),async recommendArt(selection,original){if(!original?.localSource)throw new ReaderError(400,'请先选择已核对出处的故事。');return recommendStoryArt(key,selection,original,models,transport,taskReasoningEfforts);},generator:()=>makeGenerator(key,media,models,transport,taskReasoningEfforts),safeError:safeGeminiError};
+  return {generationTimeoutMs:phase=>['recommend','plan','reflection','review','repair','image'].includes(phase)?geminiGenerationTimeoutMs:null,async status(){return {configured:!!key,provider:'gemini',models,voiceEnabled:false,taskReasoningEfforts,themeMatching:{model:models.text,reasoningEffort:themeMatchEffort}};},suggestions:(selection,excluded,localBook,reading)=>suggestStories(key,selection,models,transport,excluded,localBook,taskReasoningEfforts,reading?.maxStories,reading),matchStories:(theme,stories,context)=>matchStoryThemes(key,theme,stories,models,transport,context),async recommendArt(selection,original){if(!original?.localSource)throw new ReaderError(400,'请先选择已核对出处的故事。');return recommendStoryArt(key,selection,original,models,transport,taskReasoningEfforts);},generator:()=>makeGenerator(key,media,models,transport,taskReasoningEfforts),safeError:safeGeminiError};
  }
  const rawCodex=runner||createCodexRunner(variables),codex:CodexRunner={status:()=>rawCodex.status(),run:job=>rawCodex.run({...job,instructions:formatSystemPrompt(job.instructions)})},models={text:variables.CODEX_MODEL?.trim()||'codex-default',image:'codex-image-generation'};
  let cached:Promise<ProviderStatus>|undefined,expires=0;

@@ -6,7 +6,7 @@ import type {DiscoveryContext} from './reader-discovery-call.ts';
 import {normalizeProductionPrompt,storyEditorialContext} from './reader-prompts.ts';
 import {z} from 'zod';
 import {frameRecommendationOutputSchema,frameRecommendationOutputJson,frameRecommendationPrompt,frameRecommendationPayload} from './reader-frame-recommendation.ts';
-import {readerMaxFrames,readerGenerationTimeoutMs,readerStoryboardTimeoutMs} from './reader-limits.ts';
+import {readerMaxFrames,geminiGenerationTimeoutMs} from './reader-limits.ts';
 import {storyDraftSchema,readerBooks} from './reader-model.ts';
 import type {Plan,Selection} from './reader-model.ts';
 import type {StoryGenerator} from './reader-engine.ts';
@@ -27,9 +27,10 @@ import {readerImageAsset,referenceImageKey} from './reader-image-assets.ts';
 import {imageDimensions} from './reader-image-dimensions.ts';
 import {storyboardGenerator} from './reader-storyboard.ts';
 import {geminiReviewEvidence} from './reader-gemini-evidence.ts';
+import {geminiResponseDiagnostic} from './reader-gemini-diagnostics.ts';
 import {artRecommendationJson,artRecommendationSchema,selectedArtRecommendationPrompt,selectedArtRecommendationPayload} from './reader-art-recommendation.ts';
 import {taskReasoningDefaults,geminiThinkingLevel} from './reader-reasoning.ts';
-import type {TaskReasoningEfforts,ReasoningEffort} from './reader-reasoning.ts';
+import type {TaskReasoningEfforts,ReasoningEffort,ReasoningTask} from './reader-reasoning.ts';
 
 export const defaultModels={text:'gemini-3.8-flash',image:'gemini-nano-banana-2.1'};
 type Models=typeof defaultModels;
@@ -87,11 +88,12 @@ export function safeGeminiError(error:unknown){
  return '这一步暂时没能生成，已保留前面的内容。可手动重试。';
 }
 function client(key:string,transport:typeof fetch){
- return async(model:string,input:Record<string,unknown>,timeout=readerGenerationTimeoutMs)=>{
+ return async(model:string,input:Record<string,unknown>,task?:ReasoningTask)=>{
+  const started=Date.now();
   if(!/^[a-zA-Z0-9._-]+$/.test(model))throw new GeminiError('INVALID_MODEL',400);
   const response=await transport(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,{
    method:'POST',headers:{'x-goog-api-key':key,'Content-Type':'application/json'},
-   body:JSON.stringify({...input,store:false}),signal:AbortSignal.timeout(timeout),
+   body:JSON.stringify({...input,store:false}),signal:AbortSignal.timeout(geminiGenerationTimeoutMs),
   });
   // Never propagate a provider's response body; it may echo private prompts or credentials.
   if(!response.ok){
@@ -104,6 +106,8 @@ function client(key:string,transport:typeof fetch){
   let result:Result;try{result=await response.json() as Result;}catch{throw new GeminiError('PROVIDER_ERROR',502);}
   if(!result||typeof result!=='object')throw new GeminiError('PROVIDER_ERROR',502);
   const candidate=result.candidates?.[0];
+  const config=input.generationConfig as {maxOutputTokens?:number;thinkingConfig?:{thinkingLevel?:string}}|undefined;
+  console.info('gemini_response',JSON.stringify(geminiResponseDiagnostic({...result.usageMetadata as object,finishReason:candidate?candidate.finishReason||'FINISH_REASON_UNSPECIFIED':'NO_CANDIDATE',task,maxOutputTokens:config?.maxOutputTokens,thinkingLevel:config?.thinkingConfig?.thinkingLevel,elapsedMs:Date.now()-started})));
   const fail=(code:string)=>Object.assign(new GeminiError(code),{usage:result.usageMetadata,model:result.modelVersion||model});
   if(result.promptFeedback?.blockReason||candidate?.finishReason&&['SAFETY','IMAGE_SAFETY','PROHIBITED_CONTENT','BLOCKLIST','RECITATION'].includes(candidate.finishReason))throw fail('CONTENT_BLOCKED');
   if(!candidate||candidate.finishReason&&candidate.finishReason!=='STOP')throw fail('INCOMPLETE_RESPONSE');
@@ -149,7 +153,7 @@ export async function suggestStories(key:string,selection:Selection,config:Parti
  const run=async(report:(meta:{model?:string;usage?:unknown;acceptedCount?:number})=>void)=>{
   const {candidate,metadata}=await client(key,transport)(models.text,textRequest(
    localBook?localReadingPrompt(localBook):suggestionSystemPrompt,
-   localSuggestionPayload(book,selection.theme,excludeTitles,localBook,maxStories),discoveryOutputSchema(localBook?.purpose==='catalog'?localCatalogOutputJson(localBook):scanning?localScanJson:localBook?localChoicesJson:choicesJson),url,localBook?.purpose==='catalog'?localCatalogOutputTokens(localBook.scan?.maxStories||1):scanning?10000:localBook?5000:2500,reasoning.suggest),localBook?120000:60000);report(metadata);
+   localSuggestionPayload(book,selection.theme,excludeTitles,localBook,maxStories),discoveryOutputSchema(localBook?.purpose==='catalog'?localCatalogOutputJson(localBook):scanning?localScanJson:localBook?localChoicesJson:choicesJson),url,localBook?.purpose==='catalog'?localCatalogOutputTokens(localBook.scan?.maxStories||1):scanning?10000:localBook?5000:2500,reasoning.suggest),'suggest');report(metadata);
   if(url&&!wasRead(candidate,url))return {stories:[],note:'暂时无法读取这个链接，请提供可公开访问的原文页面，或直接输入书名。'};
   const batch=localBook?localChoices(parseText(candidate),localBook):choicesSchema.parse(parseText(candidate));
   const fresh=scanning?batch:freshSuggestions(batch,excludeTitles);report({acceptedCount:fresh.stories.length});
@@ -160,7 +164,7 @@ export async function suggestStories(key:string,selection:Selection,config:Parti
 export async function matchStoryThemes(key:string,theme:string,stories:ThemeStory[],config:Partial<Models>={},transport:typeof fetch=fetch,context?:DiscoveryContext){
  const models={...defaultModels,...config};
  return discoveryCall({stage:'matching',provider:'gemini',model:models.text,effort:themeMatchEffort,requestedCount:stories.length},context,async report=>{
-  const {candidate,metadata}=await client(key,transport)(models.text,textRequest(themeMatchPrompt,themeMatchPayload(theme,stories),themeMatchJson,'',themeMatchOutputTokens(stories.length),themeMatchEffort),120000);report(metadata);
+  const {candidate,metadata}=await client(key,transport)(models.text,textRequest(themeMatchPrompt,themeMatchPayload(theme,stories),themeMatchJson,'',themeMatchOutputTokens(stories.length),themeMatchEffort));report(metadata);
   const parsed=parseThemeMatches(parseText(candidate),stories);report({acceptedCount:parsed.matches.length});return parsed;
  });
 }
@@ -176,7 +180,7 @@ export function makeGenerator(key:string,assets:Assets,config:Partial<Models>={}
    const evidence=geminiReviewEvidence(payload,schema);
    if(evidence.direction){instructions+='\n\n'+evidence.direction;payload=evidence.payload;schema=evidence.schema;}
    const book=(payload as {book:string}).book,url=!original&&/^https?:/i.test(book)?book:'',outputSchema=storyboardOutputSchema(schema);
-   const {candidate,metadata}=await generate(models.text,textRequest(instructions,payload,outputSchema,url,maxOutputTokens,reasoning[task]),readerStoryboardTimeoutMs);
+   const {candidate,metadata}=await generate(models.text,textRequest(instructions,payload,outputSchema,url,maxOutputTokens,reasoning[task]),task);
    if(url&&!wasRead(candidate,url))throw new GeminiError('SOURCE_UNAVAILABLE');
    return {value:evidence.resolve(parseText(candidate)),...metadata,reasoningEffort:reasoning[task],promptRecord:promptRecord(instructions,payload,outputSchema)};
   }),
@@ -190,7 +194,7 @@ export function makeGenerator(key:string,assets:Assets,config:Partial<Models>={}
    assertStoryBriefReady(original);
    const {book,url}=source(selection);
    const instructions=draftInstructions(!!original?.localSource),payload={book,chosenStory:selection.storyTitle,...(selection.storyTitle?{}:{theme:selection.theme}),editorialContext:storyEditorialContext(selection.theme),exactPageCount:selection.length,narrativeDetail:selection.narrativeDetail,productionPrompt:normalizeProductionPrompt(selection.productionPrompt||'',selection.theme),artDirection:getArtStyle(selection.artStyle).prompt,variationSeed:id,...(original?{verifiedOriginal:verifiedOriginalPayload(original)}:{})},schema=storyDraftJson(selection.length);
-   const {candidate,metadata}=await generate(models.text,textRequest(instructions,payload,schema,original?'':url,Math.max(8192,(selection.length==='auto'?readerMaxFrames:selection.length)*800),reasoning.plan),readerStoryboardTimeoutMs);
+   const {candidate,metadata}=await generate(models.text,textRequest(instructions,payload,schema,original?'':url,Math.max(8192,(selection.length==='auto'?readerMaxFrames:selection.length)*800),reasoning.plan),'plan');
    if(url&&!original&&!wasRead(candidate,url))throw new GeminiError('SOURCE_UNAVAILABLE');
    const value=storyDraftSchema.parse(parseText(candidate));
    if(selection.length!=='auto'&&value.pages.length!==selection.length)throw new GeminiError('INVALID_PLAN');

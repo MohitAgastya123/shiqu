@@ -207,13 +207,13 @@ test('a URL without a verifiable original cannot start summary or directory infe
  g.original=async()=>{lookups++;return {source:null,message:'未找到可核对的原文',searchUrl:''};};await repo.create(id,'alice',chosen);
  assert.equal((await advanceStory(repo,g,'alice',id,0)).state,'failed');assert.equal(lookups,1);assert.equal(paid,0);assert.equal(JSON.parse((await repo.get(id,'alice')).document).storyboard,undefined);
 });
-test('Gemini allows five-minute storyboards without extending image deadlines',async()=>{
+test('Gemini allows fifteen minutes for both storyboard and image generation',async()=>{
  const timeouts=[],originalTimeout=AbortSignal.timeout;
  AbortSignal.timeout=function(ms){timeouts.push(ms);return originalTimeout.call(this,ms);};
  try{
   const g=makeGenerator('unit-test-only',memoryAssets(),{},async(url)=>url.includes('nano-banana')?geminiResponse([{inlineData:{mimeType:'image/png',data:b64(png)}}]):geminiResponse([{text:JSON.stringify(plan)}]));
   await g.plan(selection,'timeout-fixture');await g.image(plan,0,'timeout-fixture','');
-  assert.deepEqual(timeouts,[300000,120000]);
+  assert.deepEqual(timeouts,[900000,900000]);
  }finally{AbortSignal.timeout=originalTimeout;}
 });
 test('Gemini plans structured scenes and Nano Banana carries the first picture into subsequent scenes',async()=>{
