@@ -118,7 +118,7 @@ pnpm typecheck
 pnpm lint
 ```
 
-`pnpm test`（以及 PR 的 CI「Shared checks」）是快速层：制作流程类测试只用受控 Codex 适配器跑一次，跳过超长用例（多处 80 幅流程、完整幅数矩阵、真实 PTY 与无服务 CLI 子命令全流程）。提供方适配器契约测试（`prompt-contracts`、`story-brief`、`task-reasoning`、各提供方 schema/错误测试等）始终覆盖全部提供方。随应用附带的 24 部原著只在手动增补或替换时变化，逐字、版本与章节完整性检查不在 CI 中运行；原文加载、校验与失败即停的逻辑测试仍在快速层。
+`pnpm test`（以及 PR 的 CI「Shared checks」）是单元层：不运行受控模拟大模型的制作流程测试（调用 `productionFixture()` 的文件），这些流程测试用 `pnpm test:flows` 运行，`pnpm test:providers` 与 `pnpm test:full` 也包含它们。快速层其余规则：制作流程类测试只用受控 Codex 适配器跑一次，跳过超长用例（多处 80 幅流程、完整幅数矩阵、真实 PTY 与无服务 CLI 子命令全流程）。提供方适配器契约测试（`prompt-contracts`、`story-brief`、`task-reasoning`、各提供方 schema/错误测试等）始终覆盖全部提供方。随应用附带的 24 部原著只在手动增补或替换时变化，逐字、版本与章节完整性检查不在 CI 中运行；原文加载、校验与失败即停的逻辑测试仍在快速层。
 
 ```bash
 pnpm test:books       # 增补或替换原著后：全部原著内容检查（含 24 部目录、世说全书扫描）
