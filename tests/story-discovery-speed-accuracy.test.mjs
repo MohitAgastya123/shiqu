@@ -69,13 +69,14 @@ import {memory} from './fixtures/story-library.mjs';
 import {previousReadingPlanKey,previousDiscoveryNamespace} from '../server/story-discovery-legacy.ts';
 import {legacyThemeDecisionKey,legacyThemeStoryId} from '../server/story-theme-matching.ts';
 import baseline from './fixtures/story-discovery-v1.json' with {type:'json'};
+import {books} from './fixtures/test-tier.mjs';
 test('fixed books retain exhaustive bounded blocks and meet provider-neutral size targets',async()=>{
  const books=new LocalBooks(process.cwd());
  for(const row of baseline.probe.books){const book=await books.book({bookId:row.id}),next=buildReadingPlan(book,'codex'),gemini=buildReadingPlan(book,'gemini'),blocks=hydrateReadingPlan(book,next);assert.deepEqual(blocks.flatMap(b=>[...b.visible]),book.sections.flatMap(s=>s.units.map(u=>u.id)));assert.ok(next.blocks.every(b=>b.tokens<=12000));
   if(row.id==='战国策'){assert.ok(next.blocks.length<=60);const sizes=next.blocks.map(b=>b.tokens).sort((a,b)=>a-b);assert.ok(sizes[Math.floor(sizes.length/2)]>=2000);}else if(row.id==='三国演义'){assert.ok(Math.abs(next.blocks.length-row.old)/row.old<=.05);assert.ok(gemini.blocks.length<=next.blocks.length*1.5);}else assert.ok(next.blocks.length<=row.old);
  }
 });
-test('all 1129 Shishuo units are covered in at most 60 calls; 1072 eligible stories saved once and 57 rejects accounted',async()=>{
+test('all 1129 Shishuo units are covered in at most 60 calls; 1072 eligible stories saved once and 57 rejects accounted',books,async()=>{
  const books=new LocalBooks(process.cwd()),book=await books.book({bookId:'shishuo'}),store=memory(),cache=new StoryDiscoveryCache(store),eligible=[],rejected=[];let calls=0;
  for(const s of book.sections)for(const u of s.units){const story={title:'事件'+u.id,description:'原典中的完整独立事件。',source:{edition:book.edition,sectionId:s.id,firstUnit:u.id,lastUnit:u.id}};try{books.resolve(book,story.source);eligible.push(story);}catch{rejected.push({id:u.id,reason:u.text.length<20?'short':'source-anomaly'});}}
  const provider={status:async()=>({provider:'codex',models:{text:'mock',image:'none'},taskReasoningEfforts:{suggest:'medium'},themeMatching:{model:'match',reasoningEffort:'low'}}),suggestions:async(_s,_excluded,input)=>{calls++;const known=new Set(input.scan.excludedSources.map(localSourceKey)),available=eligible.filter(story=>input.text.includes('['+story.source.firstUnit+']')&&!known.has(localSourceKey(story.source)));return {stories:available.slice(0,input.scan.maxStories),note:'',scan:{blockComplete:available.length<input.scan.maxStories,pendingEvents:[],resolvedEventIds:[]}};},matchStories:async(_theme,entries)=>({matches:entries.map(s=>({id:s.id,verdict:'no',reason:'固定主题无符合项。'}))})};

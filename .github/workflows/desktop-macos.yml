@@ -1,20 +1,53 @@
-# Release tags use the local pre-push checks; CI verifies each native installer before publishing.
+# Pull requests run shared checks; pushes to main run the pipeline flows. Release tags use the local pre-push
+# checks; CI builds and verifies each native installer before publishing.
 name: Desktop
 
 on:
   push:
+    # main: simulated-LLM pipeline tests after merge; v* tags: native builds and release.
+    branches: [main]
     tags: ['v*']
   workflow_dispatch:
+  # Every pull request reports "Shared checks" so it can be a required status check; docs-only changes skip the work.
   pull_request:
-    paths: ['client/**', 'public/**', 'desktop/**', 'src-tauri/**', 'server/**', 'lib/**', 'components/**', 'db/**', 'drizzle/**', 'data/library/**', 'docker/seed.sql', 'scripts/**', 'tests/**', '*.config.*', 'tsconfig.json', '.nvmrc', 'rust-toolchain.toml', 'package.json', 'pnpm-lock.yaml', '.github/workflows/desktop-macos.yml']
 
 permissions:
   contents: read
 
 jobs:
+  scope:
+    name: Change scope
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.changes.outputs.code }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - id: changes
+        name: Detect code changes
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          changed=$(git diff --name-only "$BASE...$HEAD")
+          printf '%s\n' "$changed"
+          # Docs-only means every changed file is documentation; anything else runs the checks.
+          if [ -n "$changed" ] && ! printf '%s\n' "$changed" | grep -Evq '\.md$|^\.docs/|^LICENSE$|^NOTICE$'; then
+            echo code=false >> "$GITHUB_OUTPUT"
+          else
+            echo code=true >> "$GITHUB_OUTPUT"
+          fi
+
   checks:
     name: Shared checks
-    if: github.event_name != 'push'
+    needs: scope
+    # A job skipped by this condition reports success, so docs-only pull requests satisfy a required check.
+    # Only a successful scope result of docs-only skips it; a failed scope job still runs the checks.
+    if: ${{ !cancelled() && github.event_name != 'push' && (github.event_name != 'pull_request' || needs.scope.outputs.code != 'false') }}
+    # macOS is the shipped Unix platform for the CLI/server and desktop runtime JavaScript (tag builds run only
+    # cargo test); Rust tests, formatting and native packaging are checked by the tag build jobs below.
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v6
@@ -24,21 +57,37 @@ jobs:
           package-manager-cache: false
       - name: Enable pinned pnpm
         run: corepack enable pnpm
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: 1.93.0
-          components: rustfmt
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm lint
-      # Unix CLI fixtures need macOS; this full suite also covers desktop/runtime JavaScript tests.
+      # Fast tier; provider matrix, heavy cases and shipped-book checks run via pnpm test:providers / test:books.
       - run: pnpm test
-      - run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
+
+  flows:
+    name: Pipeline flows
+    # PR checks skip the controlled production-pipeline tests; run them after each merge to main without
+    # blocking pull requests. A newer push to main cancels an older run.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    concurrency:
+      group: pipeline-flows-main
+      cancel-in-progress: true
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - name: Enable pinned pnpm
+        run: corepack enable pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:flows
 
   build:
     name: Desktop / ${{ matrix.platform }} ${{ matrix.arch }}
     needs: checks
-    if: ${{ !cancelled() && (needs.checks.result == 'success' || (github.event_name == 'push' && needs.checks.result == 'skipped')) }}
+    # Installers are built for release tags and manual runs only, never for pull requests or main pushes.
+    if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' && needs.checks.result == 'success' || github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && needs.checks.result == 'skipped') }}
     strategy:
       fail-fast: false
       matrix:
@@ -82,6 +131,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.93.0
+          components: rustfmt
+      - run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
       - run: pnpm install --frozen-lockfile
       - name: Build shared reader, desktop UI, and runtime resources
         run: |

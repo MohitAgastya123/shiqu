@@ -8,10 +8,11 @@ import {createHash} from 'node:crypto';
 import {LocalBooks} from '../server/local-books.ts';
 import {readWikiBody} from '../server/local-book-html.ts';
 import {bookInputs} from '../server/local-book-inputs.ts';
+import {books} from './fixtures/test-tier.mjs';
 const selection={bookId:'二刻拍案惊奇',theme:'聪明与糊涂',length:8},library=new LocalBooks(process.cwd()),catalog=JSON.parse(await readFile('data/library/catalog.json','utf8')),entry=catalog.books.find(b=>b.id===selection.bookId),directory=path.join('data/library',entry.originalFile);
 const reference=(book,section,first,last=first)=>({edition:book.edition,sectionId:section.id,firstUnit:section.units[first].id,lastUnit:section.units[last].id});
 
-test('forty Wiki volumes retain every parsed body glyph and the complete nine-act finale',async()=>{
+test('forty Wiki volumes retain every parsed body glyph and the complete nine-act finale',books,async()=>{
  const book=await library.book(selection),parts=bookInputs(book),seen=new Set(parts.flatMap(part=>[...part.visible]));assert.equal(book.sections.length,40);assert.equal(entry.originalFiles.length,41);assert.deepEqual(entry.supplements,[]);
  const bodies=[];
  for(const [index,item] of entry.originalFiles.slice(0,40).entries()){

@@ -18,6 +18,7 @@ import {assertStoryWebp} from '../lib/story-webp-metadata.ts';
 import {zipMetadataStory} from '../lib/reader-zip-content.ts';
 import {DatabaseSync} from 'node:sqlite';
 import {createApplication} from '../server/app.ts';
+import {heavy} from './fixtures/test-tier.mjs';
 
 async function fixture(t){
  const f=await productionFixture(t);await f.stop();
@@ -278,7 +279,7 @@ test('same native/browser export core produces credited public ZIP, PDF, PNG and
  await call(['stories','rename',id,'--title','<script>alert(1)</script>']);const preview=path.join(f.root,'preview.html');await call(['preview',id,'--output',preview]);const html=await readFile(preview,'utf8');assert.ok(html.includes('&lt;script&gt;'));assert.ok(!html.includes('<script>'));assert.ok(html.includes('data:image/png;base64,'));
  await assert.rejects(call(['export',id,'--output',zipFile]),/EEXIST/);
 });
-test('real CLI subcommands initialize/inspect/export diagnostics with one JSON stdout and no network listener', {timeout:30000},async t=>{
+test('real CLI subcommands initialize/inspect/export diagnostics with one JSON stdout and no network listener', {...heavy,timeout:30000},async t=>{
  const f=await startupFixture(t),source=new URL('../server/cli.ts',import.meta.url).href,directory=path.join(f.root,'headless-library');
  async function cli(args){
   const code=`import net from 'node:net';net.Server.prototype.listen=()=>{throw Error('LISTEN_FORBIDDEN')};globalThis.fetch=async()=>{throw Error('NETWORK_FORBIDDEN')};const {runCli}=await import(${JSON.stringify(source)});await runCli(process.argv[1],process.argv.slice(2));`;

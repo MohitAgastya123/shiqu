@@ -5,6 +5,7 @@ import {productionFixture,until,selection} from './fixtures/production.mjs';
 import {saveStoryOriginal} from '../lib/reader-source-storage.ts';
 import {observeStoryGeneration} from '../lib/reader-production-client.ts';
 import {shelfGenerationStatus} from '../lib/shelf-generation.ts';
+import {heavy} from './fixtures/test-tier.mjs';
 const batch={stories:[{title:'庄周梦蝶',description:'梦醒后的庄周思考自己的经历。',artRecommendation:{artStyle:'paper-cut',reason:'层次适合梦境。'}},{title:'大葫芦',description:'惠子与庄子谈论大葫芦的用处。'}],note:''};
 async function fixture(t){const f=await productionFixture(t);f.control.hold=false;f.discoveries=[];f.generation.suggestions=async(s,excluded,_local,reading)=>{f.discoveries.push({s,excluded});reading?.onProgress({completed:1,total:1,completedChars:100,totalChars:100,stage:'selecting'});return structuredClone(batch);};return f;}
 async function create(f,requestId=crypto.randomUUID(),overrides={}) {const s=await f.json('sessions','POST',{requestId,intake:true,selection:{...selection,storyTitle:undefined,length:'auto',narrativeDetail:'balanced',...overrides}});if(s.intake.search.state==='idle'&&!s.intake.batches.length)await f.startDiscovery(s.id);await f.demand(s.id);return s.id;}
@@ -131,7 +132,7 @@ test('finding another batch leaves the prepared story in place and observes unti
  assert.equal(polls,2);assert.deepEqual(observed,['searching','idle']);assert.equal(shelfGenerationStatus(await f.read(id)).group,'待制作确认');assert.equal(f.control.recommendations.length,1);assert.equal(f.control.plans.length,0);assert.equal(f.control.calls.length,0);
 });
 
-test('confirmed intake draws eighty frames once across four storyboard batches',async t=>{
+test('confirmed intake draws eighty frames once across four storyboard batches',heavy,async t=>{
  const f=await fixture(t),id=await create(f);await until(async()=>(await f.read(id)).intake.phase==='choosing');
  await setup(f,id,{action:'choose',batch:0,index:0});await until(async()=>(await f.read(id)).intake.phase==='confirming');
  await setup(f,id,{action:'confirm',settings:{artStyle:'paper-cut',productionPrompt:'Complete causality without repeated scenes.',narrativeDetail:'detailed',length:80}});
