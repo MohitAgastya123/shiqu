@@ -14,10 +14,10 @@ Setup must stop creating an obsolete provider `.env` for a normal development in
 
 - [x] First SS feasibility probe: pinned Node 24.22.1/pnpm 11.25.0; isolated saved Google fixture resolved matching credential/models/reasoning through the shared resolver without inference.
 - [x] Added `server/development.ts` and wired the dev launcher to it, removing both implicit Node `.env` loads while preserving watch/port/library handling. Standalone entry unchanged.
-- [x] Added isolated shared resolver/setup tests and real dev process scenarios for saved Google settings, shell overrides, unchanged saved state, `.env` exclusion, shared/local libraries, private-file protection, and shutdown. Execution evidence pending TT/ET.
+- [x] Added isolated shared resolver/setup tests and real dev process scenarios for saved Google settings, shell overrides, unchanged saved state, `.env` exclusion, shared/local libraries, private-file protection, and shutdown. TT/ET execution passed as recorded below.
 - [x] Updated setup, `.env.example`, development/desktop/skill user guidance; shared configuration needs no new skill runtime path or independent secret storage.
 - [x] Compared private `.env` Gemini credential/models, Codex model, and library against saved settings read-only before removing duplicates and stale provider selector. Retained `SHIQU_PORT`; ignored `.env` is not staged.
-- [ ] Run applicable Node unit/integration suites, typecheck, lint, and the matching development startup E2E specification. Reuse existing CLI/settings tests as production parity evidence; do not build/package Docker or desktop.
+- [x] Ran 11 applicable Node unit/integration suites (162 tests), typecheck, lint, and the matching real development startup E2E specification (3 tests). No inference, Docker or desktop packaging.
 
 ## Verification and risks
 
@@ -30,5 +30,11 @@ Runtime cleanup must terminate spawned frontend/backend children and free both p
 
 - REQ: recorded before implementation.
 - AR passed: no blocking architecture flaws. AR risk: non-low — development reads saved provider credentials; startup precedence and isolation require verification. AR review round: 1; reviewer: new (`settings_review`).
-- SS milestone: source/docs/test implementation complete; pinned-Node resolver/development unit checks (11 tests total) and typecheck/lint passed. Actual process E2E and broader regression checks pending.
-- CR / TT / ET / VR / DD / GC: pending.
+- SS milestone: `843069a` (`fix: share saved provider settings with development`). Source/docs/test implementation complete; pinned-Node resolver/development unit checks (11 tests total) and typecheck/lint passed before the milestone commit.
+- CR passed: no major findings. CR risk: non-low — development loads saved provider credentials/defaults. CR review round: 1; reviewer: reused (`settings_review`). Full base-to-milestone diff reviewed; no source changes followed.
+- TT passed: 162/162 tests across `system-settings`, `settings-faults`, `startup-matrix`, `startup-pty`, `cli-library`, `npm-cli`, `headless-cli`, `cli-skill`, `development-local`, `development-access`, and `development-cache`. Executed with Node 24.22.1, `--experimental-strip-types --test --test-concurrency=2`; log `/tmp/shiqu-shared-settings-tt.log`. Initial sandbox attempt could not open listeners/PTYs; the permitted rerun passed outside the sandbox using isolated fixtures.
+- `pnpm typecheck` and `pnpm lint`: passed under Node 24.22.1/pnpm 11.25.0.
+- ET passed: 3/3 tests in `tests/development-local.e2e.mjs` via the matching specification; saved Google with poisoned `.env`, shell readonly override, and local-library/private-file/shutdown checks. Actual `pnpm dev` processes used disposable homes/checkouts/ports, fake keys and no inference. Log `/tmp/shiqu-shared-settings-et.log`.
+- VR passed: all acceptance criteria complete. VR risk: non-low — development loads saved provider credentials. VR review round: 1; reviewer: reused (`settings_review`). Full criterion-by-criterion verdict preserved in DD.
+- DD: `.docs/done/2026/11/05/shared-development-settings.md` records behavior, validation, and the full final VR result. Stale AP pending-evidence phrase corrected.
+- GC: implementation milestone `843069a`; final evidence/acceptance documentation committed separately. No push; no user service restart.

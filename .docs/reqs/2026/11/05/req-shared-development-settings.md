@@ -4,12 +4,12 @@
 
 ## Acceptance criteria
 
-- [ ] Ordinary `pnpm dev` and `pnpm dev local` use the shared saved provider, matching provider credential, models, and per-task reasoning defaults.
-- [ ] Explicit shell variables override saved values for this invocation only. Switching provider uses only that provider's credential; empty/invalid overrides retain existing shared resolver semantics.
-- [ ] Project `.env` cannot silently select a different development provider, key, models, or library. Standalone server/Docker env behavior remains unchanged.
-- [ ] Ordinary dev keeps the shared library selection; `local` still forces the checkout-owned shelf. Tests use disposable settings, homes, libraries, and ports without inference or access to the user's library.
-- [ ] Desktop, CLI, and skill documentation explain the common configuration and restart behavior; skills keep calling the production CLI and carry no independent credentials or provider configuration.
-- [ ] Redundant local `.env` settings are removed only after checking their saved replacements without exposing credentials; unrelated Docker settings are retained.
+- [x] Ordinary `pnpm dev` and `pnpm dev local` use the shared saved provider, matching provider credential, models, and per-task reasoning defaults.
+- [x] Explicit shell variables override saved values for this invocation only. Switching provider uses only that provider's credential; empty/invalid overrides retain existing shared resolver semantics.
+- [x] Project `.env` cannot silently select a different development provider, key, models, or library. Standalone server/Docker env behavior remains unchanged.
+- [x] Ordinary dev keeps the shared library selection; `local` still forces the checkout-owned shelf. Tests use disposable settings, homes, libraries, and ports without inference or access to the user's library.
+- [x] Desktop, CLI, and skill documentation explain the common configuration and restart behavior; skills keep calling the production CLI and carry no independent credentials or provider configuration.
+- [x] Redundant local `.env` settings are removed only after checking their saved replacements without exposing credentials; unrelated Docker settings are retained.
 
 ## Constraints and non-goals
 
