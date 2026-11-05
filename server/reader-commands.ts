@@ -69,7 +69,12 @@ export async function authorizeOverride(db:Database,ownerId:string,sessionId:str
  await db.prepare(`INSERT INTO reader_commands(request_id,owner_id,session_id,action,fingerprint,payload,fault_id,created_at,updated_at)
   SELECT ?,?,?,'override',?,'{}',?,?,? FROM stories s JOIN reader_faults f ON f.session_id=s.id AND f.owner_id=s.user_id
   WHERE s.id=? AND s.user_id=? AND f.id=? AND f.state='pending' AND s.state!='running'
-   AND json_extract(s.document,'$.visualReview.status')='blocked' AND NOT ${supersededSql('s')}
+   AND (json_extract(s.document,'$.visualReview.status')='blocked' OR (
+    s.generation_control='paused' AND json_extract(s.document,'$.visualReview.status') IN ('pending','repair')
+    AND json_type(s.document,'$.plan')='object' AND json_type(s.document,'$.original')='object'
+    AND f.kind IN ('job','interrupted') AND EXISTS(SELECT 1 FROM production_jobs j
+     WHERE j.id=f.job_id AND j.session_id=s.id AND j.owner_id=s.user_id AND j.kind='script' AND j.pool='text' AND j.state='failed')
+   )) AND NOT ${supersededSql('s')}
    AND NOT EXISTS(SELECT 1 FROM library_deletions d WHERE d.story_id=s.id AND d.user_id=s.user_id)
   ON CONFLICT(owner_id,request_id) DO NOTHING`)
   .bind(command.requestId,ownerId,sessionId,fingerprint,command.faultId,now,now,sessionId,ownerId,command.faultId).run();

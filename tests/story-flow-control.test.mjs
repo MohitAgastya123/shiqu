@@ -68,6 +68,27 @@ test('a blocked story shows every issue, can be edited, and draws on the reader\
  f.control.beforeText=null;const healthy=await f.create(1);await until(async()=>(await f.read(healthy)).state==='completed');assert.equal((await f.request(`sessions/${healthy}/review-override`,'POST',{})).status,409);
 });
 
+test('a paused failed review can be explicitly accepted without rerunning or changing the script',async t=>{
+ const f=await productionFixture(t);f.control.hold=false;
+ f.control.beforeText=async kind=>{if(kind==='review')throw Error('controlled review interruption');};
+ const id=await f.create(3);await until(async()=>(await f.read(id)).state==='failed');
+ const failed=await f.read(id),before=await stored(f,id),reviews=f.control.reviews.length;
+ assert.equal(failed.generationProgress.reviewStatus,'pending');
+ const fault=failed.faults.find(fault=>fault.state==='pending');assert.ok(fault);
+ const command={requestId:crypto.randomUUID(),faultId:fault.id};
+ assert.equal((await f.request(`sessions/${id}/review-override`,'POST',command)).status,409,'An unfinished review must first be paused');
+ await f.json(`sessions/${id}/production-control`,'POST',{action:'pause'});
+ const accepted=await f.json(`sessions/${id}/review-override`,'POST',command);
+ assert.equal(accepted.generationControl,'paused');assert.equal(accepted.state,'idle');assert.equal(accepted.error,null);
+ assert.equal(accepted.generationProgress.reviewStatus,'passed');assert.equal(accepted.generationProgress.reviewOverridden,true);
+ assert.equal((accepted.faults||[]).length,0);
+ await f.app.services.production.tick();await f.app.services.production.queue.settle();await f.app.services.production.tick();
+ assert.equal(f.control.calls.length,0);assert.equal(f.control.reviews.length,reviews);
+ const after=await stored(f,id);assert.deepEqual(after.plan,before.plan);assert.deepEqual(after.original,before.original);
+ assert.equal((await f.request(`sessions/${id}/review-override`,'POST',command)).status,200,'The same acknowledgement is idempotent');
+ assert.equal((await f.request(`sessions/${id}/review-override`,'POST',{requestId:crypto.randomUUID(),faultId:fault.id})).status,409,'A resolved fault cannot authorize another acknowledgement');
+});
+
 test('a blocked revision that reused its first image can still be drawn past',async t=>{
  const f=await productionFixture(t);f.control.hold=false;const id=await f.create(4);await until(async()=>(await f.read(id)).state==='completed');
  const base=await f.json(`sessions/${id}/revisions`),plan=structuredClone(base.plan);plan.pages[1].caption='庄周醒来，看着窗外，仍记得梦中自在飞翔的感觉。';
