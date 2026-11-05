@@ -43,6 +43,8 @@ npx @apprun/shiqu
 npx @apprun/shiqu skill install --scope global
 ```
 
+安装后，Codex 通过 `npx --yes @apprun/shiqu@<技能版本>` 调用配套 CLI，无需另装 pnpm。技能安装只复制指引和版本记录，不会全局安装 `shiqu` 命令；源码开发仍使用 `pnpm cli`。
+
 然后在 Codex 中说：
 
 ```text

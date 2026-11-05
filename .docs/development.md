@@ -25,7 +25,7 @@ pnpm dev
 
 ## 服务与数据目录
 
-发布的 CLI 使用 `pnpm dlx @apprun/shiqu`，入口 `server/cli.ts → server/start.ts`，不导入或启动 `server/desktop.ts` / Tauri。CLI 与桌面共用系统配置数据库 `desktop.sqlite`（协议版本 2），包含独立非密钥设置 JSON、revision 和按提供方分开的凭据；故事数据库不保存全局密钥。CLI 目录选择与服务首次问答、`--configure`、`--reset-providers` 见[使用指南](user-guide.md#cli-启动)。环境/显式配置文件仅覆盖本次调用，不自动持久化。原 CLI 的目录 JSON 只作迁移输入，之后两端使用同一个已确认书库。
+发布的 CLI 默认使用 `npx @apprun/shiqu`，无需 pnpm；源码入口使用 `pnpm cli`，用户已选择 pnpm 时也可用 `pnpm dlx @apprun/shiqu`。发布包安装的技能默认用 `npx --yes @apprun/shiqu@<技能版本>` 调用配套 CLI。入口 `server/cli.ts → server/start.ts` 不导入或启动 `server/desktop.ts` / Tauri。CLI 与桌面共用系统配置数据库 `desktop.sqlite`（协议版本 2），包含独立非密钥设置 JSON、revision 和按提供方分开的凭据；故事数据库不保存全局密钥。CLI 目录选择与服务首次问答、`--configure`、`--reset-providers` 见[使用指南](user-guide.md#cli-启动)。环境/显式配置文件仅覆盖本次调用，不自动持久化。原 CLI 的目录 JSON 只作迁移输入，之后两端使用同一个已确认书库。
 
 打开终端打印的本机访问地址；手机使用同一终端中的局域网二维码。默认前端端口为 `3000`，API 为 `3002`。与桌面版同时运行时可用：
 

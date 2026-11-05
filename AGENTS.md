@@ -2,11 +2,11 @@
 
 ## Package Manager
 
-- Use pnpm for dependency management, scripts, and documentation examples.
+- 源码项目的依赖管理、开发脚本及相关文档示例使用 pnpm。面向发布包和已安装技能的使用说明默认采用 npx，不要求用户安装 pnpm；用户明确指定启动器时沿用其选择。
 - Follow the pnpm version pinned in `package.json` (`packageManager`) and the Node version in `.nvmrc`.
 - Use `pnpm install --frozen-lockfile` for reproducible installs, and `pnpm add` / `pnpm remove` to change dependencies.
 - Run scripts with `pnpm run <script>` (for example, `pnpm run codex:login`) or shorthand such as `pnpm dev` and `pnpm test`.
-- Use `pnpm exec` for installed command-line tools instead of `npx`.
+- 源码开发中已安装的命令行工具使用 `pnpm exec`；发布包和已安装技能的调用遵循上述 npx 默认入口。
 - Keep `pnpm-lock.yaml` in sync with dependency changes. Do not introduce npm or Yarn lockfiles.
 
 ## CLI 与技能同步
