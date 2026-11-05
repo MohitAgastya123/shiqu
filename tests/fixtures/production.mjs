@@ -6,6 +6,7 @@ import path from 'node:path';
 import {createApplication} from '../../server/app.ts';
 import {createReaderProvider} from '../../server/generation.ts';
 import {FileMedia} from '../../server/media.ts';
+import {geminiEvidenceAnswer} from './gemini-evidence.mjs';
 
 import {encoded} from './images.mjs';
 export {encoded};
@@ -48,7 +49,8 @@ export async function productionFixture(t,provider='codex',variables={},storage=
  const transport=async(url,options)=>{
   assert.match(String(url),/^https:\/\/generativelanguage.googleapis.com\//,'No external source/inference request');
   const body=JSON.parse(options.body),parts=body.contents[0].parts;
-  const output=body.generationConfig.responseModalities?{inlineData:{mimeType:'image/png',data:await image(parts.find(p=>p.text).text,parts.find(p=>p.inlineData)?.inlineData.data)}}:{text:JSON.stringify(await planned(parts[0].text,body.generationConfig.responseFormat.text.schema))};
+  const schema=body.generationConfig.responseFormat?.text.schema;
+  const output=body.generationConfig.responseModalities?{inlineData:{mimeType:'image/png',data:await image(parts.find(p=>p.text).text,parts.find(p=>p.inlineData)?.inlineData.data)}}:{text:JSON.stringify(geminiEvidenceAnswer(await planned(parts[0].text,schema),JSON.parse(parts[0].text),schema))};
   return Response.json({candidates:[{finishReason:'STOP',content:{parts:[output]}}],responseId:'controlled',usageMetadata:{calls:1}});
  };
  const runner={async status(){return {configured:true};},async run(job){return {text:job.generateImage?'':JSON.stringify(await planned(job.prompt,job.schema)),image:job.generateImage?await image(job.prompt,job.image&&Buffer.from(job.image.bytes).toString('base64')):null,model:'controlled',requestId:'controlled',usage:{calls:1}};}};

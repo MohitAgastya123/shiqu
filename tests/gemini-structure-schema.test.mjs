@@ -22,7 +22,7 @@ test('Gemini removes only the inner counted-array bound and preserves the shared
  const result=await repair(generator(answer,schema=>{
   sent=schema;assert.equal(schema.properties.edits.maxItems,readerStoryboardBatchSize);
   const pages=schema.properties.edits.items.properties.pages;
-  assert.equal(pages.maxItems,undefined);assert.match(pages.description,/20.*all edits combined/);
+  assert.equal(pages.maxItems,undefined);assert.match(pages.description,/At most 20 items/);
   assert.deepEqual(pages.items,structuralEditsJson(12).properties.edits.items.properties.pages.items);
  }));
  assert.equal(applyStructuralEdits(plan,result.value).plan.pages.length,13);

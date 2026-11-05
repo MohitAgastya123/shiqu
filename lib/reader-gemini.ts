@@ -26,6 +26,7 @@ import type {OriginalSource} from './reader-source-types.ts';
 import {readerImageAsset,referenceImageKey} from './reader-image-assets.ts';
 import {imageDimensions} from './reader-image-dimensions.ts';
 import {storyboardGenerator} from './reader-storyboard.ts';
+import {geminiReviewEvidence} from './reader-gemini-evidence.ts';
 import {artRecommendationJson,artRecommendationSchema,selectedArtRecommendationPrompt,selectedArtRecommendationPayload} from './reader-art-recommendation.ts';
 import {taskReasoningDefaults,geminiThinkingLevel} from './reader-reasoning.ts';
 import type {TaskReasoningEfforts,ReasoningEffort} from './reader-reasoning.ts';
@@ -133,15 +134,14 @@ function discoveryOutputSchema(value:unknown):unknown{
   return [name,discoveryOutputSchema(rule)];
  }));
 }
-function storyboardOutputSchema(schema:unknown):unknown{
- // Gemini rejects the nested 20-edits × 20-pages grammar. Keep the outer bound and
- // express the inner limit as guidance; structuralEditsSchema and applyStructuralEdits enforce it.
- const value=schema as {properties?:{edits?:{items:{properties:{pages:{maxItems?:number;description?:string}}}}}};
- const pages=value.properties?.edits?.items.properties.pages;
- if(typeof pages?.maxItems!=='number')return schema;
- const output=structuredClone(value),rule=output.properties!.edits!.items.properties.pages;
- rule.description=`At most ${rule.maxItems} replacement frames; the same limit applies across all edits combined.`;
- delete rule.maxItems;
+function storyboardOutputSchema(value:unknown,boundedArray=false):unknown{
+ // Gemini rejects multiplied counted-array grammars in repairs and review evidence.
+ // Nested maxima and wide review evidence lists remain guidance; local validators enforce them.
+ if(Array.isArray(value))return value.map(rule=>storyboardOutputSchema(rule,boundedArray));
+ if(!value||typeof value!=='object')return value;
+ const rule=value as Record<string,unknown>,counted=rule.type==='array'&&typeof rule.maxItems==='number';
+ const output=Object.fromEntries(Object.entries(rule).filter(([name])=>!(boundedArray&&counted&&name==='maxItems')).map(([name,child])=>[name,storyboardOutputSchema(child,boundedArray||counted||name==='coverage'||name==='acceptanceResults')]));
+ if(boundedArray&&counted)output.description=[rule.description,`At most ${rule.maxItems} items.`].filter(Boolean).join(' ');
  return output;
 }
 export async function suggestStories(key:string,selection:Selection,config:Partial<Models>={},transport:typeof fetch=fetch,excludeTitles:string[]=[],localBook?:WholeBookInput,reasoning:TaskReasoningEfforts=taskReasoningDefaults,maxStories?:1,context?:DiscoveryContext){
@@ -173,10 +173,12 @@ export function makeGenerator(key:string,assets:Assets,config:Partial<Models>={}
  const models={...defaultModels,...config},generate=client(key,transport);
  return {
   ...storyboardGenerator(selection=>source(selection).book,async(task,instructions,payload,schema,maxOutputTokens,original)=>{
+   const evidence=geminiReviewEvidence(payload,schema);
+   if(evidence.direction){instructions+='\n\n'+evidence.direction;payload=evidence.payload;schema=evidence.schema;}
    const book=(payload as {book:string}).book,url=!original&&/^https?:/i.test(book)?book:'',outputSchema=storyboardOutputSchema(schema);
    const {candidate,metadata}=await generate(models.text,textRequest(instructions,payload,outputSchema,url,maxOutputTokens,reasoning[task]),readerStoryboardTimeoutMs);
    if(url&&!wasRead(candidate,url))throw new GeminiError('SOURCE_UNAVAILABLE');
-   return {value:parseText(candidate),...metadata,reasoningEffort:reasoning[task],promptRecord:promptRecord(instructions,payload,outputSchema)};
+   return {value:evidence.resolve(parseText(candidate)),...metadata,reasoningEffort:reasoning[task],promptRecord:promptRecord(instructions,payload,outputSchema)};
   }),
   original:(selection,plan,id)=>saveStoryOriginal(assets,selection,plan,id,transport),
   async recommend(selection,id,original,prepareRequirements=false){

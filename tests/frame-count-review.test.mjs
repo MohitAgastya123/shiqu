@@ -5,6 +5,7 @@ import {frameCountReviewSchema,frameRequirementSchema,reviewReportSchema,parseFr
 import {validateEditorialCoverage} from '../lib/reader-editorial.ts';
 import {createReaderProvider} from '../server/generation.ts';
 import {makePlan,selection as legacy} from './fixtures/production.mjs';
+import {geminiEvidenceAnswer} from './fixtures/gemini-evidence.mjs';
 import {storyScopeDirection} from '../lib/reader-prompts.ts';
 import {withLocalBooks} from '../server/local-generation.ts';
 const issue={page:2,category:'progression',problem:'先后回应被挤在同幅。',instruction:'给听者的回应独立画幅。',requiresReplan:true};
@@ -39,7 +40,7 @@ for(const provider of ['codex','gemini','openai'])test(`${provider}: automatic a
  const selection={...legacy,length:'auto',narrativeDetail:'balanced'},plan=makePlan(3),original={title:'原文',text:'甲赠物，乙未接，稍后转身离去。',url:'https://example.org',kind:'passage',provider:'fixture',retrievedAt:'2026-11-01'};
  let captured;const answer=(schema,payload,effort,budget)=>{captured={schema,payload,effort,budget};return {requirements:[requirement],frameCountReview:{decision:'expand',proposedCount:4,reason:'补回未接受的回应。'}};};
  const runner={status:async()=>({configured:true}),run:async job=>({text:JSON.stringify(answer(job.schema,JSON.parse(job.prompt),job.reasoningEffort)),model:'controlled',requestId:'fixture',usage:null,image:null})};
- const transport=async(_url,options)=>{const b=JSON.parse(options.body);const value=provider==='openai'?answer(b.text.format.schema,JSON.parse(b.input[0].content),b.reasoning.effort,b.max_output_tokens):answer(b.generationConfig.responseFormat.text.schema,JSON.parse(b.contents[0].parts[0].text),b.generationConfig.thinkingConfig.thinkingLevel,b.generationConfig.maxOutputTokens);return Response.json(provider==='openai'?{status:'completed',id:'fixture',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify(value)}]}]}:{candidates:[{content:{parts:[{text:JSON.stringify(value)}]}}]});};
+ const transport=async(_url,options)=>{const b=JSON.parse(options.body);const value=provider==='openai'?answer(b.text.format.schema,JSON.parse(b.input[0].content),b.reasoning.effort,b.max_output_tokens):answer(b.generationConfig.responseFormat.text.schema,JSON.parse(b.contents[0].parts[0].text),b.generationConfig.thinkingConfig.thinkingLevel,b.generationConfig.maxOutputTokens);return Response.json(provider==='openai'?{status:'completed',id:'fixture',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify(value)}]}]}:{candidates:[{content:{parts:[{text:JSON.stringify(geminiEvidenceAnswer(value,captured.payload,captured.schema))}]}}]});};
  const gen=createReaderProvider({SHIQU_AI_PROVIDER:provider,GEMINI_API_KEY:'controlled',OPENAI_API_KEY:'controlled'}, {},transport,runner).generator();
  assert.equal((await gen.reviewFrameCount(selection,plan,original)).value.frameCountReview.proposedCount,4);assert.ok(captured.schema.required.includes('frameCountReview'));assert.equal(captured.payload.countPolicy,'adaptive');
  assert.ok(['high','HIGH'].includes(captured.effort));if(provider!=='codex')assert.equal(captured.budget,24000);

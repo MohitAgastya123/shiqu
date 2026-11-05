@@ -8,6 +8,7 @@ import {reusableRevisionImages} from '../lib/reader-revision-images.ts';
 import {checkedRevision} from '../lib/reader-revision.ts';
 import {createReaderProvider} from '../server/generation.ts';
 import {makePlan,selection as legacy} from './fixtures/production.mjs';
+import {geminiEvidenceAnswer} from './fixtures/gemini-evidence.mjs';
 
 const selection={...legacy,length:'auto',narrativeDetail:'detailed'};
 const original={title:'测试原文',text:'甲贈物，乙沉默未接，然後轉身告辭。',url:'https://example.org/source',kind:'passage',provider:'fixture',retrievedAt:'2026-11-01'};
@@ -58,7 +59,7 @@ for(const provider of ['codex','gemini','openai'])test(`${provider} editorial/st
  const seen=[],plan=makePlan(3),media={get(){throw Error('No media');},put(){throw Error('No media');}};
  const answer=(schema,payload,budget)=>{seen.push({schema,payload,budget});return schema.properties.edits?{edits:[{from:2,to:1,pages:[added]}]}:{titleReview:{title:plan.title,reason:'原文支持'},issues:[],coverage:[coverage]};};
  const runner={status:async()=>({configured:true}),run:async job=>({text:JSON.stringify(answer(job.schema,JSON.parse(job.prompt))),model:'controlled',requestId:'fixture',usage:{calls:1},image:null})};
- const transport=async(_url,options)=>{const body=JSON.parse(options.body);if(provider==='openai'){const value=answer(body.text.format.schema,JSON.parse(body.input[0].content),body.max_output_tokens);return Response.json({status:'completed',id:'fixture',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify(value)}]}]});}const value=answer(body.generationConfig.responseFormat.text.schema,JSON.parse(body.contents[0].parts[0].text),body.generationConfig.maxOutputTokens);return Response.json({candidates:[{content:{parts:[{text:JSON.stringify(value)}]}}]});};
+ const transport=async(_url,options)=>{const body=JSON.parse(options.body);if(provider==='openai'){const value=answer(body.text.format.schema,JSON.parse(body.input[0].content),body.max_output_tokens);return Response.json({status:'completed',id:'fixture',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify(value)}]}]});}const schema=body.generationConfig.responseFormat.text.schema,payload=JSON.parse(body.contents[0].parts[0].text),value=geminiEvidenceAnswer(answer(schema,payload,body.generationConfig.maxOutputTokens),payload,schema);return Response.json({candidates:[{content:{parts:[{text:JSON.stringify(value)}]}}]});};
  const gen=createReaderProvider({SHIQU_AI_PROVIDER:provider,GEMINI_API_KEY:'test-only',OPENAI_API_KEY:'test-only'},media,transport,runner).generator();
  assert.equal((await gen.review(selection,plan,original)).value.coverage.length,1);
  assert.equal((await gen.restructure(selection,plan,original,[issue])).value.edits.length,1);
