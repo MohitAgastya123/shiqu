@@ -291,6 +291,10 @@ selection.json 例如 `{"bookId":"zhuangzi","theme":"善意与误解","artStyle"
 
 子命令 stdout 为单个 `{schemaVersion,ok,data|error}` JSON，日志在 stderr；失败退出非零。skill show 默认输出 Markdown，增加 `--json` 才返回 JSON 信封。`--input file.json` 或 `--input -` 接受JSON。保存可固定 `--request-id UUID` 供重放。search/choose/confirm/setup 必须带 JSON generation 或 `--generation N`（由 stories get 返回的 intake.generation 取得）；同一请求重放沿用原代数。retry/override 必须带当前 faultId，不自动挑选。编辑先用 `stories revisions ID` 读取 token，再提交 `{"token":"...","changes":{"acceptancePrompt":"保留关键人物反应"}}`；返回的新 id 是后续制作对象。旧版本拒绝制作/完整导出，过期 token 或 faultId 返回冲突。config 复用桌面/CLI设置，密钥只通过输入文件/stdin传递，不放进命令参数。init/读取/导出不检查云端，run 未配置时明确报错。
 
+`stories copy STORY_ID --from-data-dir /private/source-library --data-dir /private/target-library` 可跨书库复制已通过审核的故事，默认只保存文本与审核记录。CLI 子命令始终无交互；拾趣 Skill 在对话中报告文本复制完成，再询问是否复制已有图片。用户同意后，Skill 使用 `stories copy-images TARGET_ID --from-data-dir /private/source-library --data-dir /private/target-library --input source.json`，其中 `source.json` 为 `{"sourceId":"来源故事id"}`，向已有的目标副本补图，不再创建故事。用户已明确要求连图片一起复制时，`copy` 也可通过 `--copy-images` 或 JSON 的 `copyImages:true` 一次完成；`--no-copy-images` 或 `copyImages:false` 明确仅复制文本。
+
+图片保持原始字节，在目标书库独立保存；缺失或损坏会报错并保留文本，可重试原命令和输入。更改 `artStyle` 时不能同时复制旧画风图片。新故事初始暂停，后续使用返回的新 id；复制文本和图片均不调用模型、不重新审核。Skill 负责选题、方案检查、文本审核及生图前的阶段控制，按用户授权调用 CLI 推进。
+
 JSON/Markdown 可导出中间稿；ZIP/PDF/PNG要求当前版本全部图片完成。未署名需明确 `--allow-unsigned`；公开 ZIP 默认不含提示词，内部记录须加 `--include-prompts`。输出必须是新路径，导出不自动提交或发布。备份要求已有数据库；帮助、静态书籍/主题/画风列表、技能安装和诊断导出不会自动建立书库，恢复仍要求不存在的新目录。
 
 ## 桌面版入门

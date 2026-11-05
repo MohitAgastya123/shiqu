@@ -35,7 +35,7 @@ function stepParts(step:string){
 
 export function storyReviewHistory(row:SessionRow):StoryReviewHistory{
  const doc=JSON.parse(row.document) as Document,selection=object(JSON.parse(row.selection))!,review=doc.visualReview;
- const calls=(doc.usage||[]).flatMap((call,position)=>!call.originId||call.originId===row.id?[{...call,position,input:input(call.promptRecord?.input),parts:stepParts(call.step)}]:[]);
+ const calls=(doc.usage||[]).flatMap((call,position)=>!call.originId||call.originId===row.id||call.originId===doc.copiedFrom?.storyId?[{...call,position,input:input(call.promptRecord?.input),parts:stepParts(call.step)}]:[]);
  type Call=typeof calls[number];
  function locate(meta:ReviewRecordMeta,predicate:(call:Call)=>boolean){
   const matches=calls.filter(call=>(!meta.step||call.step===meta.step)&&predicate(call));return matches.length===1?matches[0]:null;

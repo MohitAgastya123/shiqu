@@ -15,6 +15,7 @@ description: 根据拾趣的数据契约与业务规则，自主编写任务程�
 - 所有书库操作使用同一绝对路径：显式 `--data-dir` 优先，其次 `SHIQU_DATA_DIR`、已保存位置和默认书库。首次访问自动建库并迁移，无需先 init；不因此更改默认位置或模型配置。书库被其他服务占用时报告占用，不绕过锁。
 - 自主程序使用进程 API 的可执行文件与参数数组，JSON 经 `--input -` 的 stdin 或私有文件传入；不要把标题、路径、原文、提示词拼接成 shell 命令。沿用入口及其工作目录，处理 stdout 与 stderr，设置有限超时。同一书库的 CLI 调用串行执行，避免独占开库冲突。
 - 子命令 stdout 为一个 JSON 信封：成功 `{schemaVersion:1,ok:true,data:...}`，失败 `{schemaVersion:1,ok:false,error:{code,message,details?}}`；日志在 stderr。检查退出码、信封及业务结果。`skill show` 默认是 Markdown，带 `--json` 才是信封。不要把非零退出的 JSON 丢弃，也不要把退出码 0 或 `ok:true` 当作故事完成。
+- CLI 子命令无交互，所有询问、检查点和阶段选择由本技能在对话中处理；不要向 CLI 发送终端按键或等待它提问。
 - 继续使用已保存的提供方与模型；缺配置时查当前 `config` 帮助。密钥仅经已有环境、私有 JSON 文件或 stdin 传入，不进入 argv、对话、报告或日志；不自行切换提供方或计费方式。
 
 ## 数据契约
@@ -52,8 +53,18 @@ description: 根据拾趣的数据契约与业务规则，自主编写任务程�
 | 执行生产 | `run <id> --until candidates\|prepared\|reviewed\|completed`。candidates 后按用户目标选择或等待；prepared 后检查原文、摘要和方案并确认；reviewed 在审核通过且生图前停止；默认 completed。每次检查返回 reason 和 session，不假定达到了请求边界。 |
 | 解释停止原因 | `choice` 需选题；`frame_count_required` 是旧故事等待幅数确认，按 help 的 frameCount 输入处理；`already_prepared/already_selected` 表示已越过该边界，改用下一步；`paused` 保持暂停，`blocked` 检查故障，`superseded` 查当前版本。不能在同一停止边界空转。 |
 | 修改与控制 | `stories edit` 使用 token/changes 创建新版；rename 仅改显示名。pause/resume/stop 控制制作；retry/override 针对当前故障。reselect/replace/cancel-reselection 按现有草稿协议处理。 |
+| 跨库复制 | `stories copy <来源故事id> --from-data-dir <来源书库> --data-dir <目标书库>` 默认仅复制已通过审核的文本与审核记录，新故事初始暂停。`stories copy-images <目标故事id>` 用同一对书库及输入 `{sourceId:"来源故事id"}` 给已有文本副本补充图片，不创建另一个故事。`copy` 也支持显式 `--copy-images` / `--no-copy-images` 或输入 `copyImages`；仅在用户已决定时使用。换画风时不能复制旧图片。 |
 | 预览与交付 | preview 输出独立离线 HTML；export 支持 zip/pdf/png/json/md，使用共享序列化、图片编码、水印和元数据规则。自主程序可组织导出清单，不能自己重建作品包。 |
 | 维护 | backup 创建完整私有快照，verify-backup 验证；restore 仅恢复到新的 data-dir，不覆盖原库或自动切换默认位置。diagnostics 输出脱敏诊断；它与私有完整备份用途不同。 |
+
+## 制片流程控制
+
+本技能负责决定下一阶段，CLI 负责执行明确动作。根据用户目标和已保存状态推进；用户指定的选题、原文、方案、文本或生图前检查点，必须先报告结果并取得所需选择，再运行后续命令。文本与图片是分别可交付的结果，文本完成不代表已获准处理图片。
+
+- 制作时按需要使用 `run --until candidates|prepared|reviewed|completed`，核对实际返回的 `reason/session` 后再选下一步。审核通过、生图尚未开始时可预览文本并处理反馈；不要为检查文本而直接运行到 `completed`。用户已经明确授权的阶段可以继续，不重复询问；未授权的生图、恢复或越过审核不自动执行。
+- 复制故事时，先调用不含图片的 `stories copy`，记录来源书库、来源 id、目标书库、返回的目标 id，以及原创建 requestId 和输入。核对目标文本与审核记录后，先向用户说明“文本已复制”，再在对话中询问是否复制来源已有图片；展示已有图片数/总幅数，不能用图片生成代替图片复制。
+- 用户同意复制图片后，调用 `stories copy-images <目标id> --from-data-dir <来源书库> --data-dir <目标书库>`，输入 `{sourceId:"来源id"}`。这是给同一文本副本补图的独立动作，不修改原创建请求、不重新复制文本。用户拒绝或尚未回答时，保留文本并等待；用户此前已明确要求连图片一起复制时，沿用该授权，无需再问。
+- 更换画风或来源没有图片时，说明不能沿用旧图或没有可复制图片。若用户想制作新图，先确认画风和制作范围，再通过目标故事的恢复与 `run` 生产流程执行。复制文本和图片均不重新审核、不调用模型；图片复制失败保留文本，沿用相同目标 id 与来源输入重试，遇到输入冲突时停止并重新核对。
 
 ## 验收与交付
 
