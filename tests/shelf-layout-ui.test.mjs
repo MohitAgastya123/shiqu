@@ -54,9 +54,14 @@ test('readable cards are the same size in single-story groups and show finished 
  const html=render({stories,progress,grouping:'book',bookName:s=>s.id==='done'?'红楼梦':'石头记'});
  assert.doesNotMatch(html,/yu-shelf-grid-single|yu-shelf-row-compact/);
  assert.equal((html.match(/class="yu-shelf-row yu-shelf-row-readable"/g)||[]).length,2);
- assert.match(html,/aria-label="继续阅读《葬花》"><span class="yu-shelf-progress" aria-hidden="true"><i style="width:100%"><\/i><\/span><span class="yu-shelf-reading-meta"><span>已读完 · 4 幅<\/span><span class="yu-shelf-continue">重读/);
+ assert.match(html,/aria-label="重读《葬花》"><span class="yu-shelf-progress" aria-hidden="true"><i style="width:100%"><\/i><\/span><span class="yu-shelf-reading-meta"><span>已读完 · 4 幅<\/span><span class="yu-shelf-continue">重读/);
  assert.match(html,/<span>第 2 \/ 4 幅<\/span><span class="yu-shelf-continue">接着看/);
  assert.doesNotMatch(html,/yu-shelf-region-title/,'No region heading without productions');
+ // 已读完从第一幅重读；未读完沿用原有的继续阅读调用。
+ const opened=[],tree=Shelf({stories,pending:[],sessions:[],progress,loading:false,refreshing:false,error:'',tab:'recent',query:'',grouping:'none',bookName:()=> '红楼梦',controlBusy:'',favoriteBusy:'',onOpen:(...args)=>opened.push(args)});
+ const button=(node,label)=>{if(!node||typeof node!=='object')return;if(node.type==='button'&&node.props['aria-label']===label)return node;for(const child of [node.props?.children].flat(Infinity)){const found=button(child,label);if(found)return found;}};
+ button(tree,'重读《葬花》').props.onClick();button(tree,'继续阅读《初进贾府》').props.onClick();
+ assert.deepEqual(opened,[[stories[0],true],[stories[1]]]);
 });
 
 test('filters apply to both regions; production-only shelves explain where stories will appear',()=>{

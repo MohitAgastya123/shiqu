@@ -238,3 +238,6 @@ button.yu-swipe-surface{padding:0;border:0;background:transparent;cursor:default
 .yu-settings-flow{margin:12px 0;padding-top:8px;border-top:1px solid #dce3cf}
 .yu-story-name+.yu-settings-flow,.yu-pdf-setting+.yu-settings-flow{margin-top:0}
 
+
+/* “我的”统计加载占位：书库首次加载完成前不显示 0。 */
+.yu-profile-stats .yu-profile-stat-loading{color:#c3c9b6}

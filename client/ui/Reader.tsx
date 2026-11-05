@@ -5,6 +5,7 @@
 // Swipe offsets live in a drag store and frames render through a memoized filmstrip, so pointer moves
 // do not re-render Reader. Identical poll snapshots keep their previous story and progress references.
 // 书架未保存分组偏好时默认不分组；已保存的偏好照常沿用。
+// “我的”统计在书库首次加载完成前显示占位，避免先显示 0。
 
 import {pruneReadingCaches,type LibraryInventory} from '../reading-cache.ts';
 import StoryExportControl from './StoryExportControl';
@@ -15,7 +16,7 @@ import ProviderSettings,{ProviderRuntimeSummary} from './ProviderSettings';
 import type {ProviderSettingsView} from '@/lib/provider-settings';
 import {useBookReference} from '../useBookReference';
 import {useCallback, useEffect, useRef, useState} from 'react';
-import {ArrowLeft, ArrowRight, Bookmark, BookOpen, Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Compass, Feather, Leaf, List, Moon, Play, RotateCcw, ImageDown, Settings2, Sparkles, UserRound, X, Loader2, FileDown, FileArchive, RefreshCw, Trash2} from 'lucide-react';
+import {ArrowLeft, ArrowRight, Bookmark, BookOpen, Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Compass, Feather, Leaf, List, Moon, Play, RotateCcw, ImageDown, BookOpenText, Settings2, Sparkles, UserRound, X, Loader2, FileDown, FileArchive, RefreshCw, Trash2} from 'lucide-react';
 import {randomId, request} from './shared';
 import type {Story} from '@/lib/content';
 import type {GeneratedStory,Selection,SessionView} from '@/lib/reader-model';
@@ -396,6 +397,7 @@ export default function Reader(){
  const shelf=activeProgress.flatMap(p=>{const s=allStories.find(s=>s.id===p.storyId);return s&&s.pages[0]?.image?[s]:[];});
 
  const shelfCount=shelf.length+pendingStories.length;
+ const libraryLoading=loading||gen.libraryLoading;
  const progressById=new Map(activeProgress.map(p=>[p.storyId,p]));
  const favoriteCount=shelf.filter(s=>progressById.get(s.id)?.saved).length+pendingStories.filter(s=>progressById.get(s.id)?.saved??s.saved).length;
 
@@ -416,7 +418,7 @@ export default function Reader(){
  <main className="yu-home">
  {tab==='discover'?<>
  <section className="yu-intro"><div><p className="yu-kicker">把片刻，留给一个好故事</p><h1>今天，想遇见<br/>什么<span>故事</span>？</h1></div><span className="yu-stamp">古意<br/>新生</span></section>
- <RecentStories key={heroes.map(h=>h.story.id).join('|')} items={heroes} loading={loading||gen.libraryLoading} bookName={bookName} onOpen={open}/>
+ <RecentStories key={heroes.map(h=>h.story.id).join('|')} items={heroes} loading={libraryLoading} bookName={bookName} onOpen={open}/>
  <button className="yu-new-story-link" onClick={()=>choose()}><Sparkles size={16}/><span>生成我的故事</span><ArrowRight size={16}/></button>
  <section className="yu-section"><div className="yu-section-title"><h2>从一本书开始</h2><span>熟悉的经典，新的相遇</span></div><div className="yu-books">{choices.map((b,i)=><button key={b.id} onClick={()=>choose(b.id)} aria-label={'选择'+b.title}><span className={'yu-book-cover book-'+(i%3)}><span className="yu-book-border"/><small>{b.era} · {b.author}</small><strong className={b.title.length>5?'yu-book-title-long':undefined}>{b.title}</strong><i>{b.genre}</i><span className="yu-book-ornament">{i===0?<Moon size={44} strokeWidth={.7}/>:i===1?<Leaf size={52} strokeWidth={.7}/>:<Feather size={48} strokeWidth={.7}/>}</span></span><strong>{b.title}</strong><small>{b.note}</small></button>)}</div></section>
  <section className="yu-section yu-theme-section"><div className="yu-section-title"><h2>或者，跟着心情走</h2><Sparkles size={17}/></div><div className="yu-moods">{moods.map((m,i)=><button key={m} className={selection.theme===m?'selected':''} onClick={()=>{choose(selection.bookId,m);}}>{i===0&&<Sparkles size={13}/>} {m}</button>)}</div></section>
@@ -425,14 +427,14 @@ export default function Reader(){
  {loading?<p className="yu-inline-status" role="status">正在打开书页…</p>:loadError?<div className="yu-inline-status" role="alert">{loadError}<button onClick={()=>location.reload()}>重新加载</button></div>:null}
  </>:tab==='shelf'?<ReaderShelf onControl={gen.control} controlBusy={gen.controlBusy} stories={shelf} pending={pendingStories} sessions={gen.sessions} progress={activeProgress} refreshing={shelfRefreshing||gen.libraryRefreshing} onRefresh={()=>{void refreshShelf();}} loading={loading||gen.libraryLoading} error={loadError||gen.libraryError} tab={shelfTab} onTab={changeShelfTab} query={shelfQuery} onQuery={changeShelfQuery} grouping={shelfGrouping} onGrouping={changeShelfGrouping} bookName={bookName} onOpen={open} onResume={session=>openWorkflow(session.id)} onRetry={session=>{setWorkflowTarget(session.id);setWorkflowError('');setStory(null);gen.retrySession(session.id).catch(e=>setWorkflowError(e.message));}} onDelete={askDelete} onFavorite={favoriteFromShelf} favoriteBusy={favoriteBusy} onCreate={()=>choose()} onDiscover={()=>setTab('discover')}/>:<section className="yu-profile" aria-label="我的">
   <section className="yu-profile-group" aria-labelledby="profile-overview"><h2 id="profile-overview">故事概览</h2>
-  <div className="yu-profile-stats"><div><strong>{shelfCount}</strong><span>书架故事</span></div><div><strong>{favoriteCount}</strong><span>已收藏</span></div><div><strong>{deletedStories.length}</strong><span>已删除</span></div></div>
+  <div className="yu-profile-stats" aria-busy={libraryLoading}>{[[shelfCount,'书架故事'],[favoriteCount,'已收藏'],[deletedStories.length,'已删除']].map(([count,label])=><div key={label}><strong>{libraryLoading?<span className="yu-profile-stat-loading" aria-label="正在统计">—</span>:count}</strong><span>{label}</span></div>)}</div>
   </section>
   <section className="yu-profile-group" aria-labelledby="profile-stories"><h2 id="profile-stories">作品管理</h2><div className="yu-preferences">
    <button onClick={()=>setPublicationDefaultsOpen(true)}><Feather size={20}/>署名与转载<ChevronRight size={18}/></button>
    <button onClick={()=>{setRecoveryOpen(true);void loadDeletedStories();}}><Trash2 size={20}/>已删除的故事<ChevronRight size={18}/></button>
   </div></section>
   <section className="yu-profile-group" aria-labelledby="profile-preferences"><h2 id="profile-preferences">偏好与服务</h2><div className="yu-preferences">
-   <button onClick={()=>setSettings(true)}><Settings2 size={20}/>阅读偏好<ChevronRight size={18}/></button>
+   <button onClick={()=>setSettings(true)}><BookOpenText size={20}/>阅读偏好<ChevronRight size={18}/></button>
    <ProviderSettings onRuntime={setProviderRuntime}/>
   </div></section>
   <ProviderRuntimeSummary runtime={providerRuntime}/>

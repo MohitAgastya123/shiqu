@@ -2,7 +2,7 @@
 // 运维版式：顶部状态卡展示当前进程实际运行的服务、待重启与启动覆盖；提供方以卡片单选并标出密钥状态；
 // 各分区标记未保存更改；推理档位以分段控件逐项展示；底部常驻操作栏提供放弃更改、重新读取与保存。
 import {useEffect,useRef,useState} from 'react';
-import {AlertTriangle,ChevronRight,Image as ImageIcon,KeyRound,RefreshCw,RotateCcw,Settings2,SlidersHorizontal,Type} from 'lucide-react';
+import {AlertTriangle,ChevronRight,Cpu,Image as ImageIcon,KeyRound,RefreshCw,RotateCcw,SlidersHorizontal,Type} from 'lucide-react';
 import Sheet from './StorySheet';
 import {request} from './shared';
 import type {ProviderSettings as Settings,ProviderSettingsSave,ProviderSettingsView} from '@/lib/provider-settings';
@@ -111,7 +111,7 @@ export default function ProviderSettings({onRuntime}:{onRuntime?:(runtime:Runtim
   if(effectiveImageProvider({provider:provider!,imageProvider:next})!==imageProvider){setImageKey('');setImageKeyAction('keep');}
   update('imageProvider',next);
  }
- return <><button type="button" onClick={()=>{setOpen(true);void load();}}><Settings2 size={20}/>生成服务与模型<ChevronRight size={18}/></button>
+ return <><button type="button" onClick={()=>{setOpen(true);void load();}}><Cpu size={20}/>生成服务与模型<ChevronRight size={18}/></button>
  {open&&<Sheet title="生成服务与模型" busy={saving.current} onClose={()=>{setOpen(false);setKey('');setKeyAction('keep');setImageKey('');setImageKeyAction('keep');}}>
   <div className="yu-provider-settings">
    <p className="yu-provider-intro">与桌面、CLI 和技能共用，保存后重启服务生效。</p>

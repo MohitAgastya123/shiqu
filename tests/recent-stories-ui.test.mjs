@@ -33,3 +33,11 @@ test('settled history shows the resume card or the first-use empty state',()=>{
  assert.match(empty,/把下一篇故事留在这里/);
  assert.doesNotMatch(empty,/正在打开故事…/);
 });
+
+test('a story read to its last frame offers a restart instead of resuming',()=>{
+ const last=story.pages.length-1,finished=recentHeroes([story],story.id,[{storyId:story.id,page:last}]);
+ const html=renderToStaticMarkup(createElement(RecentStories,{items:finished,loading:false,bookName:()=> '聊斋志异',onOpen(){}}));
+ assert.match(html,new RegExp(`aria-label="重读${story.title}"`));
+ assert.match(html,new RegExp(`已读完 · 重读 · ${story.pages.length} 幅`));
+ assert.doesNotMatch(html,/继续阅读/);
+});

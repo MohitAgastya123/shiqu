@@ -2,7 +2,7 @@
 // “制作中”区域为紧凑行：需要用户处理的排在最前且始终可见，其余默认最多显示 5 行，搜索时全部显示；
 // 通用状态说明只供读屏软件朗读，失败时的具体错误仍可见。分组只作用于可阅读故事，所有卡片同尺寸。
 // 显示名同样适用于未完成的故事；确认制作前，以已保存的设置草稿作为展示画风。
-// 封面上的收藏与删除按钮与阅读按钮互为兄弟节点，互不触发。
+// 封面上的收藏与删除按钮与阅读按钮互为兄弟节点，互不触发；已读完的“重读”从第一幅开始。
 // ReaderShelf 顶层不调用 Hook（测试会把它当普通函数调用），有状态的部分放在子组件中，行内容以 children 传入。
 import {useState,type ReactNode} from 'react';
 import {ArrowRight,Bookmark,BookOpen,ChevronDown,ChevronRight,Feather,Plus,RefreshCw,RotateCcw,Search,Trash2,X} from 'lucide-react';
@@ -38,7 +38,7 @@ function ProductionGroup({needs,limit,children}:{needs:number;limit:number|null;
 }
 
 type ShelfItem={processingStatus:string;id:string;title:string;book:string;theme:string;artStyleLabel:string;story:Story|null;session?:SessionView;page:number;saved:boolean};
-type Props={onControl:(id:string,action:ProductionAction)=>Promise<void>;controlBusy:string;stories:Story[];pending:SessionView[];sessions:SessionView[];progress:ReadingProgress[];loading:boolean;refreshing:boolean;onRefresh:()=>void;error:string;tab:string;onTab:(tab:string)=>void;query:string;onQuery:(query:string)=>void;grouping:ShelfGrouping;onGrouping:(grouping:ShelfGrouping)=>void;bookName:(story:Pick<Story,'id'|'bookId'>)=>string;onOpen:(story:Story)=>void;onResume:(session:SessionView)=>void;onRetry:(session:SessionView)=>void;onDelete:(id:string,title:string)=>void;onFavorite:(id:string,saved:boolean)=>void;favoriteBusy:string;onCreate:()=>void;onDiscover:()=>void};
+type Props={onControl:(id:string,action:ProductionAction)=>Promise<void>;controlBusy:string;stories:Story[];pending:SessionView[];sessions:SessionView[];progress:ReadingProgress[];loading:boolean;refreshing:boolean;onRefresh:()=>void;error:string;tab:string;onTab:(tab:string)=>void;query:string;onQuery:(query:string)=>void;grouping:ShelfGrouping;onGrouping:(grouping:ShelfGrouping)=>void;bookName:(story:Pick<Story,'id'|'bookId'>)=>string;onOpen:(story:Story,restart?:boolean)=>void;onResume:(session:SessionView)=>void;onRetry:(session:SessionView)=>void;onDelete:(id:string,title:string)=>void;onFavorite:(id:string,saved:boolean)=>void;favoriteBusy:string;onCreate:()=>void;onDiscover:()=>void};
 export default function ReaderShelf({onControl,controlBusy,stories,pending,sessions,progress,loading,refreshing,onRefresh,error,tab,onTab,query,onQuery,grouping,onGrouping,bookName,onOpen,onResume,onRetry,onDelete,onFavorite,favoriteBusy,onCreate,onDiscover}:Props){
  const progressById=new Map(progress.map(row=>[row.storyId,row]));
  const sessionById=new Map(sessions.map(session=>[session.id,session]));
@@ -91,7 +91,7 @@ export default function ReaderShelf({onControl,controlBusy,stories,pending,sessi
    <div className="yu-shelf-card-body">
     <button className="yu-shelf-card yu-shelf-card-details" aria-label={'阅读《'+item.title+'》'} onClick={()=>onOpen(story)}><h2>{item.title}</h2><span className="yu-shelf-tags"><span title={item.theme}>{item.theme}</span><span title={item.artStyleLabel}>{item.artStyleLabel}</span>{number&&<span>第 {number} 版</span>}</span></button>
     {feedback}
-    <button className={'yu-shelf-reading-footer'+(finished?' finished':'')} aria-label={'继续阅读《'+item.title+'》'} onClick={()=>onOpen(story)}>
+    <button className={'yu-shelf-reading-footer'+(finished?' finished':'')} aria-label={(finished?'重读《':'继续阅读《')+item.title+'》'} onClick={()=>finished?onOpen(story,true):onOpen(story)}>
      <span className="yu-shelf-progress" aria-hidden="true"><i style={{width:`${total?Math.min(100,Math.round((item.page+1)/total*100)):0}%`}}/></span>
      <span className="yu-shelf-reading-meta">{finished?<><span>已读完 · {total} 幅</span><span className="yu-shelf-continue">重读 <RotateCcw size={14}/></span></>:<><span>第 {item.page+1} / {total} 幅</span><span className="yu-shelf-continue">接着看 <ArrowRight size={15}/></span></>}</span>
     </button>
