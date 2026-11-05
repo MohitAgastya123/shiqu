@@ -101,6 +101,34 @@ async function copySource(t){
  return {source,target,sourceId:session.id,args:['stories','copy',session.id,'--from-data-dir',source.f.dataDirectory,'--request-id',crypto.randomUUID()]};
 }
 
+test('CLI image-only edit redraws selected pages after explicit resume/run and preserves text, review and other images', {timeout:30000},async t=>{
+ const {f,library,call,inspect}=await fixture(t);
+ const created=await call(['stories','create','--no-intake'],{...selection,length:3,source:library.stories[0].source,storyTitle:library.stories[0].title}),id=created.session.id;
+ assert.equal((await call(['run',id,'--timeout','10'])).reason,'completed');
+ const original=await call(['stories','get',id]),base=await call(['stories','revisions',id]);
+ const readDoc=storyId=>{const db=inspect();try{return JSON.parse(db.prepare('SELECT document FROM stories WHERE id=?').get(storyId).document);}finally{db.close();}};
+ const saved=readDoc(id),before={images:f.control.calls.length,reviews:f.control.reviews.length,plans:f.control.plans.length,frameReviews:f.control.frameReviews.length};
+ const help=await call(['help','--json']),requestId=crypto.randomUUID(),input={...help.inputs.redraw.input,token:base.token,changes:{redrawPages:[1,3]}};
+ for(const changes of [{redrawPages:[0]},{redrawPages:[4]},{redrawPages:[1,1]},{redrawPages:[1],artStyle:'clay'}]){
+  await assert.rejects(call(['stories','edit',id],{token:base.token,changes}),error=>error.code==='INVALID_REQUEST');
+ }
+ assert.equal((await call(['stories','list'])).length,1);
+ const args=['stories','edit',id,'--request-id',requestId],edited=await call(args,input),next=edited.session.id;
+ assert.notEqual(next,id);assert.equal(edited.session.generationControl,'paused');assert.equal(edited.session.ready,1);
+ assert.equal((await call(['run',next,'--timeout','10'])).reason,'paused');assert.equal(f.control.calls.length,before.images);
+ await call(['stories','resume',next]);assert.equal(f.control.calls.length,before.images);
+ const done=await call(['run',next,'--timeout','10']);assert.equal(done.reason,'completed');assert.equal(done.session.ready,3);
+ assert.deepEqual(f.control.calls.slice(before.images).map(call=>call.page).sort((a,b)=>a-b),[0,2]);
+ assert.equal(f.control.reviews.length,before.reviews);assert.equal(f.control.plans.length,before.plans);assert.equal(f.control.frameReviews.length,before.frameReviews);
+ const doc=readDoc(next);assert.deepEqual(doc.plan,saved.plan);assert.deepEqual(doc.original,saved.original);assert.deepEqual(doc.visualReview,saved.visualReview);
+ const bytes=page=>readFile(path.join(f.dataDirectory,'media',page.image.replace('/api/reader/media/','reader/')));
+ assert.deepEqual(await bytes(done.session.story.pages[1]),await bytes(original.story.pages[1]));
+ assert.deepEqual((await call(['stories','get',id])).story,original.story);
+ assert.equal((await call(['stories','current',id])).id,next);
+ assert.equal((await call(args,input)).session.id,next);assert.equal(f.control.calls.length,before.images+2);
+ await assert.rejects(call(args,{...input,changes:{redrawPages:[2]}}),error=>error.code==='CONFLICT');
+});
+
 test('Skill can copy text, wait for a user decision, then attach independent images to the same story',async t=>{
  const {source,target,sourceId,args}=await copySource(t),id=args.at(-1);
  const textArgs=[...args,'--no-copy-images'],text=await target.call(textArgs);assert.equal(text.session.ready,0);assert.equal(text.session.generationControl,'paused');

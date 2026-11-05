@@ -9,6 +9,14 @@
 - Use `pnpm exec` for installed command-line tools instead of `npx`.
 - Keep `pnpm-lock.yaml` in sync with dependency changes. Do not introduce npm or Yarn lockfiles.
 
+## CLI 与技能同步
+
+- 修改 CLI 命令、输入、行为或流程规则时，必须在同一次变更中同步更新内置的 `skills/shiqu/SKILL.md` 及受影响的使用示例，确保技能与 CLI 的实际帮助和生产行为一致。
+
+## 代码注释
+
+- 今后新增或修改的代码注释使用中文。
+
 ## Desktop Development
 
 - Develop and verify the desktop UI in the in-app browser using `pnpm desktop:preview` (Vite). Reuse the relevant existing tab.
