@@ -97,7 +97,8 @@ function client(key:string,transport:typeof fetch){
   if(!response.ok){
    let failure:{error?:{status?:string;message?:string}}={};try{failure=await response.json() as typeof failure;}catch{}
    const status=failure.error?.status,unknownFields=[...(failure.error?.message||'').matchAll(/Unknown name "([A-Za-z_][A-Za-z0-9_.]{0,70})"/g)].map(m=>m[1]);
-   console.error('gemini_request_rejected',JSON.stringify({httpStatus:response.status,model,status:status&&/^[A-Z_]{1,50}$/.test(status)?status:undefined,unknownFields}));
+   const message=failure.error?.message||'',reason=/too (?:many states|complex)|schema[^.]*complexity/i.test(message)?'SCHEMA_TOO_COMPLEX':unknownFields.length?'UNSUPPORTED_FIELD':undefined;
+   console.error('gemini_request_rejected',JSON.stringify({httpStatus:response.status,model,status:status&&/^[A-Z_]{1,50}$/.test(status)?status:undefined,reason,unknownFields}));
    throw new GeminiError('PROVIDER_ERROR',response.status);
   }
   let result:Result;try{result=await response.json() as Result;}catch{throw new GeminiError('PROVIDER_ERROR',502);}
@@ -133,6 +134,17 @@ function discoveryOutputSchema(value:unknown):unknown{
   return [name,discoveryOutputSchema(rule)];
  }));
 }
+function storyboardOutputSchema(schema:unknown):unknown{
+ // Gemini rejects the nested 20-edits × 20-pages grammar. Keep the outer bound and
+ // express the inner limit as guidance; structuralEditsSchema and applyStructuralEdits enforce it.
+ const value=schema as {properties?:{edits?:{items:{properties:{pages:{maxItems?:number;description?:string}}}}}};
+ const pages=value.properties?.edits?.items.properties.pages;
+ if(typeof pages?.maxItems!=='number')return schema;
+ const output=structuredClone(value),rule=output.properties!.edits!.items.properties.pages;
+ rule.description=`At most ${rule.maxItems} replacement frames; the same limit applies across all edits combined.`;
+ delete rule.maxItems;
+ return output;
+}
 export async function suggestStories(key:string,selection:Selection,config:Partial<Models>={},transport:typeof fetch=fetch,excludeTitles:string[]=[],localBook?:WholeBookInput,reasoning:TaskReasoningEfforts=taskReasoningDefaults,maxStories?:1,context?:DiscoveryContext){
  const models={...defaultModels,...config},{book,url}=source(selection),scanning=localBook?.purpose==='scan'||localBook?.purpose==='catalog';
  const run=async(report:(meta:{model?:string;usage?:unknown;acceptedCount?:number})=>void)=>{
@@ -162,10 +174,10 @@ export function makeGenerator(key:string,assets:Assets,config:Partial<Models>={}
  const models={...defaultModels,...config},generate=client(key,transport);
  return {
   ...storyboardGenerator(selection=>source(selection).book,async(task,instructions,payload,schema,maxOutputTokens,original)=>{
-   const book=(payload as {book:string}).book,url=!original&&/^https?:/i.test(book)?book:'';
-   const {candidate,metadata}=await generate(models.text,textRequest(instructions,payload,schema,url,maxOutputTokens,reasoning[task]),readerStoryboardTimeoutMs);
+   const book=(payload as {book:string}).book,url=!original&&/^https?:/i.test(book)?book:'',outputSchema=storyboardOutputSchema(schema);
+   const {candidate,metadata}=await generate(models.text,textRequest(instructions,payload,outputSchema,url,maxOutputTokens,reasoning[task]),readerStoryboardTimeoutMs);
    if(url&&!wasRead(candidate,url))throw new GeminiError('SOURCE_UNAVAILABLE');
-   return {value:parseText(candidate),...metadata,reasoningEffort:reasoning[task],promptRecord:promptRecord(instructions,payload,schema)};
+   return {value:parseText(candidate),...metadata,reasoningEffort:reasoning[task],promptRecord:promptRecord(instructions,payload,outputSchema)};
   }),
   original:(selection,plan,id)=>saveStoryOriginal(assets,selection,plan,id,transport),
   async recommend(selection,id,original){

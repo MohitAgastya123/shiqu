@@ -8,6 +8,7 @@ import {recordDiagnostic,diagnosticReport,diagnosticLimit,installDiagnostics} fr
 import {startupFixture,startFixtureCli,freeStartupPort} from './fixtures/startup.mjs';
 import {startDesktop} from '../server/desktop.ts';
 import {defaultSystemSettings} from '../lib/system-settings.ts';
+import {createReaderProvider} from '../server/generation.ts';
 
 test('whitelist strips secrets, arbitrary messages/paths and hostile stored records; rotation stays bounded',async t=>{
  const directory=await mkdtemp(path.join(os.tmpdir(),'shiqu-diagnostics-test-'));t.after(()=>rm(directory,{recursive:true,force:true}));
@@ -33,6 +34,29 @@ test('known console events are saved safely and capture is removed on shutdown',
  // Keep this test's expected console error out of the TAP error stream.
  const capture=console.error;try{capture('production_tick_failed',JSON.stringify({code:'SQLITE_BUSY',prompt:'do not store'}));}finally{restore();}
  assert.equal(diagnosticReport(directory,'0.6.6').events[0].code,'SQLITE_BUSY');assert.equal(console.error,original);
+});
+test('production Gemini failures persist safe rejection details and survive diagnostic export',async t=>{
+ const f=await startupFixture(t),directory=path.join(f.root,'library'),original=console.error;
+ console.error=()=>{};const restore=installDiagnostics(directory);
+ const privateText='sk-private-secret /Users/private story原文 prompt敏感';
+ try{
+  const provider=createReaderProvider({SHIQU_AI_PROVIDER:'gemini',GEMINI_API_KEY:privateText},{},async()=>Response.json({error:{status:'INVALID_ARGUMENT',message:'The input schema has too many states for serving. '+privateText}},{status:400}));
+  await assert.rejects(provider.suggestions({bookId:'西游记',theme:'原典故事',length:'auto',artStyle:'ink-pencil',voice:false},[]),error=>{
+   assert.match(provider.safeError(error),/已保留前面的内容/);return true;
+  });
+ }finally{restore();console.error=original;}
+ const events=diagnosticReport(directory,'0.8.0').events;
+ assert.deepEqual(events.map(({time,...event})=>event),[
+  {event:'gemini_request_rejected',httpStatus:400,status:'INVALID_ARGUMENT',reason:'SCHEMA_TOO_COMPLEX'},
+  {event:'reader_generation_error',code:'PROVIDER_ERROR',status:400},
+ ]);
+ recordDiagnostic(directory,'gemini_request_rejected',{httpStatus:502,status:privateText,reason:privateText,model:privateText,message:privateText,unknownFields:[privateText]});
+ recordDiagnostic(directory,'reader_generation_error',{code:'INVALID_JSON',status:502,message:privateText});
+ assert.equal(diagnosticReport(directory,'0.8.0').events.at(-1).code,'INVALID_JSON');
+ assert.doesNotMatch(await readFile(path.join(directory,'.diagnostics/events.jsonl'),'utf8'),/sk-private|Users|原文|敏感/);
+ // Export reprojects even a locally edited log; no arbitrary provider strings become public metadata.
+ await writeFile(path.join(directory,'.diagnostics/events.jsonl'),JSON.stringify({time:new Date().toISOString(),event:'gemini_request_rejected',httpStatus:999,status:privateText,reason:privateText,message:privateText})+'\n');
+ assert.deepEqual(diagnosticReport(directory,'0.8.0').events.map(({time,...event})=>event),[{event:'gemini_request_rejected'}]);
 });
 test('real CLI saves lifecycle events and exports a new metadata-only report, including corrupt libraries',async t=>{
  const f=await startupFixture(t),directory=path.join(f.root,'library'),port=await freeStartupPort();
