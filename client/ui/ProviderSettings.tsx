@@ -55,13 +55,14 @@ function KeyField({name,title,present,action,onAction,value,onValue}:{name:strin
  </div>;
 }
 export default function ProviderSettings({onRuntime,onAvailability,openRequest=0,showEntry=true,showPrompt=false}:{onRuntime?:(runtime:Runtime|null)=>void;onAvailability?:(allowed:boolean)=>void;openRequest?:number;showEntry?:boolean;showPrompt?:boolean}){
+ const [access,setAccess]=useState<'unknown'|'allowed'|'denied'>('unknown');
  const [open,setOpen]=useState(false),[view,setView]=useState<ProviderSettingsView|null>(null),[draft,setDraft]=useState<Settings|null>(null);
  const [runtime,setRuntime]=useState<ProviderSettingsView['runtime']|null>(null);
  useEffect(()=>{onRuntime?.(runtime);},[runtime,onRuntime]);
  const [busy,setBusy]=useState(false),[error,setError]=useState(''),[message,setMessage]=useState(''),[key,setKey]=useState(''),[keyAction,setKeyAction]=useState<ProviderSettingsSave['keyAction']>('keep');
  const [imageKey,setImageKey]=useState(''),[imageKeyAction,setImageKeyAction]=useState<ProviderSettingsSave['imageKeyAction']>('keep');
  const live=useRef(true),saving=useRef(false),readVersion=useRef(0);
- function adopt(result:ProviderSettingsView){setView(result);setDraft(result.settings);setRuntime(result.runtime);setKey('');setKeyAction('keep');setImageKey('');setImageKeyAction('keep');}
+ function adopt(result:ProviderSettingsView){setAccess('allowed');setView(result);setDraft(result.settings);setRuntime(result.runtime);setKey('');setKeyAction('keep');setImageKey('');setImageKeyAction('keep');}
  async function load(){
   const version=++readVersion.current;
   setBusy(true);setError('');setMessage('');
@@ -69,8 +70,8 @@ export default function ProviderSettings({onRuntime,onAvailability,openRequest=0
   catch(e){
    if(live.current&&version===readVersion.current){
     const status=(e as {status?:number}).status;
-    if(status===403||status===404){setView(null);setDraft(null);setError('请在运行服务的电脑上，使用本机回环地址打开生成服务设置。');}
-    else setError(e instanceof Error?e.message:'暂时无法读取生成设置。');
+    if(status===403||status===404){setAccess('denied');setOpen(false);setView(null);setDraft(null);setError('请在运行服务的电脑上，使用本机回环地址打开生成服务设置。');}
+    else {if(status===503){setAccess('allowed');setView(null);setDraft(null);}setError(e instanceof Error?e.message:'暂时无法读取生成设置。');}
    }
    // 运行配置属于公开阅读元数据，与本机编辑权限无关。
    try{const status=await request('reader/status');if(live.current&&version===readVersion.current)setRuntime({provider:status.provider,imageProvider:status.imageProvider,models:status.models,configured:status.configured,taskReasoningEfforts:status.taskReasoningEfforts});}catch{}
@@ -78,8 +79,8 @@ export default function ProviderSettings({onRuntime,onAvailability,openRequest=0
   finally{if(live.current&&version===readVersion.current)setBusy(false);}
  }
  useEffect(()=>{live.current=true;void load();return()=>{live.current=false;};},[]);
- useEffect(()=>{onAvailability?.(!!view);},[!!view,onAvailability]);
- useEffect(()=>{if(openRequest&&view)setOpen(true);},[openRequest,!!view]);
+ useEffect(()=>{onAvailability?.(access==='allowed');},[access,onAvailability]);
+ useEffect(()=>{if(openRequest&&access==='allowed')setOpen(true);},[openRequest,access]);
  function update<K extends keyof Settings>(field:K,value:Settings[K]){setDraft(old=>old?{...old,[field]:value}:old);setMessage('');}
  function selectProvider(provider:Settings['provider']){
   if(!draft)return;
@@ -121,8 +122,8 @@ export default function ProviderSettings({onRuntime,onAvailability,openRequest=0
   catch(e){setError(e instanceof Error?e.message:'操作失败，请重新读取设置。');}
   finally{saving.current=false;setBusy(false);}
  }
- return <>{showPrompt&&runtime?.configured===false&&!open&&<aside className="yu-provider-setup" role="status">请先配置生成服务。{view?<a href="#provider-settings">打开生成服务与模型</a>:<span>请在运行服务的电脑上，使用本机回环地址打开 我的 → 生成服务与模型。</span>}</aside>}{showEntry&&view&&<button type="button" onClick={()=>{setOpen(true);void load();}}><Cpu size={20}/>生成服务与模型<ChevronRight size={18}/></button>}
- {open&&<Sheet title="生成服务与模型" busy={saving.current} onClose={()=>{setOpen(false);setKey('');setKeyAction('keep');setImageKey('');setImageKeyAction('keep');}}>
+ return <>{showPrompt&&runtime?.configured===false&&!open&&<aside className="yu-provider-setup" role="status">请先配置生成服务。{access==='allowed'?<a href="#provider-settings">打开生成服务与模型</a>:<span>请在运行服务的电脑上，使用本机回环地址打开 我的 → 生成服务与模型。</span>}</aside>}{showEntry&&access==='allowed'&&<button type="button" onClick={()=>{setOpen(true);void load();}}><Cpu size={20}/>生成服务与模型<ChevronRight size={18}/></button>}
+ {open&&<Sheet title="生成服务与模型" busy={saving.current} onClose={()=>{setOpen(false);if(location.hash==='#provider-settings')history.replaceState(null,'',location.pathname+location.search);setKey('');setKeyAction('keep');setImageKey('');setImageKeyAction('keep');}}>
   <div className="yu-provider-settings">
    <p className="yu-provider-intro">与桌面、CLI 和技能共用，保存后重启服务生效。</p>
    <section className={`yu-provider-status ${state.tone}`} aria-label="运行状态">

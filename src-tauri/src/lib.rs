@@ -252,9 +252,19 @@ async fn start_server(
 }
 
 fn stop_control(state: &DesktopState) {
-    if let Ok(mut control) = state.0.lock() {
+    // 托盘、窗口退出与原生命令共用此边界；升级期间释放互斥锁等待，不中断子进程。
+    loop {
+        let Ok(mut control) = state.0.lock() else {
+            return;
+        };
+        if control.starting {
+            drop(control);
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            continue;
+        }
         drop(control.runtime.take());
         control.last_error = None;
+        return;
     }
 }
 #[tauri::command]
@@ -331,13 +341,6 @@ async fn quit_app(
 ) -> Result<(), String> {
     let state = state.inner().clone();
     blocking(move || {
-        // 升级必须安全结束后再退出，不能因窗口退出杀死迁移子进程。
-        loop {
-            if !state.0.lock().map_err(|_| "服务控制器不可用。")?.starting {
-                break;
-            }
-            std::thread::sleep(std::time::Duration::from_millis(100));
-        }
         stop_control(&state);
         app.exit(0);
         Ok(())
@@ -419,6 +422,24 @@ fn thread_stop(app: tauri::AppHandle, quit: bool) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn stop_and_exit_wait_for_startup_without_holding_the_controller_lock() {
+        let state = DesktopState::default();
+        state.0.lock().unwrap().starting = true;
+        let stopping = state.clone();
+        let (send, receive) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            stop_control(&stopping);
+            send.send(()).unwrap();
+        });
+        assert!(receive
+            .recv_timeout(std::time::Duration::from_millis(20))
+            .is_err());
+        state.0.lock().unwrap().starting = false;
+        receive
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .unwrap();
+    }
     #[test]
     fn browser_opener_accepts_only_root_and_fixed_settings_fragment() {
         assert_eq!(

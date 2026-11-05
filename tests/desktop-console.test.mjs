@@ -36,3 +36,12 @@ test('console renders lifecycle controls, saved/runtime summaries and safe upgra
  assert.match(render({state:'running',status:{running:true,restartRequired:true}}),/待重启生效/);
  assert.match(render({provider:savedProvider({...settings,provider:'readonly'})}),/只读/);
 });
+
+test('stopped provider summary requires both active API keys even when providerConfigured remains true',()=>{
+ const settings={...defaultSystemSettings('/isolated/library'),providerConfigured:true};
+ assert.equal(savedProvider(settings,{gemini:false,openai:true}).configured,false);
+ assert.equal(savedProvider(settings,{gemini:true,openai:false}).configured,true);
+ assert.equal(savedProvider({...settings,imageProvider:'openai'},{gemini:true,openai:false}).configured,false);
+ assert.equal(savedProvider({...settings,imageProvider:'openai'},{gemini:true,openai:true}).configured,true);
+ assert.equal(savedProvider({...settings,provider:'codex'}).configured,true);
+});

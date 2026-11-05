@@ -2,7 +2,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
-import {mkdir} from 'node:fs/promises';
+import {mkdir,rename} from 'node:fs/promises';
+import {existsSync} from 'node:fs';
 import {chromium} from 'playwright';
 import {build,createServer} from 'vite';
 import {startupFixture,freeStartupPort} from './fixtures/startup.mjs';
@@ -68,6 +69,11 @@ test('console-only desktop, lifecycle IPC and actual desktop browser settings',{
  await reader.getByRole('button',{name:'检查已保存配置的连接',exact:true}).click();await reader.getByText('连接检查通过；仅检查模型元数据或登录状态，未生成内容。').waitFor();
  reader.once('dialog',dialog=>dialog.accept());await reader.getByRole('button',{name:'重置所有生成服务配置',exact:true}).click();await reader.getByText('生成设置已重置，重启服务后生效。').waitFor();
  const after=new SystemSettingsStore(file,native.dataDirectory,{existingOnly:true});assert.equal(after.settings().codexPath,native.codexPath);assert.equal(after.settings().codexHome,native.codexHome);assert.equal(after.key('openai'),'');after.close();
- await reader.screenshot({path:path.join(output,'browser-provider-settings.png'),fullPage:true});assert.deepEqual(errors,[]);
+ await reader.screenshot({path:path.join(output,'browser-provider-settings.png'),fullPage:true});
+ await reader.getByRole('button',{name:'关闭',exact:true}).click();await reader.getByRole('link',{name:'打开生成服务与模型',exact:true}).click();await reader.getByRole('dialog',{name:'生成服务与模型'}).waitFor();
+ await rename(file,file+'.held');await reader.reload();await reader.getByRole('dialog',{name:'生成服务与模型'}).waitFor();await reader.getByText('暂时无法读取或保存共享生成设置，请检查本机配置后重新读取。').waitFor();
+ assert.equal(existsSync(file),false);assert.equal(await reader.locator('input[type=password]').count(),0);
+ await rename(file+'.held',file);await reader.getByRole('button',{name:'重新读取设置',exact:true}).click();await reader.getByRole('radiogroup',{name:'文本服务',exact:true}).waitFor();
+ assert.deepEqual(errors,[]);
  }catch(error){await page.screenshot({path:path.join(output,'failed-console.png'),fullPage:true}).catch(()=>{});console.log(await page.locator('body').innerText().catch(()=>''));throw error;}
 });

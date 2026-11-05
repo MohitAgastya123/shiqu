@@ -41,8 +41,8 @@ export function desktopProviderConfiguration(settings:DesktopSettings,key:string
 }
 export async function startDesktop(settings:DesktopSettings,key:string,root:string,options:{signal?:AbortSignal;onStatus?:(status:unknown)=>void;imageKey?:string;settingsFile?:string;overrides?:Record<string,string|undefined>;transport?:typeof fetch}={}){
  options.onStatus?.({running:false,phoneUrls:[],state:'upgrading'});
- ensureLibraryReady(settings.dataDirectory,root);
- const backup=libraryUpgradeBackup(settings.dataDirectory);
+ const upgrade=ensureLibraryReady(settings.dataDirectory,root);
+ const backup=upgrade?.backup||libraryUpgradeBackup(settings.dataDirectory);
  options.onStatus?.({running:false,phoneUrls:[],state:'starting',backup});
  const configuration=desktopProviderConfiguration(settings,key,options.imageKey||'',options.settingsFile,options.overrides);
  const release=await ownDesktopData(settings.dataDirectory);

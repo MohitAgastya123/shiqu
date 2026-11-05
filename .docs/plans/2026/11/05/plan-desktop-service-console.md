@@ -49,3 +49,13 @@ Node focused checks: initial 32 tests passed; full default-tier run found three 
 ET passed: actual in-app Vite preview has no tablist/password fields and fits 1040/390 widths; backend does not permit initialization-script injection, so native IPC simulation uses a disclosed separate Playwright session. Executable E2E passes startup/upgrading, runtime vs saved summary, backup, stop, restart confirm/cancel, dirty native save, stale refusal, unknown/failure recovery, QR and both widths. Actual production desktop HTTP plus a temporary browser-only build passes fixed deep link, browser provider/key save, secret absence in DOM, unchanged running snapshot, restart-needed, saved-only metadata check and confirmed reset preserving paths. No paid requests or personal data. Screenshots inspected at `.data/e2e/desktop-service-console/`; actual OS opener, tray and packaged runtime remain unrun.
 
 Concurrent unrelated work was committed separately as `eed3629`; it is excluded from this story. Story base remains unchanged. Source/test story path list: `/tmp/shiqu-console-story-files` (including the status-stream-only hunks of desktop-internet tests). Current tree contains only this story's pending changes.
+
+Implementation milestone: `e6c089e` (only this story's changes; unrelated `eed3629` preserved).
+
+CR blocked: three acceptance gaps remain — current-format upgrades could report an old backup; authorized browser 503 errors hid their retry sheet; stopped summaries trusted providerConfigured after key removal.
+CR risk: non-low — native lifecycle, library upgrades and secret-bearing HTTP settings.
+CR review round: 1; reviewer: reused (`console_review`).
+
+Corrections: prefer the actual initializer return backup over an older report, with a current-format pending-migration test; distinguish authorized-but-unavailable browser settings from denied access and keep the safe error/reload sheet reachable; calculate saved provider readiness from native key-presence flags for both active providers. Closing the settings sheet clears only its fixed fragment so the setup prompt can reopen it. Tray/OS stop and quit now share a lock-releasing startup wait, covered by a native concurrency test. The running provider summary also survives settings-store failure using its immutable startup variables.
+
+Fix verification: isolated upgrade/recovery tests pass including in-place migration backup; native suite 24 pass, one prepared-bundle test excluded; E2E plus console tests 5/5 pass, now including missing-store error visibility/reload, reopening the fixed deep link and key-presence summaries. Existing actual pnpm dev settings E2E passed in its disposable checkout. Full provider/heavy TT continues with no failures so far.

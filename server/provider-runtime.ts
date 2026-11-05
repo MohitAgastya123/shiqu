@@ -47,8 +47,8 @@ export async function checkProviderVariables(variables:Variables,transport:typeo
     if(!key)return {ok:false,message:label+'请先配置生成服务并保存 API 密钥。'};
     const models=[...(provider===runtime.provider?[runtime.models.text]:[]),...(provider===(runtime.imageProvider||runtime.provider)?[runtime.models.image]:[])].filter(Boolean);
     for(const model of new Set(models)){
-     const base=provider==='openai'?'https://api.openai.com/v1/models/':provider==='deepseek'?'https://api.deepseek.com/models/':'https://generativelanguage.googleapis.com/v1beta/models/';
-     const response=await transport(base+encodeURIComponent(model),{headers:provider==='gemini'?{'x-goog-api-key':key}:{Authorization:'Bearer '+key},signal:AbortSignal.timeout(10000),redirect:'error'});
+     const base=provider==='openai'?'https://api.openai.com/v1/models/':provider==='deepseek'?'https://api.deepseek.com/models':'https://generativelanguage.googleapis.com/v1beta/models/';
+     const response=await transport(base+(provider==='deepseek'?'':encodeURIComponent(model)),{headers:provider==='gemini'?{'x-goog-api-key':key}:{Authorization:'Bearer '+key},signal:AbortSignal.timeout(10000),redirect:'error'});
      await response.body?.cancel();
      if(!response.ok)return {ok:false,message:`模型访问检查失败（HTTP ${response.status}），请检查密钥及权限。`};
     }

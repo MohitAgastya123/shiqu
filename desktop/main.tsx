@@ -11,7 +11,7 @@ import type {Status,ServiceState} from './console-state';
 import {defaultSystemSettings} from '../lib/system-settings';
 import type {SystemSettings} from '../lib/system-settings';
 import './styles.css';
-type View={settings:SystemSettings;revision:number};
+type View={settings:SystemSettings;revision:number;providerKeys?:{gemini:boolean;openai:boolean}};
 type NodeInfo={version:string};
 const nativeFields=['dataDirectory','port','internetEnabled','cloudflaredPath','codexPath','codexHome'] as const;
 const nativeValues=(settings:SystemSettings)=>Object.fromEntries(nativeFields.map(name=>[name,settings[name]]));
@@ -50,7 +50,7 @@ function Desktop(){
  return <main className="desktop-console"><header className="app-header"><div className="brand"><div className="brand-mark" aria-hidden="true">拾</div><div><h1>拾趣 <span>桌面控制台</span></h1><p>留一间故事书房，随时打开。</p></div></div></header>
   {(error||message||statusError)&&<div className="notice" role="status">{error||statusError?<span className="error">{error||statusError}</span>:message}</div>}
   {!settings?<section className="card"><h2>正在读取本机设置…</h2><button onClick={()=>void action('读取设置',reload)}>重新读取设置</button></section>:<div className="layout"><div className="settings-stack">
-   <ServiceCard state={state} status={status} native={native} busy={busy} provider={status.running&&status.provider?status.provider:savedProvider(view?.settings||settings)} nodeVersion={node?.version} nodeError={nodeError} onStart={()=>void action('启动服务',start)} onStop={()=>void action('停止服务',stop)} onRestart={()=>void action('重启服务',restart)} onOpen={()=>void action('打开浏览器',async()=>{await invoke('open_reader');})} onSettings={()=>void action('打开生成设置',async()=>{await invoke('open_reader',{generationSettings:true});})} previewUrl={previewUrl}/>
+   <ServiceCard state={state} status={status} native={native} busy={busy} provider={status.running&&status.provider?status.provider:savedProvider(view?.settings||settings,view?.providerKeys)} nodeVersion={node?.version} nodeError={nodeError} onStart={()=>void action('启动服务',start)} onStop={()=>void action('停止服务',stop)} onRestart={()=>void action('重启服务',restart)} onOpen={()=>void action('打开浏览器',async()=>{await invoke('open_reader');})} onSettings={()=>void action('打开生成设置',async()=>{await invoke('open_reader',{generationSettings:true});})} previewUrl={previewUrl}/>
    <section className="card local-settings"><div className="section-heading"><h2>本机与存储</h2><p>停止服务后可修改。</p></div><fieldset disabled={locked}><legend className="sr-only">本机设置</legend>
     <label>故事数据目录<div className="input-row"><input value={settings.dataDirectory} onChange={e=>update('dataDirectory',e.target.value)}/><button className="secondary" onClick={()=>void action('选择目录',()=>browse('data','dataDirectory'))}>选择目录</button></div></label>
     <label className="port-field">服务端口<input type="number" min="1024" max="65535" value={settings.port} onChange={e=>update('port',Number(e.target.value))}/></label>

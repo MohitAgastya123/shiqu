@@ -13,6 +13,8 @@ import {browserProviderSettings} from '../server/browser-provider-settings.ts';
 import {effectiveProviderVariables} from '../server/cli-setup.ts';
 import {verifyLibraryBackup} from '../server/library-backup.ts';
 import {desktopRemote} from '../server/desktop-remote.ts';
+import {openDatabase} from '../server/database.ts';
+import {checkProviderVariables} from '../server/provider-runtime.ts';
 import {providerSettingsPath as route} from '../lib/provider-settings.ts';
 const failNetwork=async()=>{throw Error('禁止测试外网请求');};
 async function fixture(t,patch={},overrides={}){
@@ -87,4 +89,18 @@ test('failed pending-journal recovery reports its backup safely before any servi
  const store=new SystemSettingsStore(path.join(f.root,'config/desktop.sqlite'),library),settings=store.save({port:await freeStartupPort()});store.close();const events=[];
  await assert.rejects(startDesktop(settings,'',f.root,{onStatus:value=>events.push(value)}),error=>{const safe=desktopFailure(error);assert.match(safe,/LIBRARY_RECOVERY_FAILED/);assert.ok(safe.includes(backup));return true;});
  assert.deepEqual(events.map(s=>s.state),['upgrading']);await assert.rejects(fetch('http://127.0.0.1:'+settings.port));
+});
+
+test('in-place migration reports its new verified backup rather than an older consolidation report',async t=>{
+ const f=await startupFixture(t),library=path.join(f.root,'current-library'),database=openDatabase(library,f.root);
+ database.sqlite.exec("DROP TRIGGER stories_blocked_revision_fault; DELETE FROM app_migrations WHERE name='0020_blocked_revision_faults.sql'");database.close();
+ const previous=path.join(f.root,'previous-consolidation-backup');await writeFile(path.join(library,'.desktop-upgrade-result.json'),JSON.stringify({backup:previous}));
+ const store=new SystemSettingsStore(path.join(f.root,'native/desktop.sqlite'),library),settings=store.save({port:await freeStartupPort()});store.close();const events=[];
+ const runtime=await startDesktop(settings,'',f.root,{onStatus:status=>events.push(status)});f.defer(()=>runtime.stop());
+ assert.notEqual(runtime.status.backup,previous);assert.ok(runtime.status.backup);verifyLibraryBackup(runtime.status.backup);assert.equal(events.find(s=>s.state==='starting').backup,runtime.status.backup);
+});
+
+test('metadata check uses the model-list route for a DeepSeek invocation override without generation',async()=>{
+ const calls=[],result=await checkProviderVariables({SHIQU_AI_PROVIDER:'deepseek',DEEPSEEK_API_KEY:'synthetic-key'},async(url,options)=>{calls.push({url,options});return Response.json({data:[]});});
+ assert.equal(result.ok,true);assert.equal(calls.length,1);assert.equal(calls[0].url,'https://api.deepseek.com/models');assert.equal(calls[0].options.body,undefined);
 });
