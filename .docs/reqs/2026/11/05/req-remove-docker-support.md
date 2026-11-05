@@ -4,10 +4,10 @@ Remove the obsolete container deployment route after development, desktop, CLI, 
 
 ## Acceptance criteria
 
-- [ ] Remove Dockerfile, Compose files, container healthcheck/ignore/build script, Docker-only environment variables, and the private `.env` if it still contains only the known Docker port.
-- [ ] Keep `docker/seed.sql`, initializer/upgrade/packaging paths, persisted owner IDs, private/public package identities, library format, dependencies and historical records unchanged.
-- [ ] Active setup/docs/UI no longer advertise container support; remove the obsolete Dockerfile-specific test assertion while retaining book provenance checks.
-- [ ] Verify applicable local configuration, library, CLI and development startup regressions; inspect the desktop footer through the in-app preview. No real library migration, inference, container build or desktop packaging.
+- [x] Remove Dockerfile, Compose files, container healthcheck/ignore/build script, Docker-only environment variables, and the private `.env` if it still contains only the known Docker port.
+- [x] Keep `docker/seed.sql`, initializer/upgrade/packaging paths, persisted owner IDs, private/public package identities, library format, dependencies and historical records unchanged.
+- [x] Active setup/docs/UI no longer advertise container support; remove the obsolete Dockerfile-specific test assertion while retaining book provenance checks.
+- [x] Verify applicable local configuration, library, CLI and development startup regressions; inspect the desktop footer through the in-app preview. No real library migration, inference, container build or desktop packaging.
 
 ## Constraints
 
