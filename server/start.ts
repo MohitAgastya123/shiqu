@@ -21,7 +21,7 @@ export async function startServer({root,variables=process.env,localAccess=false,
  catch(error){recordDiagnostic(config.dataDirectory,'service_start_failed',{code:safeErrorCode(error)});removeDiagnostics();await release();throw error;}
  const urls=phoneUrls(config.host,config.port);
  const handle=localAccess?desktopAccess(app.handle,{hosts:[`localhost:${config.port}`,`127.0.0.1:${config.port}`,`[::1]:${config.port}`,...urls.map(url=>new URL(url).host)]}).handle:developmentAccess(app.handle,variables,config.port);
- const providerSettings=settingsOverrides?browserProviderSettings({variables,overrides:settingsOverrides,proxyToken:settingsProxyToken,ports:[config.port,...(variables.SHIQU_DEV_FRONTEND_PORT?[Number(variables.SHIQU_DEV_FRONTEND_PORT)]:[])],status:()=>app.services.generation.status()}):undefined;
+ const providerSettings=settingsOverrides?browserProviderSettings({variables,overrides:settingsOverrides,proxyToken:settingsProxyToken,ports:[config.port,...(variables.SHIQU_DEV_FRONTEND_PORT?[Number(variables.SHIQU_DEV_FRONTEND_PORT)]:[])]}):undefined;
  const server=createHttpServer((request,peer)=>providerSettings&&new URL(request.url).pathname===providerSettingsPath?providerSettings(request,peer):handle(request));
  let closing:Promise<void>|undefined,stopping=false;
  function closeApplication(){

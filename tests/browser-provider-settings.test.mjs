@@ -5,10 +5,10 @@ import {writeFile,mkdir} from 'node:fs/promises';
 import path from 'node:path';
 import {once} from 'node:events';
 import {get} from 'node:http';
+import {existsSync} from 'node:fs';
 import {browserProviderSettings} from '../server/browser-provider-settings.ts';
 import {createHttpServer} from '../server/http.ts';
 import {effectiveProviderVariables} from '../server/cli-setup.ts';
-import {createReaderProvider} from '../server/generation.ts';
 import {createApplication} from '../server/app.ts';
 import {startDesktop} from '../server/desktop.ts';
 import {defaultSystemSettings} from '../lib/system-settings.ts';
@@ -22,8 +22,8 @@ async function fixture(t,overrides={}){
  const f=await startupFixture(t),store=f.store();
  store.save({provider:'gemini',providerConfigured:true,libraryConfigured:true,textModel:'saved-google-text',imageModel:'saved-google-image'},{provider:'gemini',value:googleKey});
  store.save({provider:'openai',openaiTextModel:'saved-openai-text',openaiImageModel:'saved-openai-image'},{provider:'openai',value:openaiKey});store.save({provider:'gemini'});
- const variables=effectiveProviderVariables(store,overrides),generation=createReaderProvider(variables,{},()=>assert.fail('No inference'));
- const handler=browserProviderSettings({variables,overrides,ports:[3456,3457],locations:f.locations,status:()=>generation.status()});
+ const variables=effectiveProviderVariables(store,overrides);
+ const handler=browserProviderSettings({variables,overrides,ports:[3456,3457],locations:f.locations});
  const read=(headers={},remote=peer,url=origin+providerSettingsPath)=>handler(new Request(url,{headers}),remote);
  const save=(body,headers={},remote=peer)=>handler(new Request(origin+providerSettingsPath,{method:'POST',headers:{Origin:origin,'Content-Type':'application/json',...headers},body:JSON.stringify(body)}),remote);
  const view=async()=>{const response=await read();assert.equal(response.status,200);return response.json();};
@@ -115,9 +115,9 @@ test('Vite guard rejects original LAN peers even through normalized proxy path v
 });
 
 test('development settings fail closed behind legacy proxies or missing proof, while CLI stays direct',async t=>{
- const f=await fixture(t),runtime=(await f.view()).runtime;
+ const f=await fixture(t);
  for(const proxyToken of ['', 'private-fixture-proof']){
-  const handler=browserProviderSettings({variables:f.variables,overrides:{},ports:[3456,3457],locations:f.locations,status:async()=>runtime,proxyToken});
+  const handler=browserProviderSettings({variables:f.variables,overrides:{},ports:[3456,3457],locations:f.locations,proxyToken});
   for(const host of ['127.0.0.1:3456','127.0.0.1:3457'])for(const supplied of [undefined,'forged-client-proof']){
    const headers=supplied?{[providerSettingsProofHeader]:supplied}:{};assert.equal((await handler(new Request('http://'+host+providerSettingsPath,{headers}),peer)).status,403);
    assert.equal((await handler(new Request('http://'+host+providerSettingsPath,{method:'POST',headers:{...headers,Origin:'http://'+host,'Content-Type':'application/json'},body:'{}'}),peer)).status,403);
@@ -143,6 +143,17 @@ test('browser CLI edits share the production store and leave runtime unchanged u
  response=await fetch(base+providerSettingsPath,{method:'POST',headers:{Origin:base,'Content-Type':'application/json'},body:JSON.stringify(body(current,{...current.settings,textModel:'cli-new-text'}))});assert.equal(response.status,200);current=await safeJson(response);assert.equal(current.restartRequired,true);assert.equal(current.runtime.models.text,'cli-saved-text');
  await process.stop();const state=await savedStartupState(f);assert.equal(state.settings.textModel,'cli-new-text');assert.equal(state.gemini,googleKey);
  const restarted=startFixtureCli(f);await restarted.ready();current=await (await fetch(base+providerSettingsPath)).json();assert.equal(current.runtime.models.text,'cli-new-text');assert.equal(current.restartRequired,false);await restarted.stop();
+});
+
+test('Codex settings load and save without launching a slow or unavailable CLI readiness probe',{skip:process.platform==='win32'},async t=>{
+ const f=await startupFixture(t),port=await freeStartupPort(),marker=path.join(f.root,'must-not-probe'),binary=path.join(f.root,'slow-codex.mjs');
+ await writeFile(binary,'#!'+process.execPath+'\nimport {writeFileSync} from "node:fs";writeFileSync('+JSON.stringify(marker)+',"started");setInterval(()=>{},1000);\n',{mode:0o700});
+ const store=f.store();store.save({provider:'codex',providerConfigured:true,libraryConfigured:true,codexPath:binary,codexModel:'configured-codex-model',port});store.close();
+ const cli=startFixtureCli(f);await cli.ready();const base=`http://127.0.0.1:${port}`;
+ let response=await fetch(base+providerSettingsPath,{signal:AbortSignal.timeout(2000)});assert.equal(response.status,200);let current=await response.json();
+ assert.equal(current.runtime.provider,'codex');assert.equal(current.runtime.models.text,'configured-codex-model');assert.equal(current.runtime.configured,undefined);assert.equal(existsSync(marker),false);
+ response=await fetch(base+providerSettingsPath,{method:'POST',signal:AbortSignal.timeout(2000),headers:{Origin:base,'Content-Type':'application/json'},body:JSON.stringify({settings:{codexModel:'next-codex-model'},expectedRevision:current.revision,keyAction:'keep'})});assert.equal(response.status,200);current=await response.json();
+ assert.equal(current.settings.codexModel,'next-codex-model');assert.equal(current.runtime.models.text,'configured-codex-model');assert.equal(existsSync(marker),false);await cli.stop();
 });
 
 test('fully explicit CLI startup survives a corrupt saved store; settings failures stay safe',async t=>{

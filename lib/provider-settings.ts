@@ -11,5 +11,5 @@ export type ProviderSettings=z.infer<typeof providerSettingsSchema>;
 const providerSettingsPatchSchema=providerSettingsSchema.partial().extend({taskReasoningEfforts:taskReasoningSchema.removeDefault().partial().optional()});
 export const providerSettingsSaveSchema=z.object({settings:providerSettingsPatchSchema,expectedRevision:z.number().int().nonnegative(),keyAction:z.enum(['keep','replace','remove']),key:z.string().max(4096).default('')}).strict();
 export type ProviderSettingsSave=z.infer<typeof providerSettingsSaveSchema>;
-export type ProviderSettingsView={settings:ProviderSettings;revision:number;keyPresent:{gemini:boolean;openai:boolean};runtime:Pick<ProviderStatus,'provider'|'configured'|'models'|'taskReasoningEfforts'>;overrides:string[];restartRequired:boolean;platform:string};
+export type ProviderSettingsView={settings:ProviderSettings;revision:number;keyPresent:{gemini:boolean;openai:boolean};runtime:Pick<ProviderStatus,'provider'|'models'|'taskReasoningEfforts'>&{configured?:boolean};overrides:string[];restartRequired:boolean;platform:string};
 export function loopbackAddress(address:string|undefined){return address==='127.0.0.1'||address==='::1'||address==='::ffff:127.0.0.1';}

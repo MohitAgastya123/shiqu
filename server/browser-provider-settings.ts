@@ -1,4 +1,4 @@
-// Keep local-only provider edits in the shared settings store; running generation remains immutable.
+// Keep local-only provider edits in the shared settings store; startup metadata never runs login probes.
 // Trust socket metadata and exact loopback hosts, never forwarding headers. Saved keys never leave here.
 import {z} from 'zod';
 import {SystemSettingsStore} from './system-settings.ts';
@@ -9,21 +9,27 @@ import {configuredModels} from '../lib/reader-gemini.ts';
 import {openaiDefaultModels,systemSettingsSchema,validApiKey} from '../lib/system-settings.ts';
 import {loopbackAddress,providerSettingsSchema,providerSettingsSaveSchema,providerSettingsProofHeader} from '../lib/provider-settings.ts';
 import type {ProviderSettingsView} from '../lib/provider-settings.ts';
-import type {ProviderStatus} from '../lib/reader-provider.ts';
 import type {HttpPeer} from './http.ts';
 
 type Variables=Record<string,string|undefined>;
 const overrideNames=['SHIQU_AI_PROVIDER','GEMINI_API_KEY','GEMINI_TEXT_MODEL','GEMINI_IMAGE_MODEL','OPENAI_API_KEY','OPENAI_TEXT_MODEL','OPENAI_IMAGE_MODEL','CODEX_BIN','CODEX_MODEL','SHIQU_CODEX_HOME','CODEX_REASONING_EFFORT','CLAUDE_BIN','CLAUDE_MODEL','CLAUDE_CONFIG_DIR','DEEPSEEK_API_KEY','DEEPSEEK_TEXT_MODEL',...['SUGGEST','ART','FRAMES','OUTLINE','PLAN','REVIEW','REPAIR'].map(task=>'SHIQU_REASONING_'+task)];
+function runtimeConfiguration(variables:Variables):ProviderSettingsView['runtime']{
+ const provider=(variables.SHIQU_AI_PROVIDER?.trim()||'gemini') as ProviderSettingsView['runtime']['provider'],value=(key:string,fallback='')=>variables[key]?.trim()||fallback;
+ if(provider==='readonly')return {provider,models:{text:'',image:''},configured:false};
+ const models=provider==='gemini'?configuredModels(variables):provider==='openai'?{text:value('OPENAI_TEXT_MODEL',openaiDefaultModels.text),image:value('OPENAI_IMAGE_MODEL',openaiDefaultModels.image)}:provider==='codex'?{text:value('CODEX_MODEL','codex-default'),image:'codex-image-generation'}:{text:value(provider==='claude'?'CLAUDE_MODEL':'DEEPSEEK_TEXT_MODEL',provider==='claude'?'opus':'deepseek-flash'),image:''};
+ const key=provider==='gemini'?'GEMINI_API_KEY':provider==='openai'?'OPENAI_API_KEY':provider==='deepseek'?'DEEPSEEK_API_KEY':null;
+ return {provider,models,taskReasoningEfforts:configuredTaskReasoning(variables),...(key?{configured:!!value(key)}:{})};
+}
 // Compare credentials only in server memory and only for the effective provider.
 function signature(variables:Variables){
- const provider=variables.SHIQU_AI_PROVIDER?.trim()||'gemini',value=(key:string,fallback='')=>variables[key]?.trim()||fallback;
+ const {provider,models,taskReasoningEfforts}=runtimeConfiguration(variables),value=(key:string,fallback='')=>variables[key]?.trim()||fallback;
  if(provider==='readonly')return provider;
- const models=provider==='gemini'?configuredModels(variables):provider==='openai'?{text:value('OPENAI_TEXT_MODEL',openaiDefaultModels.text),image:value('OPENAI_IMAGE_MODEL',openaiDefaultModels.image)}:provider==='codex'?{text:value('CODEX_MODEL','codex-default'),image:'codex-image-generation'}:{text:value(provider==='claude'?'CLAUDE_MODEL':'DEEPSEEK_TEXT_MODEL',provider==='claude'?'opus':'deepseek-flash'),image:''};
  const fields=provider==='gemini'?['GEMINI_API_KEY']:provider==='openai'?['OPENAI_API_KEY']:provider==='codex'?['CODEX_BIN','SHIQU_CODEX_HOME','CODEX_REASONING_EFFORT']:provider==='claude'?['CLAUDE_BIN','CLAUDE_CONFIG_DIR']:['DEEPSEEK_API_KEY'];
- return JSON.stringify({provider,models,reasoning:configuredTaskReasoning(variables),fields:fields.map(key=>[key,value(key,key.endsWith('_BIN')?provider:'')])});
+ return JSON.stringify({provider,models,reasoning:taskReasoningEfforts,fields:fields.map(key=>[key,value(key,key.endsWith('_BIN')?provider:'')])});
 }
-export function browserProviderSettings(options:{variables:Variables;overrides:Variables;ports:number[];status:()=>Promise<ProviderStatus>;locations?:ReturnType<typeof desktopLibraryPaths>;proxyToken?:string}){
+export function browserProviderSettings(options:{variables:Variables;overrides:Variables;ports:number[];locations?:ReturnType<typeof desktopLibraryPaths>;proxyToken?:string}){
  const runtimeSignature=signature(options.variables),locations=options.locations||desktopLibraryPaths(),hosts=new Set(options.ports.flatMap(port=>[`localhost:${port}`,`127.0.0.1:${port}`,`[::1]:${port}`]));
+ const runtime=runtimeConfiguration(options.variables);
  const overrides=overrideNames.filter(name=>typeof options.overrides[name]==='string');
  const headers={'Cache-Control':'private, no-store','Referrer-Policy':'no-referrer','X-Content-Type-Options':'nosniff'};
  const json=(value:unknown,status=200)=>Response.json(value,{status,headers});
@@ -48,8 +54,8 @@ export function browserProviderSettings(options:{variables:Variables;overrides:V
     if(api&&input.keyAction==='keep'&&!store.key(provider))return json({error:'请先为所选服务填写 API 密钥，或选择只读模式。'},400);
     store.save({...providerSettingsSchema.strip().parse(merged),providerConfigured:true},key,input.expectedRevision);
    }
-   const status=await options.status(),snapshot=store.snapshot(),effective=effectiveProviderVariables(store,options.overrides);
-   const view:ProviderSettingsView={settings:providerSettingsSchema.strip().parse(snapshot.settings),revision:snapshot.revision,keyPresent:snapshot.keyPresent,runtime:{provider:status.provider,configured:status.configured,models:status.models,...(status.taskReasoningEfforts?{taskReasoningEfforts:status.taskReasoningEfforts}:{})},overrides,restartRequired:signature(effective)!==runtimeSignature,platform:process.platform};
+   const snapshot=store.snapshot(),effective=effectiveProviderVariables(store,options.overrides);
+   const view:ProviderSettingsView={settings:providerSettingsSchema.strip().parse(snapshot.settings),revision:snapshot.revision,keyPresent:snapshot.keyPresent,runtime,overrides,restartRequired:signature(effective)!==runtimeSignature,platform:process.platform};
    return json(view);
   }catch(error){
    if(error instanceof z.ZodError||error instanceof SyntaxError)return json({error:'请检查提供方、模型名称、推理档位和保存内容。'},400);
