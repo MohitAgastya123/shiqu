@@ -1,0 +1,132 @@
+/* 书架：标题与搜索、带数量的标签页、视图栏；“制作中”紧凑行区域；可阅读故事两列等宽封面卡片。
+   沿用阅读器配色（--yu-meta / --yu-action）、衬线标题与 12px 圆角；窄屏不出现横向滚动。 */
+.yu-shelf{min-height:calc(100dvh - 250px);padding-top:22px}
+.yu-shelf>h1{font-family:var(--serif);font-size:28px;font-weight:500;margin:6px 0 18px}
+
+/* 搜索 */
+.yu-shelf-search{display:flex;align-items:center;gap:10px;border:1px solid #dce3d1;background:#fafbf4;border-radius:11px;padding:0 6px 0 13px;color:#8d9d7e;margin-bottom:8px}
+.yu-shelf-search:focus-within{outline:2px solid #8da277;outline-offset:2px}
+.yu-shelf-search input{flex:1;min-width:0;border:0!important;background:transparent!important;box-shadow:none!important;padding:12px 0!important;margin:0;font-size:14px!important;color:#3a513e}
+.yu-shelf-search input::placeholder{color:var(--yu-meta)}
+.yu-shelf-search input::-webkit-search-cancel-button{display:none}
+.yu-shelf-search input:focus-visible{outline:none}
+.yu-shelf-search button{display:grid;place-items:center;flex:none;min-width:44px;min-height:44px;border:0;background:none;color:var(--yu-action);padding:0}
+
+/* 标签页与新建 */
+.yu-shelf-tabs{display:flex;align-items:center;gap:22px;border-bottom:1px solid #dfe4d5;margin-bottom:10px}
+.yu-shelf-tabs>button{display:inline-flex;align-items:center;gap:6px;min-height:44px;border:0;border-bottom:2px solid transparent;background:none;padding:10px 0;color:var(--yu-meta);font-size:13px}
+.yu-shelf-tabs>button>span{min-width:20px;padding:0 6px;border-radius:999px;background:#eceee3;color:#6c7a60;font-size:11px;line-height:18px;text-align:center}
+.yu-shelf-tabs>button.active{color:#325d43;border-color:#547249}
+.yu-shelf-tabs>button.active>span{background:#dfe8d3;color:#35583e}
+.yu-shelf-tabs>.yu-shelf-create{margin-left:auto;gap:5px;border-bottom:0;white-space:nowrap;color:#325d43}
+.yu-shelf-tabs>button:focus-visible{outline:2px solid #648354;outline-offset:2px}
+
+/* 视图栏：结果、刷新、分组 */
+.yu-shelf-view{display:flex;align-items:center;gap:8px;margin-bottom:14px}
+.yu-shelf-result{flex:1;min-width:0;display:flex;flex-wrap:wrap;align-items:center;gap:0 10px;font-size:12px;color:var(--yu-meta)}
+.yu-shelf-result button{min-height:44px;padding:0;border:0;background:none;color:#35583e;text-decoration:underline;text-underline-offset:3px;font:inherit}
+.yu-shelf-refresh{display:grid;place-items:center;flex:none;width:40px;height:40px;padding:0;border:1px solid #dde5d2;border-radius:9px;background:#f8faf1;color:var(--yu-action)}
+.yu-shelf-refresh:disabled{opacity:.6;cursor:default}
+.yu-shelf-view label{position:relative;display:block;margin:0}
+.yu-shelf-view select{appearance:none;box-sizing:border-box;height:40px;max-width:150px;padding:0 28px 0 10px;border:1px solid #dde5d2;border-radius:9px;background:#f8faf1;color:var(--yu-meta);font-size:12px}
+.yu-shelf-view label>svg{position:absolute;right:9px;top:50%;transform:translateY(-50%);pointer-events:none;color:var(--yu-meta)}
+.yu-shelf-result button:focus-visible,.yu-shelf-refresh:focus-visible,.yu-shelf-view select:focus-visible{outline:2px solid #648354;outline-offset:2px}
+
+/* 共享：标签以单行“·”分隔并在行尾省略；收藏与删除 */
+.yu-shelf-tags{display:block;min-width:0;margin:2px 0 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--yu-meta);font-size:11px;font-weight:400;line-height:1.7}
+.yu-shelf-tags>span+span::before{content:' · ';color:#a3ac96}
+.yu-shelf-card-actions{display:flex;align-items:center;gap:2px;flex:none}
+.yu-shelf-card-actions button{display:grid;place-items:center;width:36px;height:36px;padding:0;border:0;border-radius:8px;background:transparent;color:var(--yu-action)}
+.yu-shelf-card-actions button:hover{background:#edf2e3;color:#35583e}
+.yu-shelf-card-actions button:disabled{opacity:.5;cursor:default}
+.yu-shelf-card-actions button:focus-visible{outline:2px solid #648354;outline-offset:2px}
+.yu-shelf-favorite>span{display:none}
+.yu-shelf-favorite.is-saved{background:#eaf0df}
+.yu-shelf .yu-generation-control{white-space:nowrap}
+
+/* 制作中区域 */
+.yu-production{margin-bottom:18px;border:1px solid #dfe5d2;border-radius:12px;background:#f3f5ea}
+.yu-production>summary{display:flex;align-items:center;gap:8px;min-height:48px;padding:4px 14px;cursor:pointer;list-style:none;color:#526e45}
+.yu-production>summary::-webkit-details-marker{display:none}
+.yu-production>summary>svg{flex:none;transition:transform .15s}
+.yu-production[open]>summary>svg{transform:rotate(90deg)}
+.yu-production>summary>h2{margin:0;font-family:var(--serif);font-size:16px;font-weight:500}
+.yu-production>summary>span{font-size:12px;color:var(--yu-meta)}
+.yu-production>summary>em{margin-left:auto;padding:1px 8px;border-radius:999px;background:#f6e7c8;color:#8a5a12;font-size:11px;font-style:normal;font-weight:500}
+.yu-production>summary:focus-visible{outline:2px solid #648354;outline-offset:-2px;border-radius:12px}
+.yu-production>ul{display:grid;margin:0;padding:0 6px 6px;list-style:none}
+.yu-production-row{position:relative;display:flex;align-items:center;gap:4px;min-width:0;padding:2px 4px 2px 0;border-radius:10px;background:#fdfbf3}
+.yu-production-row+.yu-production-row{margin-top:4px}
+.yu-production-row::before{content:'';flex:none;align-self:stretch;width:3px;margin:8px 0;border-radius:3px;background:#b8c4a8}
+.yu-production-row.needs::before{background:#c98a2b}
+.yu-production-row.failed::before{background:#b4533b}
+.yu-production-row.active::before{background:#5f8a4b}
+.yu-pending-story{flex:1;min-width:0;display:grid;gap:1px;padding:9px 6px 9px 8px;border:0;background:transparent;border-radius:8px;color:#3a513e;text-align:left}
+.yu-pending-story:focus-visible{outline:2px solid #648354;outline-offset:2px}
+.yu-production-title{display:flex;align-items:baseline;gap:8px;min-width:0}
+.yu-production-title>strong{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--serif);font-size:15px;font-weight:500;line-height:1.6}
+.yu-production-title>em{flex:none;max-width:55%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 7px;border-radius:999px;background:#eceee3;color:#6c7a60;font-size:11px;font-style:normal;line-height:19px}
+.yu-production-row.needs .yu-production-title>em{background:#f6e7c8;color:#8a5a12}
+.yu-production-row.failed .yu-production-title>em{background:#f6dfd6;color:#9a3f2a}
+.yu-production-row.active .yu-production-title>em{background:#e1ecd6;color:#3f6a35}
+.yu-production-error{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#9a3f2a;font-size:12px}
+.yu-production-side{display:flex;align-items:center;flex:none;gap:2px}
+.yu-production-side>.yu-generation-control{min-height:36px;padding:0 8px;border:1px solid #d4dcc7;border-radius:8px;background:#fffdf6;color:#35583e;font-size:12px;text-decoration:none}
+.yu-production-more{display:block;width:100%;min-height:40px;margin-top:4px;border:0;border-radius:8px;background:transparent;color:#35583e;font:inherit;font-size:12px}
+.yu-production-more:hover{background:#e9eddf}
+.yu-production-more:focus-visible{outline:2px solid #648354;outline-offset:-2px}
+
+/* 可阅读区域 */
+.yu-shelf-region-title{display:flex;align-items:baseline;gap:8px;margin:4px 2px 12px;font-family:var(--serif);font-size:16px;font-weight:500;color:#526e45}
+.yu-shelf-region-title>span{font-family:inherit;font-size:12px;color:var(--yu-meta)}
+.yu-shelf-region-empty{margin:4px 2px;font-size:12px;color:var(--yu-meta)}
+.yu-shelf-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.yu-shelf-book-group{border-top:1px solid #e1e6d8;margin-top:8px}
+.yu-shelf-book-group:first-child{margin-top:0;border-top:0}
+.yu-shelf-book-group>summary{display:flex;align-items:center;gap:8px;min-height:44px;padding:6px 1px;cursor:pointer;list-style:none;color:#849875}
+.yu-shelf-book-group>summary::-webkit-details-marker{display:none}
+.yu-shelf-book-group>summary>svg{flex:none}
+.yu-shelf-book-group>summary>svg:first-child{transition:transform .15s}
+.yu-shelf-book-group[open]>summary>svg:first-child{transform:rotate(90deg)}
+.yu-shelf-book-group>summary>h2{margin:0;font-family:var(--serif);font-size:16px;font-weight:500;line-height:1.7;color:#526e45}
+.yu-shelf-book-group>summary>span{margin-left:auto;flex:none;font-size:12px;color:var(--yu-meta)}
+.yu-shelf-book-group>summary:focus-visible{outline:2px solid #648354;outline-offset:3px}
+.yu-shelf-book-group[open]>.yu-shelf-grid{padding-bottom:14px}
+
+/* 可阅读卡片：封面、标题与标签、生成状态、阅读进度 */
+.yu-shelf-row-readable{display:flex;flex-direction:column;gap:10px;min-width:0;padding:10px;border:1px solid #e5e5d9;border-radius:12px;background:#fdfbf3}
+.yu-shelf-cover-wrap{position:relative;min-width:0}
+.yu-shelf-cover{display:block;position:relative;width:100%;padding:0;border:0;border-radius:8px;background:#e6ecda;overflow:hidden}
+.yu-shelf-cover>img,.yu-shelf-cover>.yu-shelf-pending{display:block;width:100%;aspect-ratio:3/4;object-fit:cover}
+.yu-shelf-cover>.yu-shelf-pending{display:grid;place-items:center;color:#819a68}
+.yu-shelf-cover:focus-visible{outline:2px solid #648354;outline-offset:2px}
+.yu-shelf-cover-overlay{position:absolute;left:6px;right:6px;bottom:6px;z-index:2;display:flex;align-items:center;justify-content:space-between;gap:6px;min-width:0;pointer-events:none}
+.yu-shelf-book-badge{flex:0 1 auto;min-width:0;max-width:calc(100% - 70px);padding:3px 7px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border:1px solid #fff9;border-radius:6px;background:#faf9f1cc;color:#3a563f;font-size:11px;font-weight:500;line-height:1.6}
+.yu-shelf-cover-overlay .yu-shelf-card-actions{pointer-events:auto;gap:4px}
+.yu-shelf-cover-overlay .yu-shelf-card-actions button{width:30px;height:30px;border:1px solid #ffffff70;border-radius:50%;background:#faf9f1b3;color:#3a563f}
+.yu-shelf-cover-overlay .yu-shelf-card-actions button>svg{width:16px;height:16px}
+.yu-shelf-cover-overlay .yu-shelf-card-actions button:hover{background:#e7edddcc}
+.yu-shelf-cover-overlay .yu-shelf-favorite.is-saved{background:#e1ebd4cc;color:#34583d}
+.yu-shelf-card-body{display:flex;flex-direction:column;flex:1;min-width:0;gap:6px}
+.yu-shelf-card-details{display:block;width:100%;min-width:0;padding:0;border:0;background:transparent;color:#3a513e;text-align:left}
+.yu-shelf-card-details>h2{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin:0;font-family:var(--serif);font-size:16px;font-weight:500;line-height:1.5;overflow-wrap:anywhere}
+.yu-shelf-card-details:focus-visible{outline:2px solid #648354;outline-offset:2px;border-radius:4px}
+.yu-shelf-generation-progress{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:2px 8px;color:#617254;font-size:11px;line-height:1.6}
+.yu-shelf-generation-progress>span{min-width:0;overflow-wrap:anywhere}
+.yu-shelf-generation-progress>.yu-generation-control{min-height:28px;padding:2px 0}
+.yu-shelf-reading-footer{display:grid;gap:6px;width:100%;margin-top:auto;padding:4px 0 0;border:0;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.yu-shelf-reading-footer:focus-visible{outline:2px solid #648354;outline-offset:2px;border-radius:4px}
+.yu-shelf-progress{display:block;height:3px;border-radius:3px;background:#e6eadc;overflow:hidden}
+.yu-shelf-progress>i{display:block;height:100%;border-radius:inherit;background:#7f9a63}
+.yu-shelf-reading-footer.finished .yu-shelf-progress>i{background:#a9b79a}
+.yu-shelf-reading-meta{display:flex;align-items:center;justify-content:space-between;gap:4px;min-height:24px;color:var(--yu-meta);font-size:11px;line-height:1.6}
+.yu-shelf-continue{display:inline-flex;align-items:center;gap:3px;flex:none;color:#35583e;font-size:12px}
+
+@media(max-width:380px){
+ .yu-shelf-grid{gap:10px}
+ .yu-shelf-row-readable{padding:8px}
+ .yu-shelf-card-details>h2{font-size:15px}
+ .yu-shelf-tabs{gap:16px}
+ .yu-production-title{flex-wrap:wrap;row-gap:2px}
+ .yu-production-title>em{max-width:100%}
+}

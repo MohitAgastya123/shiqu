@@ -1,7 +1,7 @@
 // Shelf observations must explain live work without starting or renewing generation.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {shelfGenerationStatus} from '../lib/shelf-generation.ts';
+import {shelfGenerationStatus,shelfNeedsUserGroups,shelfProductionPriority,sortShelfProductions} from '../lib/shelf-generation.ts';
 import {observeStoryGeneration,runQueuedStoryGeneration} from '../lib/reader-production-client.ts';
 import {productionFixture,until,turn} from './fixtures/production.mjs';
 
@@ -90,4 +90,12 @@ test('viewing a saved failure preserves its attempt count until an explicit retr
  // An explicit retry starts a new run, so its count restarts rather than continuing from before.
  assert.equal(await attempts(),1);assert.ok(before>=1);assert.equal(f.control.plans.length,1);
  assert.ok((await f.read(id)).ready>0);
+});
+
+test('production rows list user decisions and failures before running, queued and paused work, keeping order within a status',()=>{
+ const items=[['a','生成已暂停'],['b','生成中'],['c','待选故事'],['d','生成已暂停'],['e','生成失败'],['f','等待生成'],['g','待选画幅数'],['h','未知状态']];
+ const sorted=sortShelfProductions(items,([,group])=>group).map(([id])=>id);
+ assert.deepEqual(sorted,['c','g','e','b','f','a','d','h']);
+ assert.deepEqual(items.map(([id])=>id),['a','b','c','d','e','f','g','h'],'The input order is not mutated');
+ for(const group of shelfNeedsUserGroups)assert.ok(shelfProductionPriority(group)<shelfProductionPriority('生成中'));
 });

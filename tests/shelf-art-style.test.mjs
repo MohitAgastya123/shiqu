@@ -34,7 +34,9 @@ test('saved setup art style drives shelf tags, search and grouping before confir
  assert.match(html,/黏土定格/);assert.doesNotMatch(html,/电影写实/);
  assert.match(render(session,{query:'黏土'}),/找到 1 \/ 1 篇/);
  assert.match(render(session,{query:'电影写实'}),/找到 0 \/ 1 篇/);
- assert.match(render(session,{grouping:'artStyle'}),/<h2>黏土定格<\/h2>/);
+ // 制作中的条目不参与分组，画风仍以标签显示。
+ const grouped=render(session,{grouping:'artStyle'});
+ assert.match(grouped,/<span title="黏土定格">黏土定格<\/span>/);assert.doesNotMatch(grouped,/<h2>黏土定格<\/h2>/);
  assert.equal(readLibrarySummary(f.dataDirectory).stories.find(s=>s.id===session.id).artStyle,'clay');
 });
 

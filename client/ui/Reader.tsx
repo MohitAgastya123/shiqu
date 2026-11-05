@@ -4,6 +4,7 @@
 // Display-name editing uses a saved session even before a generated story exists.
 // Swipe offsets live in a drag store and frames render through a memoized filmstrip, so pointer moves
 // do not re-render Reader. Identical poll snapshots keep their previous story and progress references.
+// 书架未保存分组偏好时默认不分组；已保存的偏好照常沿用。
 
 import {pruneReadingCaches,type LibraryInventory} from '../reading-cache.ts';
 import StoryExportControl from './StoryExportControl';
@@ -81,7 +82,7 @@ export default function Reader(){
  const startupDeletions=useRef<Promise<LibraryInventory>|null>(null);
  const authoritativeProgress=useRef<Progress[]>([]);
  const [shelfQuery,setShelfQuery]=useState(()=>{try{return localStorage.getItem('shiqu-shelf-query')||'';}catch{return '';}}),[shelfGrouping,setShelfGrouping]=useState<ShelfGrouping>(()=>{
-  try{const saved=localStorage.getItem('shiqu-shelf-grouping');return shelfGroupings.find(option=>option.value===saved)?.value||'book';}catch{return 'book';}
+  try{const saved=localStorage.getItem('shiqu-shelf-grouping');return shelfGroupings.find(option=>option.value===saved)?.value||'none';}catch{return 'none';}
  });
  const [shelfRefreshing,setShelfRefreshing]=useState(false);
  const [tab,setTab]=useState<string>(()=>{

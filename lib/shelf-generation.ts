@@ -1,4 +1,5 @@
 // Explain saved generation checkpoints without treating a shelf visit as demand for new work.
+// 书架“制作中”区域按状态优先级排序：需要用户处理的排在运行、排队与暂停之前，同一状态内保持原顺序。
 import type {SessionView} from './reader-model.ts';
 
 export function shelfGenerationStatus(session:SessionView){
@@ -12,4 +13,16 @@ export function shelfGenerationStatus(session:SessionView){
  if(session.productionState==='running'||!session.productionState&&session.state==='running')return {group:'生成中',message:session.stage,detail:session.intake&&session.intake.phase!=='confirmed'?'正在准备制作内容，离开后继续，确认前不编排分镜或绘图。':'正在生成整篇，离开页面后继续，可随时暂停。',action:'查看进度'};
  if(session.productionState==='queued'||session.generationMode==='background')return {group:'等待生成',message:'等待生成',detail:'已进入队列，轮到后自动开始。',action:'查看进度'};
  return {group:'生成已暂停',message:'生成已暂停',detail:'点击“继续生成”后恢复，已保存的结果会保留。',action:'查看详情'};
+}
+
+// 需要用户操作才能继续的状态，在书架“制作中”区域始终显示且排在最前。
+export const shelfNeedsUserGroups=['待提取故事','待选故事','待制作确认','待选画幅数','生成失败'] as const;
+const productionOrder=[...shelfNeedsUserGroups,'生成中','等待生成','生成已暂停'];
+export function shelfProductionPriority(group:string){
+ const index=productionOrder.indexOf(group);
+ return index<0?productionOrder.length:index;
+}
+export function sortShelfProductions<T>(items:T[],group:(item:T)=>string){
+ // Array.prototype.sort 为稳定排序，同一状态内保持书架原有顺序。
+ return [...items].sort((a,b)=>shelfProductionPriority(group(a))-shelfProductionPriority(group(b)));
 }
