@@ -19,7 +19,7 @@ Browser adds saved-configuration check/reset operations to the existing guarded 
 - [x] Wire desktop child to exact settings path and shared provider resolution, upgrade-before-ownership and progress/backup reporting, no-provider startup and pre-production guard; preserve environment precedence and remote reading/generation.
 - [x] Refactor Rust supervisor for observable startup/upgrade without deadline interruption, exact store handoff, native-only revision-safe saves, status/restart metadata and fixed deep-link opener. Remove summary/tombstone native and preview paths while retaining schema/journal refusal.
 - [x] Replace desktop tabs/queue/provider form with single console, native path pickers, lifecycle/restart confirmation, read-only provider summary and phone access. Add browser first-run prompt/deep link/check/reset controls; update desktop README and user guide and affected tests.
-- [ ] Verify focused Node/Rust behavior, full applicable unit/integration tiers, typecheck/lint/Rust format and matching E2E including in-app Vite console at multiple sizes. Use isolated settings/homes/libraries and synthetic keys, no inference or packaging.
+- [x] Verify focused Node/Rust behavior, full applicable unit/integration tiers, typecheck/lint/Rust format and matching E2E including in-app Vite console at multiple sizes. Use isolated settings/homes/libraries and synthetic keys, no inference or packaging.
 
 ## Validation and risks
 
@@ -59,3 +59,23 @@ CR review round: 1; reviewer: reused (`console_review`).
 Corrections: prefer the actual initializer return backup over an older report, with a current-format pending-migration test; distinguish authorized-but-unavailable browser settings from denied access and keep the safe error/reload sheet reachable; calculate saved provider readiness from native key-presence flags for both active providers. Closing the settings sheet clears only its fixed fragment so the setup prompt can reopen it. Tray/OS stop and quit now share a lock-releasing startup wait, covered by a native concurrency test. The running provider summary also survives settings-store failure using its immutable startup variables.
 
 Fix verification: isolated upgrade/recovery tests pass including in-place migration backup; native suite 24 pass, one prepared-bundle test excluded; E2E plus console tests 5/5 pass, now including missing-store error visibility/reload, reopening the fixed deep link and key-presence summaries. Existing actual pnpm dev settings E2E passed in its disposable checkout. Full provider/heavy TT continues with no failures so far.
+
+Fix milestone: `bc7e74c`.
+
+CR fixed: latest upgrade backup preserved; local settings failures expose retry; saved readiness reflects missing keys; all stop/exit paths wait safely for startup. Rerun result passed.
+CR risk: non-low — native lifecycle, migration safety and shared HTTP settings.
+CR review round: 2; reviewer: reused (`console_review`).
+
+## Final verification
+
+TT passed: full Node 24.22.1/pnpm 11.25.0 provider/heavy tier (`SHIQU_TEST_TIER=full pnpm exec node --experimental-strip-types --test --test-concurrency=2 tests/*.test.mjs`) completed 1323/1323, no failures/skips/cancellations, 291.3 seconds. Log `/tmp/shiqu-console-full-tier.log`. Reuse unaffected full-tier evidence after the localized review fixes; final focused settings/separate-provider suite passes 33/33 including new backup/list-metadata cases (`/tmp/shiqu-console-review-fix.log`). Native suite passes 24 tests with the absent prepared-bundle-only test filtered (`/tmp/shiqu-console-rust.log`); typecheck/lint and Rust formatting pass. All applicable Node unit/integration suites were covered; no live inference or real data.
+
+ET passed: `tests/desktop-service-console.playwright.e2e.mjs` and console unit tests 5/5 after all UI fixes (`/tmp/shiqu-console-e2e.log`), plus existing real pnpm dev/browser settings E2E 1/1 (`/tmp/shiqu-console-dev-e2e.log`). In-app Vite preview at 1040/390 verified separately; native IPC fixture and actual desktop HTTP + temporary browser build are explicitly separate evidence. Browser-origin settings errors/retry/reopening, restart confirm/cancel, safe key submission/reset, current runtime summary, all native-only save fields, status failures and responsive QR layout pass. Test screenshots are `.data/e2e/desktop-service-console/console-running-{1040,390}.png` and `browser-provider-settings.png`.
+
+Native packaging/preparation and OS opener/tray/WebView runtime smoke are intentionally unrun. No story schema, migration, dependency or CLI command/behavior change. The existing v2 store interop tests pass; no CLI skill change was required. The two Codex path fields remain under the original REQ; moving them to collapsed advanced controls was discussed as a recommendation, not implemented without a change request.
+
+VR passed: all acceptance criteria complete
+VR risk: non-low — coordinates native lifecycle and upgrade safety, shared settings, secret handling and browser access boundaries.
+VR review round: 1; reviewer: reused (`console_review`).
+
+All 25 REQ criteria and six AP tasks are complete. Full independent VR result is preserved verbatim in `.docs/done/2026/11/05/desktop-service-console.md`. DD complete; GC finalizes these acceptance/delivery documents without changing reviewed implementation.
