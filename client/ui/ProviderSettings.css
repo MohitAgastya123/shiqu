@@ -2,19 +2,29 @@
 .yu-provider-settings{display:grid;gap:18px;margin-top:20px;color:#3e5b3c;font-size:14px;line-height:1.65;text-align:left}
 .yu-provider-settings p{margin:0;color:#617157;font-size:13px;line-height:1.7}
 .yu-provider-settings fieldset{border:0;padding:0;margin:0;display:grid;gap:18px;min-width:0}
-.yu-provider-settings legend{font-family:var(--serif);font-size:19px;padding:0;margin-bottom:18px;color:#34583d}
-.yu-provider-settings label{display:grid;gap:7px;font-size:14px;min-width:0}
+.yu-provider-group{display:grid;gap:14px;min-width:0}
+.yu-provider-group+.yu-provider-group{border-top:1px solid #dce3d2;padding-top:20px}
+.yu-provider-group h3{margin:0;font-size:15px;font-weight:500;color:#34583d}
+.yu-provider-group-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.yu-provider-group-heading span{font-size:12px;color:#718468}
+.yu-provider-settings label{display:grid;gap:7px;font-size:14px;min-width:0;margin:0}
 .yu-provider-settings input,.yu-provider-settings select{width:100%;min-width:0;box-sizing:border-box;min-height:46px;border:1px solid #c9d3bd;border-radius:9px;padding:10px 12px;background:#fffdf7;color:#36533a;font:inherit}
 .yu-provider-settings input:focus-visible,.yu-provider-settings select:focus-visible{outline:2px solid #607e4b;outline-offset:2px}
 .yu-provider-settings :disabled{opacity:.6}
-.yu-provider-runtime{padding:18px;border:1px solid #d6dfca;border-radius:12px;background:#eff3e7;display:grid;gap:10px;min-width:0}
-.yu-provider-runtime h3{font-size:15px;margin:0}.yu-provider-runtime strong{font-size:17px;font-weight:500}
-.yu-provider-runtime dl{display:grid;grid-template-columns:auto minmax(0,1fr);gap:5px 12px;margin:0;font-size:13px}
-.yu-provider-runtime dt{color:#66785b}.yu-provider-runtime dd{margin:0;overflow-wrap:anywhere}
-.yu-provider-runtime details dl{display:block;margin-top:12px}.yu-provider-runtime details dl>div{display:flex;gap:16px;justify-content:space-between}
+.yu-provider-summary{margin:18px 0 0;padding:0 4px;text-align:left;color:#62755a;font-size:12px;line-height:1.6}
+.yu-provider-summary>div{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.yu-provider-summary strong{font-size:13px;font-weight:500;color:#42623d}
+.yu-provider-summary dl{display:grid;grid-template-columns:auto minmax(0,1fr);gap:3px 12px;margin:7px 0 0}
+.yu-provider-summary dt{color:#819078}.yu-provider-summary dd{margin:0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.yu-provider-summary p{margin:7px 0 0;font-size:12px}
 .yu-provider-settings summary{cursor:pointer;min-height:36px;align-content:center}
 .yu-provider-overrides ul{margin:8px 0;padding-left:20px}.yu-provider-overrides code{font-size:12px;overflow-wrap:anywhere}
-.yu-provider-settings .yu-provider-restart,.yu-provider-settings .yu-provider-message{padding:12px;border:1px solid #c9d3bd;border-radius:9px;background:#f7f4e4;color:#4b633c}
+.yu-provider-settings .yu-provider-message{padding:12px;border:1px solid #c9d3bd;border-radius:9px;background:#f7f4e4;color:#4b633c}
 .yu-provider-models,.yu-provider-efforts>div{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
 .yu-provider-efforts>div{margin-top:14px}
-@media(max-width:540px){.yu-provider-models,.yu-provider-efforts>div{grid-template-columns:1fr}.yu-provider-runtime{padding:15px}.yu-provider-settings input,.yu-provider-settings select{font-size:16px}}
+.yu-provider-efforts{border-top:1px solid #dce3d2;padding-top:12px}
+.yu-provider-codex-effort{margin-top:14px}
+.yu-provider-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:20px;padding-top:16px;border-top:1px solid #dce3d2}
+.yu-provider-reload{min-height:46px;padding:10px 0;border:0;background:transparent;color:#4b693d;font:inherit}
+.yu-provider-actions .yu-primary{width:auto;min-width:140px;min-height:46px;padding:12px 20px;font-size:14px}
+@media(max-width:540px){.yu-provider-models,.yu-provider-efforts>div{grid-template-columns:1fr}.yu-provider-settings input,.yu-provider-settings select{font-size:16px}}
