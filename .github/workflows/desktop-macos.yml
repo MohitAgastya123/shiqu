@@ -43,7 +43,9 @@ jobs:
     # A job skipped by this condition reports success, so docs-only pull requests satisfy a required check.
     # Only a successful scope result of docs-only skips it; a failed scope job still runs the checks.
     if: ${{ !cancelled() && github.event_name != 'push' && (github.event_name != 'pull_request' || needs.scope.outputs.code != 'false') }}
-    runs-on: macos-15
+    # Linux runs the Unix CLI/PTY fixtures and desktop/runtime JavaScript tests; native macOS and Windows
+    # behavior, Rust tests and formatting are checked by the tag build jobs below.
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -52,16 +54,11 @@ jobs:
           package-manager-cache: false
       - name: Enable pinned pnpm
         run: corepack enable pnpm
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: 1.93.0
-          components: rustfmt
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm lint
-      # Unix CLI fixtures need macOS; this full suite also covers desktop/runtime JavaScript tests.
+      # Fast tier; provider matrix, heavy cases and shipped-book checks run via pnpm test:providers / test:books.
       - run: pnpm test
-      - run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
 
   build:
     name: Desktop / ${{ matrix.platform }} ${{ matrix.arch }}
@@ -111,6 +108,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.93.0
+          components: rustfmt
+      - run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
       - run: pnpm install --frozen-lockfile
       - name: Build shared reader, desktop UI, and runtime resources
         run: |
