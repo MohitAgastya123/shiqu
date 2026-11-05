@@ -41,12 +41,12 @@ test('patches preserve concurrent unrelated updates, stale revisions and key fai
 });
 test('configure prompts only required fields, retains keys on blank input, and cancels without partial saves',async t=>{
  const f=await fixture(t),store=new SystemSettingsStore(f.file,f.library);t.after(()=>store.close());
- await configureProvider(store,prompts(['openai','',''],['test-only-openai']));
+ await configureProvider(store,prompts(['openai','','',''],['test-only-openai']));
  assert.equal(store.settings().provider,'openai');assert.equal(store.settings().providerConfigured,true);assert.equal(store.key('openai'),'test-only-openai');
  const effective=await cliProviderConfiguration(store,{});assert.equal(effective.OPENAI_API_KEY,'test-only-openai');
- await configureProvider(store,prompts(['openai','',''],['']));assert.equal(store.key('openai'),'test-only-openai');
+ await configureProvider(store,prompts(['openai','','',''],['']));assert.equal(store.key('openai'),'test-only-openai');
  const before=store.settings(),revision=store.revision();
- await assert.rejects(configureProvider(store,prompts(['gemini',new Error('cancelled')],['new-test-only-key'])),/cancelled/);
+ await assert.rejects(configureProvider(store,prompts(['gemini','',new Error('cancelled')],['new-test-only-key'])),/cancelled/);
  assert.deepEqual(store.settings(),before);assert.equal(store.revision(),revision);assert.equal(store.key('gemini'),'');
  await configureProvider(store,prompts(['readonly']));assert.equal(store.key('openai'),'test-only-openai');assert.equal(store.settings().provider,'readonly');
 });

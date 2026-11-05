@@ -157,6 +157,8 @@ CLI 与桌面版共用配置目录中的 `desktop.sqlite`，库目录保存在�
 | Gemini | Gemini API 密钥、文本和图片模型 | 按 Gemini API 项目计费 |
 | 只读 | 无需密钥 | 不调用生成服务，已有故事仍可阅读整理 |
 
+选择 Codex、OpenAI API 或 Gemini 后，还会询问**图片服务**：回车或输入 `0` 表示与文本服务相同（默认，原有配置不变）；也可另选一种只用于绘制插图，例如 Codex 写故事与分镜、Gemini 画图。选题、分镜、审核和修订始终使用文本服务，制作流程不变。另选的 API 图片服务使用自己已保存的密钥和图片模型，此时文本服务只询问文本模型。两边都配置好才能开始制作；只读模式忽略图片服务。
+
 API 密钥输入隐藏；已保存该服务的密钥时，回车保留。模型回车使用已保存值或默认值。OpenAI 默认文本模型为 `gpt-6.1-sol`，图片模型为 `gpt-image-2.5-sunburst`；实际使用仍需账户具备相应模型权限与额度。新配置只在整个问答完成后保存；取消或输入结束不会保存部分服务配置。
 
 ```bash
@@ -181,6 +183,8 @@ OPENAI_IMAGE_MODEL=gpt-image-2.5-sunburst
 ```
 
 其他服务分别使用 `SHIQU_AI_PROVIDER=codex`，或 `SHIQU_AI_PROVIDER=gemini` 与 `GEMINI_API_KEY`。无人值守只阅读可用 `SHIQU_AI_PROVIDER=readonly`。
+
+另用一种服务画图时，加 `SHIQU_IMAGE_PROVIDER=gemini`（或 `openai`、`codex`）及该服务的密钥，例如 `SHIQU_AI_PROVIDER=codex`、`SHIQU_IMAGE_PROVIDER=gemini`、`GEMINI_API_KEY=…`。留空保留已保存的图片服务（未保存则与文本服务相同）。`IMAGE_SIZE` 只在 OpenAI 画图时生效。
 
 ```bash
 npx @apprun/shiqu --config /absolute/path/to/shiqu.env
@@ -323,6 +327,8 @@ Windows：[下载安装程序](https://github.com/yysun/shiqu/releases/latest/do
 ### 配置生成服务
 
 与 CLI 使用上方相同的服务和存储规则。在「设置」中切换提供方可查看各自保存的模型与密钥状态；已保存密钥不返回原文，留空保留，输入新密钥才替换。只读模式不调用生成服务。
+
+「文本服务」负责选题、分镜、审核与修订；「图片服务」默认「与文本服务相同」。另选图片服务后，下方会单独显示它的密钥与图片模型（或 Codex 设置），「检查连接」分别检查两边。设置了不同图片服务的配置需要本版本或更高版本的桌面版和 CLI 读取；保持「与文本服务相同」不改变已保存的设置格式。
 
 Codex 首次登录仍在终端执行 `codex login`；找不到时可选择可执行文件。OpenAI API 与 Gemini 分别使用自己的 API 密钥，彼此不回退，也不与 Codex 订阅混用计费。网页 URL 选题仍仅支持 Gemini。
 

@@ -64,6 +64,8 @@ OPENAI_IMAGE_MODEL=gpt-image-2.5-sunburst
 
 系统配置迁移与校验由 `server/system-settings.ts` 和 `src-tauri/src/config.rs` 共同遵循，TypeScript/Rust 测试实际互读同一数据库。版本 1 迁移保留旧设置与 Gemini 密钥；桌面保存以 revision 拒绝过期快照，CLI 事务 patch 保留其他入口的新值。真实密钥不进入 tests、打包输入或浏览器。
 
+文本与图片可分属不同提供方：`SHIQU_IMAGE_PROVIDER`（`gemini`/`openai`/`codex`，留空时 CLI/桌面保留已保存的图片服务，否则跟随 `SHIQU_AI_PROVIDER`）只替换 `generator().image`，其余调用、队列、审核与提示词记录不变（`server/generation.ts` 的 `withImageProvider`）。图片错误按图片提供方的安全文案报告；状态中 `provider`/`models.text` 仍来自文本提供方，选题缓存身份不变。设置中的 `imageProvider` 可选，未设置时不写入 JSON；与文本相同的选择保存为未设置。
+
 Codex 配置示例（先安装并登录 CLI）：
 
 ```bash

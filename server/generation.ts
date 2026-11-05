@@ -40,8 +40,39 @@ function codexMessage(code:string){
  return 'Codex 暂时无法完成这一步，请检查订阅额度和登录状态。已保留前面的内容。';
 }
 export function safeCodexError(error:unknown){const code=error instanceof CodexError?error.message:'INVALID_OUTPUT';console.error('codex_generation_error',JSON.stringify({code}));return codexMessage(code);}
+// Text work stays on SHIQU_AI_PROVIDER; an optional SHIQU_IMAGE_PROVIDER draws through the same production workflow.
 export function createReaderProvider(variables:Record<string,string|undefined>,media:MediaStore,transport:typeof fetch,runner?:CodexRunner):ReaderProvider{
- const name=variables.SHIQU_AI_PROVIDER?.trim()||'gemini';
+ const name=variables.SHIQU_AI_PROVIDER?.trim()||'gemini',imageName=variables.SHIQU_IMAGE_PROVIDER?.trim()||'';
+ const text=createSingleProvider(name,variables,media,transport,runner);
+ // Read-only has no image side, so its image setting is ignored rather than validated.
+ if(name==='readonly'||!imageName||imageName===name)return text;
+ if(!['gemini','codex','openai'].includes(imageName))throw Error('SHIQU_IMAGE_PROVIDER must be gemini, codex or openai');
+ return withImageProvider(text,createSingleProvider(imageName,variables,media,transport,runner));
+}
+// Compose one provider from separate text and image providers. Image errors keep the image provider's safe messages.
+export function withImageProvider(text:ReaderProvider,image:ReaderProvider):ReaderProvider{
+ const imageErrors=new WeakSet<object>();
+ const safeError=(error:unknown)=>error&&typeof error==='object'&&imageErrors.has(error)?image.safeError(error):text.safeError(error);
+ return {
+  ...text,
+  generationTimeoutMs:phase=>(phase==='image'?image:text).generationTimeoutMs?.(phase)??null,
+  async status(){
+   const [textStatus,imageStatus]=await Promise.all([text.status(),image.status()]);
+   const imageMessage=!imageStatus.configured?'图片服务：'+(imageStatus.message||'尚未配置，请检查图片服务的密钥或登录状态。'):undefined;
+   const message=!textStatus.configured?textStatus.message:imageMessage,reason=!textStatus.configured?textStatus.reason:imageStatus.reason;
+   return {...textStatus,configured:textStatus.configured&&imageStatus.configured,...(reason?{reason}:{}),imageProvider:imageStatus.provider as Exclude<ProviderStatus['provider'],'readonly'>,models:{text:textStatus.models.text,image:imageStatus.models.image},...(message?{message}:{})};
+  },
+  generator(){
+   const generator=text.generator(),drawing=image.generator();
+   return {...generator,safeError,async image(...args){
+    try{return await drawing.image(...args);}
+    catch(error){if(error&&typeof error==='object')imageErrors.add(error);throw error;}
+   }};
+  },
+  safeError,
+ };
+}
+function createSingleProvider(name:string,variables:Record<string,string|undefined>,media:MediaStore,transport:typeof fetch,runner?:CodexRunner):ReaderProvider{
  if(name==='readonly'){
   const unavailable=()=>{throw new ReaderError(503,'当前为只读模式，请通过 --configure 或桌面设置配置生成服务。');};
   return {async status(){return {configured:false,provider:'readonly',models:{text:'',image:''},voiceEnabled:false};},suggestions:async()=>unavailable(),generator:()=>({plan:async()=>unavailable(),original:async()=>unavailable(),image:async()=>unavailable(),audio:async()=>unavailable(),reflection:async()=>unavailable(),reflectionCandidates:async()=>unavailable(),safeError:()=> '当前为只读模式，请先配置生成服务。'}),safeError:()=> '当前为只读模式，请先配置生成服务。'};

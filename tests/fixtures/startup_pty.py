@@ -167,6 +167,10 @@ class StartupTerminalTests(unittest.TestCase):
     def choose(self, child, provider, key=None, models=("", "")):
         child.expect("输入编号或名称")
         child.send(provider + "\n")
+        if provider != "readonly":
+            child.expect("选择图片服务")
+            child.expect("输入编号或名称")
+            child.send("\n")
         if provider in ["openai", "gemini"]:
             child.expect("API 密钥（输入隐藏")
             child.send((key or "") + "\n")
@@ -250,6 +254,8 @@ class StartupTerminalTests(unittest.TestCase):
                 child = self.start("--configure")
                 child.expect("输入编号或名称")
                 child.send("gemini\n")
+                child.expect("选择图片服务")
+                child.send("\n")
                 child.expect("API 密钥（输入隐藏")
                 child.send("test-only-discarded" + cancel)
                 child.expect("已取消服务配置")
@@ -259,6 +265,8 @@ class StartupTerminalTests(unittest.TestCase):
         child = self.start("--configure")
         child.expect("输入编号或名称")
         child.send("gemini\n")
+        child.expect("选择图片服务")
+        child.send("\n")
         child.expect("API 密钥（输入隐藏")
         child.send("test-only-discarded\n")
         child.expect("文本模型")
@@ -301,6 +309,8 @@ class StartupTerminalTests(unittest.TestCase):
         child.send("invalid-provider\n")
         child.expect("输入编号或名称")
         child.send("openai\n")
+        child.expect("选择图片服务")
+        child.send("\n")
         child.expect("API 密钥（输入隐藏")
         child.send("\n")
         child.expect("未输入 API 密钥")

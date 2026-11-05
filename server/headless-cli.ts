@@ -59,7 +59,7 @@ const inputs={
  retry:{faultId:'current fault UUID from stories get'},favorite:{saved:true},reference:{page:0,starred:true},replace:{batch:0,index:0},
  publication:{get:'api GET reader/publication-defaults',set:'api POST reader/publication-defaults --input publication.json',input:{publication:{...emptyPublication,author:'你的署名',watermarkFontSize:24},expected:'Use the exact publication object (or null) returned by GET.'}},
  frameCount:{command:'api POST reader/sessions/ID/frame-count --input count.json',input:{count:8}},
- config:{command:'config set --input settings.json',input:{settings:{provider:'codex',providerConfigured:true},expectedRevision:'from config get'},key:'For API providers only: key:{provider:"openai"|"gemini",value:"secret"|null}; never pass a key in argv.'},
+ config:{command:'config set --input settings.json',input:{settings:{provider:'codex',providerConfigured:true,imageProvider:'gemini'},expectedRevision:'from config get'},imageProvider:'Optional drawing provider (gemini|openai|codex); null or omitted follows provider.',key:'For API providers only: key:{provider:"openai"|"gemini",value:"secret"|null}, or a list for separate text/image providers; never pass a key in argv.'},
 };
 type Context={cwd?:string;home?:string;generation?:ReaderProvider;localBooks?:LocalBooks;variables?:Record<string,string|undefined>;input?:unknown;signal?:AbortSignal;skill?:{transport?:typeof fetch;now?:()=>number}};
 function parse(args:string[]){return parseArgs({args,allowPositionals:true,strict:true,options:Object.fromEntries([

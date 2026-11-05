@@ -30,7 +30,7 @@ CLI 和桌面版使用同一份 `com.shiqu.desktop/desktop.sqlite`。桌面首�
 
 服务运行时先停止再修改设置或「重置所有服务配置」。重置经确认后删除全部服务选择、模型与 API 密钥，保留书库目录、网络设置、故事和阅读进度；CLI 对应 `--reset-providers`。配置后启动新服务生效，已运行的另一入口保留启动快照直到重启。只读模式阻止新阅读队列和历史 admin 生成接口调用生成服务。
 
-环境变量覆盖本次启动和连接检查，不会自动导入或保存。支持 `SHIQU_AI_PROVIDER`、对应 `OPENAI_API_KEY` / `GEMINI_API_KEY`、`OPENAI_TEXT_MODEL` / `OPENAI_IMAGE_MODEL`、Gemini 模型、Codex 可执行文件/模型/登录目录及推理设置。设置页面显示数据库保存值。Finder/Dock 启动通常不继承终端环境，普通使用直接在设置中保存即可；桌面版不执行 shell、读取 `.zshrc` 或项目 `.env`。
+环境变量覆盖本次启动和连接检查，不会自动导入或保存。支持 `SHIQU_AI_PROVIDER`、可选 `SHIQU_IMAGE_PROVIDER`（图片服务；留空保留已保存选择，未保存则与文本服务相同）、对应 `OPENAI_API_KEY` / `GEMINI_API_KEY`、`OPENAI_TEXT_MODEL` / `OPENAI_IMAGE_MODEL`、Gemini 模型、Codex 可执行文件/模型/登录目录及推理设置。设置页面显示数据库保存值。Finder/Dock 启动通常不继承终端环境，普通使用直接在设置中保存即可；桌面版不执行 shell、读取 `.zshrc` 或项目 `.env`。
 
 「检查连接」先保存界面中的更改，然后读取共享数据库并应用本次环境覆盖。OpenAI API / Gemini 只检查模型元数据，Codex 只检查登录，不生成内容，也不证明配额充足。
 

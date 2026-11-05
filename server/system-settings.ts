@@ -3,8 +3,9 @@
 import {DatabaseSync} from 'node:sqlite';
 import {existsSync,mkdirSync,lstatSync,openSync,closeSync,chmodSync,constants,readFileSync} from 'node:fs';
 import path from 'node:path';
-import {defaultSystemSettings,systemSettingsSchema,validApiKey,resetProviderSettings} from '../lib/system-settings.ts';
-import type {SystemSettings,ProviderName} from '../lib/system-settings.ts';
+import {defaultSystemSettings,systemSettingsSchema,validApiKey,resetProviderSettings,effectiveImageProvider} from '../lib/system-settings.ts';
+import type {SystemSettings,ProviderName,ApiProviderName} from '../lib/system-settings.ts';
+export type KeyChange={provider:ApiProviderName;value:string|null};
 const failure='无法读取或保存共享设置数据库；请检查权限或使用兼容版本，不会自动重建已有配置。';
 export class SystemSettingsStore{
  private db:DatabaseSync;
@@ -42,8 +43,11 @@ export class SystemSettingsStore{
  private validate(value:unknown){
   const settings=systemSettingsSchema.parse(value);
   if(!path.isAbsolute(settings.dataDirectory)||settings.cloudflaredPath&&!path.isAbsolute(settings.cloudflaredPath))throw Error();
-  if(process.platform==='win32'&&settings.provider==='codex')throw Error('Codex 不支持原生 Windows，请选择 OpenAI API、Gemini 或只读。');
-  const {lanEnabled:_,...saved}=settings;void _;return saved;
+  if(process.platform==='win32'&&(settings.provider==='codex'||effectiveImageProvider(settings)==='codex'))throw Error('Codex 不支持原生 Windows，请选择 OpenAI API、Gemini 或只读。');
+  const {lanEnabled:_,...saved}=settings;void _;
+  // "Same as text" is stored as unset so older builds can still read the settings.
+  if(saved.imageProvider===saved.provider)delete saved.imageProvider;
+  return saved;
  }
  settings():SystemSettings{
   try{return this.validate(JSON.parse(this.db.prepare('SELECT value FROM desktop_settings WHERE id=1').get()!.value as string));}
@@ -54,15 +58,17 @@ export class SystemSettingsStore{
   if(provider!=='gemini'&&provider!=='openai')return '';
   return (this.db.prepare('SELECT value FROM desktop_credentials WHERE name=?').get(provider)?.value as string|undefined)||'';
  }
- save(patch:Partial<SystemSettings>,key?:{provider:'gemini'|'openai';value:string|null},expectedRevision?:number){
+ // Key changes may target the text provider or a separate image provider, never an unused provider.
+ save(patch:Partial<SystemSettings>,key?:KeyChange|KeyChange[],expectedRevision?:number){
   this.db.exec('BEGIN IMMEDIATE');
   try{
    if(expectedRevision!==undefined&&this.revision()!==expectedRevision)throw Error('SETTINGS_CHANGED');
-   const settings=this.validate({...this.settings(),...patch});
-   if(key){
-    if(key.provider!==settings.provider)throw Error();
-    if(key.value===null)this.db.prepare('DELETE FROM desktop_credentials WHERE name=?').run(key.provider);
-    else this.db.prepare('INSERT INTO desktop_credentials VALUES(?,?) ON CONFLICT(name) DO UPDATE SET value=excluded.value').run(key.provider,validApiKey(key.value));
+   const settings=this.validate({...this.settings(),...patch}),changes=key?Array.isArray(key)?key:[key]:[];
+   const active=new Set([settings.provider,effectiveImageProvider(settings)]);
+   if(changes.some(change=>!active.has(change.provider))||new Set(changes.map(change=>change.provider)).size!==changes.length)throw Error();
+   for(const change of changes){
+    if(change.value===null)this.db.prepare('DELETE FROM desktop_credentials WHERE name=?').run(change.provider);
+    else this.db.prepare('INSERT INTO desktop_credentials VALUES(?,?) ON CONFLICT(name) DO UPDATE SET value=excluded.value').run(change.provider,validApiKey(change.value));
    }
    this.db.prepare('UPDATE desktop_settings SET value=?,revision=revision+1 WHERE id=1').run(JSON.stringify(settings));
    this.db.exec('COMMIT');return settings;

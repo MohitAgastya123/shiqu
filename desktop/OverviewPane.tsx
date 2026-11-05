@@ -1,6 +1,7 @@
 // The desktop is a local service console; reading and creation stay in the single browser frontend.
 import {ArrowRight,BookOpen,Bookmark,Check,ChevronRight,Clock3,ExternalLink,Feather,Layers3,RefreshCw,Sparkles} from 'lucide-react';
 import {getArtStyle} from '../lib/reader-styles';
+import {effectiveImageProvider} from '../lib/system-settings';
 import type {SystemSettings} from '../lib/system-settings';
 import {overviewStoryState,overviewSummary,type ServiceState} from './library-summary';
 import {useLibrarySummary} from './useLibrarySummary';
@@ -10,6 +11,7 @@ const serviceLabels:Record<ServiceState,string>={loading:'正在读取服务状�
 const providerLabels:Record<SystemSettings['provider'],string>={readonly:'只读模式',codex:'Codex',openai:'OpenAI API',gemini:'Gemini'};
 export function OverviewPane({native,state,busy,configured,settings,previewUrl,onLaunch,onQueue,onSettings}:Props){
  const {summary,error,loading,refresh}=useLibrarySummary(native,settings.dataDirectory);
+ const image=effectiveImageProvider(settings);
  const stats=summary?overviewSummary(summary.stories):null;
  const primaryLabel=busy?busy+'…':native?!configured?'完成设置':state==='running'?'打开拾趣':'启动并打开拾趣':'在浏览器打开拾趣';
  const disabled=!!busy||native&&configured&&['loading','unavailable'].includes(state);
@@ -36,6 +38,6 @@ export function OverviewPane({native,state,busy,configured,settings,previewUrl,o
     {!stats?<div className="overview-small-empty" role="status"><BookOpen size={24}/><p>{loading?'正在打开本机书库…':'书库暂不可用'}</p></div>:stats.recent.length?<><ul className="overview-recent-list">{stats.recent.map((story,index)=><li key={story.id}><div className={'overview-mini-book mini-book-'+index%3} aria-hidden="true"><BookOpen size={20} strokeWidth={1.3}/></div><div className="overview-recent-copy"><h3>{story.title}</h3><p title={story.book+' · '+(story.theme||'未记录主题')+' · '+getArtStyle(story.artStyle).label}>{story.book} · {story.theme||'未记录主题'} · {getArtStyle(story.artStyle).label}</p><span>{overviewStoryState(story).label}{story.total>0?' · 已生成 '+story.ready+' / '+story.total+' 幅':''}</span>{story.total>0&&story.ready>0&&<span className="overview-reading-position">阅读位置 · 第 {Math.max(1,Math.min(story.page+1,story.total))} / {story.total} 幅</span>}</div>{!!story.saved&&<Bookmark size={14} fill="currentColor" className="overview-saved" aria-label="已收藏"/>}</li>)}</ul><div className="overview-card-foot">{launch('在拾趣里继续阅读','overview-text-link')}</div></>:<div className="overview-small-empty"><Feather size={29} strokeWidth={1.2}/><h3>第一篇故事，等你翻开。</h3><p>在浏览器中开启一篇故事，它会留在这间书房。</p></div>}
    </section>
   </div>
-  <div className="overview-config"><span className="overview-config-icon"><Feather size={17}/></span><div><strong>{native&&settings.providerConfigured?providerLabels[settings.provider]:'生成配置'}</strong><p>{!native?null:!settings.providerConfigured?configured?'本次启动使用环境配置':'尚未完成生成配置':settings.provider==='readonly'?'已保存 · 只读模式，不调用生成服务':'已保存的生成配置 · '+(settings.provider==='openai'?settings.openaiTextModel:settings.provider==='codex'?settings.codexModel||'跟随 Codex 默认':settings.textModel)}</p></div><button type="button" onClick={onSettings}>调整配置<ChevronRight size={14}/></button></div>
+  <div className="overview-config"><span className="overview-config-icon"><Feather size={17}/></span><div><strong>{native&&settings.providerConfigured?providerLabels[settings.provider]+(image&&image!==settings.provider?' · 图片 '+providerLabels[image]:''):'生成配置'}</strong><p>{!native?null:!settings.providerConfigured?configured?'本次启动使用环境配置':'尚未完成生成配置':settings.provider==='readonly'?'已保存 · 只读模式，不调用生成服务':'已保存的生成配置 · '+(settings.provider==='openai'?settings.openaiTextModel:settings.provider==='codex'?settings.codexModel||'跟随 Codex 默认':settings.textModel)}</p></div><button type="button" onClick={onSettings}>调整配置<ChevronRight size={14}/></button></div>
  </div>;
 }

@@ -17,23 +17,22 @@ import {startDesktopTunnel,TunnelError} from './desktop-tunnel.ts';
 import {createReaderProvider} from './generation.ts';
 import {stopCodexProcesses} from './codex-runner.ts';
 import {FileMedia} from './media.ts';
-import {systemSettingsSchema,settingsVariables} from '../lib/system-settings.ts';
+import {systemSettingsSchema,settingsVariables,effectiveImageProvider} from '../lib/system-settings.ts';
 import {installDiagnostics,recordDiagnostic,safeErrorCode} from './diagnostics.ts';
 
 export const desktopSettings=systemSettingsSchema;
 export type DesktopSettings=z.infer<typeof desktopSettings>;
-export function desktopVariables(settings:DesktopSettings,key:string){return settingsVariables(systemSettingsSchema.parse(settings),key);}
-export async function testDesktopProvider(settings:DesktopSettings,key:string,root:string,transport:typeof fetch=fetch){
- if(settings.provider==='codex'){
-  const provider=createReaderProvider(desktopVariables(settings,key),new FileMedia(path.join(root,'unused')),transport);
+export function desktopVariables(settings:DesktopSettings,key:string,imageKey=''){return settingsVariables(systemSettingsSchema.parse(settings),key,imageKey);}
+// Metadata only: no generation endpoint, prompt, or paid output.
+async function checkProvider(settings:DesktopSettings,name:'gemini'|'codex'|'openai',key:string,models:string[],root:string,transport:typeof fetch){
+ if(name==='codex'){
+  const provider=createReaderProvider({...desktopVariables(settings,''),SHIQU_AI_PROVIDER:'codex',SHIQU_IMAGE_PROVIDER:''},new FileMedia(path.join(root,'unused')),transport);
   const status=await provider.status();return {ok:status.configured,message:status.configured?'Codex 已登录；此检查未生成内容。':status.message||'Codex 尚未连接。'};
  }
- if(settings.provider==='readonly')return {ok:true,message:'当前为只读模式，不调用生成服务。'};
  if(!key)return {ok:false,message:'请先填写或保存 API 密钥。'};
  try{
-  // Metadata only: no generation endpoint, prompt, or paid output.
-  for(const model of new Set(settings.provider==='openai'?[settings.openaiTextModel,settings.openaiImageModel]:[settings.textModel,settings.imageModel])){
-   const openai=settings.provider==='openai';
+  for(const model of new Set(models)){
+   const openai=name==='openai';
    const response=await transport(openai?`https://api.openai.com/v1/models/${model}`:`https://generativelanguage.googleapis.com/v1beta/models/${model}`,{headers:openai?{Authorization:'Bearer '+key}:{'x-goog-api-key':key},signal:AbortSignal.timeout(10000),redirect:'error'});
    if(!response.ok)return {ok:false,message:`模型访问检查失败（HTTP ${response.status}）。请检查密钥及模型权限。`};
    await response.body?.cancel();
@@ -41,7 +40,19 @@ export async function testDesktopProvider(settings:DesktopSettings,key:string,ro
   return {ok:true,message:'密钥和模型元数据可访问；未生成内容，不代表生成额度充足。'};
  }catch{return {ok:false,message:'连接超时或网络不可用；未生成内容。'};}
 }
-export async function startDesktop(settings:DesktopSettings,key:string,root:string,options:{signal?:AbortSignal;onStatus?:(status:unknown)=>void}={}){
+const textModel=(settings:DesktopSettings,name:'gemini'|'openai')=>name==='openai'?settings.openaiTextModel:settings.textModel;
+const imageModel=(settings:DesktopSettings,name:'gemini'|'openai')=>name==='openai'?settings.openaiImageModel:settings.imageModel;
+export async function testDesktopProvider(settings:DesktopSettings,key:string,root:string,transport:typeof fetch=fetch,imageKey=''){
+ if(settings.provider==='readonly')return {ok:true,message:'当前为只读模式，不调用生成服务。'};
+ const text=settings.provider,image=effectiveImageProvider(settings)!;
+ const models=(name:typeof text,kinds:('text'|'image')[])=>name==='codex'?[]:kinds.map(kind=>(kind==='text'?textModel:imageModel)(settings,name));
+ if(image===text)return checkProvider(settings,text,key,models(text,['text','image']),root,transport);
+ const textResult=await checkProvider(settings,text,key,models(text,['text']),root,transport);
+ if(!textResult.ok)return {ok:false,message:'文本服务：'+textResult.message};
+ const imageResult=await checkProvider(settings,image,imageKey,models(image,['image']),root,transport);
+ return {ok:imageResult.ok,message:imageResult.ok?`文本服务：${textResult.message} 图片服务：${imageResult.message}`:'图片服务：'+imageResult.message};
+}
+export async function startDesktop(settings:DesktopSettings,key:string,root:string,options:{signal?:AbortSignal;onStatus?:(status:unknown)=>void;imageKey?:string}={}){
  const release=await ownDesktopData(settings.dataDirectory);
  const removeDiagnostics=installDiagnostics(settings.dataDirectory);
  let app:ReturnType<typeof createApplication>|undefined,server:ReturnType<typeof createHttpServer>|undefined,remoteServer:ReturnType<typeof createHttpServer>|undefined,tunnel:Awaited<ReturnType<typeof startDesktopTunnel>>|undefined;
@@ -51,7 +62,7 @@ export async function startDesktop(settings:DesktopSettings,key:string,root:stri
  function stop(){return stopped??=(async()=>{try{remote.revoke();await tunnel?.stop();app?.stopGeneration();await stopCodexProcesses();await Promise.all([close(remoteServer),close(server)]);await app?.close();}finally{recordDiagnostic(settings.dataDirectory,'service_stopped');removeDiagnostics();await release();}})();}
  try{
   options.signal?.throwIfAborted();
-  app=createApplication({root,dataDirectory:settings.dataDirectory,variables:desktopVariables(settings,key)});
+  app=createApplication({root,dataDirectory:settings.dataDirectory,variables:desktopVariables(settings,key,options.imageKey)});
   const local=`http://127.0.0.1:${settings.port}`,phones=phoneUrls('0.0.0.0',settings.port);
   const access=desktopAccess(app.handle,{hosts:[new URL(local).host,...phones.map(url=>new URL(url).host)]});
   // macOS can let a wildcard bind coexist with an occupied loopback port.
@@ -107,11 +118,11 @@ async function main(){
   if(starting||closing)return;starting=true;
   void(async()=>{
    try{
-    const input=z.object({action:z.enum(['start','test','upgrade']),settings:desktopSettings,key:z.string().max(4096).default('')}).strict().parse(JSON.parse(line));
+    const input=z.object({action:z.enum(['start','test','upgrade']),settings:desktopSettings,key:z.string().max(4096).default(''),imageKey:z.string().max(4096).default('')}).strict().parse(JSON.parse(line));
     const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
     if(input.action==='upgrade'){ensureLibraryReady(input.settings.dataDirectory,root);send({upgraded:true,started:false,backup:libraryUpgradeBackup(input.settings.dataDirectory)});await stop();return;}
-    if(input.action==='test'){send(await testDesktopProvider(input.settings,input.key,root));await stop();return;}
-    runtime=await startDesktop(input.settings,input.key,root,{signal:abort.signal,onStatus:send});starting=false;
+    if(input.action==='test'){send(await testDesktopProvider(input.settings,input.key,root,fetch,input.imageKey));await stop();return;}
+    runtime=await startDesktop(input.settings,input.key,root,{signal:abort.signal,onStatus:send,imageKey:input.imageKey});starting=false;
     if(inputClosed){await stop();return;}
     send(runtime.status);
    }catch(error){send({error:desktopFailure(error)});starting=false;await stop();}
