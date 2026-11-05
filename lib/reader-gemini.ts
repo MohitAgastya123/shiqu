@@ -120,12 +120,25 @@ function parseText(candidate:Candidate){
  if(!value)throw new GeminiError('INVALID_TEXT');
  try{return JSON.parse(value);}catch{throw new GeminiError('INVALID_JSON');}
 }
+function discoveryOutputSchema(value:unknown):unknown{
+ // Counted continuations multiply the grammar inside stories and pending events, causing HTTP 400.
+ // Keep the limit as guidance here; localChoices still validates every returned source range.
+ if(Array.isArray(value))return value.map(discoveryOutputSchema);
+ if(!value||typeof value!=='object')return value;
+ return Object.fromEntries(Object.entries(value).map(([name,rule])=>{
+  if(name==='continuations'&&rule&&typeof rule==='object'&&rule.type==='array'&&typeof rule.maxItems==='number'){
+   const {maxItems,...array}=rule;
+   return [name,{...array,description:`At most ${maxItems} additional source ranges.`}];
+  }
+  return [name,discoveryOutputSchema(rule)];
+ }));
+}
 export async function suggestStories(key:string,selection:Selection,config:Partial<Models>={},transport:typeof fetch=fetch,excludeTitles:string[]=[],localBook?:WholeBookInput,reasoning:TaskReasoningEfforts=taskReasoningDefaults,maxStories?:1,context?:DiscoveryContext){
  const models={...defaultModels,...config},{book,url}=source(selection),scanning=localBook?.purpose==='scan'||localBook?.purpose==='catalog';
  const run=async(report:(meta:{model?:string;usage?:unknown;acceptedCount?:number})=>void)=>{
   const {candidate,metadata}=await client(key,transport)(models.text,textRequest(
    localBook?localReadingPrompt(localBook):suggestionSystemPrompt,
-   localSuggestionPayload(book,selection.theme,excludeTitles,localBook,maxStories),localBook?.purpose==='catalog'?localCatalogOutputJson(localBook):scanning?localScanJson:localBook?localChoicesJson:choicesJson,url,localBook?.purpose==='catalog'?localCatalogOutputTokens(localBook.scan?.maxStories||1):scanning?10000:localBook?5000:2500,reasoning.suggest),localBook?120000:60000);report(metadata);
+   localSuggestionPayload(book,selection.theme,excludeTitles,localBook,maxStories),discoveryOutputSchema(localBook?.purpose==='catalog'?localCatalogOutputJson(localBook):scanning?localScanJson:localBook?localChoicesJson:choicesJson),url,localBook?.purpose==='catalog'?localCatalogOutputTokens(localBook.scan?.maxStories||1):scanning?10000:localBook?5000:2500,reasoning.suggest),localBook?120000:60000);report(metadata);
   if(url&&!wasRead(candidate,url))return {stories:[],note:'暂时无法读取这个链接，请提供可公开访问的原文页面，或直接输入书名。'};
   const batch=localBook?localChoices(parseText(candidate),localBook):choicesSchema.parse(parseText(candidate));
   const fresh=scanning?batch:freshSuggestions(batch,excludeTitles);report({acceptedCount:fresh.stories.length});
