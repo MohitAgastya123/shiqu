@@ -1,5 +1,0 @@
-# Pin the desktop build toolchain without changing the developer's global Rust default.
-[toolchain]
-channel = "1.93.0"
-profile = "minimal"
-components = ["rustfmt"]

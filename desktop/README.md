@@ -71,7 +71,7 @@ helper 使用隔离的空配置与最小环境，不继承 AI 凭据、Cloudflar
 
 队列与阅读端统一展示「确认原文 → 确定画幅数 → 分批分镜 → 全篇审片 → 定向修订 → 复核 → 绘图」。初审通过时修订与复核标记为无需执行；复核未通过时明确阻止绘图。旧故事没有审片检查点时显示未启用，不补做审核。只在用户明确要求时运行桌面准备、构建或打包命令。
 
-使用 `.nvmrc` 固定的 Node、`package.json` 固定的 pnpm，及 `src-tauri/rust-toolchain.toml` 固定的 Rust 1.93.0。安装对应平台的 [Tauri 系统构建依赖](https://v2.tauri.app/start/prerequisites/)。
+使用 `.nvmrc` 固定的 Node、`package.json` 固定的 pnpm，及仓库根目录 `rust-toolchain.toml` 固定的 Rust 1.93.0。Rust 固定文件须在根目录，让 Tauri 启动时的目标检测与 `src-tauri` 内的 Cargo 编译使用同一工具链；无需修改全局 Rust 默认版本。安装对应平台的 [Tauri 系统构建依赖](https://v2.tauri.app/start/prerequisites/)。
 
 预览概览的浏览器入口时，另外启动现有阅读端开发服务，并为桌面预览显式指定地址。以下两条命令在两个终端运行，`/tmp/shiqu-reader-preview` 是独立测试书库；不要用个人书库验证写操作。只读提供方不会调用生成服务：
 
@@ -93,6 +93,8 @@ pnpm desktop:build
 Windows 本地构建需安装 Microsoft C++ Build Tools 的「使用 C++ 的桌面开发」、WebView2 和 Rust MSVC x64 工具链，并使用官方 Node **24.22.1 x64** 发行版（保留 LICENSE）。PowerShell 中无需执行 `nvm use`；先安装固定版本 Node 和 pnpm，再运行上面的 `pnpm install`、`desktop:dev` / `desktop:build` 命令。Tauri 自动合并 `src-tauri/tauri.windows.conf.json`，桌面版默认输出 NSIS 安装程序，无需 MSI / WiX。详见 [Tauri Windows 构建前置条件](https://v2.tauri.app/start/prerequisites/#windows)及 [Windows 安装程序说明](https://v2.tauri.app/distribute/windows-installer/)。
 
 桌面构建会运行现有 `pnpm build`、单独编译设置 UI，将应用运行资源复制到 `desktop/resources/runtime`，再将构建所用的 **精确 Node 24.22.1 可执行文件和原发行版 LICENSE** 复制到 `desktop/resources/node`，记录版本、平台、架构、来源及 SHA-256。构建环境必须使用完整官方 Node 发行版及同架构的 Rust 工具链；不支持跨平台/跨架构、universal 或 musl 打包，遇到不匹配会停止。安装桌面版时不下载 Node；Windows 缺失 WebView2 时仍需联网安装它。
+
+`desktop:dev` 也会先完成这些准备步骤，再编译和启动原生应用；准备钩子必须设置 `wait: true`，避免原生应用提前读取旧资源或尚未复制完成的运行时。仅修改界面时使用 `desktop:preview`，无需等待资源准备。
 
 安装包使用 `shiqu-standard-*` 文件名，产物在 `src-tauri/target/release/bundle/`；macOS 可用 `pnpm desktop:build --bundles app` 只生成 `.app`。不构建 Docker 镜像。
 

@@ -4,7 +4,10 @@
   "version": "0.8.0",
   "identifier": "com.shiqu.desktop",
   "build": {
-    "beforeDevCommand": "pnpm run desktop:prepare",
+    "beforeDevCommand": {
+      "script": "pnpm run desktop:prepare",
+      "wait": true
+    },
     "beforeBuildCommand": "pnpm run desktop:prepare",
     "frontendDist": "../desktop/dist"
   },

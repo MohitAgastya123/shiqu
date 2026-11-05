@@ -1,0 +1,5 @@
+# Pin Rust before the root pnpm commands let Tauri detect its target; Cargo inherits this pin in src-tauri.
+[toolchain]
+channel = "1.93.0"
+profile = "minimal"
+components = ["rustfmt"]
