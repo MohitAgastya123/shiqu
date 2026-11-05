@@ -36,14 +36,14 @@ export async function askHiddenKey(question:string){
 export const terminalSetupPrompt:SetupPrompt={text:askSetupText,secret:askHiddenKey};
 export function effectiveProviderVariables(store:SystemSettingsStore,variables:Record<string,string|undefined>){
  const saved=store.settings(),name=variables.SHIQU_AI_PROVIDER?.trim()||saved.provider;
- // DeepSeek is invocation-only: preserve saved task settings without loading another provider's key.
- if(name==='deepseek')return {...settingsVariables(saved,''),...variables,SHIQU_AI_PROVIDER:name};
- if(!(providerNames as readonly string[]).includes(name))throw Error('SHIQU_AI_PROVIDER must be gemini, codex, openai, deepseek or readonly');
+ // DeepSeek and Claude are invocation-only: preserve saved task settings without loading another provider's key.
+ if(name==='deepseek'||name==='claude')return {...settingsVariables(saved,''),...variables,SHIQU_AI_PROVIDER:name};
+ if(!(providerNames as readonly string[]).includes(name))throw Error('SHIQU_AI_PROVIDER must be gemini, codex, claude, openai, deepseek or readonly');
  const provider=name as ProviderName;
  return {...settingsVariables({...saved,provider},store.key(provider)),...variables,SHIQU_AI_PROVIDER:provider};
 }
 export function providerReady(variables:Record<string,string|undefined>){
- if(variables.SHIQU_AI_PROVIDER==='readonly'||variables.SHIQU_AI_PROVIDER==='codex')return true;
+ if(variables.SHIQU_AI_PROVIDER==='readonly'||variables.SHIQU_AI_PROVIDER==='codex'||variables.SHIQU_AI_PROVIDER==='claude')return true;
  const key=variables.SHIQU_AI_PROVIDER==='deepseek'?variables.DEEPSEEK_API_KEY:variables.SHIQU_AI_PROVIDER==='openai'?variables.OPENAI_API_KEY:variables.GEMINI_API_KEY;
  if(!key?.trim())return false;validApiKey(key);return true;
 }

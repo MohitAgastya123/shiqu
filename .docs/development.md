@@ -80,6 +80,10 @@ CODEX_REASONING_EFFORT=low
 
 ### 文本任务推理预算
 
+Claude Code 文本提供方仅通过本次环境变量启用，不修改桌面保存的服务：先运行 `claude auth login` 登录订阅账号，再使用 `SHIQU_AI_PROVIDER=claude CLAUDE_MODEL=opus pnpm cli run STORY_ID --data-dir /absolute/private/library --until reviewed --timeout 3600`。`CLAUDE_BIN` 可指定可执行文件，`CLAUDE_CONFIG_DIR` 可指定已有登录目录。正式服务同样接受此提供方；图片请求明确失败，不自动切换其他提供方。为可重复比较，可将 `CLAUDE_MODEL` 固定为首个调用回执中的完整模型 ID。
+
+适配器使用 Claude Code 2.1.318 的 safe mode、空工具集、strict 空 MCP、禁用 hooks 和会话持久化，并替换系统提示词为共享生产提示词；使用临时目录隔离项目上下文。只接受订阅登录，不继承 API 密钥、API 地址或第三方提供方环境变量。`--bare` 会忽略订阅登录，因此不使用。CLI flag 语义见 [Claude Code CLI reference](https://code.claude.com/docs/en/cli-reference)。各任务档位通过 `--effort` 请求，保存的 `reasoningEffort` 是请求值；真实模型来自 assistant/用量回执，不把档位冒充模型确认值。超时及 CLI/server/desktop 退出会结束子进程组，原始 stdout/stderr 错误不进入日志。
+
 文本任务独立分配推理预算：`SHIQU_REASONING_SUGGEST=medium`（选题）、`SHIQU_REASONING_ART=low`（画风）、`SHIQU_REASONING_FRAMES=medium`（画幅数）、`SHIQU_REASONING_OUTLINE=high`（提纲）、`SHIQU_REASONING_PLAN=high`（分镜）、`SHIQU_REASONING_REVIEW=high`（初审/复核）、`SHIQU_REASONING_REPAIR=high`（修订）。结语撰写沿用分镜档位，结语修订沿用修订档位。这些也是缺省值，可逐项覆盖；不自动升档。Codex 支持 low/medium/high/xhigh/max，具体取决于模型和 CLI；Gemini 支持 low/medium/high，不支持值报错，不静默降档。旧 `CODEX_REASONING_EFFORT` 仍用于未分类及图片工具调用，不再覆盖已分类文本任务，也不代表图片质量。已生成步骤不因改档重做；新选题和画风缓存按对应档位隔离。生成检查点用量记录中的 `reasoningEffort` 对 Codex 是线程确认值，对 Gemini / OpenAI API 是请求值。
 
 ### 真实审核对比

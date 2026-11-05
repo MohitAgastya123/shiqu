@@ -19,6 +19,7 @@ import {diagnosticReport} from './diagnostics.ts';
 import {createLibraryBackup,verifyLibraryBackup,containsPath} from './library-backup.ts';
 import {bundledSkill,installSkill,checkSkill,updateSkill} from './cli-skill.ts';
 import {stopCodexProcesses} from './codex-runner.ts';
+import {stopClaudeProcesses} from './claude-runner.ts';
 import {readerBooks} from '../lib/reader-books.ts';
 import {artStyles,artStyleGroups} from '../lib/reader-styles.ts';
 import {themes} from '../lib/content.ts';
@@ -133,7 +134,7 @@ export async function executeHeadless(root:string,args:string[],context:Context=
  const running=command==='run'||command==='stories'&&action==='run',target=command==='run'?action:id;
  const until=value('until')||'completed',timeout=Number(value('timeout')||900);let timer:ReturnType<typeof setTimeout>|undefined;
  const abort=new AbortController();let timedOut=false;
- const interrupt=()=>{app?.stopGeneration();abort.abort();void stopCodexProcesses();};
+ const interrupt=()=>{app?.stopGeneration();abort.abort();void Promise.all([stopCodexProcesses(),stopClaudeProcesses()]);};
  try{
   if(command==='backup'){need(action,'BACKUP_PATH_REQUIRED','Specify a new backup directory.');outputOutside(root,path.resolve(action));const manifest=createLibraryBackup(directory,path.resolve(action),appVersion);return {path:path.resolve(action),files:manifest.files.length,verified:true};}
   let effective:Record<string,string|undefined>={...variables,SHIQU_AI_PROVIDER:'readonly'};
@@ -227,7 +228,7 @@ export async function executeHeadless(root:string,args:string[],context:Context=
   throw new CliCommandError('UNKNOWN_COMMAND','Use help --json for available commands.');
  }finally{
   if(timer)clearTimeout(timer);process.off('SIGINT',interrupt);process.off('SIGTERM',interrupt);context.signal?.removeEventListener('abort',interrupt);
-  try{if(app){app.stopGeneration();abort.abort();if(running)await stopCodexProcesses();await app.close();}}finally{removeDiagnostics();await release();}
+  try{if(app){app.stopGeneration();abort.abort();if(running)await Promise.all([stopCodexProcesses(),stopClaudeProcesses()]);await app.close();}}finally{removeDiagnostics();await release();}
  }
 }
 export async function routeHeadless(root:string,args:string[]){

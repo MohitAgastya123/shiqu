@@ -16,6 +16,7 @@ import {desktopRemote} from './desktop-remote.ts';
 import {startDesktopTunnel,TunnelError} from './desktop-tunnel.ts';
 import {createReaderProvider} from './generation.ts';
 import {stopCodexProcesses} from './codex-runner.ts';
+import {stopClaudeProcesses} from './claude-runner.ts';
 import {FileMedia} from './media.ts';
 import {systemSettingsSchema,settingsVariables} from '../lib/system-settings.ts';
 import {installDiagnostics,recordDiagnostic,safeErrorCode} from './diagnostics.ts';
@@ -48,7 +49,7 @@ export async function startDesktop(settings:DesktopSettings,key:string,root:stri
  let stopped:Promise<void>|undefined;
  const remote=desktopRemote(request=>app!.handle(request));
  async function close(listener:typeof server){if(!listener)return;await new Promise<void>(resolve=>{listener.close(()=>resolve());listener.closeAllConnections();});}
- function stop(){return stopped??=(async()=>{try{remote.revoke();await tunnel?.stop();app?.stopGeneration();await stopCodexProcesses();await Promise.all([close(remoteServer),close(server)]);await app?.close();}finally{recordDiagnostic(settings.dataDirectory,'service_stopped');removeDiagnostics();await release();}})();}
+ function stop(){return stopped??=(async()=>{try{remote.revoke();await tunnel?.stop();app?.stopGeneration();await Promise.all([stopCodexProcesses(),stopClaudeProcesses()]);await Promise.all([close(remoteServer),close(server)]);await app?.close();}finally{recordDiagnostic(settings.dataDirectory,'service_stopped');removeDiagnostics();await release();}})();}
  try{
   options.signal?.throwIfAborted();
   app=createApplication({root,dataDirectory:settings.dataDirectory,variables:desktopVariables(settings,key)});
@@ -95,10 +96,10 @@ async function main(){
  const abort=new AbortController();
  let runtime:Awaited<ReturnType<typeof startDesktop>>|undefined,starting=false,closing=false,inputClosed=false;
  const send=(value:unknown)=>process.stdout.write(JSON.stringify(value)+'\n');
- async function stop(){if(closing)return;closing=true;if(runtime)await runtime.stop();else await stopCodexProcesses();process.exit(0);}
+ async function stop(){if(closing)return;closing=true;if(runtime)await runtime.stop();else await Promise.all([stopCodexProcesses(),stopClaudeProcesses()]);process.exit(0);}
  lines.on('close',()=>{inputClosed=true;abort.abort();if(!starting)void stop();});
  for(const signal of ['SIGINT','SIGTERM'] as const)process.on(signal,()=>{abort.abort();if(!starting)void stop();});
- process.on('exit',()=>stopCodexProcesses());
+ process.on('exit',()=>{void stopCodexProcesses();void stopClaudeProcesses();});
  // Discard raw exception/provider output: the parent receives only safe status messages.
  process.on('uncaughtException',()=>{send({error:'服务意外退出，请重新启动。'});void stop();});
  lines.on('line',line=>{

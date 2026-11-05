@@ -6,6 +6,7 @@ import {phoneUrls,printPhoneAccess} from './phone-access.ts';
 import {developmentAccess} from './development-access.ts';
 import {desktopAccess} from './desktop-access.ts';
 import {stopCodexProcesses} from './codex-runner.ts';
+import {stopClaudeProcesses} from './claude-runner.ts';
 import {ownDesktopData} from './desktop-owner.ts';
 import {installDiagnostics,recordDiagnostic,safeErrorCode} from './diagnostics.ts';
 
@@ -23,7 +24,7 @@ export async function startServer({root,variables=process.env,localAccess=false}
  function closeApplication(){
   return closing??=(async()=>{
    app.stopGeneration();
-   try{await stopCodexProcesses();await app.close();}
+   try{await Promise.all([stopCodexProcesses(),stopClaudeProcesses()]);await app.close();}
    finally{recordDiagnostic(config.dataDirectory,'service_stopped');removeDiagnostics();await release();}
   })();
  }
@@ -39,7 +40,7 @@ export async function startServer({root,variables=process.env,localAccess=false}
   const closed=new Promise<void>(resolve=>server.close(()=>resolve()));
   server.closeAllConnections();
   // Cancel provider requests before waiting for their HTTP connections to drain.
-  void Promise.all([closed,stopCodexProcesses()]).then(closeApplication).then(()=>process.exit(0));
+  void Promise.all([closed,stopCodexProcesses(),stopClaudeProcesses()]).then(closeApplication).then(()=>process.exit(0));
  }
  try{
   // macOS permits wildcard and loopback binds to coexist; keep the printed local URL on this service.

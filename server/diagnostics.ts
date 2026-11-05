@@ -7,19 +7,20 @@ import {geminiResponseDiagnostic} from '../lib/reader-gemini-diagnostics.ts';
 import {responsesDiagnostic} from '../lib/reader-responses-diagnostics.ts';
 
 export const diagnosticLimit=128*1024;
-const names=new Set(['service_started','service_stopped','service_start_failed','service_uncaught','request_failed','codex_generation_error','reader_generation_error','gemini_request_rejected','gemini_response','deepseek_response','deepseek_request_failed','production_job_unreadable','production_job_unsaved','production_story_unreadable','production_tick_failed','story_discovery_search']);
+const names=new Set(['service_started','service_stopped','service_start_failed','service_uncaught','request_failed','codex_generation_error','claude_generation_error','reader_generation_error','gemini_request_rejected','gemini_response','deepseek_response','deepseek_request_failed','production_job_unreadable','production_job_unsaved','production_story_unreadable','production_tick_failed','story_discovery_search']);
+const claudeCodes=new Set(['CLAUDE_LOGIN_REQUIRED','SUBSCRIPTION_REQUIRED','CLI_UNAVAILABLE','INVALID_MODEL','INVALID_REASONING_EFFORT','INVALID_PROTOCOL','UNSAFE_CONFIGURATION','UNEXPECTED_TOOL','GENERATION_FAILED','PROCESS_EXIT','OUTPUT_LIMIT','TEXT_ONLY']);
 const geminiCodes=new Set(['INVALID_OUTPUT','PROVIDER_ERROR','SCHEMA_TOO_COMPLEX','UNSUPPORTED_FIELD','UNSUPPORTED_REASONING_EFFORT','SOURCE_UNAVAILABLE','INVALID_SOURCE','CONTENT_BLOCKED','INVALID_MODEL','INCOMPLETE_RESPONSE','INVALID_TEXT','INVALID_JSON']);
 const responsesCodes=new Set(['KEY_REQUIRED','INVALID_MODEL','INCOMPLETE_RESPONSE','INVALID_OUTPUT','REFUSED','MODEL_UNAVAILABLE','PROVIDER_ERROR','TIMEOUT','EDITORIAL_SOURCE_QUOTE','EDITORIAL_COVERAGE_REQUIRED','FRAME_COUNT_REVIEW_SCOPE']);
 const providerStatuses=new Set(['INVALID_ARGUMENT','FAILED_PRECONDITION','OUT_OF_RANGE','UNAUTHENTICATED','PERMISSION_DENIED','NOT_FOUND','RESOURCE_EXHAUSTED','CANCELLED','INTERNAL','UNKNOWN','UNAVAILABLE','DEADLINE_EXCEEDED']);
 const rejectionReasons=new Set(['SCHEMA_TOO_COMPLEX','UNSUPPORTED_FIELD']);
-const codes=new Set(['UNKNOWN','Error','TypeError','RangeError','SyntaxError','AbortError','ReaderError','CodexError','ZodError','ENOENT','EACCES','EPERM','EIO','ENOSPC','EMFILE','EROFS','EBUSY','EADDRINUSE','DATA_BUSY','INVALID_OUTPUT','TIMEOUT','MODEL_UNAVAILABLE','REASONING_EFFORT_UNAVAILABLE','INTERRUPTED','SQLITE_BUSY','SQLITE_ERROR','SQLITE_CORRUPT','ERR_SQLITE_ERROR']);
+const codes=new Set(['UNKNOWN','Error','TypeError','RangeError','SyntaxError','AbortError','ReaderError','CodexError','ClaudeError','ZodError','ENOENT','EACCES','EPERM','EIO','ENOSPC','EMFILE','EROFS','EBUSY','EADDRINUSE','DATA_BUSY','INVALID_OUTPUT','TIMEOUT','MODEL_UNAVAILABLE','REASONING_EFFORT_UNAVAILABLE','INTERRUPTED','SQLITE_BUSY','SQLITE_ERROR','SQLITE_CORRUPT','ERR_SQLITE_ERROR']);
 type Event={time:string;event:string;code?:string;id?:string;[key:string]:string|number|undefined};
 function project(event:string,value:unknown={},time=new Date().toISOString()):Event|undefined{
  if(!names.has(event)||!/^\d{4}-\d\d-\d\dT[\d:.]+Z$/.test(time))return;
  const raw=value&&typeof value==='object'?value as Record<string,unknown>:{code:value},out:Event={time,event};
  if(event==='gemini_response')Object.assign(out,geminiResponseDiagnostic(raw));
  if(event==='deepseek_response')Object.assign(out,responsesDiagnostic(raw));
- if(raw.code!==undefined)out.code=typeof raw.code==='string'&&(codes.has(raw.code)||event==='reader_generation_error'&&geminiCodes.has(raw.code)||event==='deepseek_request_failed'&&responsesCodes.has(raw.code))?raw.code:'UNKNOWN';
+ if(raw.code!==undefined)out.code=typeof raw.code==='string'&&(codes.has(raw.code)||event==='claude_generation_error'&&claudeCodes.has(raw.code)||event==='reader_generation_error'&&geminiCodes.has(raw.code)||event==='deepseek_request_failed'&&responsesCodes.has(raw.code))?raw.code:'UNKNOWN';
  if(['reader_generation_error','deepseek_request_failed'].includes(event)&&typeof raw.status==='number'&&Number.isInteger(raw.status)&&raw.status>=100&&raw.status<=599)out.status=raw.status;
  if(event==='gemini_request_rejected'){
   if(typeof raw.httpStatus==='number'&&Number.isInteger(raw.httpStatus)&&raw.httpStatus>=100&&raw.httpStatus<=599)out.httpStatus=raw.httpStatus;

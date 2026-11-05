@@ -9,7 +9,7 @@ import type {TaskReasoningEfforts} from './reader-reasoning.ts';
 import type {DiscoveryContext} from './reader-discovery-call.ts';
 import type {ThemeStory,ThemeMatches} from './reader-theme-match.ts';
 export type StoryReading={signal:AbortSignal;onProgress:(progress:SuggestionProgress)=>void;drain?:boolean;maxStories?:1;cycleId?:string;onCall?:DiscoveryContext['onCall']};
-export type ProviderStatus={configured:boolean;provider:'gemini'|'codex'|'openai'|'deepseek'|'readonly';models:{text:string;image:string};voiceEnabled:false;reason?:string;message?:string;taskReasoningEfforts?:TaskReasoningEfforts;themeMatching?:{model:string;reasoningEffort:string}};
+export type ProviderStatus={configured:boolean;provider:'gemini'|'codex'|'claude'|'openai'|'deepseek'|'readonly';models:{text:string;image:string};voiceEnabled:false;reason?:string;message?:string;taskReasoningEfforts?:TaskReasoningEfforts;themeMatching?:{model:string;reasoningEffort:string}};
 export interface ReaderProvider {
  // Per-call limit for the active production step; local work has no provider deadline.
  generationTimeoutMs?:(phase:GenerationProgress['phase'])=>number|null;
