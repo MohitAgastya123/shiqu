@@ -7,7 +7,7 @@ import {effectiveProviderVariables} from './cli-setup.ts';
 import {configuredTaskReasoning} from '../lib/reader-reasoning.ts';
 import {configuredModels} from '../lib/reader-gemini.ts';
 import {openaiDefaultModels,systemSettingsSchema,validApiKey} from '../lib/system-settings.ts';
-import {loopbackAddress,providerSettingsSchema,providerSettingsSaveSchema} from '../lib/provider-settings.ts';
+import {loopbackAddress,providerSettingsSchema,providerSettingsSaveSchema,providerSettingsProofHeader} from '../lib/provider-settings.ts';
 import type {ProviderSettingsView} from '../lib/provider-settings.ts';
 import type {ProviderStatus} from '../lib/reader-provider.ts';
 import type {HttpPeer} from './http.ts';
@@ -22,14 +22,15 @@ function signature(variables:Variables){
  const fields=provider==='gemini'?['GEMINI_API_KEY']:provider==='openai'?['OPENAI_API_KEY']:provider==='codex'?['CODEX_BIN','SHIQU_CODEX_HOME','CODEX_REASONING_EFFORT']:provider==='claude'?['CLAUDE_BIN','CLAUDE_CONFIG_DIR']:['DEEPSEEK_API_KEY'];
  return JSON.stringify({provider,models,reasoning:configuredTaskReasoning(variables),fields:fields.map(key=>[key,value(key,key.endsWith('_BIN')?provider:'')])});
 }
-export function browserProviderSettings(options:{variables:Variables;overrides:Variables;ports:number[];status:()=>Promise<ProviderStatus>;locations?:ReturnType<typeof desktopLibraryPaths>}){
+export function browserProviderSettings(options:{variables:Variables;overrides:Variables;ports:number[];status:()=>Promise<ProviderStatus>;locations?:ReturnType<typeof desktopLibraryPaths>;proxyToken?:string}){
  const runtimeSignature=signature(options.variables),locations=options.locations||desktopLibraryPaths(),hosts=new Set(options.ports.flatMap(port=>[`localhost:${port}`,`127.0.0.1:${port}`,`[::1]:${port}`]));
  const overrides=overrideNames.filter(name=>typeof options.overrides[name]==='string');
  const headers={'Cache-Control':'private, no-store','Referrer-Policy':'no-referrer','X-Content-Type-Options':'nosniff'};
  const json=(value:unknown,status=200)=>Response.json(value,{status,headers});
  return async(request:Request,peer:HttpPeer)=>{
   const url=new URL(request.url),origin=request.headers.get('origin');
-  if(!loopbackAddress(peer.remoteAddress)||!hosts.has(url.host)||request.headers.get('sec-fetch-site')==='cross-site'||origin&&origin!==url.origin||request.method!=='GET'&&origin!==url.origin)return json({error:'生成服务设置仅可在本机同源页面中访问。'},403);
+  const proxyVerified=options.proxyToken===undefined||!!options.proxyToken&&request.headers.get(providerSettingsProofHeader)===options.proxyToken;
+  if(!proxyVerified||!loopbackAddress(peer.remoteAddress)||!hosts.has(url.host)||request.headers.get('sec-fetch-site')==='cross-site'||origin&&origin!==url.origin||request.method!=='GET'&&origin!==url.origin)return json({error:'生成服务设置仅可在本机同源页面中访问。'},403);
   if(!['GET','POST'].includes(request.method))return json({error:'不支持的设置操作。'},405);
   let store:SystemSettingsStore|undefined;
   try{
@@ -39,13 +40,13 @@ export function browserProviderSettings(options:{variables:Variables;overrides:V
     const body=await request.text();if(body.length>16384)return json({error:'设置内容过长。'},413);
     const input=providerSettingsSaveSchema.parse(JSON.parse(body));
     if(input.expectedRevision!==store.revision())return json({error:'设置已由另一入口修改，请重新读取后保存。'},409);
-    const current=store.settings(),merged=systemSettingsSchema.parse({...current,...input.settings,providerConfigured:true});
+    const current=store.settings(),merged=systemSettingsSchema.parse({...current,...input.settings,taskReasoningEfforts:{...current.taskReasoningEfforts,...input.settings.taskReasoningEfforts},providerConfigured:true});
     const provider=merged.provider,api=provider==='gemini'||provider==='openai';
     if(!api&&(input.keyAction!=='keep'||input.key))return json({error:'当前提供方不使用 API 密钥。'},400);
     if(input.keyAction!=='replace'&&input.key)return json({error:'请选择替换密钥，或清空输入以保留现有密钥。'},400);
     const key=api&&input.keyAction!=='keep'?{provider,value:input.keyAction==='remove'?null:validApiKey(input.key)}:undefined;
     if(api&&input.keyAction==='keep'&&!store.key(provider))return json({error:'请先为所选服务填写 API 密钥，或选择只读模式。'},400);
-    store.save({...input.settings,providerConfigured:true},key,input.expectedRevision);
+    store.save({...providerSettingsSchema.strip().parse(merged),providerConfigured:true},key,input.expectedRevision);
    }
    const status=await options.status(),snapshot=store.snapshot(),effective=effectiveProviderVariables(store,options.overrides);
    const view:ProviderSettingsView={settings:providerSettingsSchema.strip().parse(snapshot.settings),revision:snapshot.revision,keyPresent:snapshot.keyPresent,runtime:{provider:status.provider,configured:status.configured,models:status.models,...(status.taskReasoningEfforts?{taskReasoningEfforts:status.taskReasoningEfforts}:{})},overrides,restartRequired:signature(effective)!==runtimeSignature,platform:process.platform};

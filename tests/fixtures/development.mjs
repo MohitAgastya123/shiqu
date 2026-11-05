@@ -10,7 +10,7 @@ import {startupFixture,freeStartupPort} from './startup.mjs';
 
 export async function checkoutFixture(t){
  const f=await startupFixture(t),checkout=path.join(f.root,'checkout');await mkdir(checkout);
- for(const name of ['client','components','hooks','lib','server','db','drizzle','docker','scripts','public','package.json','pnpm-lock.yaml','.nvmrc','index.html','vite.config.ts','tsconfig.json']){
+ for(const name of ['client','components','hooks','lib','server','db','drizzle','docker','scripts','public','package.json','pnpm-lock.yaml','pnpm-workspace.yaml','.nvmrc','index.html','vite.config.ts','tsconfig.json']){
   if(existsSync(name))await cp(name,path.join(checkout,name),{recursive:true,filter:source=>!/(?:^|\/)\.env(?:\.|$)/.test(source)});
  }
  await mkdir(path.join(checkout,'data'));await symlink(path.resolve('data/library'),path.join(checkout,'data/library'),process.platform==='win32'?'junction':'dir');
@@ -24,7 +24,8 @@ export async function checkoutFixture(t){
 export async function startDevelopment(t,f,{local=false,variables={}}={}){
  const port=await freeStartupPort();let apiPort=await freeStartupPort();while(apiPort===port)apiPort=await freeStartupPort();
  let output='';
- const child=spawn('pnpm',['dev',...(local?['local']:[]),'--port',String(port)],{cwd:f.checkout,env:{
+ // Dependencies are already installed and symlinked: a fixture must not rewrite the live virtual store.
+ const child=spawn('pnpm',['--config.verify-deps-before-run=false','dev',...(local?['local']:[]),'--port',String(port)],{cwd:f.checkout,env:{
   ...f.env,PATH:process.env.PATH,
   // Corepack's package cache contains tooling, not user settings; avoid downloads in a disposable HOME.
   COREPACK_HOME:process.env.COREPACK_HOME||path.join(os.homedir(),'.cache/node/corepack'),

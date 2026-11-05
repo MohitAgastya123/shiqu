@@ -13,7 +13,7 @@ import {createApplication} from '../server/app.ts';
 import {startDesktop} from '../server/desktop.ts';
 import {defaultSystemSettings} from '../lib/system-settings.ts';
 import {protectLocalProviderSettings} from '../scripts/development-server.mjs';
-import {providerSettingsPath,providerSettingsSchema,loopbackAddress} from '../lib/provider-settings.ts';
+import {providerSettingsPath,providerSettingsProofHeader,loopbackAddress} from '../lib/provider-settings.ts';
 import {startupFixture,startFixtureCli,freeStartupPort,savedStartupState} from './fixtures/startup.mjs';
 
 const origin='http://127.0.0.1:3456',peer={remoteAddress:'127.0.0.1'};
@@ -51,6 +51,19 @@ test('provider profiles and explicit key keep/replace/remove never return creden
  response=await f.save(body(current,{...current.settings,provider:'codex'}));assert.equal(response.status,200);current=await safeJson(response);assert.equal(current.settings.openaiTextModel,'saved-openai-text');
  response=await f.save(body(current,{...current.settings,provider:'readonly'}));assert.equal(response.status,200);current=await safeJson(response);
  response=await f.save(body(current,{...current.settings,provider:'gemini'}));assert.equal(response.status,200);assert.equal(f.settingsStore.key('gemini'),googleKey);await safeJson(response);
+});
+
+test('partial provider, model, per-task and key updates preserve omitted custom profiles and reasoning',async t=>{
+ const f=await fixture(t);f.settingsStore.save({codexModel:'custom-codex-model',taskReasoningEfforts:{...f.settingsStore.settings().taskReasoningEfforts,art:'high',outline:'low',plan:'low'}});
+ let current=await f.view();const original=f.settingsStore.settings();
+ let response=await f.save({settings:{provider:'openai'},expectedRevision:current.revision,keyAction:'keep'});assert.equal(response.status,200);current=await safeJson(response);
+ assert.deepEqual(f.settingsStore.settings(),{...original,provider:'openai'});
+ response=await f.save({settings:{textModel:'new-inactive-google-model'},expectedRevision:current.revision,keyAction:'keep'});assert.equal(response.status,200);current=await safeJson(response);
+ assert.deepEqual(f.settingsStore.settings(),{...original,provider:'openai',textModel:'new-inactive-google-model'});
+ response=await f.save({settings:{taskReasoningEfforts:{review:'medium'}},expectedRevision:current.revision,keyAction:'keep'});assert.equal(response.status,200);current=await safeJson(response);
+ assert.deepEqual(f.settingsStore.settings().taskReasoningEfforts,{...original.taskReasoningEfforts,review:'medium'});assert.equal(f.settingsStore.settings().codexModel,'custom-codex-model');
+ const before=f.settingsStore.settings();response=await f.save({settings:{},expectedRevision:current.revision,keyAction:'replace',key:'replacement-secret'});assert.equal(response.status,200);await safeJson(response);
+ assert.deepEqual(f.settingsStore.settings(),before);assert.equal(f.settingsStore.key('openai'),'replacement-secret');assert.equal(f.settingsStore.key('gemini'),googleKey);
 });
 
 test('invocation overrides report names only and drift follows the effective active provider',async t=>{
@@ -91,14 +104,29 @@ test('real peer, exact loopback hosts, origins and fetch-site guard settings wit
 });
 
 test('Vite guard rejects original LAN peers even through normalized proxy path variants',()=>{
- let middleware;protectLocalProviderSettings().configureServer({middlewares:{use(fn){middleware=fn;}}});
+ let middleware;protectLocalProviderSettings('private-fixture-proof').configureServer({middlewares:{use(fn){middleware=fn;}}});
  for(const url of [providerSettingsPath,providerSettingsPath+'?x=1','/art/../api/local/provider-settings','/api/x/%2e%2e/local/provider-settings','/api/x/../../api/local/provider-settings']){
   let next=false,ended=false;const response={statusCode:200,setHeader(){},end(){ended=true;}};
-  middleware({url,socket:{remoteAddress:'192.0.2.3'},headers:{'x-forwarded-for':'127.0.0.1'}},response,()=>{next=true;});assert.equal(response.statusCode,403,url);assert.equal(ended,true);assert.equal(next,false);
+  middleware({url,socket:{remoteAddress:'192.0.2.3'},headers:{'x-forwarded-for':'127.0.0.1',[providerSettingsProofHeader]:'private-fixture-proof'}},response,()=>{next=true;});assert.equal(response.statusCode,403,url);assert.equal(ended,true);assert.equal(next,false);
  }
  for(const [url,remoteAddress] of [[providerSettingsPath,'127.0.0.1'],['/api/reader/sessions','192.0.2.3']]){
-  let next=false;middleware({url,socket:{remoteAddress}}, {setHeader(){},end(){assert.fail('Reader or actual local request must pass');}},()=>{next=true;});assert.equal(next,true);
+  let next=false;const headers={[providerSettingsProofHeader]:'forged-client-proof'};middleware({url,socket:{remoteAddress},headers}, {setHeader(){},end(){assert.fail('Reader or actual local request must pass');}},()=>{next=true;});assert.equal(next,true);if(url===providerSettingsPath)assert.equal(headers[providerSettingsProofHeader],'private-fixture-proof');
  }
+});
+
+test('development settings fail closed behind legacy proxies or missing proof, while CLI stays direct',async t=>{
+ const f=await fixture(t),runtime=(await f.view()).runtime;
+ for(const proxyToken of ['', 'private-fixture-proof']){
+  const handler=browserProviderSettings({variables:f.variables,overrides:{},ports:[3456,3457],locations:f.locations,status:async()=>runtime,proxyToken});
+  for(const host of ['127.0.0.1:3456','127.0.0.1:3457'])for(const supplied of [undefined,'forged-client-proof']){
+   const headers=supplied?{[providerSettingsProofHeader]:supplied}:{};assert.equal((await handler(new Request('http://'+host+providerSettingsPath,{headers}),peer)).status,403);
+   assert.equal((await handler(new Request('http://'+host+providerSettingsPath,{method:'POST',headers:{...headers,Origin:'http://'+host,'Content-Type':'application/json'},body:'{}'}),peer)).status,403);
+  }
+  const request=new Request(origin+providerSettingsPath,{headers:{[providerSettingsProofHeader]:'private-fixture-proof'}}),response=await handler(request,peer);
+  assert.equal(response.status,proxyToken?200:403);assert.ok(!(await response.text()).includes('private-fixture-proof'));
+  assert.equal((await handler(request,{remoteAddress:'192.0.2.3'})).status,403);
+ }
+ assert.equal((await f.read()).status,200,'Non-proxied CLI remains protected by its actual loopback peer');
 });
 
 test('HTTP adapter supplies socket metadata; forwarded headers cannot change the actual peer',async t=>{

@@ -3,12 +3,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {get} from 'node:http';
 import {networkInterfaces} from 'node:os';
+import {readlink} from 'node:fs/promises';
 import {checkoutFixture,startDevelopment,assertStopped,saveGoogle} from './fixtures/development.mjs';
 import {savedStartupState} from './fixtures/startup.mjs';
 import {providerSettingsPath} from '../lib/provider-settings.ts';
 
 test('browser settings save through actual Vite/backend, preserve overrides and adopt changes only after restart',{timeout:60000},async t=>{
- const f=await checkoutFixture(t);saveGoogle(f);
+ const dependencyLink=await readlink('node_modules/recharts'),f=await checkoutFixture(t);saveGoogle(f);
  const variables={GEMINI_IMAGE_MODEL:'shell-image-model',GEMINI_API_KEY:'fake-shell-key'};
  let server=await startDevelopment(t,f,{variables});
  const load=async()=>{const response=await fetch(server.origin+providerSettingsPath);assert.equal(response.status,200);return response.json();};
@@ -20,7 +21,7 @@ test('browser settings save through actual Vite/backend, preserve overrides and 
  const running=await (await fetch(server.origin+'/api/reader/status')).json();assert.equal(running.models.text,'saved-google-text');
  const conflict=await save({settings:{...current.settings,textModel:'must-not-save'},expectedRevision:current.revision-1,keyAction:'keep'});assert.equal(conflict.status,409);assert.equal((await savedStartupState(f)).settings.textModel,'browser-saved-text');
  assert.equal((await fetch(server.origin+providerSettingsPath,{headers:{Origin:'https://foreign.example'}})).status,403);assert.equal((await fetch(server.origin+providerSettingsPath,{headers:{'Sec-Fetch-Site':'cross-site'}})).status,403);
- const direct=await fetch(`http://127.0.0.1:${server.apiPort}`+providerSettingsPath);assert.equal(direct.status,200);
+ const direct=await fetch(`http://127.0.0.1:${server.apiPort}`+providerSettingsPath);assert.equal(direct.status,403,'Internal dev port requires proof from the guarded frontend');
  const lan=Object.values(networkInterfaces()).flat().find(address=>address?.family==='IPv4'&&!address.internal)?.address;
  if(lan){
   for(const route of [providerSettingsPath,'/api/x/%2e%2e/local/provider-settings','/art/../api/local/provider-settings']){
@@ -31,4 +32,5 @@ test('browser settings save through actual Vite/backend, preserve overrides and 
  response=await save({settings:{...current.settings,provider:'openai',openaiTextModel:'browser-openai-text',openaiImageModel:'browser-openai-image'},expectedRevision:current.revision,keyAction:'replace',key:'fake-openai-browser-key'});assert.equal(response.status,200);current=await response.json();assert.equal(current.runtime.provider,'gemini');assert.equal(current.restartRequired,true);
  persisted=await savedStartupState(f);assert.equal(persisted.settings.provider,'openai');assert.equal(persisted.gemini,'fake-browser-key');assert.equal(persisted.openai,'fake-openai-browser-key');assert.ok(!server.output().includes('fake-browser-key'));assert.ok(!server.output().includes('fake-openai-browser-key'));
  await assertStopped(server);
+ assert.equal(await readlink('node_modules/recharts'),dependencyLink,'Disposable dev processes must preserve the live dependency links');
 });
