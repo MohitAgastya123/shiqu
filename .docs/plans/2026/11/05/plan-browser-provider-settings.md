@@ -21,7 +21,7 @@ Reader entry lives under 我的. Reuse StorySheet with a responsive form, runnin
 - [x] Add reader entry/form/styles for saved vs running settings, provider/model/reasoning editing, key presence/actions, temporary override explanation and restart feedback.
 - [x] Add meaningful API/security/transaction/credential-leak tests and actual dev/CLI process regressions. Add a durable isolated browser test/fixture for the actual form and verify manually through the in-app browser; save/reload/conflict/mobile flows use fake keys only.
 - [x] Update current user/development docs and stale statements that all browser settings/credential editing are unavailable; keep saved keys unreadable.
-- [ ] Run applicable unit/integration suites, typecheck/lint and the matching E2E specification. Record actual evidence and cleanup preview processes/temporary inputs.
+- [x] Ran 211 applicable unit/integration tests, typecheck/lint and 4 matching actual dev E2E scenarios; all passed. In-app UI checks completed and the disposable preview/temporary inputs were cleaned up; viewport reset.
 
 ## Verification
 
@@ -42,4 +42,10 @@ No production library is opened, migrated or modified for validation. No depende
 - AR addendum (round 2, reused reviewer) passed for proxy proof: a watched backend may update while the original Vite launcher remains alive; the backend must require a nonce proving the original-peer guard ran. Otherwise forged loopback Host/Origin through a legacy proxy could bypass the intended local-only guarantee. No native/CLI direct transport changes.
 - Proxy-proof addendum implemented: a per-launch UUID stays in the Vite guard closure/backend environment. Only original-loopback settings requests receive the stamped proof; development entry always requires it (missing/empty fails closed), including internal-port direct access. CLI direct mode retains the existing socket boundary. No proof value is returned or exposed in public configuration.
 - Focused API suite: 12/12 passed after omission/proxy-proof fixes; actual dev E2E: 4/4 passed with direct internal-port denial, LAN forged headers/normalized paths, and unchanged live dependency links. Typecheck/lint passed; package.json and lockfile unchanged. Additional POST proof assertions are included in final broad TT.
-- SS first milestone: `788af97`; correction milestone pending. CR round 1 P2 addressed; CR round 2/final TT/VR/DD pending.
+- SS milestones: `788af97` (local browser settings) and `0e2d599` (partial merge/proxy proof/fixture isolation).
+- CR fixed: partial updates now preserve saved profiles and nested reasoning; development requests require per-launch proxy proof. Rerun result passed. CR risk: non-low — credential writes and proxy authorization. CR review round: 2; reviewer: reused (`settings_review`). No source changes after this review.
+- TT passed: 211/211 in 16 applicable settings/transport/proxy/CLI/native compatibility/release-selection suites. Node 24.22.1, `--experimental-strip-types --test --test-concurrency=2`; log `/tmp/shiqu-browser-settings-tt.log`. Final run includes new nested omission and GET/POST proof cases. No package/dependency/lockfile changes.
+- ET passed: 4/4 actual guarded dev scenarios; log `/tmp/shiqu-browser-settings-et.log`. Browser UI evidence remains applicable after compatible patch/proof plumbing corrections (frontend unchanged).
+- VR passed: all acceptance criteria complete. VR risk: non-low — local credential mutation, shared persistence, and proxy authorization. VR review round: 1; reviewer: reused (`settings_review`). Full final result preserved in DD.
+- DD: `.docs/done/2026/11/05/browser-provider-settings.md` records behavior, validation, and startup limitations.
+- GC: implementation milestones `788af97` and `0e2d599`; final evidence/acceptance documentation committed separately. No push or publication.
