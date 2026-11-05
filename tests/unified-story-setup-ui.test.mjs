@@ -116,12 +116,13 @@ test('discovery stays in the picker and selection opens one continuous story flo
  const changedReview=renderToStaticMarkup(createElement(Editor,{editor:{...targetEditor,changes:{plan:{...targetedPlan,pages:targetedPlan.pages.map((p,i)=>i===17?{...p,caption:'手改后的第十八幅旁白。'}:p)}}},reviewIssues}));
  assert.match(changedReview,/缺少第18幅的关键动作/);assert.match(changedReview,/手改后的第十八幅旁白/);
  // Review corrections submit immediately even from settings or a paused editor with onDone.
+ // A manual frame correction requires review (lib/reader-revision.ts), unlike a style-only change.
  for(const resuming of [false,true]){
-  const saving=renderToStaticMarkup(createElement(Editor,{editor:{...targetEditor,impact:{...targetEditor.impact,changed:true}},reviewIssues,onDone:noop,resuming}));
+  const saving=renderToStaticMarkup(createElement(Editor,{editor:{...targetEditor,impact:{...targetEditor.impact,changed:true,review:true}},reviewIssues,onDone:noop,resuming}));
   assert.match(saving,resuming?/>应用修改并恢复<\/button>/:/>保存并重新审核<\/button>/);assert.match(saving,/重新审片，通过后继续绘图/);assert.doesNotMatch(saving,/>完成编辑<\/button>|>恢复生成<\/a>|>开始制作<\/(?:button|a)>/);
  }
  let submitted=0,finished=0;
- const saveTree=Actions({editor:{...targetEditor,impact:{...targetEditor.impact,changed:true},submit:()=>{submitted++;}},reviewOnSave:true,onDone:()=>{finished++;}});
+ const saveTree=Actions({editor:{...targetEditor,impact:{...targetEditor.impact,changed:true,review:true},submit:()=>{submitted++;}},reviewOnSave:true,onDone:()=>{finished++;}});
  const findPrimary=node=>{
   if(Array.isArray(node))return node.map(findPrimary).find(Boolean);
   if(!node?.props)return;
@@ -153,8 +154,9 @@ test('discovery stays in the picker and selection opens one continuous story flo
  assert.equal(draftSteps.find(s=>s.id==='source').detail,'画风：彩铅国漫');
  for(const id of ['plan','review','repair','recheck','image'])assert.equal(draftSteps.find(s=>s.id===id).state,'pending',id);
  const savedPlan={pages:Array(5).fill({caption:'已保存的旁白。',prompt:'Saved scene.'})};
- const styleSteps=revisionDraftSteps({...draftEditor.base,plan:savedPlan},{artStyle:'ink-pencil'});
- assert.equal(styleSteps.find(s=>s.id==='plan').state,'done');assert.equal(styleSteps.find(s=>s.id==='review').state,'pending');assert.equal(styleSteps.find(s=>s.id==='image').state,'pending');
+ // Style-only revisions keep the saved review progress instead of re-reviewing (see storyboard-ui.test.mjs).
+ const styleSteps=revisionDraftSteps({...draftEditor.base,plan:savedPlan,reviewStatus:'passed'},{artStyle:'ink-pencil'});
+ assert.equal(styleSteps.find(s=>s.id==='plan').state,'done');assert.equal(styleSteps.find(s=>s.id==='review').state,'done');assert.match(styleSteps.find(s=>s.id==='review').detail,/不重新审核/);assert.equal(styleSteps.find(s=>s.id==='image').state,'current');
  const manualSteps=revisionDraftSteps({...draftEditor.base,plan:savedPlan},{plan:{...savedPlan,reflection:'手改余味。'}});
  assert.equal(manualSteps.find(s=>s.id==='plan').detail,'已修改分镜 · 待审片');
 

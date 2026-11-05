@@ -54,6 +54,10 @@ export class SystemSettingsStore{
   catch{throw Error(failure);}
  }
  revision(){return Number(this.db.prepare('SELECT revision FROM desktop_settings WHERE id=1').get()!.revision);}
+ snapshot(){
+  const row=this.db.prepare("SELECT value,revision,EXISTS(SELECT 1 FROM desktop_credentials WHERE name='gemini' AND length(value)>0) AS gemini,EXISTS(SELECT 1 FROM desktop_credentials WHERE name='openai' AND length(value)>0) AS openai FROM desktop_settings WHERE id=1").get()!;
+  return {settings:this.validate(JSON.parse(row.value as string)),revision:Number(row.revision),keyPresent:{gemini:!!row.gemini,openai:!!row.openai}};
+ }
  key(provider:ProviderName){
   if(provider!=='gemini'&&provider!=='openai')return '';
   return (this.db.prepare('SELECT value FROM desktop_credentials WHERE name=?').get(provider)?.value as string|undefined)||'';

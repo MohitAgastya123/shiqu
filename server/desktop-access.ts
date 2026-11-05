@@ -1,5 +1,5 @@
 // Serve the reader directly on local/LAN addresses while rejecting foreign hosts/origins.
-// Native settings and credentials remain outside this HTTP listener.
+// Native routes stay excluded; browser-CLI provider editing has a separate socket-level local gate.
 export function desktopAccess(handle:(request:Request)=>Promise<Response>,options:{hosts:string[]}){
  const hosts=new Set(options.hosts);
  const headers={'Cache-Control':'no-store','Referrer-Policy':'no-referrer','X-Content-Type-Options':'nosniff','Content-Type':'application/json; charset=utf-8'};

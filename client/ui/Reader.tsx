@@ -10,6 +10,8 @@ import StoryExportControl from './StoryExportControl';
 import StoryPublicationEditor,{StoryPublicationDetails,StoryPublicationDefaults} from './StoryPublication';
 import {storyExportKey} from '@/lib/story-publication';
 import BookReferenceStar from './BookReferenceStar';
+import ProviderSettings,{ProviderRuntimeSummary} from './ProviderSettings';
+import type {ProviderSettingsView} from '@/lib/provider-settings';
 import {useBookReference} from '../useBookReference';
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {ArrowLeft, ArrowRight, Bookmark, BookOpen, Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Compass, Feather, Leaf, List, Moon, Play, RotateCcw, ImageDown, Settings2, Sparkles, UserRound, X, Loader2, FileDown, FileArchive, RefreshCw, Trash2} from 'lucide-react';
@@ -94,8 +96,9 @@ export default function Reader(){
  const [imageIssues,setImageIssues]=useState<Record<string,string>>({}),[imageReloads,setImageReloads]=useState<Record<string,number>>({});
  const [reviewHistoryId,setReviewHistoryId]=useState<string|null>(null);
  const [publicationTarget,setPublicationTarget]=useState<Story|null>(null),[publicationDefaultsOpen,setPublicationDefaultsOpen]=useState(false);
+ const [providerRuntime,setProviderRuntime]=useState<ProviderSettingsView['runtime']|null>(null);
  const [sceneList,setSceneList]=useState(false);
- const [selection,setSelection]=useState<Selection>(initialReaderSelection),[largeText,setLargeText]=useState(false),[install,setInstall]=useState<any>(null),[motion,setMotion]=useState('forward'),[creating,setCreating]=useState(false);
+ const [selection,setSelection]=useState<Selection>(initialReaderSelection),[largeText,setLargeText]=useState(false),[motion,setMotion]=useState('forward'),[creating,setCreating]=useState(false);
  const [deletedIds,setDeletedIds]=useState<string[]>([]),[deleteTarget,setDeleteTarget]=useState<{id:string;title:string}|null>(null),[deleting,setDeleting]=useState(false),[deleteError,setDeleteError]=useState('');
  const [favoriteBusy,setFavoriteBusy]=useState('');
  const [renameTarget,setRenameTarget]=useState<{id:string;title:string}|null>(null);
@@ -180,7 +183,7 @@ export default function Reader(){
  function turn(delta:number){if(!story)return;if(!ended&&page===0&&delta<0)return;if(ended){if(delta<0){setDrag(0);setPage(story.pages.length-1);setEnded(false);setMotion('back');}else if(delta>0)home();return;}if(delta>0&&!story.pages[page]?.image){notify('这一幅还在绘制，稍等一下。');return;}setMotion(delta>0?'forward':'back');if(page+delta>=story.pages.length){setEnded(true);if(seen.current.size===story.pages.length)track('complete');}else setPage(p=>Math.max(0,p+delta));}
  function goToPage(index:number){if(!story)return;setDrag(0);setMotion(index>page?'forward':'back');setEnded(false);setPage(Math.max(0,Math.min(index,story.pages.length-1)));}
  function choose(bookId:Selection['bookId']=selection.bookId,theme:Selection['theme']='原典故事'){setDiscoveryTarget(null);setSelection(s=>({...s,bookId,theme,productionPrompt:promptAfterThemeChange(s.productionPrompt,s.theme,theme),discovery:{mode:'auto'},storyTitle:undefined,source:undefined,discoverySources:undefined}));setConfigure(true);setUnavailable('');}
- useEffect(()=>{visitor.current=localStorage.getItem('yiyu-visitor')||randomId();localStorage.setItem('yiyu-visitor',visitor.current);try{setLargeText(localStorage.getItem('yiyu-large-text')==='1');}catch{}const installHandler=(e:Event)=>{e.preventDefault();setInstall(e);};window.addEventListener('beforeinstallprompt',installHandler);if('serviceWorker'in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});
+ useEffect(()=>{visitor.current=localStorage.getItem('yiyu-visitor')||randomId();localStorage.setItem('yiyu-visitor',visitor.current);try{setLargeText(localStorage.getItem('yiyu-large-text')==='1');}catch{}if('serviceWorker'in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});
  let active=true;
  startupDeletions.current??=request('reader/deletions?inventory=1');
  startupDeletions.current.then(async inventory=>{
@@ -195,7 +198,7 @@ export default function Reader(){
   const id=new URLSearchParams(location.search).get('id');
   if(id&&!deleted.current.has(id))gen.resume(id).catch(()=>{if(active)setLoadError('这篇故事暂时无法打开。');});
  }).catch(()=>{if(active)setLoadError('故事暂时没有加载出来，请检查网络后再试。');}).finally(()=>{if(active)setLoading(false);});
- return()=>{active=false;window.removeEventListener('beforeinstallprompt',installHandler);if(noticeTimer.current)clearTimeout(noticeTimer.current);};},[]);
+ return()=>{active=false;if(noticeTimer.current)clearTimeout(noticeTimer.current);};},[]);
  useEffect(()=>{if(story){if(!session.current)session.current=randomId();track('start',story);}},[story?.id]);
  useEffect(()=>{if(!story||ended||!story.pages[page]?.image)return;seen.current.add(page);track('page',story,page);remember(story,page,saved);const next=story.pages[page+1]?.image;if(next){const img=new Image();img.src=next;}},[story?.id,story?.pages[page]?.image,page,ended]);
  useEffect(()=>{function key(e:KeyboardEvent){if(!story||source||settings||workflowTarget||configure||sceneList)return;if(e.key==='ArrowRight'||e.key==='ArrowDown'){e.preventDefault();turn(1);}if(e.key==='ArrowLeft'||e.key==='ArrowUp'){e.preventDefault();turn(-1);}if(e.key==='Escape')home();}window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key);},[story,page,ended,source,settings,workflowTarget,configure,sceneList]);
@@ -419,7 +422,20 @@ export default function Reader(){
  <button className="yu-surprise" onClick={()=>{const b=choices[Math.floor(Math.random()*(choices.length-1))];choose(b.id,moods[Math.floor(Math.random()*(moods.length-1))]);}}><span><Feather size={24}/></span><div><strong>不挑了，给我一个故事</strong><small>让偶然替你翻开第一页</small></div><ArrowRight size={19}/></button>
  <div className="yu-generation-note"><Sparkles size={13}/><p>故事、画面与文字，由 AI 为这一次阅读生成。</p></div>
  {loading?<p className="yu-inline-status" role="status">正在打开书页…</p>:loadError?<div className="yu-inline-status" role="alert">{loadError}<button onClick={()=>location.reload()}>重新加载</button></div>:null}
- </>:tab==='shelf'?<ReaderShelf onControl={gen.control} controlBusy={gen.controlBusy} stories={shelf} pending={pendingStories} sessions={gen.sessions} progress={activeProgress} refreshing={shelfRefreshing||gen.libraryRefreshing} onRefresh={()=>{void refreshShelf();}} loading={loading||gen.libraryLoading} error={loadError||gen.libraryError} tab={shelfTab} onTab={changeShelfTab} query={shelfQuery} onQuery={changeShelfQuery} grouping={shelfGrouping} onGrouping={changeShelfGrouping} bookName={bookName} onOpen={open} onResume={session=>openWorkflow(session.id)} onRetry={session=>{setWorkflowTarget(session.id);setWorkflowError('');setStory(null);gen.retrySession(session.id).catch(e=>setWorkflowError(e.message));}} onDelete={askDelete} onFavorite={favoriteFromShelf} favoriteBusy={favoriteBusy} onCreate={()=>choose()} onDiscover={()=>setTab('discover')}/>:<section className="yu-profile"><div className="yu-profile-portrait"><UserRound size={33} strokeWidth={1.2}/></div><h1>留一点时间，给自己。</h1><p>拾趣，随身的一小座故事馆。</p><div className="yu-profile-stats"><div><strong>{shelfCount}</strong><span>书架故事</span></div><div><strong>{favoriteCount}</strong><span>已收藏</span></div></div><div className="yu-preferences"><button onClick={()=>setPublicationDefaultsOpen(true)}><Feather size={20}/>署名与转载<ChevronRight size={18}/></button><button onClick={()=>{setRecoveryOpen(true);void loadDeletedStories();}}><Trash2 size={20}/>已删除的故事<ChevronRight size={18}/></button><button onClick={()=>setSettings(true)}><Settings2 size={20}/>阅读偏好<ChevronRight size={18}/></button><button onClick={async()=>{if(install){await install.prompt();setInstall(null);}else notify('在浏览器的分享或菜单中，选择“添加到主屏幕”。');}}><BookOpen size={20}/>把拾趣放到桌面<ChevronRight size={18}/></button></div><p className="yu-profile-quote">“故事有尽，余味未尽。”</p></section>}
+ </>:tab==='shelf'?<ReaderShelf onControl={gen.control} controlBusy={gen.controlBusy} stories={shelf} pending={pendingStories} sessions={gen.sessions} progress={activeProgress} refreshing={shelfRefreshing||gen.libraryRefreshing} onRefresh={()=>{void refreshShelf();}} loading={loading||gen.libraryLoading} error={loadError||gen.libraryError} tab={shelfTab} onTab={changeShelfTab} query={shelfQuery} onQuery={changeShelfQuery} grouping={shelfGrouping} onGrouping={changeShelfGrouping} bookName={bookName} onOpen={open} onResume={session=>openWorkflow(session.id)} onRetry={session=>{setWorkflowTarget(session.id);setWorkflowError('');setStory(null);gen.retrySession(session.id).catch(e=>setWorkflowError(e.message));}} onDelete={askDelete} onFavorite={favoriteFromShelf} favoriteBusy={favoriteBusy} onCreate={()=>choose()} onDiscover={()=>setTab('discover')}/>:<section className="yu-profile" aria-label="我的">
+  <section className="yu-profile-group" aria-labelledby="profile-overview"><h2 id="profile-overview">故事概览</h2>
+  <div className="yu-profile-stats"><div><strong>{shelfCount}</strong><span>书架故事</span></div><div><strong>{favoriteCount}</strong><span>已收藏</span></div><div><strong>{deletedStories.length}</strong><span>已删除</span></div></div>
+  </section>
+  <section className="yu-profile-group" aria-labelledby="profile-stories"><h2 id="profile-stories">作品管理</h2><div className="yu-preferences">
+   <button onClick={()=>setPublicationDefaultsOpen(true)}><Feather size={20}/>署名与转载<ChevronRight size={18}/></button>
+   <button onClick={()=>{setRecoveryOpen(true);void loadDeletedStories();}}><Trash2 size={20}/>已删除的故事<ChevronRight size={18}/></button>
+  </div></section>
+  <section className="yu-profile-group" aria-labelledby="profile-preferences"><h2 id="profile-preferences">偏好与服务</h2><div className="yu-preferences">
+   <button onClick={()=>setSettings(true)}><Settings2 size={20}/>阅读偏好<ChevronRight size={18}/></button>
+   <ProviderSettings onRuntime={setProviderRuntime}/>
+  </div></section>
+  <ProviderRuntimeSummary runtime={providerRuntime}/>
+ </section>}
  </main>
  <nav className="yu-tabbar" aria-label="主导航">{[{id:'discover',title:'发现',Icon:Compass},{id:'shelf',title:'书架',Icon:BookOpen},{id:'me',title:'我的',Icon:UserRound}].map(({id,title,Icon})=><button key={id} className={tab===id?'active':''} aria-current={tab===id?'page':undefined} onClick={()=>{setTab(id);window.scrollTo({top:0,behavior:'instant'});}}><Icon size={22} strokeWidth={tab===id?2:1.6}/><span>{title}</span>{tab===id&&<i/>}</button>)}</nav>
  </>}

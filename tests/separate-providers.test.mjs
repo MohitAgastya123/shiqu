@@ -5,14 +5,14 @@ import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import {createReaderProvider} from '../server/generation.ts';
+import {createReaderProvider,withImageProvider} from '../server/generation.ts';
 import {withLocalBooks} from '../server/local-generation.ts';
 import {LocalBooks} from '../server/local-books.ts';
 import {SystemSettingsStore} from '../server/system-settings.ts';
 import {configureProvider,effectiveProviderVariables,providerReady} from '../server/cli-setup.ts';
 import {testDesktopProvider,desktopVariables} from '../server/desktop.ts';
 import {defaultSystemSettings,settingsVariables,resetProviderSettings,effectiveImageProvider} from '../lib/system-settings.ts';
-import {readerGenerationTimeoutMs} from '../lib/reader-limits.ts';
+import {geminiGenerationTimeoutMs} from '../lib/reader-limits.ts';
 import {codexGenerationTimeoutMs} from '../lib/codex-settings.ts';
 import {png} from './fixtures/images.mjs';
 import {productionFixture,makePlan,until} from './fixtures/production.mjs';
@@ -37,7 +37,9 @@ test('Codex text with Gemini images: drawing, timeouts and status come from the 
  const status=await provider.status();
  assert.equal(status.provider,'codex');assert.equal(status.imageProvider,'gemini');assert.equal(status.configured,true);
  assert.deepEqual(status.models,{text:'test-text-model',image:'test-image-model'});
- assert.equal(provider.generationTimeoutMs('image'),readerGenerationTimeoutMs);assert.equal(provider.generationTimeoutMs('plan'),codexGenerationTimeoutMs);
+ assert.equal(provider.generationTimeoutMs('image'),geminiGenerationTimeoutMs);assert.equal(provider.generationTimeoutMs('plan'),codexGenerationTimeoutMs);
+ const stub=ms=>({generationTimeoutMs:()=>ms,status:async()=>({}),generator:()=>({}),safeError:()=>''});
+ const composed=withImageProvider(stub(1),stub(2));assert.equal(composed.generationTimeoutMs('image'),2);assert.equal(composed.generationTimeoutMs('review'),1);
  const result=await provider.generator().image(makePlan(8),0,'story','');
  assert.equal(c.calls.gemini.length,1);assert.equal(c.calls.codex.length,0);assert.equal(result.model,'test-image-model');
  assert.ok(media.stored.has('reader/story/0.png'));assert.match(result.promptRecord.prompt||JSON.stringify(result.promptRecord),/Scene 1/);
@@ -136,4 +138,17 @@ test('desktop checks each side with its own key and model, without generating co
  const variables=desktopVariables(settings,'text-key','image-key');assert.equal(variables.GEMINI_API_KEY,'image-key');assert.equal(variables.OPENAI_API_KEY,'text-key');
  requests.length=0;const same=await testDesktopProvider({...settings,imageProvider:undefined},'text-key','/tmp',transport);
  assert.equal(same.ok,true);assert.deepEqual(requests.map(r=>r.url),['https://api.openai.com/v1/models/text-model','https://api.openai.com/v1/models/gpt-image-2.5-sunburst']);
+});
+
+test('invocation-only Claude text draws only through an explicit image provider with that provider key',async t=>{
+ const f=await temporary(t),store=new SystemSettingsStore(f.file,f.library);t.after(()=>store.close());
+ store.save({provider:'openai',providerConfigured:true},{provider:'openai',value:'saved-openai'});
+ const plain=effectiveProviderVariables(store,{SHIQU_AI_PROVIDER:'claude'});
+ assert.equal(plain.SHIQU_IMAGE_PROVIDER,undefined);assert.equal(plain.OPENAI_API_KEY,'');assert.ok(providerReady(plain));
+ const drawing=effectiveProviderVariables(store,{SHIQU_AI_PROVIDER:'claude',SHIQU_IMAGE_PROVIDER:'openai'});
+ assert.equal(drawing.SHIQU_IMAGE_PROVIDER,'openai');assert.equal(drawing.OPENAI_API_KEY,'saved-openai');assert.equal(drawing.GEMINI_API_KEY,undefined);assert.ok(providerReady(drawing));
+ assert.equal(providerReady({SHIQU_AI_PROVIDER:'deepseek',DEEPSEEK_API_KEY:'k',SHIQU_IMAGE_PROVIDER:'gemini'}),false);
+ const c=controlled(),media=memoryMedia();
+ const provider=createReaderProvider({SHIQU_AI_PROVIDER:'claude',SHIQU_IMAGE_PROVIDER:'gemini',GEMINI_API_KEY:'controlled'},media,c.transport,{async status(){return {configured:true};},async run(){assert.fail('Claude must not draw');}});
+ assert.equal((await provider.status()).imageProvider,'gemini');await provider.generator().image(makePlan(8),0,'story','');assert.equal(c.calls.gemini.length,1);
 });

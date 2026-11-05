@@ -2,6 +2,7 @@
 -- A deleted latest submission still supersedes its history; reading an old version never promotes it.
 -- Match jobs and deletions by owner as well as story; never return prompts, keys, or job payloads.
 -- Recover complete choice checkpoints without writes; compare source-range leaves independent of key order.
+-- Saved setup drafts supply the displayed art style until production is confirmed.
 WITH selected_sessions AS (
  SELECT s.*, CASE WHEN json_type(document,'$.intake.selected.batch')='integer' AND json_extract(document,'$.intake.selected.batch')>=0
   AND json_type(document,'$.intake.selected.index')='integer' AND json_extract(document,'$.intake.selected.index')>=0
@@ -38,7 +39,7 @@ SELECT json_object('stories', json_group_array(json(summary))) FROM (
   'title', coalesce(json_extract(s.selection, '$.displayTitle'), json_extract(s.document, '$.plan.title'), nullif(json_extract(s.selection, '$.storyTitle'), ''), '还在展开的故事'),
   'book', coalesce(b.title, json_extract(s.selection, '$.customBook'), json_extract(s.selection, '$.bookId')),
   'theme', json_extract(s.selection, '$.theme'),
-  'artStyle', coalesce(json_extract(s.selection, '$.artStyle'), 'ink-pencil'),
+  'artStyle', coalesce(CASE WHEN s.intake_phase!='confirmed' THEN json_extract(s.document, '$.intake.draft.artStyle') END, json_extract(s.selection, '$.artStyle'), 'ink-pencil'),
   'state', s.state, 'saved', s.saved, 'page', s.page,
   'ready', (SELECT count(*) FROM json_each(s.document, '$.images') WHERE value IS NOT NULL AND value != ''),
   'total', coalesce(json_array_length(s.document, '$.plan.pages'), json_array_length(s.document, '$.draft.pages'), json_array_length(s.document, '$.storyboard.outline.beats'), CASE WHEN json_type(s.selection, '$.length') = 'integer' THEN json_extract(s.selection, '$.length') END, 0),

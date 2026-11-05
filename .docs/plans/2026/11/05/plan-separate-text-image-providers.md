@@ -57,3 +57,12 @@ VR risk: low — composition over the existing production provider, with no seco
 VR review round: 1; reviewer: reused
 
 VR evidence limits: the full suite predates the CR repairs, which were re-verified with the targeted suites (158/158). The 6 JS failures and 1 Rust failure are identical on the base. The UI was checked with Playwright on `desktop:preview`, since this cloud session has no in-app browser. Codex drawing and Windows paths were checked with controlled runners and code inspection only. The development.md wording nit was fixed.
+
+Merge with `main` (2026-11-05): resolved conflicts in `server/generation.ts`, `server/cli-setup.ts`, `lib/reader-provider.ts` and the production fixture. Main's invocation-only Claude/DeepSeek text providers draw only through an explicit image provider (`SHIQU_IMAGE_PROVIDER` or the saved choice) with that provider's own key; otherwise they stay text-only as before. Main's browser settings sheet (`/api/local/provider-settings`, `ProviderSettings.tsx`) now edits the image provider with separate image-side key actions; an unset choice is sent as `null` to clear it. Runtime summary, restart detection and override names include the image side. New tests cover the browser API and Claude text with Gemini images; the Playwright-driven dev sheet at 390px saves Codex text with Gemini images.
+
+Test fixes after the merge:
+- `unified-story-setup-ui` fails on `main` because its fixture predates `5acee55`. It now marks a manual frame correction `review:true` and expects style-only revisions to keep review progress.
+- `cli-library`'s Codex signal test fails here because this container's PID 1 does not reap orphans. It now treats a killed zombie as terminated, polling briefly.
+- `background-generation`'s whole-story wait is 20 s instead of the 5 s default under full-suite load.
+
+Final merged run: 1,319 tests, 1,317 pass, 1 skipped, 1 fail. The failure is `local-image-batches`, a 100-second Gemini checkpoint test that passed in the preceding full run and passes 15/15 alone, so it is load timing. Typecheck/lint pass. Rust: 21 pass; the bundled-Node test still needs `desktop:prepare`.

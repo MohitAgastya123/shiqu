@@ -2,6 +2,22 @@
 import path from 'node:path';
 import {existsSync,realpathSync,readdirSync,lstatSync} from 'node:fs';
 import {normalizePath,isFileServingAllowed} from 'vite';
+import {providerSettingsPath,providerSettingsProofHeader,loopbackAddress} from '../lib/provider-settings.ts';
+// Vite proxies LAN traffic through loopback; authorize the original socket before any rewrite/proxy.
+export function protectLocalProviderSettings(proxyToken){
+ if(!proxyToken)throw Error('Local provider settings require private proxy proof');
+ return {name:'shiqu-local-provider-settings',configureServer(server){
+  server.middlewares.use((request,response,next)=>{
+   if(new URL(request.url||'/', 'http://localhost').pathname===providerSettingsPath){
+    if(!loopbackAddress(request.socket.remoteAddress)){
+     response.statusCode=403;response.setHeader('Content-Type','application/json');response.setHeader('Cache-Control','no-store');response.end(JSON.stringify({error:'生成服务设置仅可在本机打开。'}));return;
+    }
+    request.headers[providerSettingsProofHeader]=proxyToken;
+   }
+   next();
+  });
+ }};
+}
 // Local development opts into a checkout-owned shelf; an unknown mode must never open a shared one.
 export function developmentArguments(args,variables=process.env,cwd=process.cwd()){
  const remaining=[...args],local=remaining[0]==='local';if(local)remaining.shift();

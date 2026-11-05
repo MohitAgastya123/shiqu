@@ -6,10 +6,13 @@ import {phoneUrls,printPhoneAccess} from './phone-access.ts';
 import {developmentAccess} from './development-access.ts';
 import {desktopAccess} from './desktop-access.ts';
 import {stopCodexProcesses} from './codex-runner.ts';
+import {stopClaudeProcesses} from './claude-runner.ts';
 import {ownDesktopData} from './desktop-owner.ts';
 import {installDiagnostics,recordDiagnostic,safeErrorCode} from './diagnostics.ts';
+import {browserProviderSettings} from './browser-provider-settings.ts';
+import {providerSettingsPath} from '../lib/provider-settings.ts';
 
-export async function startServer({root,variables=process.env,localAccess=false}:{root:string;variables?:NodeJS.ProcessEnv;localAccess?:boolean}){
+export async function startServer({root,variables=process.env,localAccess=false,settingsOverrides,settingsProxyToken}:{root:string;variables?:NodeJS.ProcessEnv;localAccess?:boolean;settingsOverrides?:Record<string,string|undefined>;settingsProxyToken?:string}){
  const config=serverConfig(variables);
  const release=await ownDesktopData(config.dataDirectory);
  const removeDiagnostics=installDiagnostics(config.dataDirectory);
@@ -18,12 +21,13 @@ export async function startServer({root,variables=process.env,localAccess=false}
  catch(error){recordDiagnostic(config.dataDirectory,'service_start_failed',{code:safeErrorCode(error)});removeDiagnostics();await release();throw error;}
  const urls=phoneUrls(config.host,config.port);
  const handle=localAccess?desktopAccess(app.handle,{hosts:[`localhost:${config.port}`,`127.0.0.1:${config.port}`,`[::1]:${config.port}`,...urls.map(url=>new URL(url).host)]}).handle:developmentAccess(app.handle,variables,config.port);
- const server=createHttpServer(handle);
+ const providerSettings=settingsOverrides?browserProviderSettings({variables,overrides:settingsOverrides,proxyToken:settingsProxyToken,ports:[config.port,...(variables.SHIQU_DEV_FRONTEND_PORT?[Number(variables.SHIQU_DEV_FRONTEND_PORT)]:[])]}):undefined;
+ const server=createHttpServer((request,peer)=>providerSettings&&new URL(request.url).pathname===providerSettingsPath?providerSettings(request,peer):handle(request));
  let closing:Promise<void>|undefined,stopping=false;
  function closeApplication(){
   return closing??=(async()=>{
    app.stopGeneration();
-   try{await stopCodexProcesses();await app.close();}
+   try{await Promise.all([stopCodexProcesses(),stopClaudeProcesses()]);await app.close();}
    finally{recordDiagnostic(config.dataDirectory,'service_stopped');removeDiagnostics();await release();}
   })();
  }
@@ -39,7 +43,7 @@ export async function startServer({root,variables=process.env,localAccess=false}
   const closed=new Promise<void>(resolve=>server.close(()=>resolve()));
   server.closeAllConnections();
   // Cancel provider requests before waiting for their HTTP connections to drain.
-  void Promise.all([closed,stopCodexProcesses()]).then(closeApplication).then(()=>process.exit(0));
+  void Promise.all([closed,stopCodexProcesses(),stopClaudeProcesses()]).then(closeApplication).then(()=>process.exit(0));
  }
  try{
   // macOS permits wildcard and loopback binds to coexist; keep the printed local URL on this service.

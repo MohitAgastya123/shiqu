@@ -103,11 +103,11 @@ test('session and job heartbeats fence legacy advances while slow images are sti
  assert.ok((await f.app.services.production.queue.jobs(id,'docker-local-owner')).filter(j=>j.state==='running').every(j=>j.lease_until>Date.now()+100000));
 });
 
-for(const [provider,timeout] of [['codex',900000],['gemini',120000]])test(`${provider}: step timing uses the persisted production claim across reads and renewals`,async t=>{
+for(const [provider,timeout] of [['codex',900000],['gemini',900000]])test(`${provider}: step timing uses the persisted production claim across reads and renewals`,async t=>{
  const f=await productionFixture(t,provider),id=await f.createLegacyReader();await f.demand(id);await until(()=>f.control.calls.length===1);
- assert.equal(f.generation.generationTimeoutMs('plan'),provider==='codex'?900000:300000);
+ assert.equal(f.generation.generationTimeoutMs('plan'),900000);
  const local=withLocalBooks(f.generation,new LocalBooks(process.cwd()),f.media);
- assert.equal(local.generationTimeoutMs('plan'),provider==='codex'?900000:300000);
+ assert.equal(local.generationTimeoutMs('plan'),900000);
  assert.equal(local.generationTimeoutMs('image'),timeout);
  assert.equal(f.generation.generationTimeoutMs('source'),null);
  const jobs=await f.app.services.production.queue.jobs(id,'docker-local-owner'),image=jobs.find(job=>job.kind==='image'&&job.state==='running');

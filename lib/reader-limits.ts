@@ -3,6 +3,6 @@ export const readerImageBatchSize=3;
 export const readerStoryboardBatchSize=20;
 export const readerMinFrames=1;
 export const readerMaxFrames=80;
-export const readerGenerationTimeoutMs=2*60*1000;
+export const geminiGenerationTimeoutMs=15*60*1000;
 export const readerStoryboardTimeoutMs=5*60*1000;
 export const readerMaxAutomaticRepairs=20;

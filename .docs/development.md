@@ -43,13 +43,19 @@ pnpm dev local
 SHIQU_API_PORT=3005 pnpm dev local --port 3004
 ```
 
-`local` 强制使用当前 checkout 的 `.data/dev-local`（SQLite、媒体和缓存），忽略 `.env` 或环境变量里的 `SHIQU_DATA_DIR`；不读取桌面书库设置。普通 `pnpm dev` 仍保留共享书库规则。
+`local` 强制使用当前 checkout 的 `.data/dev-local`（SQLite、媒体和缓存），忽略环境变量里的 `SHIQU_DATA_DIR` 和桌面书库路径；生成配置仍复用共享设置。普通 `pnpm dev` 跟随已保存的书库目录，可用 shell 中的 `SHIQU_DATA_DIR` 显式覆盖。私有书库及备份不得放入 Vite 的 `public` 目录。
 
-开发版从 `.env` 读取 AI 配置，**不读取桌面保存的密钥**。默认书架跟随桌面版的数据目录；可用 `SHIQU_DATA_DIR` 显式覆盖。两端共享书架时均需使用当前版本，两端均无需配对。私有书库及备份不得放入 Vite 的 `public` 目录。
+开发后端与桌面、浏览器 CLI、技能调用的 CLI 共用 `desktop.sqlite` 中保存的提供方、对应密钥、模型和任务推理档位；显式 shell 环境变量仅覆盖本次运行，不写回数据库。开发后端不自动加载项目 `.env`，避免旧配置把已选择的 Google 切回 Codex。Vite 的前端环境文件规则仍独立适用，不要把密钥放入 `VITE_` 变量。独立 `pnpm start` 的环境配置方式不变。
+
+`pnpm run setup` 只检查运行时、安装锁定依赖并安装 hooks，不再创建提供方 `.env`。首次使用在桌面设置中保存服务，或运行 `pnpm cli --configure`；该命令保存后退出，不启动生成。修改后重启开发/桌面/浏览器 CLI 服务；技能与 CLI 的下一次 `run` 读取新配置。两端使用同一书库时先停止占用它的服务，再切换入口。
+
+开发或 CLI 浏览器服务运行后，在本机回环地址打开「我的 → 生成服务与模型」，可编辑共享提供方、文本/图片模型、任务推理和 API 密钥。页面将已保存设置与实际运行配置分开显示；环境/配置文件覆盖只显示变量名，保存后仍需重启，覆盖仍优先。旧密钥不返回浏览器，新输入保存成功后清空；保留、替换和移除密钥均为明确动作。并发保存冲突时保留草稿，重新读取后再修改。
+
+设置 API 仅对真实回环连接、允许的回环 Host 和同源写入开放。Vite 在代理前检查原始 socket，并为通过检查的请求附加每次启动独立的私有代理凭证；开发后端拒绝旧代理和无凭证的内部端口直连，不能把局域网请求代理成有权修改凭据的本机请求。更新入口代码后应重启整条 `pnpm dev`。读取书架的局域网权限不变。原生桌面服务及互联网阅读入口不提供此 API。测试必须使用隔离 home、设置库和故事目录，不通过此页面验证真实凭据写入。
 
 ## 生成服务配置
 
-CLI 和桌面普通运行无需预设环境变量：首次问答/设置页面保存后复用。下面变量用于开发入口或本次调用覆盖。
+开发、CLI 和桌面普通运行无需预设环境变量：首次问答/设置页面保存后复用。下面变量可在 shell 中显式设置，用于本次调用覆盖；CLI 也支持 `--config /absolute/private.env`，已有 shell 变量优先。开发后端不自动读取 `.env`；复制 [.env.example](../.env.example) 仅用于明确需要该文件的独立服务。
 
 OpenAI API 示例：
 
@@ -82,9 +88,15 @@ CODEX_REASONING_EFFORT=low
 
 ### 文本任务推理预算
 
+Claude Code 文本提供方仅通过本次环境变量启用，不修改桌面保存的服务：先运行 `claude auth login` 登录订阅账号，再使用 `SHIQU_AI_PROVIDER=claude CLAUDE_MODEL=opus pnpm cli run STORY_ID --data-dir /absolute/private/library --until reviewed --timeout 3600`。`CLAUDE_BIN` 可指定可执行文件，`CLAUDE_CONFIG_DIR` 可指定已有登录目录。正式服务同样接受此提供方；图片请求明确失败，不自动切换其他提供方。为可重复比较，可将 `CLAUDE_MODEL` 固定为首个调用回执中的完整模型 ID。
+
+适配器使用 Claude Code 2.1.318 的 safe mode、空工具集、strict 空 MCP、禁用 hooks 和会话持久化，并替换系统提示词为共享生产提示词；使用临时目录隔离项目上下文。只接受订阅登录，不继承 API 密钥、API 地址或第三方提供方环境变量。`--bare` 会忽略订阅登录，因此不使用。CLI flag 语义见 [Claude Code CLI reference](https://code.claude.com/docs/en/cli-reference)。各任务档位通过 `--effort` 请求，保存的 `reasoningEffort` 是请求值；真实模型来自 assistant/用量回执，不把档位冒充模型确认值。超时及 CLI/server/desktop 退出会结束子进程组，原始 stdout/stderr 错误不进入日志。
+
 文本任务独立分配推理预算：`SHIQU_REASONING_SUGGEST=medium`（选题）、`SHIQU_REASONING_ART=low`（画风）、`SHIQU_REASONING_FRAMES=medium`（画幅数）、`SHIQU_REASONING_OUTLINE=high`（提纲）、`SHIQU_REASONING_PLAN=high`（分镜）、`SHIQU_REASONING_REVIEW=high`（初审/复核）、`SHIQU_REASONING_REPAIR=high`（修订）。结语撰写沿用分镜档位，结语修订沿用修订档位。这些也是缺省值，可逐项覆盖；不自动升档。Codex 支持 low/medium/high/xhigh/max，具体取决于模型和 CLI；Gemini 支持 low/medium/high，不支持值报错，不静默降档。旧 `CODEX_REASONING_EFFORT` 仍用于未分类及图片工具调用，不再覆盖已分类文本任务，也不代表图片质量。已生成步骤不因改档重做；新选题和画风缓存按对应档位隔离。生成检查点用量记录中的 `reasoningEffort` 对 Codex 是线程确认值，对 Gemini / OpenAI API 是请求值。
 
 ### 真实审核对比
+
+未审完的文本可用 `pnpm cli stories copy SOURCE_ID --from-data-dir /absolute/source/library --data-dir /absolute/target/library --draft --request-id UUID` 保存为独立草稿。来源须已停止且保存完整分镜、原文及审核检查点；复制保留原审核状态、历史与模型记录，新故事暂停，不复制来源故障、任务或图片。它不代表审核通过，不调用模型；后续需要显式恢复制作并完成审核。草稿模式拒绝复制图片及 `copy-images`，普通 `copy` 的已通过审核要求不变。
 
 显式真实审核对比（会使用现有 Codex 订阅；普通测试不会运行）：
 
@@ -108,7 +120,7 @@ pnpm lint
 
 `pre-push` 只对推送的 `refs/tags/v*` 执行发布检查：解析标签目标提交，在隔离 checkout 中验证 Node/pnpm 固定版本，安装锁定依赖，再运行 `pnpm release:check`。同一提交的多个发布标签只检查一次；普通分支、非 v 标签和删除标签不触发。可通过 `pnpm hooks:install` 为新 checkout 启用 hook。
 
-`release:check` 在类型、lint 检查后执行 `pnpm test:e2e --gate=release`，只运行 8 个关键冒烟测试文件；`npm:check` 使用 `--gate=npm`，运行其中 7 个文件。冒烟覆盖一条完整浏览器制作与阅读流程、生产恢复与重放、无服务 CLI/导出/备份、CLI 启动、配置安全与发布门禁；标签门禁额外验证 Git pre-push。每个文件只运行一次，标签门禁仍检查 Rust 格式。完整矩阵、全书扫描、PTY、其他浏览器与 CLI 边界测试移至按需命令 `pnpm test:full`，不再阻塞每次发布。任一冒烟失败即阻止发布；门禁只检查，不构建桌面/Docker或发布作品，平台 CI 保留安装包构建职责。完整套件的 C007 在一次性源码根目录启动真正的 `pnpm dev local`，不打开人工开发书库。
+`release:check` 在类型、lint 检查后执行 `pnpm test:e2e --gate=release`，只运行 8 个关键冒烟测试文件；`npm:check` 使用 `--gate=npm`，运行其中 7 个文件。冒烟覆盖一条完整浏览器制作与阅读流程、生产恢复与重放、无服务 CLI/导出/备份、CLI 启动、配置安全与发布门禁；标签门禁额外验证 Git pre-push。每个文件只运行一次，标签门禁仍检查 Rust 格式。完整矩阵、全书扫描、PTY、其他浏览器与 CLI 边界测试移至按需命令 `pnpm test:full`，不再阻塞每次发布。任一冒烟失败即阻止发布；门禁只检查，不构建桌面应用或发布作品，平台 CI 保留安装包构建职责。完整套件的 C007 在一次性源码根目录启动真正的 `pnpm dev local`，不打开人工开发书库。
 
 维护命令无需打包：`pnpm library:maintain --help`。备份/恢复/诊断入口复用正式 CLI 与服务实现；运行锁覆盖开发、CLI 和桌面。备份是私有数据，不能放入 `public`、`dist/client` 或公开作品集，详见[维护说明](user-guide.md#书库维护命令)。
 
@@ -123,7 +135,7 @@ pnpm test:e2e
 
 测试使用模拟模型响应，不发起付费生成。桌面 UI 使用 Vite 开发服务器验证；只有需要打包时才运行构建命令。桌面开发、平台依赖和打包说明见 [desktop/README.md](../desktop/README.md)。主要代码位于 `client/`（界面）、`lib/`（业务逻辑）、`server/`（HTTP 与存储）、`db/` 与 `drizzle/`（数据库）、`desktop/` 与 `src-tauri/`（桌面版）。
 
-桌面版只保留内置 Node 的一个发行，不再提供系统 Node 版本；构建脚本与 CI 也只打包这一版本。桌面 UI 使用 `pnpm desktop:preview`，在应用内浏览器验证。Docker 镜像和桌面应用只在明确需要构建或打包时执行相应命令。
+桌面版只保留内置 Node 的一个发行，不再提供系统 Node 版本；构建脚本与 CI 也只打包这一版本。桌面 UI 使用 `pnpm desktop:preview`，在应用内浏览器验证。桌面应用只在明确需要构建或打包时执行相应命令。
 
 ## 故事生成机制
 

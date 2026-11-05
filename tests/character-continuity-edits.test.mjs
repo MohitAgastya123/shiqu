@@ -21,5 +21,8 @@ for(const provider of ['codex','gemini','openai'])test(`${provider}: global char
  let schema;const runner={status:async()=>({configured:true}),run:async job=>{schema=job.schema;return {text:JSON.stringify({edits:[],characters}),model:'controlled',requestId:'fixture',usage:null};}};
  const transport=async(_url,options)=>{const b=JSON.parse(options.body);schema=provider==='openai'?b.text.format.schema:b.generationConfig.responseFormat.text.schema;return Response.json(provider==='openai'?{status:'completed',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify({edits:[],characters})}]}]}:{candidates:[{content:{parts:[{text:JSON.stringify({edits:[],characters})}]}}]});};
  const gen=createReaderProvider({SHIQU_AI_PROVIDER:provider,OPENAI_API_KEY:'fixture',GEMINI_API_KEY:'fixture'},{},transport,runner).generator();
- const result=await gen.restructure({...legacy,length:'auto'},makePlan(3),{title:'原文',text:'甲看见红印，乙随后擦净。'},[issue]);assert.equal(result.value.characters,characters);assert.deepEqual(result.value.edits,[]);assert.equal(schema.properties.edits.minItems,0);assert.ok(schema.properties.characters);assert.deepEqual([...schema.required].sort(),Object.keys(schema.properties).sort());
+ const result=await gen.restructure({...legacy,length:'auto'},makePlan(3),{title:'原文',text:'甲看见红印，乙随后擦净。'},[issue]);assert.equal(result.value.characters,characters);assert.deepEqual(result.value.edits,[]);
+ assert.equal(schema.properties.edits.minItems,provider==='gemini'?undefined:0);
+ if(provider==='gemini')assert.match(schema.properties.edits.description,/At least 0 items/);
+ assert.ok(schema.properties.characters);assert.deepEqual([...schema.required].sort(),Object.keys(schema.properties).sort());
 });

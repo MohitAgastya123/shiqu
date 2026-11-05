@@ -62,6 +62,12 @@ $shiqu 从《庄子》中找一个关于善意与误解的故事，用水墨写�
 
 [制作与阅读指南 →](.docs/user-guide.md#制作与阅读故事)
 
+## 五模型实作对比
+
+同一段《西游记·路阻火焰山》原文、适中详略、自动幅数，Gemini Flash、Gemini 4 Argon 与 Codex 分别通过 **16、41、70 幅**；DeepSeek 与 Claude 分别保存 **50、67 幅待审稿**。对比具体情节、静态画面、审核修订及完成度；已有插图均由 Gemini 生成。
+
+[阅读中文对比：制作条件、审核差异与五版完整 244 幅配文（含待审稿） →](.docs/reports/2026/11/05/model-comparison-huoyanshan.md)
+
 ## 导出与发布
 
 全部插图生成后，在「故事设置」或故事末页导出：
@@ -76,7 +82,7 @@ $shiqu 从《庄子》中找一个关于善意与误解的故事，用水墨写�
 
 ## 更多说明
 
-[使用指南](.docs/user-guide.md) · [使用前了解](.docs/user-guide.md#使用前了解) · [升级到 0.8.5（发布后适用）](.docs/user-guide.md#升级到-085) · [书库说明](data/README.md) · [画风](.docs/user-guide.md#画风) · [手机阅读](.docs/user-guide.md#在手机上阅读) · [常见问题](.docs/user-guide.md#常见问题)
+[使用指南](.docs/user-guide.md) · [使用前了解](.docs/user-guide.md#使用前了解) · [升级到 0.8.6](.docs/user-guide.md#升级到-086) · [书库说明](data/README.md) · [画风](.docs/user-guide.md#画风) · [手机阅读](.docs/user-guide.md#在手机上阅读) · [常见问题](.docs/user-guide.md#常见问题)
 
 ## 开发者
 

@@ -17,8 +17,10 @@ for(const provider of ['codex','gemini'])test(`${provider}: outline and 20/20/5 
   if(kind==='batch'){
    assert.deepEqual(payload.previousPages,doc.storyboard.pages);const {summary:_,...sourceMetadata}=doc.storyboard.outline;void _;assert.deepEqual(payload.outline,sourceMetadata);
    assert.ok(payload.verifiedOriginal.text);assert.equal(payload.exactPageCount,45);
-   assert.equal(schema.properties.pages.minItems,payload.batch.last-payload.batch.first+1);
+   const count=payload.batch.last-payload.batch.first+1;
+   assert.equal(schema.properties.pages.minItems,provider==='gemini'?undefined:count);
    assert.equal(schema.properties.pages.maxItems,schema.properties.pages.minItems);
+   if(provider==='gemini')assert.match(schema.properties.pages.description,new RegExp(`At least ${count} items.*At most ${count} items`));
    const session=await f.read(id);assert.equal(session.story,null);assert.equal(session.generationProgress.storyboardFrames,doc.storyboard.pages.length);
   }
  };

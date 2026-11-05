@@ -12,8 +12,8 @@ const selection={...legacy,length:'auto',acceptancePrompt:'保留关键回应。
 const original={title:'测试原文',text:'甲贈物，乙沉默未接，然後轉身告辭。',url:'https://example.org/source',kind:'passage',provider:'fixture',retrievedAt:'2026-11-01'};
 const coverage={quote:'乙沉默未接',task:'未接受赠物的回应',pages:[2],assessment:'adequate',reason:'有独立回应',issuePage:0};
 const receipt=()=>({titleReview:{title:plan.title,reason:'原文支持'},issues:[],coverage:[structuredClone(coverage)],acceptanceResults:[{criterion:1,status:'passed',pages:[2],evidence:'保留回应。'}]});
-function generator(answer,inspect=()=>{}){
- return createReaderProvider({SHIQU_AI_PROVIDER:'gemini',GEMINI_API_KEY:'controlled'},{},async(_url,init)=>{
+function generator(answer,inspect=()=>{},model='gemini-3.8-flash'){
+ return createReaderProvider({SHIQU_AI_PROVIDER:'gemini',GEMINI_API_KEY:'controlled',GEMINI_TEXT_MODEL:model},{},async(_url,init)=>{
   const body=JSON.parse(init.body),schema=body.generationConfig.responseFormat.text.schema,payload=JSON.parse(body.contents[0].parts[0].text);inspect(schema);
   return Response.json({candidates:[{finishReason:'STOP',content:{parts:[{text:JSON.stringify(geminiEvidenceAnswer(answer,payload,schema))}]}}]});
  }).generator();
@@ -27,12 +27,19 @@ test('Gemini full review flattens nested array counts and records the actual wir
    assert.equal(list.maxItems,undefined);assert.match(list.description,new RegExp(`At most ${outer} items`));assert.equal(pages.maxItems,undefined);
    assert.match(pages.description,new RegExp(`At most ${inner} items`));
   }
-  assert.equal(schema.properties.coverage.minItems,1);
-  assert.deepEqual(schema.properties.coverage.items.properties.pages.items,{type:'integer',minimum:1,maximum:12});
-  assert.equal(schema.properties.issues.maxItems,13);
+  assert.equal(schema.properties.coverage.minItems,undefined);assert.match(schema.properties.coverage.description,/At least 1 items/);
+  assert.deepEqual(schema.properties.coverage.items.properties.pages.items,{type:'integer',description:'Minimum value: 1. Maximum value: 12.'});
+  assert.equal(schema.properties.issues.maxItems,undefined);assert.match(schema.properties.issues.description,/At most 13 items/);
  }).review(selection,plan,original);
  assert.equal(result.value.coverage.length,1);assert.deepEqual(result.promptRecord.schema,sent);
  assert.equal(JSON.stringify([editorialCoverageJson(12),acceptanceResultsJson]),shared);
+});
+for(const model of ['gemini-3.8-flash','gemini-4-argon'])test(`${model}: 41-scene issue grammar stays compact and the 42-issue local limit remains strict`,async()=>{
+ const large=makePlan(41),answer=receipt();
+ const inspect=schema=>{assert.equal(schema.properties.issues.maxItems,undefined);assert.match(schema.properties.issues.description,/At most 42 items/);};
+ assert.equal((await generator(answer,inspect,model).review(selection,large,original)).value.issues.length,0);
+ answer.issues=Array(43).fill({page:2,category:'caption',problem:'配文缺少回应。',instruction:'保留未接赠物的回应。',requiresReplan:false});
+ await assert.rejects(generator(answer,inspect,model).review(selection,large,original),error=>error.name==='ZodError'&&error.issues.some(issue=>issue.code==='too_big'&&issue.path[0]==='issues'));
 });
 test('Gemini review still validates coverage counts, page references, source quotes and acceptance evidence locally',async()=>{
  const cases=[

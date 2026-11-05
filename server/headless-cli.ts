@@ -9,6 +9,7 @@ import {existsSync} from 'node:fs';
 import {randomUUID} from 'node:crypto';
 import {setTimeout as delay} from 'node:timers/promises';
 import {createApplication} from './app.ts';
+import {copySavedStory} from './reader-copy.ts';
 import {ownDesktopData} from './desktop-owner.ts';
 import {desktopLibraryPaths,savedDesktopLibraryDirectory} from './library-directory.ts';
 import {SystemSettingsStore} from './system-settings.ts';
@@ -18,11 +19,12 @@ import {diagnosticReport} from './diagnostics.ts';
 import {createLibraryBackup,verifyLibraryBackup,containsPath} from './library-backup.ts';
 import {bundledSkill,installSkill,checkSkill,updateSkill} from './cli-skill.ts';
 import {stopCodexProcesses} from './codex-runner.ts';
+import {stopClaudeProcesses} from './claude-runner.ts';
 import {readerBooks} from '../lib/reader-books.ts';
 import {artStyles,artStyleGroups} from '../lib/reader-styles.ts';
 import {themes} from '../lib/content.ts';
 import {emptyPublication} from '../lib/story-publication.ts';
-import {selectionSchema,reviewPassed} from '../lib/reader-model.ts';
+import {selectionSchema,reviewPassed,ReaderError} from '../lib/reader-model.ts';
 import type {ReaderProvider} from '../lib/reader-provider.ts';
 import type {LocalBooks} from './local-books.ts';
 
@@ -36,7 +38,9 @@ const commands=[
  ['stories create','Save intake intent; input is a selection or {selection,intake:true,requestId}.','stories create --input selection.json --request-id UUID'],
  ['stories setup|search|choose|confirm','Persist intake actions with explicit --generation or input.generation; inference requires run.','stories choose ID --batch 0 --index 0 --generation N'],
  ['run / stories run','Run only one current story to candidates, prepared, reviewed or completed; never resumes a pause/fault implicitly.','run ID --until reviewed --timeout 900'],
- ['stories edit','Commit a revision using production token/changes validation; does not generate.','stories edit ID --input revision.json --request-id UUID'],
+ ['stories copy','Copy saved text and review from an offline library without inference. --draft explicitly preserves unreviewed text as a paused copy without images; default requires passed review.','stories copy ID --from-data-dir SOURCE --request-id UUID'],
+ ['stories copy-images','Attach source images to an existing paused text copy without inference or prompts. Safe to repeat; retains text and review.','stories copy-images TARGET_ID --from-data-dir SOURCE --input source.json'],
+ ['stories edit','Commit a revision using production token/changes validation; changes.redrawPages uses 1-based pages to replace only selected artwork without re-review. Does not generate.','stories edit ID --input revision.json --request-id UUID'],
  ['stories pause|resume|stop|retry|override','Control or explicitly recover the current fault; input faultId is required for retry/override.','stories retry ID --input recovery.json --request-id UUID'],
  ['stories rename|delete|restore|favorite|reference','Shared library actions; reference input is {page,starred,token?}.','stories rename ID --title 新标题'],
  ['stories revisions|prompts|review-history|source','Read saved production checkpoints and history.','stories review-history ID'],
@@ -54,17 +58,20 @@ export class CliCommandError extends Error{
 function need(ok:unknown,code:string,message:string):asserts ok{if(!ok)throw new CliCommandError(code,message);}
 const uuid=(s:string)=>/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(s);
 const inputs={
+ copy:{copyImages:false,draft:false,artStyle:'clay',note:'CLI never prompts. Default requires passed review. --draft or draft:true preserves unreviewed text and audit checkpoints as a paused independent copy, without images. Use stories copy-images only for reviewed copies in the same style.'},
+ copyImages:{sourceId:'source story UUID',note:'stories copy-images TARGET_ID --from-data-dir SOURCE_LIBRARY --input source.json; TARGET_ID is the existing text copy, not a new creation request.'},
  setup:{note:'stories setup ID accepts an action; requestId defaults to a new UUID; generation is required from stories get ID. Keep both fixed for replay.',examples:[{action:'conditions',conditions:{bookId:'zhuangzi',theme:'善意与误解',productionPrompt:''}},{action:'more'},{action:'draft',settings:{artStyle:'ink-pencil',productionPrompt:'',acceptancePrompt:'',narrativeDetail:'balanced',length:'auto'}}]},
  confirm:{settings:{productionPrompt:'保留关键行动',acceptancePrompt:'人物回应落实到画面'}},
  retry:{faultId:'current fault UUID from stories get'},favorite:{saved:true},reference:{page:0,starred:true},replace:{batch:0,index:0},
+ redraw:{command:'stories edit ID --input redraw.json --request-id UUID',input:{token:'from stories revisions ID',paused:true,changes:{redrawPages:[1,2,28]}},note:'Completed stories only. Pages are 1-based. Preserves script, review and unselected images, including when page 1 is redrawn. Only run performs generation using its configured image provider.'},
  publication:{get:'api GET reader/publication-defaults',set:'api POST reader/publication-defaults --input publication.json',input:{publication:{...emptyPublication,author:'你的署名',watermarkFontSize:24},expected:'Use the exact publication object (or null) returned by GET.'}},
  frameCount:{command:'api POST reader/sessions/ID/frame-count --input count.json',input:{count:8}},
  config:{command:'config set --input settings.json',input:{settings:{provider:'codex',providerConfigured:true,imageProvider:'gemini'},expectedRevision:'from config get'},imageProvider:'Optional drawing provider (gemini|openai|codex); null or omitted follows provider.',key:'For API providers only: key:{provider:"openai"|"gemini",value:"secret"|null}, or a list for separate text/image providers; never pass a key in argv.'},
 };
 type Context={cwd?:string;home?:string;generation?:ReaderProvider;localBooks?:LocalBooks;variables?:Record<string,string|undefined>;input?:unknown;signal?:AbortSignal;skill?:{transport?:typeof fetch;now?:()=>number}};
 function parse(args:string[]){return parseArgs({args,allowPositionals:true,strict:true,options:Object.fromEntries([
- ...['data-dir','input','output','format','until','timeout','title','request-id','query','batch','index','scope','generation','auto-update'].map(k=>[k,{type:'string'}]),
- ...['json','help','allow-unsigned','include-prompts','no-intake','refresh','automatic'].map(k=>[k,{type:'boolean'}]),
+ ...['data-dir','from-data-dir','input','output','format','until','timeout','title','request-id','query','batch','index','scope','generation','auto-update'].map(k=>[k,{type:'string'}]),
+ ...['json','help','allow-unsigned','include-prompts','no-intake','refresh','automatic','copy-images','no-copy-images','draft'].map(k=>[k,{type:'boolean'}]),
  ]) as Record<string,{type:'string'|'boolean'}>});}
 async function readInput(filename?:string){
  if(!filename)return {};
@@ -87,7 +94,7 @@ export async function executeHeadless(root:string,args:string[],context:Context=
  const {values:v,positionals:p}=parse(args);const command=p[0]||'help',action=p[1],id=p[2],value=(name:string)=>typeof v[name]==='string'?v[name] as string:undefined;
  need(commandNames.has(command),'UNKNOWN_COMMAND','Use help --json for available commands.');
  const appVersion=JSON.parse(await readFile(path.join(root,'package.json'),'utf8')).version||'unknown';
- if(command==='help'||v.help)return {schemaVersion:1,appVersion,default:'No subcommand starts the existing browser service.',commands,inputs,options:{'--data-dir':'Private library, otherwise saved desktop/CLI location.','--input':'JSON file or - for stdin.','--output':'New output path; never overwrites.','--request-id':'Stable UUID for mutation replay; retain original generation/token/faultId and input.','--generation':'Required intake generation from stories get ID for setup/search/choose/confirm.','--until':'candidates|prepared|reviewed|completed (default completed).','--timeout':'Explicit run timeout in seconds, default 900, max 86400.','--allow-unsigned':'Explicitly permit an unsigned export.','--json':'Subcommands always return one JSON receipt on stdout.'},selectionExample:{bookId:'zhuangzi',theme:'原典故事',artStyle:'ink-pencil',narrativeDetail:'balanced'},editExample:{token:'from stories revisions ID',changes:{productionPrompt:'保留关键人物回应'}},runResults:['completed','candidates','prepared','choice','frame_count_required','already_prepared','already_selected','reviewed','paused','blocked','superseded'],execution:'Only explicit run performs inference. All other commands save or inspect local state.'};
+ if(command==='help'||v.help)return {schemaVersion:1,appVersion,default:'No subcommand starts the existing browser service.',commands,inputs,options:{'--data-dir':'Private library, otherwise saved desktop/CLI location.','--input':'JSON file or - for stdin.','--output':'New output path; never overwrites.','--request-id':'Stable UUID for mutation replay; retain original generation/token/faultId and input.','--generation':'Required intake generation from stories get ID for setup/search/choose/confirm.','--until':'candidates|prepared|reviewed|completed (default completed).','--timeout':'Explicit run timeout in seconds, default 900, max 86400.','--allow-unsigned':'Explicitly permit an unsigned export.','--draft':'Copy an unreviewed saved storyboard as a paused independent text draft; no images.','--json':'Subcommands always return one JSON receipt on stdout.'},selectionExample:{bookId:'zhuangzi',theme:'原典故事',artStyle:'ink-pencil',narrativeDetail:'balanced'},editExample:{token:'from stories revisions ID',changes:{productionPrompt:'保留关键人物回应'}},runResults:['completed','candidates','prepared','choice','frame_count_required','already_prepared','already_selected','reviewed','paused','blocked','superseded'],execution:'Only explicit run performs inference. All other commands save or inspect local state.'};
  if(command==='catalog'||command==='themes'||command==='styles'||command==='books'&&action!=='contents'){
   return command==='books'?readerBooks:command==='themes'?themes:command==='styles'?artStyles.map(({prompt,...style})=>style):{books:readerBooks,themes,styles:artStyles.map(({prompt,...style})=>style),styleGroups:artStyleGroups};
  }
@@ -128,7 +135,7 @@ export async function executeHeadless(root:string,args:string[],context:Context=
  const running=command==='run'||command==='stories'&&action==='run',target=command==='run'?action:id;
  const until=value('until')||'completed',timeout=Number(value('timeout')||900);let timer:ReturnType<typeof setTimeout>|undefined;
  const abort=new AbortController();let timedOut=false;
- const interrupt=()=>{app?.stopGeneration();abort.abort();void stopCodexProcesses();};
+ const interrupt=()=>{app?.stopGeneration();abort.abort();void Promise.all([stopCodexProcesses(),stopClaudeProcesses()]);};
  try{
   if(command==='backup'){need(action,'BACKUP_PATH_REQUIRED','Specify a new backup directory.');outputOutside(root,path.resolve(action));const manifest=createLibraryBackup(directory,path.resolve(action),appVersion);return {path:path.resolve(action),files:manifest.files.length,verified:true};}
   let effective:Record<string,string|undefined>={...variables,SHIQU_AI_PROVIDER:'readonly'};
@@ -181,7 +188,29 @@ export async function executeHeadless(root:string,args:string[],context:Context=
   if(action==='create'){
    const data=input as any,selection=selectionSchema.parse(data.selection||data);return {requestId,session:await api(app,'POST','sessions',{requestId,selection,intake:data.intake??!v['no-intake']})};
   }
-  need(id&&uuid(id),'STORY_ID_REQUIRED','Specify a story UUID.');const route=`sessions/${id}`,data={...(input as any)};
+  need(id&&uuid(id),'STORY_ID_REQUIRED','Specify a story UUID.');
+  if(action==='copy'||action==='copy-images'){
+   const source=value('from-data-dir');need(source,'SOURCE_REQUIRED','Specify --from-data-dir SOURCE_LIBRARY.');
+   if(action==='copy-images'){
+    need(!v.draft&&(input as any).draft===undefined,'INVALID_INPUT','--draft applies only to text copy.');
+    const sourceId=(input as any).sourceId;need(typeof sourceId==='string'&&uuid(sourceId),'SOURCE_REQUIRED','Specify sourceId in JSON input.');
+    const current=await api(app,'GET',`sessions/${id}`);
+    try{return {session:await copySavedStory(app,root,directory,path.resolve(source),sourceId,id,current.selection.artStyle,{images:true,existing:true})};}
+    catch(error){if(error instanceof ReaderError)throw new CliCommandError(error.status===409?'CONFLICT':'COPY_FAILED',error.message,error.status>=500?4:2,{storyId:id});throw error;}
+   }
+   const draft=(input as any).draft;
+   need(draft===undefined||typeof draft==='boolean','INVALID_INPUT','draft must be a boolean.');
+   need(!v.draft||draft!==false,'INVALID_INPUT','draft conflicts with --draft.');
+   const copyDraft=draft??!!v.draft;
+   const choice=(input as any).copyImages;
+   need(choice===undefined||typeof choice==='boolean','INVALID_INPUT','copyImages must be a boolean.');
+   need(!(v['copy-images']&&v['no-copy-images']),'INVALID_INPUT','Choose --copy-images or --no-copy-images.');
+   const flag=v['copy-images']?true:v['no-copy-images']?false:undefined;
+   need(choice===undefined||flag===undefined||choice===flag,'INVALID_INPUT','copyImages conflicts with the command-line image choice.');
+   try{return {requestId,session:await copySavedStory(app,root,directory,path.resolve(source),id,requestId,(input as any).artStyle,{images:choice??flag,draft:copyDraft})};}
+   catch(error){if(error instanceof ReaderError)throw new CliCommandError(error.status===409?'CONFLICT':'COPY_FAILED',error.message,error.status>=500?4:2,{requestId});throw error;}
+  }
+  const route=`sessions/${id}`,data={...(input as any)};
   if(['get','current','revisions','prompts','review-history','source'].includes(action))return await api(app,'GET',route+(action==='get'?'':'/'+action));
   if(action==='rename')return await api(app,'POST',route+'/title',{title:value('title')||data.title});
   if(action==='delete')return await api(app,'DELETE',`library/${id}`);
@@ -205,7 +234,7 @@ export async function executeHeadless(root:string,args:string[],context:Context=
   throw new CliCommandError('UNKNOWN_COMMAND','Use help --json for available commands.');
  }finally{
   if(timer)clearTimeout(timer);process.off('SIGINT',interrupt);process.off('SIGTERM',interrupt);context.signal?.removeEventListener('abort',interrupt);
-  try{if(app){app.stopGeneration();abort.abort();if(running)await stopCodexProcesses();await app.close();}}finally{removeDiagnostics();await release();}
+  try{if(app){app.stopGeneration();abort.abort();if(running)await Promise.all([stopCodexProcesses(),stopClaudeProcesses()]);await app.close();}}finally{removeDiagnostics();await release();}
  }
 }
 export async function routeHeadless(root:string,args:string[]){

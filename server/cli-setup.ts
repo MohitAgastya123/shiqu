@@ -38,8 +38,16 @@ const keyNames={gemini:'GEMINI_API_KEY',openai:'OPENAI_API_KEY'} as const;
 // Invocation overrides win for one run; saved credentials are read only for the active text/image providers.
 export function effectiveProviderVariables(store:SystemSettingsStore,variables:Record<string,string|undefined>){
  const saved=store.settings(),name=variables.SHIQU_AI_PROVIDER?.trim()||saved.provider,imageName=variables.SHIQU_IMAGE_PROVIDER?.trim();
- if(!(providerNames as readonly string[]).includes(name))throw Error('SHIQU_AI_PROVIDER must be gemini, codex, openai or readonly');
  if(name!=='readonly'&&imageName&&!(imageProviderNames as readonly string[]).includes(imageName))throw Error('SHIQU_IMAGE_PROVIDER must be gemini, codex or openai');
+ // DeepSeek and Claude are invocation-only text providers: preserve saved task settings without loading another provider's key.
+ // They draw only through an explicit image provider (this invocation or the saved choice), using that provider's own key.
+ if(name==='deepseek'||name==='claude'){
+  const image=(imageName||saved.imageProvider) as ImageProviderName|undefined;
+  const effective:Record<string,string|undefined>={...settingsVariables(saved,''),...(isApiProvider(image)?{[keyNames[image]]:store.key(image)}:{}),...variables,SHIQU_AI_PROVIDER:name};
+  if(image)effective.SHIQU_IMAGE_PROVIDER=image;else delete effective.SHIQU_IMAGE_PROVIDER;
+  return effective;
+ }
+ if(!(providerNames as readonly string[]).includes(name))throw Error('SHIQU_AI_PROVIDER must be gemini, codex, claude, openai, deepseek or readonly');
  const provider=name as ProviderName,settings={...saved,provider,imageProvider:(imageName||saved.imageProvider) as ImageProviderName|undefined},image=effectiveImageProvider(settings);
  const effective:Record<string,string|undefined>={...settingsVariables(settings,store.key(provider),image?store.key(image):''),...variables,SHIQU_AI_PROVIDER:provider};
  if(image&&image!==provider)effective.SHIQU_IMAGE_PROVIDER=image;else delete effective.SHIQU_IMAGE_PROVIDER;
@@ -49,8 +57,9 @@ export function providerReady(variables:Record<string,string|undefined>){
  const text=variables.SHIQU_AI_PROVIDER;
  if(text==='readonly')return true;
  for(const name of new Set([text,variables.SHIQU_IMAGE_PROVIDER||text])){
-  if(!isApiProvider(name))continue;
-  const key=variables[keyNames[name]];
+  const variable=name==='deepseek'?'DEEPSEEK_API_KEY':isApiProvider(name)?keyNames[name]:null;
+  if(!variable)continue;
+  const key=variables[variable];
   if(!key?.trim())return false;validApiKey(key);
  }
  return true;
@@ -101,6 +110,7 @@ export async function configureProvider(store:SystemSettingsStore,prompt:SetupPr
 export async function cliProviderConfiguration(store:SystemSettingsStore,variables:Record<string,string|undefined>,prompt?:SetupPrompt){
  let effective=effectiveProviderVariables(store,variables);
  if(!providerReady(effective)){
+  if(effective.SHIQU_AI_PROVIDER==='deepseek')throw Error('请通过 DEEPSEEK_API_KEY 提供 DeepSeek 密钥；不会使用其他提供方的密钥。');
   await configureProvider(store,prompt);
   effective=effectiveProviderVariables(store,variables);
   if(!providerReady(effective))throw Error('本次环境变量仍覆盖为未完整配置的服务；请修正或移除相应环境变量。保存的配置仍然保留。');

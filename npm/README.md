@@ -18,6 +18,8 @@ npx @apprun/shiqu
 
 按提示选择书库和生成服务，打开终端打印的网址即可使用。同一可信 Wi-Fi 下，手机可扫描终端二维码接着读。保持终端运行，按 Ctrl+C 停止。[CLI 使用说明](https://github.com/yysun/shiqu/blob/main/.docs/user-guide.md#cli-启动)
 
+在本机回环地址打开「我的 → 生成服务与模型」，可修改与桌面/CLI/技能共用的提供方、模型、推理和 API 密钥。页面区分已保存值与当前运行配置；保存后重启服务生效，显式环境/配置文件覆盖仍优先。已保存密钥不会返回浏览器，手机/局域网阅读入口不提供凭据编辑。
+
 ### 2. Desktop：下载安装
 
 内置 Node，无需另装运行环境。支持 Apple Silicon Mac（macOS 13.5+）和 Windows 10/11 x64。

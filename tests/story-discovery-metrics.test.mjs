@@ -13,7 +13,8 @@ for(const provider of ['codex','gemini','openai'])test(`${provider}: wire IDs, p
  assert.deepEqual(Object.keys(requests[0].payload),['stories','theme']);assert.deepEqual(requests[0].payload.stories.map(s=>s.id),[1,2,3,4]);assert.deepEqual(Object.keys(requests[0].schema.properties.matches.items.properties),['id','reason','verdict']);
  result={stories:Array.from({length:32},(_,i)=>({title:'完整事件'+i,description:'原文中的完整事件。',source:{sectionId:'s1',firstUnit:'u1',lastUnit:'u1',continuations:[]}})),note:'',scan:{blockComplete:true,pendingEvents:[],resolvedEventIds:[]}};
  await p.suggestions({bookId:'zhuangzi',theme:'PRIVATE_THEME'},['CHANGING_EXCLUSION'],{title:'原典',edition:'a'.repeat(64),text:'STABLE_TEXT',purpose:'catalog',scan:{maxStories:32,excludedSources:[],pendingEvents:[],contextText:'CHANGING_CONTEXT'}},{onCall:e=>events.push(e)});
- const serialized=JSON.stringify(requests[1].payload);assert.ok(serialized.indexOf('STABLE_TEXT')<serialized.indexOf('CHANGING_CONTEXT'));assert.ok(serialized.indexOf('STABLE_TEXT')<serialized.indexOf('CHANGING_EXCLUSION'));assert.equal(requests[1].schema.properties.stories.maxItems,32);
+ const serialized=JSON.stringify(requests[1].payload);assert.ok(serialized.indexOf('STABLE_TEXT')<serialized.indexOf('CHANGING_CONTEXT'));assert.ok(serialized.indexOf('STABLE_TEXT')<serialized.indexOf('CHANGING_EXCLUSION'));assert.equal(requests[1].schema.properties.stories.maxItems,provider==='gemini'?undefined:32);
+ if(provider==='gemini')assert.match(requests[1].schema.properties.stories.description,/At most 32 items/);
  assert.equal(events[1].acceptedCount,32);assert.equal(events.length,2);assert.equal(events[0].acceptedCount,1);assert.equal(events[0].inputTokens,11);assert.equal(events[0].outputTokens,7);assert.ok(events.every(e=>e.durationMs>=0));assert.doesNotMatch(JSON.stringify(events),/PRIVATE_|SECRET|CHANGING_/);
 });
 test('unknown usage stays unknown; only recognized content failures are isolatable',()=>{

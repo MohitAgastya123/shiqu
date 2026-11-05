@@ -47,6 +47,12 @@ export async function productionFixture(t,provider='codex',variables={},storage=
   return override??(payload.batch?{pages:plan.pages.slice(payload.batch.first-1,payload.batch.last)}:plan);
  }
  const transport=async(url,options)=>{
+  if(provider==='deepseek'){
+   assert.equal(String(url),'https://api.deepseek.com/responses','No external source/inference request');
+   assert.equal(options.headers.Authorization,'Bearer controlled');
+   const body=JSON.parse(options.body),payload=JSON.parse(body.input[0].content),value=geminiEvidenceAnswer(await planned(body.input[0].content,body.text.format.schema),payload,body.text.format.schema);
+   return Response.json({status:'completed',id:'controlled',model:'deepseek-flash',usage:{input_tokens:1,output_tokens:1},output:[{type:'message',content:[{type:'output_text',text:JSON.stringify(value)}]}]});
+  }
   assert.match(String(url),/^https:\/\/generativelanguage.googleapis.com\//,'No external source/inference request');
   const body=JSON.parse(options.body),parts=body.contents[0].parts;
   const schema=body.generationConfig.responseFormat?.text.schema;
@@ -57,7 +63,8 @@ export async function productionFixture(t,provider='codex',variables={},storage=
  const runner={async status(){return {configured:true};},async run(job){if(!job.generateImage)control.textVia.add('codex');return {text:job.generateImage?'':JSON.stringify(await planned(job.prompt,job.schema)),image:job.generateImage?await image(job.prompt,job.image&&Buffer.from(job.image.bytes).toString('base64'),'codex'):null,model:'controlled',requestId:'controlled',usage:{calls:1}};}};
  const media=new FileMedia(path.join(dataDirectory,'media'));
  // storage.imageProvider exercises the production composition with a separate drawing provider.
- const generation=createReaderProvider({SHIQU_AI_PROVIDER:provider,...(storage.imageProvider?{SHIQU_IMAGE_PROVIDER:storage.imageProvider}:{}),...([provider,storage.imageProvider].includes('gemini')?{GEMINI_API_KEY:'controlled'}:{})},media,transport,runner);
+ const keys={gemini:{GEMINI_API_KEY:'controlled'},deepseek:{DEEPSEEK_API_KEY:'controlled'}};
+ const generation=createReaderProvider({SHIQU_AI_PROVIDER:provider,...(storage.imageProvider?{SHIQU_IMAGE_PROVIDER:storage.imageProvider}:{}),...keys[provider],...keys[storage.imageProvider]},media,transport,runner);
  const options={root,dataDirectory,generation,transport,variables};let app=createApplication(options);
  async function stop(){control.hold=false;for(const call of control.calls)call.resolve();await app.close();}
  const coordinators=[];

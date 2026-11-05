@@ -14,7 +14,7 @@ pnpm build:npm
 pnpm npm:smoke
 ```
 
-`build:npm` creates `outputs/npm/package/` and `outputs/npm/apprun-shiqu-<version>.tgz`. The staged manifest derives its public name from root `publishConfig.name`, version/engines from the root manifest, and dependencies from the backend bundle's external imports. It has no development dependencies or install/build hooks. The book sources and their notices are included; `.env`, local databases/media, source maps, desktop resources, and checkout metadata are excluded. The build does not package Docker or the desktop app.
+`build:npm` creates `outputs/npm/package/` and `outputs/npm/apprun-shiqu-<version>.tgz`. The staged manifest derives its public name from root `publishConfig.name`, version/engines from the root manifest, and dependencies from the backend bundle's external imports. It has no development dependencies or install/build hooks. The book sources and their notices are included; `.env`, local databases/media, source maps, desktop resources, and checkout metadata are excluded. The build does not package the desktop app.
 
 `npm:smoke` installs the actual tarball into a temporary directory using pnpm, then invokes the installed executable directly from an unrelated directory. It needs access to the npm registry or a populated pnpm store. It checks the packaged assets/book sources, HTTP/API, configuration, persistence after restart, desktop-compatible library discovery, first-run non-interactive errors, access boundaries, and clean shutdown without invoking a generation provider. Pass a tarball path to check a specific artifact:
 

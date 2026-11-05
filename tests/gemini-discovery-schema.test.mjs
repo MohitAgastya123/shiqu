@@ -12,7 +12,7 @@ const input=(purpose='catalog',maxStories=1)=>({title:'西游记',edition:'a'.re
 const response=value=>Response.json({candidates:[{finishReason:'STOP',content:{parts:[{text:JSON.stringify(value)}]}}]});
 const provider=transport=>createReaderProvider({SHIQU_AI_PROVIDER:'gemini',GEMINI_API_KEY:'controlled'}, {},transport);
 
-test('Gemini catalog and legacy scan avoid counted continuation grammars without changing shared contracts',async()=>{
+test('Gemini catalog and legacy scan avoid counted story and continuation grammars without changing shared contracts',async()=>{
  const shared=JSON.stringify([localCatalogJson,localScanJson,localChoicesJson]);
  const schemas=[];
  const p=provider(async(_url,init)=>{
@@ -27,13 +27,15 @@ test('Gemini catalog and legacy scan avoid counted continuation grammars without
    assert.deepEqual(array.items.required,['sectionId','firstUnit','lastUnit']);
    assert.equal(array.items.additionalProperties,false);
   }
-  assert.equal(schema.properties.scan.properties.pendingEvents.maxItems,16);
+  assert.equal(schema.properties.scan.properties.pendingEvents.maxItems,undefined);
+  assert.match(schema.properties.scan.properties.pendingEvents.description,/At most 16 items/);
   assert.equal(body.store,false);
   return response(receipt());
  });
  for(const count of [1,32])assert.equal((await p.suggestions(selection,[],input('catalog',count))).stories.length,1);
  assert.equal((await p.suggestions(selection,[],input('scan',5))).stories.length,1);
- assert.deepEqual(schemas.map(schema=>schema.properties.stories.maxItems),[1,32,5]);
+ assert.deepEqual(schemas.map(schema=>schema.properties.stories.maxItems),[undefined,undefined,undefined]);
+ assert.deepEqual(schemas.map(schema=>schema.properties.stories.description),['At most 1 items.','At most 32 items.','At most 5 items.']);
  assert.equal(JSON.stringify([localCatalogJson,localScanJson,localChoicesJson]),shared);
 });
 

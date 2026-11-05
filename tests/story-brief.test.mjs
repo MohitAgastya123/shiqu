@@ -7,6 +7,7 @@ import {themeMatchesSchema,themeMatchPayload} from '../lib/reader-theme-match.ts
 import {libraryFixture} from './fixtures/story-library.mjs';
 import {themeStoryId} from '../server/story-theme-matching.ts';
 import {makePlan,makeReflectionCandidates} from './fixtures/production.mjs';
+import {geminiEvidenceAnswer} from './fixtures/gemini-evidence.mjs';
 
 const plain=text=>text.replace(/^\s*- /gm,'').replace(/\s/g,'');
 const summary='勇士为保护村民迎战猛虎，最终击退猛虎，平安返回村庄。【核对摘要专用标记】';
@@ -35,7 +36,7 @@ for(const provider of ['codex','gemini','openai'])test(`${provider}: brief verif
   calls.push({instructions,payload,schema,limit});
   if(schema.properties.matches)return {matches:payload.stories.map(story=>({id:story.id,verdict:'yes',reason:matchReason}))};
   if(schema.properties.count)return {count:2,reason:'完整讲述起因、行动和结果。',...(schema.properties.storySummary?{storySummary:summary,storyMatchReason:matchReason}:{})};
-  if(schema.properties.issues)return {issues:[],titleReview:{title:plan.title,reason:'标题对应实际故事。'}};
+  if(schema.properties.issues)return {issues:[],titleReview:{title:plan.title,reason:'标题对应实际故事。'},coverage:[{quote:'勇士面对山中的猛虎仍向前行。',task:'勇士保护村民',pages:[1],assessment:'adequate',reason:'原文的行动得到保留。',issuePage:0}]};
   if(payload.requestedPages)return {pages:payload.requestedPages.map(page=>({page,...plan.pages[page-1]}))};
   if(schema.properties.candidates)return {title:plan.title,candidates:makeReflectionCandidates(plan.reflection)};
   if(schema.properties.reflection&&!schema.properties.pages)return {reflection:plan.reflection};
@@ -45,13 +46,16 @@ for(const provider of ['codex','gemini','openai'])test(`${provider}: brief verif
  };
  const runner={status:async()=>({configured:true}),run:async job=>({text:JSON.stringify(respond(job.instructions,JSON.parse(job.prompt),job.schema)),model:'mock',requestId:'mock',usage:null})};
  const transport=async(_url,init)=>{
-  const body=JSON.parse(init.body),openai=provider==='openai';
-  const value=respond(openai?body.instructions:body.systemInstruction.parts[0].text,JSON.parse(openai?body.input[0].content:body.contents[0].parts[0].text),openai?body.text.format.schema:body.generationConfig.responseFormat.text.schema,openai?body.max_output_tokens:body.generationConfig.maxOutputTokens);
+  const body=JSON.parse(init.body),openai=provider==='openai',payload=JSON.parse(openai?body.input[0].content:body.contents[0].parts[0].text),schema=openai?body.text.format.schema:body.generationConfig.responseFormat.text.schema;
+  let value=respond(openai?body.instructions:body.systemInstruction.parts[0].text,payload,schema,openai?body.max_output_tokens:body.generationConfig.maxOutputTokens);
+  if(provider==='gemini')value=geminiEvidenceAnswer(value,payload,schema);
   return Response.json(openai?{status:'completed',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify(value)}]}]}:{candidates:[{finishReason:'STOP',content:{parts:[{text:JSON.stringify(value)}]}}]});
  };
  const p=createReaderProvider({SHIQU_AI_PROVIDER:provider,GEMINI_API_KEY:'controlled',OPENAI_API_KEY:'controlled'}, {},transport,runner),g=p.generator();
  const entries=Array.from({length:4},(_,i)=>({id:String(i).repeat(64),title:'完整故事',text:original.text}));
- await p.matchStories('勇气',entries);assert.equal(calls.at(-1).schema.properties.matches.maxItems,4);if(provider!=='codex')assert.equal(calls.at(-1).limit,2048);
+ await p.matchStories('勇气',entries);assert.equal(calls.at(-1).schema.properties.matches.maxItems,provider==='gemini'?undefined:4);
+ if(provider==='gemini')assert.match(calls.at(-1).schema.properties.matches.description,/At most 4 items/);
+ if(provider!=='codex')assert.equal(calls.at(-1).limit,2048);
  const paid=calls.length;await assert.rejects(p.matchStories('勇气',[...entries,entries[0]]));assert.equal(calls.length,paid);
  for(const theme of ['勇气与成长','原典故事','忠于原文']){
   const selection={bookId:'zhuangzi',storyTitle:'勇士护民',theme,length:2,artStyle:'ink-pencil',productionPrompt:'保留明确行动。',narrativeDetail:'balanced',voice:false},context=theme==='勇气与成长'?{mode:'theme',theme}:{mode:'source'};

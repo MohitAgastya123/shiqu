@@ -25,6 +25,7 @@
   - [升级到 0.6.5](#升级到-065)
   - [升级到 0.7.0](#升级到-070)
   - [升级到 0.8.0](#升级到-080)
+  - [升级到 0.8.6](#升级到-086)
   - [升级到 0.8.5](#升级到-085)
   - [书库维护命令](#书库维护命令)
 - [常见问题](#常见问题)
@@ -170,6 +171,12 @@ npx @apprun/shiqu --reset-providers
 
 配置与桌面版存放在同一个独立 `desktop.sqlite`，不在故事数据库内；以后从另一入口启动也不重复问。API 密钥是明文，由本机文件权限保护，Unix 下目录/文件权限为 0700/0600。设置页面和 HTTP 不返回已存密钥。备份设置数据库会包含密钥；只分享故事目录不会携带全局设置。
 
+源码开发的 `pnpm dev`（含 `local`）与技能调用的 CLI 同样复用这些保存值；显式 shell 环境变量仍优先，不改数据库。开发后端不自动加载项目 `.env`，旧文件里的提供方/模型/密钥不会覆盖桌面选择。`local` 仅把书库改为 checkout 内的独立目录。初次开发可用 `pnpm cli --configure` 保存配置；修改后重启已运行服务，CLI 下一次执行会读取新值。
+
+使用 `pnpm dev` 或 CLI 浏览器服务时，也可在电脑本机的 `localhost` / `127.0.0.1` 地址打开「我的 → 生成服务与模型」。这里编辑同一套保存设置，可选择文本服务、图片服务（默认与文本服务相同）、模型、推理档位，并分别保留、替换或移除两边的 API 密钥；已保存密钥不会显示。页面单独列出当前运行配置和启动覆盖，保存不会修改正在运行的生成任务；重启服务后生效，有显式覆盖时需先移除对应覆盖。手机、局域网和互联网阅读地址不提供凭据编辑；原生桌面服务仍在桌面设置中修改。
+
+即使当前入口不能编辑设置，页面仍可显示阅读服务正在使用的提供方与图片模型。若本机编辑入口不可用，请完整重启 `pnpm dev` 或 CLI 服务，再重新读取。读取本机设置只展示启动配置，不等待 Codex / Claude 登录检查；未检查的登录状态不会显示为已连接或未连接。
+
 ### 环境变量与配置文件覆盖
 
 显式环境变量/配置文件用于本次启动，不自动保存或覆盖数据库。可用于自动化运行：
@@ -184,7 +191,7 @@ OPENAI_IMAGE_MODEL=gpt-image-2.5-sunburst
 
 其他服务分别使用 `SHIQU_AI_PROVIDER=codex`，或 `SHIQU_AI_PROVIDER=gemini` 与 `GEMINI_API_KEY`。无人值守只阅读可用 `SHIQU_AI_PROVIDER=readonly`。
 
-另用一种服务画图时，加 `SHIQU_IMAGE_PROVIDER=gemini`（或 `openai`、`codex`）及该服务的密钥，例如 `SHIQU_AI_PROVIDER=codex`、`SHIQU_IMAGE_PROVIDER=gemini`、`GEMINI_API_KEY=…`。留空保留已保存的图片服务（未保存则与文本服务相同）。`IMAGE_SIZE` 只在 OpenAI 画图时生效。
+仅支持文本的 `SHIQU_AI_PROVIDER=claude` / `deepseek` 也可用 `SHIQU_IMAGE_PROVIDER`（或已保存的单独图片服务）画图，否则仍在绘图前停止。另用一种服务画图时，加 `SHIQU_IMAGE_PROVIDER=gemini`（或 `openai`、`codex`）及该服务的密钥，例如 `SHIQU_AI_PROVIDER=codex`、`SHIQU_IMAGE_PROVIDER=gemini`、`GEMINI_API_KEY=…`。留空保留已保存的图片服务（未保存则与文本服务相同）。`IMAGE_SIZE` 只在 OpenAI 画图时生效。
 
 ```bash
 npx @apprun/shiqu --config /absolute/path/to/shiqu.env
@@ -294,6 +301,10 @@ pnpm cli export STORY_ID --format zip --output /private/story.zip --data-dir /pr
 selection.json 例如 `{"bookId":"zhuangzi","theme":"善意与误解","artStyle":"ink-pencil","narrativeDetail":"balanced"}`。保存、确认、查看不调用模型；只有显式 run 执行指定故事并可能付费，不顺带制作其他后台故事。run 默认最多900秒，可用 `--timeout` 调整；中断保留已保存检查点。读取返回的 reason/session，需要选择、确认、恢复或修改要求时完成对应动作后再运行。旧故事等待画幅数时返回 frame_count_required，使用 help 中的 frameCount API 保存；已确认的故事请求 prepared 返回 already_prepared，不再执行。不适用的旧故事阶段以 BOUNDARY_UNAVAILABLE 拒绝。
 
 子命令 stdout 为单个 `{schemaVersion,ok,data|error}` JSON，日志在 stderr；失败退出非零。skill show 默认输出 Markdown，增加 `--json` 才返回 JSON 信封。`--input file.json` 或 `--input -` 接受JSON。保存可固定 `--request-id UUID` 供重放。search/choose/confirm/setup 必须带 JSON generation 或 `--generation N`（由 stories get 返回的 intake.generation 取得）；同一请求重放沿用原代数。retry/override 必须带当前 faultId，不自动挑选。编辑先用 `stories revisions ID` 读取 token，再提交 `{"token":"...","changes":{"acceptancePrompt":"保留关键人物反应"}}`；返回的新 id 是后续制作对象。旧版本拒绝制作/完整导出，过期 token 或 faultId 返回冲突。config 复用桌面/CLI设置，密钥只通过输入文件/stdin传递，不放进命令参数。init/读取/导出不检查云端，run 未配置时明确报错。
+
+`stories copy STORY_ID --from-data-dir /private/source-library --data-dir /private/target-library` 可跨书库复制已通过审核的故事，默认只保存文本与审核记录。CLI 子命令始终无交互；拾趣 Skill 在对话中报告文本复制完成，再询问是否复制已有图片。用户同意后，Skill 使用 `stories copy-images TARGET_ID --from-data-dir /private/source-library --data-dir /private/target-library --input source.json`，其中 `source.json` 为 `{"sourceId":"来源故事id"}`，向已有的目标副本补图，不再创建故事。用户已明确要求连图片一起复制时，`copy` 也可通过 `--copy-images` 或 JSON 的 `copyImages:true` 一次完成；`--no-copy-images` 或 `copyImages:false` 明确仅复制文本。
+
+图片保持原始字节，在目标书库独立保存；缺失或损坏会报错并保留文本，可重试原命令和输入。更改 `artStyle` 时不能同时复制旧画风图片。新故事初始暂停，后续使用返回的新 id；复制文本和图片均不调用模型、不重新审核。Skill 负责选题、方案检查、文本审核及生图前的阶段控制，按用户授权调用 CLI 推进。
 
 JSON/Markdown 可导出中间稿；ZIP/PDF/PNG要求当前版本全部图片完成。未署名需明确 `--allow-unsigned`；公开 ZIP 默认不含提示词，内部记录须加 `--include-prompts`。输出必须是新路径，导出不自动提交或发布。备份要求已有数据库；帮助、静态书籍/主题/画风列表、技能安装和诊断导出不会自动建立书库，恢复仍要求不存在的新目录。
 
@@ -571,6 +582,13 @@ macOS 默认位置：
 
 新安装使用同一最终格式，书架为空；等待从数据库加载时显示占位。旧工作室专用接口已移除，阅读端、CLI 与桌面使用同一当前故事库。
 
+### 升级到 0.8.6
+
+1. 停止共用书库的桌面、CLI 和开发服务，备份完整书库；书库外的 `desktop.sqlite` 需另行私密备份。桌面与 CLI 更新到相同的 **0.8.6** 后启动，并刷新浏览器。
+2. 本版包含恢复故障迁移：应用先建立并校验完整书库备份，再原地升级；保留应用报告的备份路径。迁移补齐仅换画风后仍被文字审核阻止的版本所缺少的恢复故障，不重新审核或绘图。随后可按当前问题明确接受审核或重试。
+3. 书库格式仍为版本 1，最低兼容应用仍为 0.8.0。从 0.7.x 或更旧版本升级，先阅读[0.8.0 升级说明](#升级到-080)。需要回退时，用升级前备份和对应版本恢复到新目录，不能覆盖活动书库。
+4. 已安装技能副本不会随 CLI 更新自动替换。如需更新，运行 `pnpm dlx @apprun/shiqu@0.8.6 skill update --scope global`；项目副本使用 `--scope project`。重新读取技能并遵守已有版本锁。
+
 ### 升级到 0.8.5
 
 1. 停止共用书库的桌面、CLI 和开发服务，备份完整书库；书库外含明文凭据的 `desktop.sqlite` 需另行私密备份。桌面与 CLI 更新到相同的 **0.8.5** 后启动，并刷新浏览器。
@@ -618,7 +636,7 @@ pnpm library:maintain --diagnostics /absolute/private-output/shiqu-diagnostics.j
 
 **连接检查成功，为什么生成失败？** 登录或模型可访问不代表生成配额充足。请检查账户权限、配额和界面提示；Codex 图片生成可能比文本更快消耗额度。
 
-**Codex 生成多久会超时？** 拾趣对每次 Codex 生成请求最多等待 15 分钟，包括找故事、分镜、审核、修订和每张图片；这是单次请求的时限，整篇故事可能需要更久。登录状态检查最多等待 10 秒。超时后已保存的分镜和图片会保留，点击重试继续未完成的部分。
+**Codex 和 Gemini 生成多久会超时？** 拾趣对每次 Codex 或 Gemini 生成请求最多等待 15 分钟，包括找故事、画风推荐、分镜、审核、修订和每张图片；这是单次请求的时限，整篇故事可能需要更久。登录状态检查最多等待 10 秒。超时后已保存的分镜和图片会保留，点击重试继续未完成的部分。
 
 **为什么不能直接指定画幅数？** 当前界面用「叙事详略」表达展开程度，模型按原文决定数量，审核还可调整。准备时的建议数和制作要求中的数量偏好不是不可增减的目标；历史固定幅数记录仍可读取。
 
