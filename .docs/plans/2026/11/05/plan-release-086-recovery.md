@@ -25,3 +25,5 @@ CR risk: non-low — persisted recovery authorization, verified library migratio
 CR review round: 2; reviewer: reused (`release_review`).
 
 TT: 15/15 further upgrade/recovery/maintenance checks pass in `/tmp/shiqu-086-upgrade-checks.log`, including paused explicit retry and idempotent replay. Typecheck, full ESLint, scoped post-test ESLint and Rust formatting pass. The retry test's initial hold-fixture timeout was corrected by releasing the controlled image gate; production code was unchanged.
+
+SS milestone: `81f5d9c` commits the reviewed migration, recovery regressions and task artifacts. Verification: 55/55 affected checks plus 15/15 further upgrade checks; no unrelated files staged.
