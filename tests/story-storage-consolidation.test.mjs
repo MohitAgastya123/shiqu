@@ -173,9 +173,9 @@ test('fresh and upgraded libraries refuse pre-0.8 seeding while current opens ke
 test('a library consolidated before the refusal guard receives it in place',t=>{
  const f=fixture(t),previous=path.join(f.parent,'previous');
  for(const item of ['docker','package.json'])cpSync(path.join(root,item),path.join(previous,item),{recursive:true});
- cpSync(path.join(root,'drizzle'),path.join(previous,'drizzle'),{recursive:true,filter:source=>!path.basename(source).startsWith('0019_')});
+ cpSync(path.join(root,'drizzle'),path.join(previous,'drizzle'),{recursive:true,filter:source=>!/^\d{4}_.*\.sql$/.test(path.basename(source))||path.basename(source)<'0019_'});
  ensureLibraryReady(f.directory,previous);
  const db=new DatabaseSync(path.join(f.directory,'shiqu.sqlite'));db.exec(releasedSeed);db.close();
- const result=ensureLibraryReady(f.directory,root);assert.deepEqual(result.migrations,['0019_refuse_pre_consolidation_apps.sql']);verifyLibraryBackup(result.backup);
+ const result=ensureLibraryReady(f.directory,root);assert.deepEqual(result.migrations,['0019_refuse_pre_consolidation_apps.sql','0020_blocked_revision_faults.sql']);verifyLibraryBackup(result.backup);
  assertRefusesReleasedSeed(f.directory);assert.deepEqual(rawRows(f.directory,'stories'),f.before);
 });

@@ -75,7 +75,7 @@ test('review edit targets survive initial loading, reopening and ending selectio
  assert.equal(h.requests.length,0);assert.equal(h.submitted.length,0);
 });
 
-test('style-only edits keep a rejected review blocked without restarting automatic repairs',async t=>{
+test('style-only blocked revisions retain one recoverable fault through replay and restart, then explicit acceptance completes once',async t=>{
  const h=await harness(t,{blocked:true,initialTab:'style'}),before=await h.f.read(h.id),reviews=h.f.control.reviews.length,repairs=h.f.control.repairs.length;
  h.render().setChanges({artStyle:'paper-cut'});await h.render().submit();
  const child=h.submitted[0];await h.f.app.services.production.tick();await h.f.app.services.production.queue.settle();
@@ -83,6 +83,20 @@ test('style-only edits keep a rejected review blocked without restarting automat
  assert.equal(saved.state,'failed');assert.equal(saved.generationProgress.reviewStatus,'blocked');
  assert.equal(saved.generationProgress.reviewAudits,before.generationProgress.reviewAudits);
  assert.equal(h.f.control.reviews.length,reviews);assert.equal(h.f.control.repairs.length,repairs);assert.equal(h.f.control.calls.length,0);
+ const fault=saved.faults?.find(fault=>fault.stage==='review'&&fault.state==='pending');assert.ok(fault,'Blocked child needs its own recovery fault');
+ const replay=await h.f.json(`sessions/${h.id}/revisions`,'POST',h.requests[0]);assert.equal(replay.id,child.id);
+ await h.f.restart();
+ const restarted=await h.f.read(child.id);assert.deepEqual(restarted.faults.map(fault=>fault.id),[fault.id]);
+ const command={requestId:crypto.randomUUID(),faultId:fault.id};
+ await h.f.json(`sessions/${child.id}/review-override`,'POST',command);
+ await until(async()=>(await h.f.read(child.id)).state==='completed');
+ const completed=await h.f.read(child.id);
+ assert.equal(completed.selection.artStyle,'paper-cut');assert.equal(completed.generationProgress.reviewOverridden,true);
+ assert.equal(completed.faults?.length||0,0);assert.equal(h.f.control.calls.length,3);
+ assert.equal(h.f.control.reviews.length,reviews);assert.equal(h.f.control.repairs.length,repairs);
+ await h.f.json(`sessions/${child.id}/review-override`,'POST',command);
+ await h.f.app.services.production.tick();await h.f.app.services.production.queue.settle();
+ assert.equal(h.f.control.calls.length,3);assert.deepEqual((await h.f.read(h.id)).story,before.story);
 });
 
 test('completed story count edits remain a draft until confirmation starts the new version',async t=>{
