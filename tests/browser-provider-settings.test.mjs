@@ -169,3 +169,16 @@ test('generic reader and native desktop listeners do not expose browser credenti
  const base=`http://127.0.0.1:${port}`;assert.equal((await fetch(base+providerSettingsPath)).status,404);
  assert.equal((await fetch(base+providerSettingsPath,{method:'POST',headers:{Origin:base,'Content-Type':'application/json'},body:'{}'})).status,404);
 });
+
+test('separate image provider saves its own key, clears with null and reports both runtime sides',async t=>{
+ const f=await fixture(t,{SHIQU_IMAGE_PROVIDER:'openai'});let current=await f.view();
+ assert.equal(current.runtime.provider,'gemini');assert.equal(current.runtime.imageProvider,'openai');assert.equal(current.runtime.models.image,'saved-openai-image');assert.equal(current.runtime.models.text,'saved-google-text');assert.ok(current.overrides.includes('SHIQU_IMAGE_PROVIDER'));
+ let response=await f.save(body(current,{...current.settings,provider:'codex',imageProvider:'openai'},{imageKeyAction:'replace',imageKey:'replacement-secret'}));assert.equal(response.status,200);current=await safeJson(response);
+ assert.equal(current.settings.imageProvider,'openai');assert.equal(f.settingsStore.key('openai'),'replacement-secret');assert.equal(f.settingsStore.key('gemini'),googleKey);
+ // A key action for an image provider that is not separate is refused without changes.
+ const revision=current.revision;response=await f.save(body(current,{...current.settings,imageProvider:null},{imageKeyAction:'remove'}));assert.equal(response.status,400);await safeJson(response);assert.equal(f.settingsStore.revision(),revision);
+ f.settingsStore.save({},{provider:'openai',value:null});
+ response=await f.save(body(await f.view()));assert.equal(response.status,400);assert.match((await safeJson(response)).error,/图片服务/);
+ current=await f.view();response=await f.save(body(current,{...current.settings,imageProvider:null}));assert.equal(response.status,200);current=await safeJson(response);
+ assert.equal(current.settings.imageProvider,undefined);assert.ok(!JSON.stringify(f.settingsStore.settings()).includes('imageProvider'));assert.equal(f.settingsStore.settings().provider,'codex');
+});

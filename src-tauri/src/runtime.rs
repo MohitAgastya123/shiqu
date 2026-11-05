@@ -260,6 +260,7 @@ impl Drop for Runtime {
 pub fn launch(
     settings: &Settings,
     key: &str,
+    image_key: &str,
     root: &Path,
     action: &str,
 ) -> Result<(Child, Value, mpsc::Receiver<Value>), String> {
@@ -278,7 +279,7 @@ pub fn launch(
         .stderr(Stdio::null())
         .spawn()
         .map_err(|_| "无法启动 Node 服务。")?;
-    let input = json!({"action":action,"settings":settings,"key":key});
+    let input = json!({"action":action,"settings":settings,"key":key,"imageKey":image_key});
     let wrote = child
         .stdin
         .as_mut()
@@ -322,7 +323,7 @@ pub fn ensure_library(settings: &Settings, root: &Path) -> Result<(), String> {
         return Ok(());
     }
     // Do not hold the short SQLite gate while Node acquires it for migration/recovery.
-    let (mut child, response, _) = launch(settings, "", root, "upgrade")?;
+    let (mut child, response, _) = launch(settings, "", "", root, "upgrade")?;
     drop(child.stdin.take());
     wait(&mut child, Duration::from_secs(8))?;
     if response["upgraded"] != true {
@@ -331,10 +332,15 @@ pub fn ensure_library(settings: &Settings, root: &Path) -> Result<(), String> {
     Ok(())
 }
 
-pub fn start(settings: &Settings, key: &str, root: &Path) -> Result<Runtime, String> {
+pub fn start(
+    settings: &Settings,
+    key: &str,
+    image_key: &str,
+    root: &Path,
+) -> Result<Runtime, String> {
     crate::library::needs_upgrade(Path::new(&settings.data_directory))?;
     let ownership = lock(Path::new(&settings.data_directory))?;
-    let (child, status, updates) = launch(settings, key, root, "start")?;
+    let (child, status, updates) = launch(settings, key, image_key, root, "start")?;
     Ok(Runtime {
         child,
         status,

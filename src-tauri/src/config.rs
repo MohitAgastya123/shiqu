@@ -70,6 +70,9 @@ pub struct Settings {
     #[serde(default)]
     pub cloudflared_path: String,
     pub provider: String,
+    // Empty follows the text provider and is omitted, keeping older saved settings unchanged.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub image_provider: String,
     pub text_model: String,
     pub image_model: String,
     pub codex_path: String,
@@ -102,6 +105,7 @@ impl Settings {
             internet_enabled: false,
             cloudflared_path: String::new(),
             provider: "gemini".into(),
+            image_provider: String::new(),
             text_model: "gemini-3.8-flash".into(),
             image_model: "gemini-nano-banana-2.1".into(),
             codex_path: String::new(),
@@ -109,6 +113,16 @@ impl Settings {
             codex_reasoning_effort: String::new(),
             task_reasoning_efforts: TaskReasoningEfforts::default(),
             codex_home: String::new(),
+        }
+    }
+    // Read-only has no image side; an unset image provider follows the text provider.
+    pub fn effective_image_provider(&self) -> &str {
+        if self.provider == "readonly" {
+            ""
+        } else if self.image_provider.is_empty() {
+            &self.provider
+        } else {
+            &self.image_provider
         }
     }
     pub fn validate(&self) -> Result<(), String> {
@@ -131,6 +145,9 @@ impl Settings {
             || !["gemini", "codex", "openai", "readonly"].contains(&self.provider.as_str())
         {
             return Err("请选择有效的提供方与 1024–65535 之间的端口。".into());
+        }
+        if !["", "gemini", "codex", "openai"].contains(&self.image_provider.as_str()) {
+            return Err("请选择有效的图片服务。".into());
         }
         if !Path::new(&self.data_directory).is_absolute() || self.data_directory.len() > 4096 {
             return Err("数据目录必须是有效的绝对路径。".into());
@@ -171,7 +188,8 @@ impl Settings {
         if !self.cloudflared_path.is_empty() && !Path::new(&self.cloudflared_path).is_absolute() {
             return Err("cloudflared 路径必须是可执行文件的绝对路径。".into());
         }
-        if cfg!(windows) && self.provider == "codex" {
+        if cfg!(windows) && (self.provider == "codex" || self.effective_image_provider() == "codex")
+        {
             return Err(
                 "当前 Codex 集成不支持原生 Windows；请选择 OpenAI API、Gemini 或只读。".into(),
             );
@@ -391,7 +409,34 @@ impl Store {
         key: KeyChange<'_>,
         expected: Option<i64>,
     ) -> Result<(), String> {
+        let provider = settings.provider.clone();
+        self.save_keys_at(settings, &[(provider.as_str(), key)], expected)
+    }
+    // Key changes may target the text provider or a separate image provider, never an unused provider.
+    pub fn save_keys_at(
+        &mut self,
+        settings: &Settings,
+        keys: &[(&str, KeyChange<'_>)],
+        expected: Option<i64>,
+    ) -> Result<(), String> {
         settings.validate()?;
+        for (index, (provider, change)) in keys.iter().enumerate() {
+            if matches!(change, KeyChange::Keep) {
+                continue;
+            }
+            if !["gemini", "openai"].contains(provider)
+                || (*provider != settings.provider
+                    && *provider != settings.effective_image_provider())
+            {
+                return Err("所选服务不使用 API 密钥。".into());
+            }
+            if keys[..index]
+                .iter()
+                .any(|(other, change)| other == provider && !matches!(change, KeyChange::Keep))
+            {
+                return Err("密钥操作无效。".into());
+            }
+        }
         let tx = self
             .db
             .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
@@ -412,21 +457,17 @@ impl Store {
             [value],
         )
         .map_err(|_| STORE_ERROR)?;
-        match key {
-            KeyChange::Keep => {}
-            KeyChange::Set(value) => {
-                if !["gemini", "openai"].contains(&settings.provider.as_str()) {
-                    return Err("所选服务不使用 API 密钥。".into());
+        for (provider, key) in keys {
+            match key {
+                KeyChange::Keep => {}
+                KeyChange::Set(value) => {
+                    let value = validate_key(value)?;
+                    tx.execute("INSERT INTO desktop_credentials VALUES (?1,?2) ON CONFLICT(name) DO UPDATE SET value=excluded.value", [provider,&value.as_str()]).map_err(|_| STORE_ERROR)?;
                 }
-                let value = validate_key(value)?;
-                tx.execute("INSERT INTO desktop_credentials VALUES (?1,?2) ON CONFLICT(name) DO UPDATE SET value=excluded.value", [&settings.provider,&value]).map_err(|_| STORE_ERROR)?;
-            }
-            KeyChange::Delete => {
-                tx.execute(
-                    "DELETE FROM desktop_credentials WHERE name=?1",
-                    [&settings.provider],
-                )
-                .map_err(|_| STORE_ERROR)?;
+                KeyChange::Delete => {
+                    tx.execute("DELETE FROM desktop_credentials WHERE name=?1", [provider])
+                        .map_err(|_| STORE_ERROR)?;
+                }
             }
         }
         tx.commit().map_err(|_| STORE_ERROR.into())
@@ -448,6 +489,7 @@ impl Store {
                 .ok_or(STORE_ERROR)?,
         );
         settings.provider = defaults.provider;
+        settings.image_provider.clear();
         settings.provider_configured = false;
         settings.text_model = defaults.text_model;
         settings.image_model = defaults.image_model;
@@ -858,7 +900,7 @@ mod tests {
         let file = folder.join("desktop.sqlite");
         let library = folder.join("library");
         let module = Path::new(env!("CARGO_MANIFEST_DIR")).join("../server/system-settings.ts");
-        let script = r#"import {pathToFileURL} from 'node:url';const {SystemSettingsStore}=await import(pathToFileURL(process.argv[1]).href);const store=new SystemSettingsStore(process.argv[2],process.argv[3]);if(process.argv[4]==='write'){store.save({provider:'openai',providerConfigured:true,libraryConfigured:true},{provider:'openai',value:'interop-test-only'});}else{if(store.settings().provider!=='gemini'||store.key('gemini')!=='native-test-only'||store.key('openai')!=='interop-test-only')throw Error('Interop mismatch');store.save({port:3457});}store.close();"#;
+        let script = r#"import {pathToFileURL} from 'node:url';const {SystemSettingsStore}=await import(pathToFileURL(process.argv[1]).href);const store=new SystemSettingsStore(process.argv[2],process.argv[3]);if(process.argv[4]==='write'){store.save({provider:'openai',imageProvider:'gemini',providerConfigured:true,libraryConfigured:true},[{provider:'openai',value:'interop-test-only'},{provider:'gemini',value:'interop-image-only'}]);}else{const saved=store.settings();if(saved.provider!=='gemini'||saved.imageProvider!=='openai'||store.key('gemini')!=='native-test-only'||store.key('openai')!=='interop-test-only')throw Error('Interop mismatch');store.save({port:3457,imageProvider:null});}store.close();"#;
         let run = |phase: &str| {
             let status = Command::new("node")
                 .args([
@@ -879,8 +921,11 @@ mod tests {
         let mut store = Store::open(&file, &folder).unwrap();
         let mut settings = store.settings().unwrap();
         assert_eq!(settings.provider, "openai");
+        assert_eq!(settings.image_provider, "gemini");
         assert_eq!(store.key().unwrap(), "interop-test-only");
+        assert_eq!(store.key_for("gemini").unwrap(), "interop-image-only");
         settings.provider = "gemini".into();
+        settings.image_provider = "openai".into();
         store
             .save(&settings, KeyChange::Set("native-test-only"))
             .unwrap();
@@ -888,6 +933,14 @@ mod tests {
         run("read");
         let store = Store::open(&file, &folder).unwrap();
         assert_eq!(store.settings().unwrap().port, 3457);
+        assert_eq!(store.settings().unwrap().image_provider, "");
+        let raw: String = store
+            .db
+            .query_row("SELECT value FROM desktop_settings WHERE id=1", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert!(!raw.contains("imageProvider"));
         drop(store);
         fs::remove_dir_all(folder).unwrap();
     }

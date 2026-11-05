@@ -66,7 +66,7 @@ const inputs={
  redraw:{command:'stories edit ID --input redraw.json --request-id UUID',input:{token:'from stories revisions ID',paused:true,changes:{redrawPages:[1,2,28]}},note:'Completed stories only. Pages are 1-based. Preserves script, review and unselected images, including when page 1 is redrawn. Only run performs generation using its configured image provider.'},
  publication:{get:'api GET reader/publication-defaults',set:'api POST reader/publication-defaults --input publication.json',input:{publication:{...emptyPublication,author:'你的署名',watermarkFontSize:24},expected:'Use the exact publication object (or null) returned by GET.'}},
  frameCount:{command:'api POST reader/sessions/ID/frame-count --input count.json',input:{count:8}},
- config:{command:'config set --input settings.json',input:{settings:{provider:'codex',providerConfigured:true},expectedRevision:'from config get'},key:'For API providers only: key:{provider:"openai"|"gemini",value:"secret"|null}; never pass a key in argv.'},
+ config:{command:'config set --input settings.json',input:{settings:{provider:'codex',providerConfigured:true,imageProvider:'gemini'},expectedRevision:'from config get'},imageProvider:'Optional drawing provider (gemini|openai|codex); null or omitted follows provider.',key:'For API providers only: key:{provider:"openai"|"gemini",value:"secret"|null}, or a list for separate text/image providers; never pass a key in argv.'},
 };
 type Context={cwd?:string;home?:string;generation?:ReaderProvider;localBooks?:LocalBooks;variables?:Record<string,string|undefined>;input?:unknown;signal?:AbortSignal;skill?:{transport?:typeof fetch;now?:()=>number}};
 function parse(args:string[]){return parseArgs({args,allowPositionals:true,strict:true,options:Object.fromEntries([

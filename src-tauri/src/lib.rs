@@ -45,30 +45,46 @@ fn resource_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 fn settings_view(app: &tauri::AppHandle, control: &mut Control) -> Result<Value, String> {
     let store = open_store(app, control)?;
     let (settings, revision, gemini, openai) = store.settings_snapshot()?;
-    let key_present = match settings.provider.as_str() {
+    let present = |provider: &str| match provider {
         "gemini" => gemini,
         "openai" => openai,
         _ => false,
     };
+    let key_present = present(&settings.provider);
+    let image_key_present = present(settings.effective_image_provider());
     Ok(
-        json!({"settings":settings,"revision":revision,"keyPresent":key_present,"providerKeys":{"gemini":gemini,"openai":openai},"runtimeConfigured":provider_configuration(&store).map(|(settings,key)| settings.provider=="codex" || settings.provider=="readonly" || !key.is_empty()).unwrap_or(false),"credentialError":null,"platform":std::env::consts::OS}),
+        json!({"settings":settings,"revision":revision,"keyPresent":key_present,"imageKeyPresent":image_key_present,"providerKeys":{"gemini":gemini,"openai":openai},"runtimeConfigured":provider_configuration(&store).map(|(settings,key,image_key)| provider_ready(&settings,&key,&image_key)).unwrap_or(false),"credentialError":null,"platform":std::env::consts::OS}),
     )
 }
 fn open_store(app: &tauri::AppHandle, _control: &mut Control) -> Result<config::Store, String> {
     let (file, data) = config::directories(app)?;
     config::Store::open(&file, &data)
 }
+// Read-only needs nothing; each active API provider needs its own credential.
+fn provider_ready(settings: &Settings, key: &str, image_key: &str) -> bool {
+    let api = |name: &str| ["gemini", "openai"].contains(&name);
+    let image = settings.effective_image_provider();
+    settings.provider == "readonly"
+        || (!(api(&settings.provider) && key.is_empty())
+            && !(image != settings.provider && api(image) && image_key.is_empty()))
+}
 // Invocation overrides never mutate the saved settings or import environment credentials.
-fn provider_configuration(store: &config::Store) -> Result<(Settings, String), String> {
+fn provider_configuration(store: &config::Store) -> Result<(Settings, String, String), String> {
     provider_configuration_with(store, |name| std::env::var(name).ok())
 }
 fn provider_configuration_with(
     store: &config::Store,
     read: impl Fn(&str) -> Option<String>,
-) -> Result<(Settings, String), String> {
+) -> Result<(Settings, String, String), String> {
     let mut settings = store.settings()?;
     if let Some(value) = read("SHIQU_AI_PROVIDER") {
         settings.provider = value;
+    }
+    // Blank keeps the saved image choice; read-only ignores the image side, matching the CLI.
+    if let Some(value) = read("SHIQU_IMAGE_PROVIDER").filter(|value| !value.trim().is_empty()) {
+        if settings.provider != "readonly" {
+            settings.image_provider = value.trim().into();
+        }
     }
     for (name, target) in [
         ("GEMINI_TEXT_MODEL", &mut settings.text_model),
@@ -99,16 +115,25 @@ fn provider_configuration_with(
     settings.task_reasoning_efforts =
         serde_json::from_value(efforts).map_err(|_| "任务推理设置无效。")?;
     settings.validate()?;
-    let name = match settings.provider.as_str() {
-        "openai" => Some("OPENAI_API_KEY"),
-        "gemini" => Some("GEMINI_API_KEY"),
-        _ => None,
+    let credential = |provider: &str| -> Result<String, String> {
+        let name = match provider {
+            "openai" => Some("OPENAI_API_KEY"),
+            "gemini" => Some("GEMINI_API_KEY"),
+            _ => None,
+        };
+        match name.and_then(&read) {
+            Some(value) => config::validate_key(&value),
+            None => store.key_for(provider),
+        }
     };
-    let key = match name.and_then(&read) {
-        Some(value) => config::validate_key(&value)?,
-        None => store.key_for(&settings.provider)?,
+    let key = credential(&settings.provider)?;
+    let image = settings.effective_image_provider();
+    let image_key = if image == settings.provider {
+        String::new()
+    } else {
+        credential(image)?
     };
-    Ok((settings, key))
+    Ok((settings, key, image_key))
 }
 
 #[tauri::command]
@@ -160,6 +185,14 @@ async fn set_library_story_deleted(
     .await
 }
 
+fn key_change(change: Option<bool>, value: &str) -> config::KeyChange<'_> {
+    match change {
+        None => config::KeyChange::Keep,
+        Some(true) => config::KeyChange::Set(value),
+        Some(false) => config::KeyChange::Delete,
+    }
+}
+
 #[tauri::command]
 async fn save_settings(
     app: tauri::AppHandle,
@@ -168,6 +201,8 @@ async fn save_settings(
     expected_revision: Option<i64>,
     key_action: String,
     key: String,
+    image_key_action: Option<String>,
+    image_key: Option<String>,
 ) -> Result<Value, String> {
     let shared = state.0.clone();
     blocking(move || {
@@ -175,31 +210,52 @@ async fn save_settings(
         if guard.runtime.is_some() {
             return Err("请先停止服务，再修改设置或密钥。".into());
         }
-        let replacement;
-        let change = match key_action.as_str() {
-            "keep" => config::KeyChange::Keep,
-            "replace" => {
-                replacement = config::validate_key(&key)?;
-                config::KeyChange::Set(&replacement)
+        let image_key_action = image_key_action.unwrap_or_else(|| "keep".into());
+        let image_key = image_key.unwrap_or_default();
+        let parse = |action: &str, value: &str| -> Result<(Option<bool>, String), String> {
+            match action {
+                "keep" => Ok((None, String::new())),
+                "replace" => Ok((Some(true), config::validate_key(value)?)),
+                "delete" => Ok((Some(false), String::new())),
+                _ => Err("密钥操作无效。".into()),
             }
-            "delete" => config::KeyChange::Delete,
-            _ => return Err("密钥操作无效。".into()),
         };
+        let (text_change, text_replacement) = parse(&key_action, &key)?;
+        let (image_change, image_replacement) = parse(&image_key_action, &image_key)?;
         let mut store = open_store(&app, &mut guard)?;
         settings.library_configured = true;
-        settings.provider_configured = match settings.provider.as_str() {
-            "gemini" | "openai" => {
-                if key_action == "replace" {
-                    true
-                } else if key_action == "delete" {
-                    false
-                } else {
-                    !store.key_for(&settings.provider)?.is_empty()
-                }
-            }
-            _ => true,
+        // "Same as text" is stored as unset so older builds can still read the settings.
+        if settings.image_provider == settings.provider {
+            settings.image_provider.clear();
+        }
+        let image = settings.effective_image_provider().to_string();
+        let separate = image != settings.provider;
+        if !separate && image_change.is_some() {
+            return Err("图片服务与文本服务相同，请使用文本服务的密钥。".into());
+        }
+        let configured = |provider: &str, change: Option<bool>| -> Result<bool, String> {
+            Ok(match provider {
+                "gemini" | "openai" => match change {
+                    Some(set) => set,
+                    None => !store.key_for(provider)?.is_empty(),
+                },
+                _ => true,
+            })
         };
-        store.save_at(&settings, change, expected_revision)?;
+        settings.provider_configured = configured(&settings.provider, text_change)?
+            && (!separate || settings.provider == "readonly" || configured(&image, image_change)?);
+        let provider = settings.provider.clone();
+        store.save_keys_at(
+            &settings,
+            &[
+                (
+                    provider.as_str(),
+                    key_change(text_change, &text_replacement),
+                ),
+                (image.as_str(), key_change(image_change, &image_replacement)),
+            ],
+            expected_revision,
+        )?;
         drop(store);
         settings_view(&app, &mut guard)
     })
@@ -263,11 +319,11 @@ async fn start_server(
             return Ok(runtime.snapshot());
         }
         let store = open_store(&app, &mut control)?;
-        let (settings, key) = provider_configuration(&store)?;
-        if !["readonly", "codex"].contains(&settings.provider.as_str()) && key.is_empty() {
+        let (settings, key, image_key) = provider_configuration(&store)?;
+        if !provider_ready(&settings, &key, &image_key) {
             return Err("请先配置生成服务，或选择只读模式。".into());
         }
-        match runtime::start(&settings, &key, &resource_root(&app)?) {
+        match runtime::start(&settings, &key, &image_key, &resource_root(&app)?) {
             Ok(runtime) => {
                 let result = runtime.status.clone();
                 control.runtime = Some(runtime);
@@ -329,9 +385,14 @@ async fn test_provider(
             return Err("请先停止服务，再测试配置。".into());
         }
         let store = open_store(&app, &mut guard)?;
-        let (settings, credential) = provider_configuration(&store)?;
-        let (mut child, result, _updates) =
-            runtime::launch(&settings, &credential, &resource_root(&app)?, "test")?;
+        let (settings, credential, image_credential) = provider_configuration(&store)?;
+        let (mut child, result, _updates) = runtime::launch(
+            &settings,
+            &credential,
+            &image_credential,
+            &resource_root(&app)?,
+            "test",
+        )?;
         drop(child.stdin.take());
         let _ = child.wait();
         Ok(result)
@@ -467,7 +528,7 @@ mod tests {
             .unwrap();
         drop(store);
         let mut store = config::Store::open(&file, &folder).unwrap();
-        let (loaded, key) = provider_configuration_with(&store, |_| None).unwrap();
+        let (loaded, key, _) = provider_configuration_with(&store, |_| None).unwrap();
         assert_eq!(loaded.text_model, "saved-model");
         assert_eq!(key, "disposable-command-key");
         store.save(&settings, config::KeyChange::Delete).unwrap();
@@ -498,7 +559,7 @@ mod tests {
             .save(&settings, config::KeyChange::Set("saved-gemini"))
             .unwrap();
         let revision = store.revision().unwrap();
-        let (effective, key) = provider_configuration_with(&store, |name| match name {
+        let (effective, key, _) = provider_configuration_with(&store, |name| match name {
             "SHIQU_AI_PROVIDER" => Some("openai".into()),
             "OPENAI_API_KEY" => Some("env-only-key".into()),
             "OPENAI_TEXT_MODEL" => Some("env-model".into()),
@@ -519,6 +580,76 @@ mod tests {
             })
             .is_err()
         );
+        drop(store);
+        std::fs::remove_dir_all(folder).unwrap();
+    }
+    #[test]
+    fn separate_image_provider_uses_its_own_credential_and_readiness() {
+        let folder =
+            std::env::temp_dir().join(format!("shiqu-image-provider-{}", std::process::id()));
+        let file = folder.join("desktop.sqlite");
+        let mut store = config::Store::open(&file, &folder).unwrap();
+        let mut settings = store.settings().unwrap();
+        settings.provider = "openai".into();
+        settings.image_provider = "gemini".into();
+        store
+            .save_keys_at(
+                &settings,
+                &[
+                    ("openai", config::KeyChange::Set("text-only-key")),
+                    ("gemini", config::KeyChange::Keep),
+                ],
+                None,
+            )
+            .unwrap();
+        let (loaded, key, image_key) = provider_configuration_with(&store, |_| None).unwrap();
+        assert_eq!(loaded.image_provider, "gemini");
+        assert_eq!((key.as_str(), image_key.as_str()), ("text-only-key", ""));
+        assert!(!provider_ready(&loaded, &key, &image_key));
+        store
+            .save_keys_at(
+                &settings,
+                &[("gemini", config::KeyChange::Set("image-only-key"))],
+                None,
+            )
+            .unwrap();
+        let (loaded, key, image_key) = provider_configuration_with(&store, |_| None).unwrap();
+        assert_eq!(image_key, "image-only-key");
+        assert!(provider_ready(&loaded, &key, &image_key));
+        // The image override is invocation-only; an unused provider's key is never read.
+        let (effective, _, image_key) = provider_configuration_with(&store, |name| match name {
+            "SHIQU_IMAGE_PROVIDER" => Some("openai".into()),
+            _ => None,
+        })
+        .unwrap();
+        assert_eq!(effective.effective_image_provider(), "openai");
+        assert!(image_key.is_empty());
+        assert_eq!(store.settings().unwrap().image_provider, "gemini");
+        // Blank keeps the saved choice; read-only ignores an invalid image override.
+        let blank = provider_configuration_with(&store, |name| {
+            (name == "SHIQU_IMAGE_PROVIDER").then(|| " ".into())
+        })
+        .unwrap();
+        assert_eq!(blank.0.image_provider, "gemini");
+        assert!(provider_configuration_with(&store, |name| match name {
+            "SHIQU_AI_PROVIDER" => Some("readonly".into()),
+            "SHIQU_IMAGE_PROVIDER" => Some("invalid".into()),
+            _ => None,
+        })
+        .is_ok());
+        settings.provider = "readonly".into();
+        assert!(store
+            .save_keys_at(&settings, &[("gemini", config::KeyChange::Delete)], None)
+            .is_err());
+        assert_eq!(store.key_for("gemini").unwrap(), "image-only-key");
+        settings.provider = "openai".into();
+        settings.image_provider.clear();
+        assert!(store
+            .save_keys_at(&settings, &[("gemini", config::KeyChange::Delete)], None)
+            .is_err());
+        store.save(&settings, config::KeyChange::Keep).unwrap();
+        let saved: serde_json::Value = serde_json::to_value(store.settings().unwrap()).unwrap();
+        assert!(saved.get("imageProvider").is_none());
         drop(store);
         std::fs::remove_dir_all(folder).unwrap();
     }

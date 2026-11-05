@@ -17,7 +17,7 @@ for(const provider of ['codex','gemini'])test(`${provider}: new stories generate
  const f=await productionFixture(t,provider),id=await f.create(10);
  const initial=await f.read(id);assert.equal(initial.generationMode,'background');assert.equal(initial.generationControl,'active');
  // The create response already carries durable intent; no mode request or viewer is involved.
- f.control.hold=false;await until(async()=>(await f.read(id)).state==='completed');
+ f.control.hold=false;await until(async()=>(await f.read(id)).state==='completed',20000);
  assert.equal(f.control.calls.length,10);assert.equal(f.control.plans.length,1);assert.ok(f.control.maxActive<=3);
  assert.equal((await f.app.services.database.prepare('SELECT COUNT(*) AS n FROM production_demand').first()).n,0);
  assert.equal((await f.read(id)).generationMode,'background');

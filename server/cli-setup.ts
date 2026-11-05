@@ -1,12 +1,12 @@
 // Terminal-only provider onboarding. Hidden input never echoes keys; only explicit completed setup persists them.
 import {createInterface} from 'node:readline/promises';
-import {providerNames,settingsVariables,validApiKey} from '../lib/system-settings.ts';
-import type {ProviderName,SystemSettings} from '../lib/system-settings.ts';
-import type {SystemSettingsStore} from './system-settings.ts';
+import {providerNames,imageProviderNames,settingsVariables,validApiKey,effectiveImageProvider,isApiProvider} from '../lib/system-settings.ts';
+import type {ProviderName,ImageProviderName,ApiProviderName,SystemSettings} from '../lib/system-settings.ts';
+import type {SystemSettingsStore,KeyChange} from './system-settings.ts';
 import {geminiReasoningEfforts,taskReasoningDefaults} from '../lib/reader-reasoning.ts';
 
 export type SetupPrompt={text:(question:string)=>Promise<string>;secret:(question:string)=>Promise<string>};
-function requireTerminal(){if(!process.stdin.isTTY||!process.stdout.isTTY)throw Error('尚未配置生成服务；请在交互终端运行 --configure，或用 SHIQU_AI_PROVIDER 和对应 API 密钥指定服务；仅阅读可设置 SHIQU_AI_PROVIDER=readonly。');}
+function requireTerminal(){if(!process.stdin.isTTY||!process.stdout.isTTY)throw Error('尚未配置生成服务；请在交互终端运行 --configure，或用 SHIQU_AI_PROVIDER（可选 SHIQU_IMAGE_PROVIDER）和对应 API 密钥指定服务；仅阅读可设置 SHIQU_AI_PROVIDER=readonly。');}
 export async function askSetupText(question:string){
  requireTerminal();const terminal=createInterface({input:process.stdin,output:process.stdout}),abort=new AbortController();
  terminal.once('SIGINT',()=>abort.abort());terminal.once('close',()=>abort.abort());
@@ -34,40 +34,78 @@ export async function askHiddenKey(question:string){
  });
 }
 export const terminalSetupPrompt:SetupPrompt={text:askSetupText,secret:askHiddenKey};
+const keyNames={gemini:'GEMINI_API_KEY',openai:'OPENAI_API_KEY'} as const;
+// Invocation overrides win for one run; saved credentials are read only for the active text/image providers.
 export function effectiveProviderVariables(store:SystemSettingsStore,variables:Record<string,string|undefined>){
- const saved=store.settings(),name=variables.SHIQU_AI_PROVIDER?.trim()||saved.provider;
- // DeepSeek and Claude are invocation-only: preserve saved task settings without loading another provider's key.
- if(name==='deepseek'||name==='claude')return {...settingsVariables(saved,''),...variables,SHIQU_AI_PROVIDER:name};
+ const saved=store.settings(),name=variables.SHIQU_AI_PROVIDER?.trim()||saved.provider,imageName=variables.SHIQU_IMAGE_PROVIDER?.trim();
+ if(name!=='readonly'&&imageName&&!(imageProviderNames as readonly string[]).includes(imageName))throw Error('SHIQU_IMAGE_PROVIDER must be gemini, codex or openai');
+ // DeepSeek and Claude are invocation-only text providers: preserve saved task settings without loading another provider's key.
+ // They draw only through an explicit image provider (this invocation or the saved choice), using that provider's own key.
+ if(name==='deepseek'||name==='claude'){
+  const image=(imageName||saved.imageProvider) as ImageProviderName|undefined;
+  const effective:Record<string,string|undefined>={...settingsVariables(saved,''),...(isApiProvider(image)?{[keyNames[image]]:store.key(image)}:{}),...variables,SHIQU_AI_PROVIDER:name};
+  if(image)effective.SHIQU_IMAGE_PROVIDER=image;else delete effective.SHIQU_IMAGE_PROVIDER;
+  return effective;
+ }
  if(!(providerNames as readonly string[]).includes(name))throw Error('SHIQU_AI_PROVIDER must be gemini, codex, claude, openai, deepseek or readonly');
- const provider=name as ProviderName;
- return {...settingsVariables({...saved,provider},store.key(provider)),...variables,SHIQU_AI_PROVIDER:provider};
+ const provider=name as ProviderName,settings={...saved,provider,imageProvider:(imageName||saved.imageProvider) as ImageProviderName|undefined},image=effectiveImageProvider(settings);
+ const effective:Record<string,string|undefined>={...settingsVariables(settings,store.key(provider),image?store.key(image):''),...variables,SHIQU_AI_PROVIDER:provider};
+ if(image&&image!==provider)effective.SHIQU_IMAGE_PROVIDER=image;else delete effective.SHIQU_IMAGE_PROVIDER;
+ return effective;
 }
 export function providerReady(variables:Record<string,string|undefined>){
- if(variables.SHIQU_AI_PROVIDER==='readonly'||variables.SHIQU_AI_PROVIDER==='codex'||variables.SHIQU_AI_PROVIDER==='claude')return true;
- const key=variables.SHIQU_AI_PROVIDER==='deepseek'?variables.DEEPSEEK_API_KEY:variables.SHIQU_AI_PROVIDER==='openai'?variables.OPENAI_API_KEY:variables.GEMINI_API_KEY;
- if(!key?.trim())return false;validApiKey(key);return true;
+ const text=variables.SHIQU_AI_PROVIDER;
+ if(text==='readonly')return true;
+ for(const name of new Set([text,variables.SHIQU_IMAGE_PROVIDER||text])){
+  const variable=name==='deepseek'?'DEEPSEEK_API_KEY':isApiProvider(name)?keyNames[name]:null;
+  if(!variable)continue;
+  const key=variables[variable];
+  if(!key?.trim())return false;validApiKey(key);
+ }
+ return true;
+}
+const providerLabels={codex:'Codex · 已登录的 CLI（订阅额度）',openai:'OpenAI API · API 密钥（单独计费）',gemini:'Gemini · API 密钥',readonly:'只读 · 不生成内容'};
+async function chooseImageProvider(prompt:SetupPrompt,saved:SystemSettings,provider:ImageProviderName,platform:string){
+ const choices=(platform==='win32'?['openai','gemini']:['codex','openai','gemini']) as ImageProviderName[],current=saved.imageProvider&&choices.includes(saved.imageProvider)?saved.imageProvider:undefined;
+ while(true){
+  const answer=(await prompt.text('选择图片服务：\n0. 与文本服务相同\n'+choices.map((name,index)=>`${index+1}. ${providerLabels[name]}`).join('\n')+`\n输入编号或名称（回车${current?`保留 ${current}`:'与文本服务相同'}）：`)).trim().toLowerCase();
+  if(!answer)return current===provider?undefined:current;
+  if(answer==='0'||answer==='same')return undefined;
+  const chosen=choices.includes(answer as ImageProviderName)?answer as ImageProviderName:/^[1-9]$/.test(answer)?choices[Number(answer)-1]:undefined;
+  if(chosen)return chosen===provider?undefined:chosen;
+ }
+}
+async function askKey(store:SystemSettingsStore,prompt:SetupPrompt,provider:ApiProviderName,purpose=''){
+ const present=!!store.key(provider),answer=await prompt.secret(`${purpose}${provider==='openai'?'OpenAI':'Gemini'} API 密钥（输入隐藏${present?'，回车保留已保存密钥':''}）：`);
+ if(answer.trim())return {provider,value:validApiKey(answer)};
+ if(!present)throw Error('未输入 API 密钥；未保存此次服务配置。可选择只读模式。');
 }
 export async function configureProvider(store:SystemSettingsStore,prompt:SetupPrompt=terminalSetupPrompt,platform=process.platform){
  const saved=store.settings();
  const choices=(platform==='win32'?['openai','gemini','readonly']:['codex','openai','gemini','readonly']) as ProviderName[];
- const labels={codex:'Codex · 已登录的 CLI（订阅额度）',openai:'OpenAI API · API 密钥（单独计费）',gemini:'Gemini · API 密钥',readonly:'只读 · 不生成内容'};
  let provider:ProviderName|undefined;
  while(!provider){
-  const answer=(await prompt.text('选择生成服务：\n'+choices.map((name,index)=>`${index+1}. ${labels[name]}`).join('\n')+'\n输入编号或名称'+(saved.providerConfigured?`（回车保留 ${saved.provider}）`:'')+'：')).trim().toLowerCase();
+  const answer=(await prompt.text('选择生成服务（文本与分镜）：\n'+choices.map((name,index)=>`${index+1}. ${providerLabels[name]}`).join('\n')+'\n输入编号或名称'+(saved.providerConfigured?`（回车保留 ${saved.provider}）`:'')+'：')).trim().toLowerCase();
   provider=choices.includes(answer as ProviderName)?answer as ProviderName:/^[1-4]$/.test(answer)?choices[Number(answer)-1]:!answer&&saved.providerConfigured?saved.provider:undefined;
  }
- const patch:Partial<SystemSettings>={provider,providerConfigured:true};
- let change:{provider:'gemini'|'openai';value:string}|undefined;
+ // Read-only keeps the saved image choice for a later switch back.
+ const imageProvider=provider==='readonly'?saved.imageProvider:await chooseImageProvider(prompt,saved,provider,platform);
+ const separate=provider!=='readonly'&&!!imageProvider&&imageProvider!==provider;
+ const patch:Partial<SystemSettings>={provider,providerConfigured:true,imageProvider:imageProvider??null} as Partial<SystemSettings>;
+ const changes:KeyChange[]=[];
  if(provider==='gemini'||provider==='openai'){
-  const present=!!store.key(provider),answer=await prompt.secret(`${provider==='openai'?'OpenAI':'Gemini'} API 密钥（输入隐藏${present?'，回车保留已保存密钥':''}）：`);
-  if(answer.trim())change={provider,value:validApiKey(answer)};
-  else if(!present)throw Error('未输入 API 密钥；未保存此次服务配置。可选择只读模式。');
+  const change=await askKey(store,prompt,provider,separate?'文本服务 ':'');if(change)changes.push(change);
   const textField=provider==='openai'?'openaiTextModel':'textModel',imageField=provider==='openai'?'openaiImageModel':'imageModel';
   patch[textField]=(await prompt.text(`文本模型（回车使用 ${saved[textField]}）：`)).trim()||saved[textField];
-  patch[imageField]=(await prompt.text(`图片模型（回车使用 ${saved[imageField]}）：`)).trim()||saved[imageField];
+  if(!separate)patch[imageField]=(await prompt.text(`图片模型（回车使用 ${saved[imageField]}）：`)).trim()||saved[imageField];
  }else if(provider==='codex')patch.codexModel=(await prompt.text(`Codex 模型（回车使用 ${saved.codexModel||'CLI 默认'}）：`)).trim()||saved.codexModel;
+ if(separate&&(imageProvider==='gemini'||imageProvider==='openai')){
+  const change=await askKey(store,prompt,imageProvider,'图片服务 ');if(change)changes.push(change);
+  const imageField=imageProvider==='openai'?'openaiImageModel':'imageModel';
+  patch[imageField]=(await prompt.text(`图片模型（回车使用 ${saved[imageField]}）：`)).trim()||saved[imageField];
+ }
  if(provider==='gemini')patch.taskReasoningEfforts=Object.fromEntries(Object.entries(saved.taskReasoningEfforts).map(([task,value])=>[task,(geminiReasoningEfforts as readonly string[]).includes(value)?value:taskReasoningDefaults[task as keyof typeof taskReasoningDefaults]])) as SystemSettings['taskReasoningEfforts'];
- store.save(patch,change);
+ store.save(patch,changes);
 }
 export async function cliProviderConfiguration(store:SystemSettingsStore,variables:Record<string,string|undefined>,prompt?:SetupPrompt){
  let effective=effectiveProviderVariables(store,variables);
