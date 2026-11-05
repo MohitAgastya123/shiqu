@@ -5,7 +5,6 @@ import {productionFixture,until,makeReflectionCandidates} from './fixtures/produ
 import {ReaderRepository} from '../lib/reader-repository.ts';
 import {advanceStory} from '../lib/reader-engine.ts';
 import {reviewReportSchema} from '../lib/reader-review.ts';
-import {readLibrarySummary} from '../desktop/library-preview.ts';
 import {generationProgress} from '../lib/generation-progress.ts';
 import {flowProviders} from './fixtures/test-tier.mjs';
 
@@ -27,7 +26,7 @@ for(const provider of flowProviders(['codex','gemini']))for(const length of [8,2
    assert.deepEqual(Object.keys(schema.properties),['title','candidates']);
    assert.equal(session.generationProgress.phase,'reflection');assert.equal(session.story,null);
    assert.match(generationProgress(session,0).steps[2].detail,/分镜已保存.*结语/);
-   assert.equal(readLibrarySummary(f.dataDirectory).stories.find(s=>s.id===id).production.phase,'reflection');
+
    assert.equal(f.control.calls.length,0);return {candidates:makeReflectionCandidates(ending)};
   }
   if(kind==='review'){

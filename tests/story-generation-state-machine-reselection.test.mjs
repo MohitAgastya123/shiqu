@@ -2,7 +2,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {productionFixture,until,turn} from './fixtures/production.mjs';
-import {readLibrarySummary} from '../desktop/library-preview.ts';
 
 const candidates={stories:[{title:'庄周梦蝶',description:'原来的故事。'},{title:'大葫芦',description:'惠子与庄子谈用途。'}],note:''};
 const settings={artStyle:'ink-pencil',productionPrompt:'quiet narration',narrativeDetail:'balanced'};
@@ -22,7 +21,7 @@ async function draft(f,id){
 const choose=(f,id,s,body={requestId:crypto.randomUUID(),batch:0,index:1,settings})=>f.json(`sessions/${id}/reselection/${s.id}`,'POST',body);
 test('opening and cancelling selection drafts never adds a shelf card; cancellation returns the current saved state',async t=>{
  const {f,id}=await fixture(t),s=await draft(f,id);
- assert.ok(s.reselection);assert.equal((await f.json('sessions')).length,1);assert.equal(readLibrarySummary(f.dataDirectory).stories.length,1);
+ assert.ok(s.reselection);assert.equal((await f.json('sessions')).length,1);
  assert.equal(f.control.calls.length,3);
  const cancelled=await f.json(`sessions/${id}/reselection/${s.id}`,'DELETE');assert.equal(cancelled.id,id);assert.equal(cancelled.state,'completed');
  assert.equal((await f.json('sessions')).length,1);assert.equal((await f.json('deletions')).length,0);
@@ -34,7 +33,7 @@ test('another story replaces one family card, leaves history intact, rejects old
  assert.equal(next.revision.rootId,id);assert.equal(next.revision.parentId,id);assert.equal(next.selection.storyTitle,'大葫芦');
  await until(async()=>(await f.read(next.id)).intake.phase==='confirming');
  assert.equal((await f.read(next.id)).story,null);assert.equal(f.control.calls.length,3);
- const cards=await f.json('sessions');assert.deepEqual(cards.map(card=>card.id),[next.id]);assert.equal(readLibrarySummary(f.dataDirectory).stories.length,1);
+ const cards=await f.json('sessions');assert.deepEqual(cards.map(card=>card.id),[next.id]);
  assert.deepEqual((await f.read(id)).story.pages,before.story.pages);
  assert.equal((await f.request(`sessions/${id}/revisions`,'POST',{requestId:crypto.randomUUID(),token:base.token,changes:{artStyle:'watercolor'}})).status,409);
  await f.json(`sessions/${next.id}/production-control`,'POST',{requestId:crypto.randomUUID(),action:'pause'});
@@ -64,7 +63,7 @@ test('same source selection is a durable no-op, including replay after the draft
 test('concurrent ordinary edit and replacement share one family CAS; stale choice remains inspectable',async t=>{
  const {f,id}=await fixture(t),s=await draft(f,id),base=await f.json(`sessions/${id}/revisions`),body={requestId:crypto.randomUUID(),batch:0,index:1,settings},plan=structuredClone(base.plan);plan.reflection='醒来后，仍能记住梦中的自由。';
  const results=await Promise.all([f.request(`sessions/${id}/revisions`,'POST',{requestId:crypto.randomUUID(),token:base.token,changes:{plan}}),f.request(`sessions/${id}/reselection/${s.id}`,'POST',body)]);
- assert.equal(results.filter(r=>r.ok).length,1);assert.equal(results.filter(r=>r.status===409).length,1);assert.equal((await f.json('sessions')).length,1);assert.equal(readLibrarySummary(f.dataDirectory).stories.length,1);
+ assert.equal(results.filter(r=>r.ok).length,1);assert.equal(results.filter(r=>r.status===409).length,1);assert.equal((await f.json('sessions')).length,1);
  const current=await f.json(`sessions/${id}/current`);assert.notEqual(current.id,id);
  const cancelled=await f.json(`sessions/${id}/reselection/${s.id}`,'DELETE');assert.equal(cancelled.id,current.id);
 });
@@ -72,7 +71,7 @@ test('cancel follows another window current version and never revives a deleted 
  const {f,id}=await fixture(t),a=await draft(f,id),b=await draft(f,id),next=await choose(f,id,b);
  assert.equal((await f.json(`sessions/${id}/reselection/${a.id}`,'DELETE')).id,next.id);
  await f.json(`library/${next.id}`,'DELETE');assert.equal((await f.request(`sessions/${id}/current`)).status,404);
- assert.equal((await f.request(`sessions/${id}/reselection/${a.id}`,'DELETE')).status,404);assert.deepEqual(await f.json('sessions'),[]);assert.equal(readLibrarySummary(f.dataDirectory).stories.length,0);
+ assert.equal((await f.request(`sessions/${id}/reselection/${a.id}`,'DELETE')).status,404);assert.deepEqual(await f.json('sessions'),[]);
 });
 for(const stopped of [false,true])test(`replacement of a ${stopped?'stopped':'failed active'} story inherits current control but clears only the new work`,async t=>{
  const {f,id}=await fixture(t,true);f.control.calls[0].reject(Error('controlled old story failure'));await until(async()=>(await f.read(id)).state==='failed');

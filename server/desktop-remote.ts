@@ -1,5 +1,5 @@
-// Authenticate the tunnel's separate loopback listener before any reader/API/media route.
-// Pairing secrets stay in URL fragments; all remote responses forbid shared caching.
+// 隧道独立监听器先鉴权；本机设置路由始终拒绝，即使来源套接字为回环。
+// 配对密钥仅保留在片段中，远程响应禁止共享缓存。
 import {randomBytes,timingSafeEqual} from 'node:crypto';
 
 const cookieName='__Host-shiqu-remote',lifetime=12*60*60;
@@ -29,6 +29,7 @@ else fetch('/connect',{method:'POST',headers:{'Content-Type':'application/json'}
   revoke(){origin='';pairing=secret();session=secret();expires=0;},
   async handle(request:Request){
    const incoming=new URL(request.url);
+   if(incoming.pathname==='/api/local/provider-settings')return denied(403);
    if(!origin||incoming.host!==new URL(origin).host)return denied(403);
    const requestOrigin=request.headers.get('origin');
    if((requestOrigin&&requestOrigin!==origin)||(!['GET','HEAD'].includes(request.method)&&requestOrigin!==origin))return denied(403);

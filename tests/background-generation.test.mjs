@@ -9,7 +9,6 @@ import {productionFixture,until,turn} from './fixtures/production.mjs';
 import {ReaderProductionCoordinator} from '../server/reader-production.ts';
 import {advanceStory} from '../lib/reader-engine.ts';
 import {ReaderRepository} from '../lib/reader-repository.ts';
-import {setLibraryStoryDeleted} from '../desktop/library-preview.ts';
 import {flowProviders} from './fixtures/test-tier.mjs';
 const owner='docker-local-owner';
 const control=(f,id,action)=>f.json(`sessions/${id}/production-control`,'POST',{action});
@@ -112,9 +111,9 @@ test('background provider failures stay failed after restart until explicit retr
  await f.demand(id,crypto.randomUUID(),0,true);await until(async()=>(await f.read(id)).state==='completed');assert.equal(f.control.calls.length,11);
 });
 
-for(const desktop of [false,true])test(`${desktop?'desktop':'reader'} deletion disarms background work; restore cannot restart it`,async t=>{
+test('reader deletion disarms background work; restore cannot restart it',async t=>{
  const f=await productionFixture(t),id=await f.create(10);await control(f,id,'background');await until(()=>f.control.calls.length===1);
- if(desktop)setLibraryStoryDeleted(f.dataDirectory,id,true);else await f.json(`library/${id}`,'DELETE');
+ await f.json(`library/${id}`,'DELETE');
  f.control.calls[0].resolve();await until(async()=>{const row=await f.app.services.database.prepare('SELECT document FROM stories WHERE id=?').bind(id).first();return JSON.parse(row.document).images.filter(Boolean).length===1;});
  await f.json(`library/${id}/restore`,'POST');await f.restart();await f.app.services.production.tick();
  assert.equal((await f.read(id)).generationControl,'stopped');assert.equal(f.control.calls.length,1);

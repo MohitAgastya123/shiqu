@@ -134,8 +134,8 @@ test('tunnel entry pairs safely and helper exit clears public access while LAN s
  const Cookie=paired.headers.get('set-cookie').split(';')[0];
  const stories=await (await tunnelRequest(target+'/api/reader/sessions',{headers:{...headers,Cookie}})).json();assert.equal(stories.length,1);
  const changed=await tunnelRequest(target+'/api/reader/sessions/'+stories[0].id+'/progress',{method:'POST',headers:{...headers,Cookie,'Content-Type':'application/json'},body:JSON.stringify({storyId:stories[0].id,page:2,saved:true})});assert.equal(changed.status,200);
- process.kill(info.pid,'SIGTERM');await until(()=>updates.length);
- assert.equal(runtime.status.publicUrl,'');assert.match(updates[0].internetError,/局域网仍可使用/);
+ process.kill(info.pid,'SIGTERM');await until(()=>updates.some(status=>status.internetError));
+ assert.equal(runtime.status.publicUrl,'');assert.match(updates.find(status=>status.internetError).internetError,/局域网仍可使用/);
  assert.equal((await fetch(runtime.status.url+'/api/reader/sessions')).status,200);
  await until(async()=>{try{await fetch(target);return false;}catch{return true;}});
  await runtime.stop();await assert.rejects(fetch(runtime.status.url));
@@ -184,9 +184,9 @@ test('native JSON protocol reports tunnel disconnect and EOF stops the remaining
  await symlink(path.resolve('node_modules'),path.join(f.root,'node_modules'),'junction');await writeFile(path.join(f.root,'package.json'),'{"type":"module"}');
  const child=spawn(process.execPath,[entry],{cwd:f.root,stdio:['pipe','pipe','pipe']});child.stderr.resume();
  t.after(()=>{if(child.exitCode===null)child.kill('SIGTERM');});
- const lines=createInterface({input:child.stdout}),ready=once(lines,'line');child.stdin.write(JSON.stringify({action:'start',settings:{...f.settings,cloudflaredPath:helper.binary},key:''})+'\n');
+ const lines=createInterface({input:child.stdout}),ready=new Promise(resolve=>lines.on('line',line=>{if(JSON.parse(line).publicUrl)resolve([line]);}));child.stdin.write(JSON.stringify({action:'start',settings:{...f.settings,cloudflaredPath:helper.binary},key:''})+'\n');
  const initial=JSON.parse((await ready)[0]);assert.ok(initial.publicUrl.startsWith(publicOrigin+'/connect#'));
- const info=await helper.info(),changed=once(lines,'line');process.kill(info.pid,'SIGTERM');const status=JSON.parse((await changed)[0]);
+ const info=await helper.info(),changed=new Promise(resolve=>lines.on('line',line=>{if(JSON.parse(line).internetError)resolve([line]);}));process.kill(info.pid,'SIGTERM');const status=JSON.parse((await changed)[0]);
  assert.equal(status.publicUrl,'');assert.equal(status.running,true);assert.equal(status.url,initial.url);assert.match(status.internetError,/局域网/);
  assert.equal((await fetch(status.url+'/api/reader/sessions')).status,200);
  const exited=once(child,'exit');child.stdin.end();await exited;assert.equal(alive(info.pid),false);await assert.rejects(fetch(status.url));

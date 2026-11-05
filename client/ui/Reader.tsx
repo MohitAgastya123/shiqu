@@ -98,6 +98,8 @@ export default function Reader(){
  const [imageIssues,setImageIssues]=useState<Record<string,string>>({}),[imageReloads,setImageReloads]=useState<Record<string,number>>({});
  const [reviewHistoryId,setReviewHistoryId]=useState<string|null>(null);
  const [publicationTarget,setPublicationTarget]=useState<Story|null>(null),[publicationDefaultsOpen,setPublicationDefaultsOpen]=useState(false);
+ const [providerAllowed,setProviderAllowed]=useState(false),[providerOpen,setProviderOpen]=useState(0);
+ useEffect(()=>{const open=()=>{if(location.hash==='#provider-settings'){setTab('me');setProviderOpen(n=>n+1);}};open();window.addEventListener('hashchange',open);return()=>window.removeEventListener('hashchange',open);},[]);
  const [providerRuntime,setProviderRuntime]=useState<ProviderSettingsView['runtime']|null>(null);
  const [sceneList,setSceneList]=useState(false);
  const [selection,setSelection]=useState<Selection>(initialReaderSelection),[largeText,setLargeText]=useState(false),[motion,setMotion]=useState('forward'),[creating,setCreating]=useState(false);
@@ -402,6 +404,7 @@ export default function Reader(){
  const favoriteCount=shelf.filter(s=>progressById.get(s.id)?.saved).length+pendingStories.filter(s=>progressById.get(s.id)?.saved??s.saved).length;
 
  return <div className={'yu-world'+(story?' yu-reading-world':'')}><div className={'yu-app'+(story?' yu-immersive':'')}>
+ <ProviderSettings onRuntime={setProviderRuntime} onAvailability={setProviderAllowed} openRequest={providerOpen} showEntry={false} showPrompt={!story}/>
  {story?<main className={'yu-reader'+(!metadataVisible&&!ended?' yu-metadata-hidden':'')} ref={readerRef} aria-label={'阅读'+story.title}>
  {!ended&&<StoryFilmstrip pages={story.pages} page={page} drag={drag} reloads={imageReloads} onImageError={onFrameError} onImageLoad={onFrameLoad}/>}
  {ended&&<div className="yu-scene-shade"/>}
@@ -435,7 +438,7 @@ export default function Reader(){
   </div></section>
   <section className="yu-profile-group" aria-labelledby="profile-preferences"><h2 id="profile-preferences">偏好与服务</h2><div className="yu-preferences">
    <button onClick={()=>setSettings(true)}><BookOpenText size={20}/>阅读偏好<ChevronRight size={18}/></button>
-   <ProviderSettings onRuntime={setProviderRuntime}/>
+   {providerAllowed&&<button type="button" onClick={()=>setProviderOpen(n=>n+1)}><Settings2 size={20}/>生成服务与模型<ChevronRight size={18}/></button>}
   </div></section>
   <ProviderRuntimeSummary runtime={providerRuntime}/>
  </section>}

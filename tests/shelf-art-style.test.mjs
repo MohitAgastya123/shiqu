@@ -6,7 +6,6 @@ import {build} from 'esbuild';
 import {createElement} from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {productionFixture,until,selection} from './fixtures/production.mjs';
-import {readLibrarySummary} from '../desktop/library-preview.ts';
 
 const bundle=await build({stdin:{contents:"export {default} from './client/ui/ReaderShelf.tsx';",resolveDir:process.cwd(),loader:'tsx'},bundle:true,write:false,loader:{'.css':'empty'},platform:'node',format:'cjs',packages:'external'});
 const compiled={exports:{}};new Function('require','module','exports',bundle.outputFiles[0].text)(createRequire(import.meta.url),compiled,compiled.exports);
@@ -37,7 +36,7 @@ test('saved setup art style drives shelf tags, search and grouping before confir
  // 制作中的条目不参与分组，画风仍以标签显示。
  const grouped=render(session,{grouping:'artStyle'});
  assert.match(grouped,/<span title="黏土定格">黏土定格<\/span>/);assert.doesNotMatch(grouped,/<h2>黏土定格<\/h2>/);
- assert.equal(readLibrarySummary(f.dataDirectory).stories.find(s=>s.id===session.id).artStyle,'clay');
+
 });
 
 test('shelf falls back to the production style without a draft and ignores obsolete confirmed drafts',()=>{

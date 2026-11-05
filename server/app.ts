@@ -27,7 +27,7 @@ export function createApplication(options:{root:string;dataDirectory:string;vari
  const services:Services={db:local.db,database:local.database,media,variables:options.variables||{},ownerId:localOwnerId,localBooks,transport:options.transport||fetch,generation,production,commandOnly:options.commandOnly};
  const api=createApi(services),publicDirectory=path.resolve(options.root,'dist/client');
  let closed=false,closing:Promise<void>|undefined;
- return {services,startGeneration:()=>production.start(),stopGeneration:()=>production.stop(),close(){
+ return {services,get generating(){return production.busy;},startGeneration:()=>production.start(),stopGeneration:()=>production.stop(),close(){
   if(closed)return closing;
   production.stop();closed=true;
   if(!production.busy){void production.close();local.close();return;}

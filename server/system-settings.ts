@@ -1,5 +1,5 @@
-// Own the shared private settings database, compatible with the native v2 store.
-// Transactions migrate old rows and patch the latest settings; no raw key reaches public views or errors.
+// 共用原生 v2 设置库，事务内合并并校验修订号；已存密钥不进入公开视图。
+// 桌面 HTTP 只打开已有库，缺失或损坏时拒绝访问，不创建替代配置。
 import {DatabaseSync} from 'node:sqlite';
 import {existsSync,mkdirSync,lstatSync,openSync,closeSync,chmodSync,constants,readFileSync} from 'node:fs';
 import path from 'node:path';
@@ -9,7 +9,8 @@ export type KeyChange={provider:ApiProviderName;value:string|null};
 const failure='无法读取或保存共享设置数据库；请检查权限或使用兼容版本，不会自动重建已有配置。';
 export class SystemSettingsStore{
  private db:DatabaseSync;
- constructor(filename:string,library:string){
+ constructor(filename:string,library:string,options:{existingOnly?:boolean}={}){
+  if(options.existingOnly&&(!existsSync(filename)||!lstatSync(filename).isFile()))throw Error(failure);
   const folder=path.dirname(filename);mkdirSync(folder,{recursive:true,mode:0o700});
   if(!lstatSync(folder).isDirectory())throw Error(failure);
   if(!existsSync(filename)){
@@ -23,6 +24,7 @@ export class SystemSettingsStore{
    this.db.exec('PRAGMA busy_timeout=2000; PRAGMA secure_delete=ON; PRAGMA temp_store=MEMORY; BEGIN IMMEDIATE');
    const version=this.db.prepare('PRAGMA user_version').get()!.user_version;
    if(version===0){
+    if(options.existingOnly)throw Error(failure);
     if(this.db.prepare("SELECT count(*) AS n FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'").get()!.n!==0)throw Error();
     const legacy=path.join(folder,'settings.json');
     const settings=existsSync(legacy)?this.validate(JSON.parse(readFileSync(legacy,'utf8'))):defaultSystemSettings(library);
@@ -78,12 +80,15 @@ export class SystemSettingsStore{
    this.db.exec('COMMIT');return settings;
   }catch(error){this.db.exec('ROLLBACK');throw Error((error as Error).message==='SETTINGS_CHANGED'?'设置已由另一入口修改，请重新读取后保存。':failure);}
  }
- resetProviders(){
+ resetProviders(expectedRevision?:number,preservePaths=false){
   this.db.exec('BEGIN IMMEDIATE');
   try{
-   const settings=resetProviderSettings(this.settings());this.db.exec('DELETE FROM desktop_credentials');
+   if(expectedRevision!==undefined&&this.revision()!==expectedRevision)throw Error('SETTINGS_CHANGED');
+   const current=this.settings(),settings=resetProviderSettings(current);
+   if(preservePaths){settings.codexPath=current.codexPath;settings.codexHome=current.codexHome;}
+   this.db.exec('DELETE FROM desktop_credentials');
    this.db.prepare('UPDATE desktop_settings SET value=?,revision=revision+1 WHERE id=1').run(JSON.stringify(settings));this.db.exec('COMMIT');
-  }catch{this.db.exec('ROLLBACK');throw Error(failure);}
+  }catch(error){this.db.exec('ROLLBACK');throw Error((error as Error).message==='SETTINGS_CHANGED'?'设置已由另一入口修改，请重新读取后保存。':failure);}
  }
  close(){this.db.close();}
 }

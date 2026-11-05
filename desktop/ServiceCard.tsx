@@ -1,22 +1,27 @@
-// Present service actions first, keeping runtime and storage details available on demand.
-// Native lifecycle and clipboard operations remain owned by the desktop controller.
-import {ChevronRight,Copy,ExternalLink,Server,Square} from 'lucide-react';
-import type {ServiceState} from './library-summary';
-
-type Props={state:ServiceState;running:boolean;busy:string;native:boolean;configured:boolean;toggleDisabled:boolean;url?:string;nodeVersion?:string;nodeError:string;directory:string;error:string;onToggle:()=>void;onOpen:()=>void;onCopy:()=>void};
-const stateLabels:Record<ServiceState,string>={running:'运行中',stopped:'已停止',loading:'读取中',unavailable:'状态未知',preview:''};
-
-export function ServiceCard({state,running,busy,native,configured,toggleDisabled,url,nodeVersion,nodeError,directory,error,onToggle,onOpen,onCopy}:Props){
- const toggleLabel=busy?busy+'…':!native?'启动服务':!configured?'先完成设置':running?'停止服务':'启动服务';
- return <section className="runtime-card" aria-labelledby="runtime-title">
-  <div className="runtime-heading"><span className="runtime-icon" aria-hidden="true"><Server size={19} strokeWidth={1.5}/></span><h2 id="runtime-title">本机服务</h2>{state!=='preview'&&<span className={'runtime-state is-'+state} role="status"><i aria-hidden="true"/>{stateLabels[state]}</span>}</div>
-  {error&&!busy&&<p className="runtime-error" role="alert">{error}</p>}
-  <div className="runtime-actions">
-   {state==='running'&&<button className="runtime-browser" type="button" disabled={!!busy} onClick={onOpen}>在浏览器打开<ExternalLink size={14} aria-hidden="true"/></button>}
-   <button id="desktop-service-toggle" className={'runtime-toggle'+(state==='running'?' is-stop':'')} type="button" disabled={toggleDisabled} onClick={onToggle}>{state==='running'&&<Square size={12} aria-hidden="true"/>}{toggleLabel}</button>
+// 服务状态、生命周期操作与只读生成摘要，均由控制器传入，不读取故事记录。
+import type {ServiceState,Status} from './console-state';
+import {stateLabels} from './console-state';
+import type {ProviderSettingsView} from '../lib/provider-settings';
+const labels:Record<string,string>={readonly:'只读',gemini:'Gemini',openai:'OpenAI API',codex:'Codex',claude:'Claude Code',deepseek:'DeepSeek'};
+type Props={state:ServiceState;status:Status;native:boolean;busy:string;provider:ProviderSettingsView['runtime'];nodeVersion?:string;nodeError:string;onStart:()=>void;onStop:()=>void;onRestart:()=>void;onOpen:()=>void;onSettings:()=>void;previewUrl:string|null};
+export function ServiceCard({state,status,native,busy,provider,nodeVersion,nodeError,onStart,onStop,onRestart,onOpen,onSettings,previewUrl}:Props){
+ const pending=state==='starting'||state==='upgrading',locked=!native||!!busy||pending||state==='loading'||state==='unavailable';
+ return <section className="service-card" aria-label="本机服务">
+  <div className="service-label"><i className={status.running?'status-dot live':'status-dot'}/><span role="status">{stateLabels[state]}</span><span className="runtime-badge">{nodeVersion?`Node ${nodeVersion}`:nodeError?'运行时不可用':'内置运行时'}</span></div>
+  <h2>故事在浏览器里，<br/>服务在这里。</h2><p>启动后，在电脑或手机上打开拾趣。</p>
+  {(status.error||status.settingsError||nodeError)&&<p className="service-error" role="alert">{status.error||status.settingsError||nodeError}</p>}
+  <div className="service-actions">
+   <button className="primary" disabled={locked||status.running} onClick={onStart}>{pending?stateLabels[state]+'…':'启动服务'}</button>
+   <button className="secondary" disabled={locked||!status.running} onClick={onStop}>停止</button>
+   <button className="secondary" disabled={locked||!status.running} onClick={onRestart}>重启服务</button>
   </div>
-  {state==='running'&&url&&<div className="runtime-address"><span title={new URL(url).origin}>{new URL(url).origin}</span><button type="button" disabled={!!busy} aria-label="复制本机访问地址" title="复制本机访问地址" onClick={onCopy}><Copy size={13} aria-hidden="true"/></button></div>}
-  <details className="runtime-details"><summary><span>运行与存储</span>{nodeError&&<span className="runtime-details-error">运行时不可用</span>}<ChevronRight size={14} aria-hidden="true"/></summary><dl className="runtime-facts"><div><dt>运行时</dt><dd>{!native?'—':nodeVersion?`Node ${nodeVersion} · 就绪`:nodeError?'运行时不可用':'正在检查…'}</dd></div><div><dt>故事目录</dt><dd className="runtime-path">{native?directory:'—'}</dd></div></dl></details>
-  <p className="runtime-foot">关闭窗口后在托盘运行，退出应用时停止。</p>
+  {native?<button className="browser-link" disabled={locked||!status.running} onClick={onOpen}>在浏览器打开 ↗</button>:previewUrl?<a className="browser-link" href={previewUrl} target="_blank" rel="noopener noreferrer">在浏览器打开 ↗</a>:<p>阅读端尚未连接，请先启动拾趣服务。</p>}
+  {status.running&&status.url&&<p className="service-address">{status.url}</p>}
+  {pending&&<p role="status">{state==='upgrading'?'升级与恢复完成后会继续启动，请保持应用打开。':'正在启动本机服务，请稍候。'}</p>}
+  {status.backup&&<p className="backup-path">已校验的升级备份：{status.backup}</p>}
+  <div className="provider-summary" aria-label={status.running?'当前运行配置':'已保存配置'}><div><strong>{status.running?'当前运行':'已保存配置'} · {provider.provider==='readonly'?'只读':provider.configured===false?'未配置生成服务':labels[provider.provider]||provider.provider}</strong>{status.restartRequired&&<span>待重启生效</span>}</div>
+   {provider.provider!=='readonly'&&provider.configured!==false&&<p>文本：{labels[provider.provider]} · {provider.models.text}<br/>图片：{labels[provider.imageProvider||provider.provider]} · {provider.models.image}</p>}
+   <button className="text-button" disabled={locked||!status.running} onClick={onSettings}>生成服务与模型 ↗</button><p>在本机浏览器中配置；保存后重启服务生效。</p>
+  </div>
  </section>;
 }

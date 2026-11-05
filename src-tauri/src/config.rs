@@ -201,6 +201,30 @@ impl Settings {
 const STORE_ERROR: &str = "无法读取或保存桌面数据库；请检查权限，或备份 desktop.sqlite 后重试。";
 const SCHEMA_ERROR: &str = "桌面数据库损坏或版本不兼容；请保留备份，使用兼容版本打开。";
 
+// 原生控制台只能提交本机路径和网络字段，不能覆盖浏览器维护的生成配置。
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct NativeSettings {
+    pub data_directory: String,
+    pub port: u16,
+    pub internet_enabled: bool,
+    pub cloudflared_path: String,
+    pub codex_path: String,
+    pub codex_home: String,
+}
+impl NativeSettings {
+    pub fn merge(self, mut current: Settings) -> Settings {
+        current.data_directory = self.data_directory;
+        current.port = self.port;
+        current.internet_enabled = self.internet_enabled;
+        current.cloudflared_path = self.cloudflared_path;
+        current.codex_path = self.codex_path;
+        current.codex_home = self.codex_home;
+        current.library_configured = true;
+        current
+    }
+}
+
 pub enum KeyChange<'a> {
     Keep,
     Set(&'a str),
@@ -544,6 +568,47 @@ mod tests {
         ));
         fs::create_dir_all(&path).unwrap();
         path
+    }
+    #[test]
+    fn native_patch_preserves_browser_fields_and_stale_saves_fail() {
+        let folder = folder();
+        let file = folder.join("desktop.sqlite");
+        let mut store = Store::open(&file, &folder).unwrap();
+        let (snapshot, revision, _, _) = store.settings_snapshot().unwrap();
+        let mut browser = snapshot.clone();
+        browser.provider = "openai".into();
+        browser.openai_text_model = "browser-model".into();
+        store
+            .save(&browser, KeyChange::Set("synthetic-key"))
+            .unwrap();
+        let patch = || NativeSettings {
+            data_directory: snapshot.data_directory.clone(),
+            port: 3456,
+            internet_enabled: true,
+            cloudflared_path: String::new(),
+            codex_path: "/native/codex".into(),
+            codex_home: "/native/login".into(),
+        };
+        assert!(store
+            .save_at(
+                &patch().merge(snapshot.clone()),
+                KeyChange::Keep,
+                Some(revision)
+            )
+            .is_err());
+        let (current, fresh, _, _) = store.settings_snapshot().unwrap();
+        store
+            .save_at(&patch().merge(current), KeyChange::Keep, Some(fresh))
+            .unwrap();
+        let saved = store.settings().unwrap();
+        assert_eq!(saved.provider, "openai");
+        assert_eq!(saved.openai_text_model, "browser-model");
+        assert_eq!(saved.port, 3456);
+        assert_eq!(store.key_for("openai").unwrap(), "synthetic-key");
+        let invalid = serde_json::json!({"dataDirectory":saved.data_directory,"port":3000,"internetEnabled":false,"cloudflaredPath":"","codexPath":"","codexHome":"","provider":"readonly"});
+        assert!(serde_json::from_value::<NativeSettings>(invalid).is_err());
+        drop(store);
+        fs::remove_dir_all(folder).unwrap();
     }
     #[test]
     fn legacy_lan_never_enables_internet_and_new_settings_round_trip() {

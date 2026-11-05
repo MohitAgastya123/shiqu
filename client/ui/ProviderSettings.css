@@ -111,3 +111,6 @@
  .yu-provider-field input{font-size:16px}
 }
 @media(max-width:360px){.yu-provider-actions{margin:0 -20px;padding-left:20px;padding-right:20px}}
+
+/* 首次使用提示始终可见，编辑入口仅在本机权限检查成功后出现。 */
+.yu-provider-setup{padding:12px 20px;background:#f3ebd8;color:#765e31;font-size:12px;line-height:1.7;display:flex;flex-wrap:wrap;gap:8px}.yu-provider-setup a{color:#315d42;text-decoration:underline}.yu-provider-maintenance{display:flex;flex-wrap:wrap;gap:12px;padding:14px 0 24px}.yu-provider-maintenance p{width:100%}

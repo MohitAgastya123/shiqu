@@ -1,11 +1,10 @@
-// Lead with phone access; keep optional tunnel setup behind a disclosure without hiding access scope.
-// Link selection, QR generation, settings persistence and clipboard actions stay in the controller.
+// 手机访问保留局域网与可选隧道，链接、二维码和保存由控制器管理。
 import {ChevronRight,Copy,Globe,Smartphone,Wifi} from 'lucide-react';
-import type {ServiceState} from './library-summary';
+import type {ServiceState} from './console-state';
 
-type Props={state:ServiceState;running:boolean;busy:boolean;locked:boolean;links:string[];phone:string;publicUrl?:string;qr:string;internetEnabled:boolean;cloudflaredPath:string;internetError?:string;onChoose:(url:string)=>void;onInternetChange:(enabled:boolean)=>void;onCloudflaredChange:(path:string)=>void;onCopy:()=>void};
+type Props={state:ServiceState;running:boolean;busy:boolean;locked:boolean;links:string[];phone:string;publicUrl?:string;qr:string;internetEnabled:boolean;cloudflaredPath:string;internetError?:string;onChoose:(url:string)=>void;onInternetChange:(enabled:boolean)=>void;onCloudflaredChange:(path:string)=>void;onCopy:()=>void;onBrowseCloudflared?:()=>void};
 
-export function PhoneAccessCard({state,running,busy,locked,links,phone,publicUrl,qr,internetEnabled,cloudflaredPath,internetError,onChoose,onInternetChange,onCloudflaredChange,onCopy}:Props){
+export function PhoneAccessCard({state,running,busy,locked,links,phone,publicUrl,qr,internetEnabled,cloudflaredPath,internetError,onChoose,onInternetChange,onCloudflaredChange,onCopy,onBrowseCloudflared}:Props){
  const internet=!!phone&&phone===publicUrl,connected=state==='running'&&!!phone;
  const ModeIcon=internet?Globe:Wifi;
  const placeholder=state==='loading'?'正在读取服务状态…':state==='unavailable'?'服务状态暂不可用，恢复后显示二维码。':state==='running'?'未找到可用的访问地址。':'启动本机服务后，手机扫码接着读。';
@@ -22,7 +21,7 @@ export function PhoneAccessCard({state,running,busy,locked,links,phone,publicUrl
   <details className="phone-settings"><summary><span>连接设置</span><span className="phone-settings-mode">{internetEnabled?'局域网 + 互联网':'仅局域网'}</span><ChevronRight size={14} aria-hidden="true"/></summary>
    <fieldset disabled={locked}><legend className="sr-only">手机访问设置</legend>
     <label className="switch-row"><input type="checkbox" checked={internetEnabled} onChange={e=>onInternetChange(e.target.checked)}/><span><strong>允许互联网访问</strong><small>{running?'停止服务后可修改互联网访问。':'手机可从其他 Wi-Fi 或蜂窝网络连接，无需账户或域名。'}</small></span></label>
-    {internetEnabled&&<><label>cloudflared 可执行文件<input value={cloudflaredPath} placeholder="留空自动查找，或填写绝对路径" onChange={e=>onCloudflaredChange(e.target.value)} spellCheck={false}/></label><p className="help">需另行安装 cloudflared。macOS：brew install cloudflared。</p></>}
+    {internetEnabled&&<><label>cloudflared 可执行文件<input value={cloudflaredPath} placeholder="留空自动查找，或填写绝对路径" onChange={e=>onCloudflaredChange(e.target.value)} spellCheck={false}/></label>{onBrowseCloudflared&&<button className="secondary" type="button" onClick={onBrowseCloudflared}>选择 cloudflared 文件</button>}<p className="help">需另行安装 cloudflared。macOS：brew install cloudflared。</p></>}
    </fieldset>
    <p className="phone-setting-note">局域网访问始终开启，使用 HTTP，无需配对 ID。可连接的设备共享书架和生成权限。</p>
    {internetEnabled&&<p className="phone-setting-note">互联网经 Cloudflare 免费临时隧道转发 HTTPS。配对有效期为 12 小时，停服立即失效，重启后需重新扫码。地址会变化，无可用性保证。</p>}

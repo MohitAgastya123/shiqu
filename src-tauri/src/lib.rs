@@ -1,4 +1,4 @@
-// Keep desktop privileges in local-only native commands; reader/phone pages never load this bridge.
+// 原生控制台仅管理本机服务、路径及网络；浏览器与手机不会加载此特权桥接。
 mod config;
 mod library;
 mod runtime;
@@ -21,6 +21,8 @@ use tauri_plugin_opener::OpenerExt;
 struct Control {
     runtime: Option<runtime::Runtime>,
     last_error: Option<String>,
+    starting: bool,
+    progress: Arc<Mutex<Value>>,
 }
 #[derive(Clone, Default)]
 struct DesktopState(Arc<Mutex<Control>>);
@@ -56,8 +58,11 @@ fn settings_view(app: &tauri::AppHandle, control: &mut Control) -> Result<Value,
         json!({"settings":settings,"revision":revision,"keyPresent":key_present,"imageKeyPresent":image_key_present,"providerKeys":{"gemini":gemini,"openai":openai},"runtimeConfigured":provider_configuration(&store).map(|(settings,key,image_key)| provider_ready(&settings,&key,&image_key)).unwrap_or(false),"credentialError":null,"platform":std::env::consts::OS}),
     )
 }
-fn open_store(app: &tauri::AppHandle, _control: &mut Control) -> Result<config::Store, String> {
+fn open_store(app: &tauri::AppHandle, control: &mut Control) -> Result<config::Store, String> {
     let (file, data) = config::directories(app)?;
+    if (control.runtime.is_some() || control.starting) && !file.is_file() {
+        return Err("共享设置数据库不可用，请保留现有配置后重试。".into());
+    }
     config::Store::open(&file, &data)
 }
 // Read-only needs nothing; each active API provider needs its own credential.
@@ -150,130 +155,22 @@ async fn get_settings(
 }
 
 #[tauri::command]
-async fn library_summary(
-    app: tauri::AppHandle,
-    state: tauri::State<'_, DesktopState>,
-) -> Result<Value, String> {
-    let shared = state.0.clone();
-    blocking(move || {
-        let settings = {
-            let mut control = shared.lock().map_err(|_| "服务控制器不可用。")?;
-            open_store(&app, &mut control)?.settings()?
-        };
-        runtime::ensure_library(&settings, &resource_root(&app)?)?;
-        library::summary(std::path::Path::new(&settings.data_directory))
-    })
-    .await
-}
-
-#[tauri::command]
-async fn set_library_story_deleted(
-    app: tauri::AppHandle,
-    state: tauri::State<'_, DesktopState>,
-    id: String,
-    deleted: bool,
-) -> Result<(), String> {
-    let shared = state.0.clone();
-    blocking(move || {
-        let settings = {
-            let mut control = shared.lock().map_err(|_| "服务控制器不可用。")?;
-            open_store(&app, &mut control)?.settings()?
-        };
-        runtime::ensure_library(&settings, &resource_root(&app)?)?;
-        library::set_deleted(std::path::Path::new(&settings.data_directory), &id, deleted)
-    })
-    .await
-}
-
-fn key_change(change: Option<bool>, value: &str) -> config::KeyChange<'_> {
-    match change {
-        None => config::KeyChange::Keep,
-        Some(true) => config::KeyChange::Set(value),
-        Some(false) => config::KeyChange::Delete,
-    }
-}
-
-#[tauri::command]
 async fn save_settings(
     app: tauri::AppHandle,
     state: tauri::State<'_, DesktopState>,
-    mut settings: Settings,
-    expected_revision: Option<i64>,
-    key_action: String,
-    key: String,
-    image_key_action: Option<String>,
-    image_key: Option<String>,
-) -> Result<Value, String> {
-    let shared = state.0.clone();
-    blocking(move || {
-        let mut guard = shared.lock().map_err(|_| "服务控制器不可用。")?;
-        if guard.runtime.is_some() {
-            return Err("请先停止服务，再修改设置或密钥。".into());
-        }
-        let image_key_action = image_key_action.unwrap_or_else(|| "keep".into());
-        let image_key = image_key.unwrap_or_default();
-        let parse = |action: &str, value: &str| -> Result<(Option<bool>, String), String> {
-            match action {
-                "keep" => Ok((None, String::new())),
-                "replace" => Ok((Some(true), config::validate_key(value)?)),
-                "delete" => Ok((Some(false), String::new())),
-                _ => Err("密钥操作无效。".into()),
-            }
-        };
-        let (text_change, text_replacement) = parse(&key_action, &key)?;
-        let (image_change, image_replacement) = parse(&image_key_action, &image_key)?;
-        let mut store = open_store(&app, &mut guard)?;
-        settings.library_configured = true;
-        // "Same as text" is stored as unset so older builds can still read the settings.
-        if settings.image_provider == settings.provider {
-            settings.image_provider.clear();
-        }
-        let image = settings.effective_image_provider().to_string();
-        let separate = image != settings.provider;
-        if !separate && image_change.is_some() {
-            return Err("图片服务与文本服务相同，请使用文本服务的密钥。".into());
-        }
-        let configured = |provider: &str, change: Option<bool>| -> Result<bool, String> {
-            Ok(match provider {
-                "gemini" | "openai" => match change {
-                    Some(set) => set,
-                    None => !store.key_for(provider)?.is_empty(),
-                },
-                _ => true,
-            })
-        };
-        settings.provider_configured = configured(&settings.provider, text_change)?
-            && (!separate || settings.provider == "readonly" || configured(&image, image_change)?);
-        let provider = settings.provider.clone();
-        store.save_keys_at(
-            &settings,
-            &[
-                (
-                    provider.as_str(),
-                    key_change(text_change, &text_replacement),
-                ),
-                (image.as_str(), key_change(image_change, &image_replacement)),
-            ],
-            expected_revision,
-        )?;
-        drop(store);
-        settings_view(&app, &mut guard)
-    })
-    .await
-}
-
-#[tauri::command]
-async fn reset_providers(
-    app: tauri::AppHandle,
-    state: tauri::State<'_, DesktopState>,
+    settings: config::NativeSettings,
+    expected_revision: i64,
 ) -> Result<Value, String> {
     let shared = state.0.clone();
     blocking(move || {
         let mut control = shared.lock().map_err(|_| "服务控制器不可用。")?;
-        if control.runtime.is_some() {
-            return Err("请先停止服务，再重置配置。".into());
+        if control.starting || control.runtime.is_some() {
+            return Err("请先停止服务，再修改本机设置。".into());
         }
-        open_store(&app, &mut control)?.reset_providers()?;
+        let mut store = open_store(&app, &mut control)?;
+        let merged = settings.merge(store.settings()?);
+        store.save_at(&merged, config::KeyChange::Keep, Some(expected_revision))?;
+        drop(store);
         settings_view(&app, &mut control)
     })
     .await
@@ -292,7 +189,7 @@ async fn choose_path(app: tauri::AppHandle, kind: String) -> Result<Option<Strin
     blocking(move || {
         let dialog = app.dialog().file();
         let chosen = match kind.as_str() {
-            "codex" => dialog.blocking_pick_file(),
+            "codex" | "cloudflared" => dialog.blocking_pick_file(),
             "data" | "codexHome" => dialog.blocking_pick_folder(),
             _ => return Err("文件选择类型无效。".into()),
         };
@@ -318,12 +215,27 @@ async fn start_server(
         if let Some(runtime) = &mut control.runtime {
             return Ok(runtime.snapshot());
         }
-        let store = open_store(&app, &mut control)?;
-        let (settings, key, image_key) = provider_configuration(&store)?;
-        if !provider_ready(&settings, &key, &image_key) {
-            return Err("请先配置生成服务，或选择只读模式。".into());
+        if control.starting {
+            return Err("服务正在启动或升级书库，请等待完成。".into());
         }
-        match runtime::start(&settings, &key, &image_key, &resource_root(&app)?) {
+        let store = open_store(&app, &mut control)?;
+        let settings = store.settings()?;
+        let (settings_file, _) = config::directories(&app)?;
+        let root = resource_root(&app)?;
+        control.starting = true;
+        *control.progress.lock().map_err(|_| "服务状态不可用。")? =
+            json!({"running":false,"phoneUrls":[],"state":"starting"});
+        let progress = control.progress.clone();
+        drop(store);
+        drop(control);
+        let result = runtime::start(&settings, &settings_file, &root, move |value| {
+            if let Ok(mut current) = progress.lock() {
+                *current = value;
+            }
+        });
+        let mut control = shared.lock().map_err(|_| "服务控制器不可用。")?;
+        control.starting = false;
+        match result {
             Ok(runtime) => {
                 let result = runtime.status.clone();
                 control.runtime = Some(runtime);
@@ -349,6 +261,9 @@ fn stop_control(state: &DesktopState) {
 async fn stop_server(state: tauri::State<'_, DesktopState>) -> Result<Value, String> {
     let state = state.inner().clone();
     blocking(move || {
+        if state.0.lock().map_err(|_| "服务控制器不可用。")?.starting {
+            return Err("书库升级或启动尚未完成，请等待。".into());
+        }
         stop_control(&state);
         Ok(json!({"running":false,"phoneUrls":[]}))
     })
@@ -359,6 +274,7 @@ async fn server_status(state: tauri::State<'_, DesktopState>) -> Result<Value, S
     let shared = state.0.clone();
     blocking(move || {
         let mut control = shared.lock().map_err(|_| "服务控制器不可用。")?;
+        if control.starting { return Ok(control.progress.lock().map_err(|_| "服务状态不可用。")?.clone()); }
         if let Some(runtime) = &mut control.runtime {
             match runtime.child.try_wait() {
                 Ok(None) => return Ok(runtime.snapshot()),
@@ -368,59 +284,44 @@ async fn server_status(state: tauri::State<'_, DesktopState>) -> Result<Value, S
                 }
             }
         }
-        Ok(json!({"running":false,"phoneUrls":[],"error":control.last_error}))
+        Ok(json!({"running":false,"state":if control.last_error.is_some(){"failed"}else{"stopped"},"phoneUrls":[],"error":control.last_error}))
     })
     .await
 }
 
-#[tauri::command]
-async fn test_provider(
-    app: tauri::AppHandle,
-    state: tauri::State<'_, DesktopState>,
-) -> Result<Value, String> {
-    let shared = state.0.clone();
-    blocking(move || {
-        let mut guard = shared.lock().map_err(|_| "服务控制器不可用。")?;
-        if guard.runtime.is_some() {
-            return Err("请先停止服务，再测试配置。".into());
-        }
-        let store = open_store(&app, &mut guard)?;
-        let (settings, credential, image_credential) = provider_configuration(&store)?;
-        let (mut child, result, _updates) = runtime::launch(
-            &settings,
-            &credential,
-            &image_credential,
-            &resource_root(&app)?,
-            "test",
-        )?;
-        drop(child.stdin.take());
-        let _ = child.wait();
-        Ok(result)
-    })
-    .await
-}
-
-#[tauri::command]
-fn open_reader(app: tauri::AppHandle, state: tauri::State<'_, DesktopState>) -> Result<(), String> {
-    let control = state.0.lock().map_err(|_| "服务控制器不可用。")?;
-    let url = control
-        .runtime
-        .as_ref()
-        .and_then(|runtime| runtime.status["url"].as_str())
-        .ok_or("请先启动服务。")?;
-    let parsed = tauri::Url::parse(url).map_err(|_| "服务地址无效。")?;
+// 只允许服务根页及一个固定生成设置深链，不接收任意路径、查询或片段。
+fn reader_url(url: &str, generation_settings: bool) -> Result<tauri::Url, String> {
+    let mut parsed = tauri::Url::parse(url).map_err(|_| "服务地址无效。")?;
     if parsed.scheme() != "http"
         || parsed.host_str() != Some("127.0.0.1")
-        || parsed.path() != "/"
-        || parsed.query().is_some()
-        || parsed.fragment().is_some()
-        || !parsed.username().is_empty()
-        || parsed.password().is_some()
+        || parsed.as_str() != format!("{}/", parsed.origin().ascii_serialization())
+        || (url != parsed.origin().ascii_serialization()
+            && url != format!("{}/", parsed.origin().ascii_serialization()))
     {
         return Err("服务地址无效。".into());
     }
+    if generation_settings {
+        parsed.set_fragment(Some("provider-settings"));
+    }
+    Ok(parsed)
+}
+#[tauri::command]
+fn open_reader(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, DesktopState>,
+    generation_settings: Option<bool>,
+) -> Result<(), String> {
+    let mut control = state.0.lock().map_err(|_| "服务控制器不可用。")?;
+    let status = control.runtime.as_mut().ok_or("请先启动服务。")?.snapshot();
+    if status["running"] != true {
+        return Err("请先启动服务。".into());
+    }
+    let parsed = reader_url(
+        status["url"].as_str().ok_or("服务地址无效。")?,
+        generation_settings.unwrap_or(false),
+    )?;
     app.opener()
-        .open_url(url, None::<&str>)
+        .open_url(parsed.as_str(), None::<&str>)
         .map_err(|_| "无法打开默认浏览器，请复制本机链接。".into())
 }
 #[tauri::command]
@@ -430,6 +331,13 @@ async fn quit_app(
 ) -> Result<(), String> {
     let state = state.inner().clone();
     blocking(move || {
+        // 升级必须安全结束后再退出，不能因窗口退出杀死迁移子进程。
+        loop {
+            if !state.0.lock().map_err(|_| "服务控制器不可用。")?.starting {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
         stop_control(&state);
         app.exit(0);
         Ok(())
@@ -452,21 +360,17 @@ pub fn run() {
         .manage(DesktopState::default())
         .invoke_handler(tauri::generate_handler![
             get_settings,
-            library_summary,
-            set_library_story_deleted,
             save_settings,
-            reset_providers,
             detect_node,
             choose_path,
             start_server,
             stop_server,
             server_status,
-            test_provider,
             open_reader,
             quit_app
         ])
         .setup(|app| {
-            let show_item = MenuItem::with_id(app, "show", "打开拾趣设置", true, None::<&str>)?;
+            let show_item = MenuItem::with_id(app, "show", "打开拾趣控制台", true, None::<&str>)?;
             let stop_item = MenuItem::with_id(app, "stop", "停止服务", true, None::<&str>)?;
             let quit_item = MenuItem::with_id(app, "quit", "退出拾趣", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show_item, &stop_item, &quit_item])?;
@@ -515,6 +419,31 @@ fn thread_stop(app: tauri::AppHandle, quit: bool) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn browser_opener_accepts_only_root_and_fixed_settings_fragment() {
+        assert_eq!(
+            reader_url("http://127.0.0.1:3000", false).unwrap().as_str(),
+            "http://127.0.0.1:3000/"
+        );
+        assert_eq!(
+            reader_url("http://127.0.0.1:3000/", true).unwrap().as_str(),
+            "http://127.0.0.1:3000/#provider-settings"
+        );
+        for url in [
+            "https://127.0.0.1:3000/",
+            "http://localhost:3000/",
+            "http://user:secret@127.0.0.1:3000/",
+            "http://127.0.0.1:3000/read",
+            "http://127.0.0.1:3000/?",
+            "http://127.0.0.1:3000/#",
+            "http://127.0.0.1:3000/#other",
+            "http://127.0.0.1:3000/read/..",
+            "http://127.0.0.1:3000/%2e",
+            "http://127.1:3000/",
+        ] {
+            assert!(reader_url(url, true).is_err(), "{}", url);
+        }
+    }
     #[test]
     fn provider_commands_only_use_committed_database_configuration() {
         let folder =

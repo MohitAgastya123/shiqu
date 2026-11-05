@@ -1,4 +1,4 @@
-// Adapt bounded Node HTTP requests to Fetch handlers, retaining multipart and binary media.
+// 有界 HTTP 请求转换为 Fetch，保留真实套接字及原始路径供本机设置边界校验。
 import {createServer} from 'node:http';
 import type {IncomingMessage,ServerResponse} from 'node:http';
 import {once} from 'node:events';
@@ -30,10 +30,10 @@ async function outgoing(response:Response,target:ServerResponse){
  }
  target.end();
 }
-export type HttpPeer={remoteAddress:string|undefined};
+export type HttpPeer={remoteAddress:string|undefined;rawPath?:string};
 export function createHttpServer(handle:(request:Request,peer:HttpPeer)=>Promise<Response>){
  return createServer(async(req,res)=>{
-  try{await outgoing(await handle(await incoming(req),{remoteAddress:req.socket.remoteAddress}),res);}
+  try{await outgoing(await handle(await incoming(req),{remoteAddress:req.socket.remoteAddress,rawPath:(req.url||'/').split('?')[0]}),res);}
   catch(error){
    if(res.headersSent){res.destroy();return;}
    const status=(error as {status?:number}).status===413?413:400;

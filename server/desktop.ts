@@ -1,5 +1,5 @@
-// Run the existing reader under a native supervisor, accepting secrets only through private stdin.
-// EOF and explicit stop revoke access and terminate generation before releasing data ownership.
+// 原生控制台通过私有 stdin 传入设置库位置及启动覆盖，生成设置只在本机浏览器编辑。
+// 先完成书库升级再启动服务；退出撤销远程访问并在释放所有权前停止生成。
 import path from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {createInterface} from 'node:readline';
@@ -18,59 +18,55 @@ import {createReaderProvider} from './generation.ts';
 import {stopCodexProcesses} from './codex-runner.ts';
 import {stopClaudeProcesses} from './claude-runner.ts';
 import {FileMedia} from './media.ts';
-import {systemSettingsSchema,settingsVariables,effectiveImageProvider} from '../lib/system-settings.ts';
+import {systemSettingsSchema,settingsVariables} from '../lib/system-settings.ts';
+import {SystemSettingsStore} from './system-settings.ts';
+import {effectiveProviderVariables,providerReady} from './cli-setup.ts';
+import {browserProviderSettings} from './browser-provider-settings.ts';
+import {providerSettingsPath} from '../lib/provider-settings.ts';
+import {checkProviderVariables,runtimeConfiguration} from './provider-runtime.ts';
 import {installDiagnostics,recordDiagnostic,safeErrorCode} from './diagnostics.ts';
 
 export const desktopSettings=systemSettingsSchema;
 export type DesktopSettings=z.infer<typeof desktopSettings>;
 export function desktopVariables(settings:DesktopSettings,key:string,imageKey=''){return settingsVariables(systemSettingsSchema.parse(settings),key,imageKey);}
-// Metadata only: no generation endpoint, prompt, or paid output.
-async function checkProvider(settings:DesktopSettings,name:'gemini'|'codex'|'openai',key:string,models:string[],root:string,transport:typeof fetch){
- if(name==='codex'){
-  const provider=createReaderProvider({...desktopVariables(settings,''),SHIQU_AI_PROVIDER:'codex',SHIQU_IMAGE_PROVIDER:''},new FileMedia(path.join(root,'unused')),transport);
-  const status=await provider.status();return {ok:status.configured,message:status.configured?'Codex 已登录；此检查未生成内容。':status.message||'Codex 尚未连接。'};
- }
- if(!key)return {ok:false,message:'请先填写或保存 API 密钥。'};
- try{
-  for(const model of new Set(models)){
-   const openai=name==='openai';
-   const response=await transport(openai?`https://api.openai.com/v1/models/${model}`:`https://generativelanguage.googleapis.com/v1beta/models/${model}`,{headers:openai?{Authorization:'Bearer '+key}:{'x-goog-api-key':key},signal:AbortSignal.timeout(10000),redirect:'error'});
-   if(!response.ok)return {ok:false,message:`模型访问检查失败（HTTP ${response.status}）。请检查密钥及模型权限。`};
-   await response.body?.cancel();
-  }
-  return {ok:true,message:'密钥和模型元数据可访问；未生成内容，不代表生成额度充足。'};
- }catch{return {ok:false,message:'连接超时或网络不可用；未生成内容。'};}
+// 兼容现有原生测试入口；连接检查复用浏览器的元数据检查实现。
+export async function testDesktopProvider(settings:DesktopSettings,key:string,_root:string,transport:typeof fetch=fetch,imageKey=''){
+ return checkProviderVariables(desktopVariables(settings,key,imageKey),transport);
 }
-const textModel=(settings:DesktopSettings,name:'gemini'|'openai')=>name==='openai'?settings.openaiTextModel:settings.textModel;
-const imageModel=(settings:DesktopSettings,name:'gemini'|'openai')=>name==='openai'?settings.openaiImageModel:settings.imageModel;
-export async function testDesktopProvider(settings:DesktopSettings,key:string,root:string,transport:typeof fetch=fetch,imageKey=''){
- if(settings.provider==='readonly')return {ok:true,message:'当前为只读模式，不调用生成服务。'};
- const text=settings.provider,image=effectiveImageProvider(settings)!;
- const models=(name:typeof text,kinds:('text'|'image')[])=>name==='codex'?[]:kinds.map(kind=>(kind==='text'?textModel:imageModel)(settings,name));
- if(image===text)return checkProvider(settings,text,key,models(text,['text','image']),root,transport);
- const textResult=await checkProvider(settings,text,key,models(text,['text']),root,transport);
- if(!textResult.ok)return {ok:false,message:'文本服务：'+textResult.message};
- const imageResult=await checkProvider(settings,image,imageKey,models(image,['image']),root,transport);
- return {ok:imageResult.ok,message:imageResult.ok?`文本服务：${textResult.message} 图片服务：${imageResult.message}`:'图片服务：'+imageResult.message};
+export function desktopProviderConfiguration(settings:DesktopSettings,key:string,imageKey:string,settingsFile?:string,overrides:Record<string,string|undefined>={}){
+ if(!settingsFile)return {variables:desktopVariables(settings,key,imageKey)};
+ if(!path.isAbsolute(settingsFile))throw Error('SETTINGS_STORE_UNAVAILABLE');
+ const store=new SystemSettingsStore(settingsFile,settings.dataDirectory,{existingOnly:true});
+ try{return {variables:effectiveProviderVariables(store,overrides),locations:{settings:settingsFile,library:settings.dataDirectory}};}finally{store.close();}
 }
-export async function startDesktop(settings:DesktopSettings,key:string,root:string,options:{signal?:AbortSignal;onStatus?:(status:unknown)=>void;imageKey?:string}={}){
+export async function startDesktop(settings:DesktopSettings,key:string,root:string,options:{signal?:AbortSignal;onStatus?:(status:unknown)=>void;imageKey?:string;settingsFile?:string;overrides?:Record<string,string|undefined>;transport?:typeof fetch}={}){
+ options.onStatus?.({running:false,phoneUrls:[],state:'upgrading'});
+ ensureLibraryReady(settings.dataDirectory,root);
+ const backup=libraryUpgradeBackup(settings.dataDirectory);
+ options.onStatus?.({running:false,phoneUrls:[],state:'starting',backup});
+ const configuration=desktopProviderConfiguration(settings,key,options.imageKey||'',options.settingsFile,options.overrides);
  const release=await ownDesktopData(settings.dataDirectory);
  const removeDiagnostics=installDiagnostics(settings.dataDirectory);
  let app:ReturnType<typeof createApplication>|undefined,server:ReturnType<typeof createHttpServer>|undefined,remoteServer:ReturnType<typeof createHttpServer>|undefined,tunnel:Awaited<ReturnType<typeof startDesktopTunnel>>|undefined;
- let stopped:Promise<void>|undefined;
+ let stopped:Promise<void>|undefined,monitor:ReturnType<typeof setInterval>|undefined;
  const remote=desktopRemote(request=>app!.handle(request));
  async function close(listener:typeof server){if(!listener)return;await new Promise<void>(resolve=>{listener.close(()=>resolve());listener.closeAllConnections();});}
- function stop(){return stopped??=(async()=>{try{remote.revoke();await tunnel?.stop();app?.stopGeneration();await Promise.all([stopCodexProcesses(),stopClaudeProcesses()]);await Promise.all([close(remoteServer),close(server)]);await app?.close();}finally{recordDiagnostic(settings.dataDirectory,'service_stopped');removeDiagnostics();await release();}})();}
+ function stop(){return stopped??=(async()=>{try{clearInterval(monitor);remote.revoke();await tunnel?.stop();app?.stopGeneration();await Promise.all([stopCodexProcesses(),stopClaudeProcesses()]);await Promise.all([close(remoteServer),close(server)]);await app?.close();}finally{recordDiagnostic(settings.dataDirectory,'service_stopped');removeDiagnostics();await release();}})();}
  try{
   options.signal?.throwIfAborted();
-  app=createApplication({root,dataDirectory:settings.dataDirectory,variables:desktopVariables(settings,key,options.imageKey)});
+  app=createApplication({root,dataDirectory:settings.dataDirectory,variables:configuration.variables,production:{autoStart:providerReady(configuration.variables)},transport:options.transport});
   const local=`http://127.0.0.1:${settings.port}`,phones=phoneUrls('0.0.0.0',settings.port);
-  const access=desktopAccess(app.handle,{hosts:[new URL(local).host,...phones.map(url=>new URL(url).host)]});
-  // macOS can let a wildcard bind coexist with an occupied loopback port.
-  // Probe the advertised local endpoint first so its browser link cannot open another service.
-  server=createHttpServer(access.handle);server.listen(settings.port,'127.0.0.1');await once(server,'listening');await close(server);
-  server=createHttpServer(access.handle);server.listen(settings.port,'0.0.0.0');await once(server,'listening');
-  const status={running:true,pid:process.pid,url:local,phoneUrls:phones,publicUrl:'',internetError:''};
+  const providerSettings=configuration.locations?browserProviderSettings({variables:configuration.variables,overrides:options.overrides||{},ports:[settings.port],locations:configuration.locations,existingOnly:true,transport:options.transport}):undefined;
+  const access=desktopAccess(app.handle,{hosts:[new URL(local).host,`localhost:${settings.port}`,...phones.map(url=>new URL(url).host)]});
+  const localHandle:Parameters<typeof createHttpServer>[0]=(request,peer)=>new URL(request.url).pathname===providerSettingsPath&&providerSettings?providerSettings(request,peer):access.handle(request);
+  // macOS 允许通配绑定与已占用回环端口共存，先探测本机地址，防止打开其他服务。
+  server=createHttpServer(localHandle);server.listen(settings.port,'127.0.0.1');await once(server,'listening');await close(server);
+  server=createHttpServer(localHandle);server.listen(settings.port,'0.0.0.0');await once(server,'listening');
+  const status={running:true,state:'running',pid:process.pid,url:local,phoneUrls:phones,publicUrl:'',internetError:'',backup};
+  function snapshot(){
+   let provider;try{provider=providerSettings?.snapshot();}catch{return {...status,provider:runtimeConfiguration(configuration.variables),generating:app!.generating,settingsError:'无法读取共享生成设置，请检查本机配置后重试。'};}
+   return {...status,provider:runtimeConfiguration(configuration.variables),generating:app!.generating,...(provider?{provider:provider.runtime,restartRequired:provider.restartRequired,overrides:provider.overrides}:{})};
+  }
   if(settings.internetEnabled){
    try{
     remoteServer=createHttpServer(remote.handle);remoteServer.listen(0,'127.0.0.1');await once(remoteServer,'listening');
@@ -79,25 +75,30 @@ export async function startDesktop(settings:DesktopSettings,key:string,root:stri
     options.signal?.throwIfAborted();status.publicUrl=remote.activate(tunnel.origin);
     void tunnel.closed.then(async()=>{
      remote.revoke();status.publicUrl='';
-     if(!stopped){status.internetError='公网隧道已断开，本机和局域网仍可使用。停止并重新启动服务以重试。';options.onStatus?.({...status});}
+     if(!stopped){status.internetError='公网隧道已断开，本机和局域网仍可使用。停止并重新启动服务以重试。';options.onStatus?.(snapshot());}
      await close(remoteServer);await tunnel?.stop();
     });
    }catch(error){
-    // Internet is optional: clean only its entry point. Parent shutdown still
-    // propagates to the outer handler and releases the complete runtime.
+    // 公网可选，失败只清理隧道；父进程关闭仍交由外层释放完整运行时。
     if(options.signal?.aborted)throw error;
     remote.revoke();await tunnel?.stop();await close(remoteServer);remoteServer=undefined;
     status.internetError=(error instanceof TunnelError?error.message:'公网隧道启动失败。')+' 本机和局域网仍可使用，无需配对 ID。';
    }
   }
-  options.signal?.throwIfAborted();recordDiagnostic(settings.dataDirectory,'service_started');return {server,status,stop};
+  options.signal?.throwIfAborted();recordDiagnostic(settings.dataDirectory,'service_started');
+  monitor=setInterval(()=>options.onStatus?.(snapshot()),1000);monitor.unref();
+  return {server,get status(){return snapshot();},stop};
  }catch(error){recordDiagnostic(settings.dataDirectory,'service_start_failed',{code:safeErrorCode(error)});await stop();throw error;}
 }
 export function desktopFailure(error:unknown){
  if(error instanceof TunnelError)return error.message;
  const code=(error as NodeJS.ErrnoException)?.code,message=(error as Error)?.message;
  if(code==='EADDRINUSE')return '端口已被占用，请更换端口或停止其他实例。';
- if(message&&/^(LIBRARY_|BACKUP_|DATA_BUSY:)/.test(message))return message;
+ if(message&&/^(LIBRARY_|BACKUP_|DATA_BUSY:)/.test(message)){
+  const code=message.split(/[;: ]/)[0],backup=message.match(/(?:^|; )backup: ([^;]+)/)?.[1];
+  return `${code}：书库暂时无法升级或打开，请保留现有书库并检查备份。${backup?' 备份：'+backup:''}`;
+ }
+ if(message==='SETTINGS_STORE_UNAVAILABLE')return '无法读取共享生成设置，请检查本机配置后重试。';
  if(message==='DATA_BUSY')return '此数据目录仍由另一个 CLI 或桌面服务使用，请等待它退出或选择其他目录。';
  if(code==='EACCES'||code==='EPERM')return '无法访问所选文件或数据目录，请检查权限。';
  return '服务启动失败。请确认 Node 24、应用资源和数据目录可用。';
@@ -111,7 +112,7 @@ async function main(){
  lines.on('close',()=>{inputClosed=true;abort.abort();if(!starting)void stop();});
  for(const signal of ['SIGINT','SIGTERM'] as const)process.on(signal,()=>{abort.abort();if(!starting)void stop();});
  process.on('exit',()=>{void stopCodexProcesses();void stopClaudeProcesses();});
- // Discard raw exception/provider output: the parent receives only safe status messages.
+ // 丢弃原始异常及提供方输出，父进程只接收安全状态。
  process.on('uncaughtException',()=>{send({error:'服务意外退出，请重新启动。'});void stop();});
  lines.on('line',line=>{
   if(line.length>20000){void stop();return;}
@@ -119,14 +120,14 @@ async function main(){
   if(starting||closing)return;starting=true;
   void(async()=>{
    try{
-    const input=z.object({action:z.enum(['start','test','upgrade']),settings:desktopSettings,key:z.string().max(4096).default(''),imageKey:z.string().max(4096).default('')}).strict().parse(JSON.parse(line));
+    const input=z.object({action:z.enum(['start','test','upgrade']),settings:desktopSettings,key:z.string().max(4096).default(''),imageKey:z.string().max(4096).default(''),settingsFile:z.string().optional(),overrides:z.record(z.string()).default({})}).strict().parse(JSON.parse(line));
     const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
     if(input.action==='upgrade'){ensureLibraryReady(input.settings.dataDirectory,root);send({upgraded:true,started:false,backup:libraryUpgradeBackup(input.settings.dataDirectory)});await stop();return;}
     if(input.action==='test'){send(await testDesktopProvider(input.settings,input.key,root,fetch,input.imageKey));await stop();return;}
-    runtime=await startDesktop(input.settings,input.key,root,{signal:abort.signal,onStatus:send,imageKey:input.imageKey});starting=false;
+    runtime=await startDesktop(input.settings,input.key,root,{signal:abort.signal,onStatus:send,imageKey:input.imageKey,settingsFile:input.settingsFile,overrides:input.overrides});starting=false;
     if(inputClosed){await stop();return;}
     send(runtime.status);
-   }catch(error){send({error:desktopFailure(error)});starting=false;await stop();}
+   }catch(error){send({running:false,state:'failed',phoneUrls:[],error:desktopFailure(error)});starting=false;await stop();}
   })();
  });
  const timer=setTimeout(()=>{if(!runtime&&!starting)void stop();},10000);timer.unref();

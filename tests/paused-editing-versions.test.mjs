@@ -4,7 +4,6 @@ import assert from 'node:assert/strict';
 import {productionFixture,until,makePlan,selection} from './fixtures/production.mjs';
 import {revisionImpact,checkedRevision} from '../lib/reader-revision.ts';
 import {latestStoryVersions} from '../lib/reader-versions.ts';
-import {readLibrarySummary} from '../desktop/library-preview.ts';
 const owner='docker-local-owner';
 const submit=(f,id,base,changes,requestId=crypto.randomUUID(),paused=true)=>f.json(`sessions/${id}/revisions`,'POST',{requestId,token:base.token,changes,paused});
 const ids=rows=>rows.map(row=>row.id).sort();
@@ -27,7 +26,7 @@ test('a paused unfinished storyboard can be revised; late work, replay and resta
  assert.equal((await f.read(child.id)).selection.productionPrompt,changes.productionPrompt);
  assert.equal((await f.read(child.id)).generationControl,'paused');assert.equal(f.control.plans.length,1);assert.equal(f.control.calls.length,0);
  assert.deepEqual(ids(await f.json('sessions')),[child.id]);
- assert.deepEqual(ids(readLibrarySummary(f.dataDirectory).stories),[child.id]);
+
  await f.restart();assert.equal((await f.read(child.id)).generationControl,'paused');
  assert.equal((await submit(f,id,base,changes,requestId)).id,child.id);
  assert.equal((await f.read(child.id)).generationControl,'paused');assert.equal(f.control.plans.length,1);
@@ -59,14 +58,14 @@ test('latest means submitted version, independent of status, reads, deletion and
   await f.app.services.database.prepare('UPDATE stories SET state=? WHERE id=?').bind(state,child.id).run();
   await f.app.services.database.prepare('UPDATE stories SET last_read_at=? WHERE id=?').bind('2099-01-01',id).run();
   assert.deepEqual(ids(await f.json('sessions')),ids([child,{id:sameTitle}]));
-  assert.deepEqual(ids(readLibrarySummary(f.dataDirectory).stories),ids([child,{id:sameTitle}]));
+
  }
  const foreign=crypto.randomUUID();
  await f.app.services.database.prepare("INSERT INTO stories(id,user_id,selection,document,state,created_at,updated_at) SELECT ?,'other-owner',selection,json_set(document,'$.revision.number',999),'idle',created_at,updated_at FROM stories WHERE id=?").bind(foreign,child.id).run();
  assert.deepEqual(ids(await f.json('sessions')),ids([child,{id:sameTitle}]));
  assert.equal((await f.request(`sessions/${id}`)).status,200,'Historical record remains directly readable');
  await f.json(`library/${child.id}`,'DELETE');assert.deepEqual(ids(await f.json('sessions')),[sameTitle]);
- assert.equal(readLibrarySummary(f.dataDirectory).stories.some(row=>row.id===id),false);
+
  await f.json(`library/${child.id}/restore`,'POST');assert.deepEqual(ids(await f.json('sessions')),ids([child,{id:sameTitle}]));
  assert.equal((await f.read(child.id)).generationControl,'stopped');
 });

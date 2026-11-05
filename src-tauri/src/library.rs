@@ -1,16 +1,16 @@
-// Read summaries and manage reversible reader tombstones without starting generation or deleting media.
+// 原生只检查书库格式与恢复日志，在所有权写入前拒绝未知版本，不读取故事记录。
 use rusqlite::{Connection, OpenFlags};
-use serde_json::{json, Value};
-use std::{path::Path, time::Duration};
+use serde_json::Value;
+use std::path::Path;
 
-// The declaration is compiled into both distributions; no runtime asset lookup is needed.
+// 两种发行包编译同一份格式声明，不依赖运行时资源查找。
 fn library_format() -> Value {
     serde_json::from_str(include_str!("../../db/library-format.json")).unwrap()
 }
 fn supported_version() -> i64 {
     library_format()["schemaVersion"].as_i64().unwrap()
 }
-// Node applies later migrations; native reads wait until the newest bundled one is recorded.
+// 后续迁移由 Node 执行，原生只检查最新迁移是否存在。
 fn latest_migration() -> String {
     library_format()["latestMigration"]
         .as_str()
@@ -18,17 +18,49 @@ fn latest_migration() -> String {
         .to_string()
 }
 pub fn needs_upgrade(directory: &Path) -> Result<bool, String> {
+    if directory
+        .symlink_metadata()
+        .is_ok_and(|m| m.file_type().is_symlink())
+    {
+        return Err("LIBRARY_UNSAFE_DIRECTORY".into());
+    }
     let journal = directory.join(".desktop-upgrade.json");
-    let pending = journal.exists();
+    let pending = journal.symlink_metadata().is_ok();
     if pending {
+        if journal
+            .symlink_metadata()
+            .is_ok_and(|m| m.file_type().is_symlink())
+        {
+            return Err("LIBRARY_UNSAFE_JOURNAL".into());
+        }
         let value: Value =
             serde_json::from_slice(&std::fs::read(journal).map_err(|e| e.to_string())?)
                 .map_err(|e| e.to_string())?;
         if value["version"].as_i64() != Some(supported_version()) {
             return Err("LIBRARY_NEWER_UPGRADER: unsupported recovery journal".into());
         }
+        let work = value["work"].as_str().unwrap_or("");
+        let suffix = work.strip_prefix(".desktop-upgrade-").unwrap_or("");
+        if suffix.len() != 36
+            || !suffix.bytes().enumerate().all(|(i, b)| {
+                if [8, 13, 18, 23].contains(&i) {
+                    b == b'-'
+                } else {
+                    b.is_ascii_hexdigit()
+                }
+            })
+            || !(value.get("backup") == Some(&Value::Null) || value["backup"].is_string())
+        {
+            return Err("LIBRARY_INVALID_JOURNAL".into());
+        }
     }
     let file = directory.join("shiqu.sqlite");
+    if file
+        .symlink_metadata()
+        .is_ok_and(|m| m.file_type().is_symlink())
+    {
+        return Err("LIBRARY_UNSAFE_DATABASE".into());
+    }
     if !file.exists() {
         return Ok(pending);
     }
@@ -69,167 +101,33 @@ pub fn needs_upgrade(directory: &Path) -> Result<bool, String> {
     }
     Err("LIBRARY_UNKNOWN_SCHEMA".into())
 }
-fn gate(directory: &Path) -> Result<Connection, String> {
-    if needs_upgrade(directory)? {
-        return Err("LIBRARY_UPGRADE_REQUIRED".into());
-    }
-    let gate = Connection::open(directory.join(".desktop-upgrade-lock.sqlite"))
-        .map_err(|e| e.to_string())?;
-    gate.execute_batch("PRAGMA busy_timeout=0; BEGIN EXCLUSIVE")
-        .map_err(|_| "DATA_BUSY: library upgrade in progress".to_string())?;
-    if needs_upgrade(directory)? {
-        return Err("LIBRARY_UPGRADE_REQUIRED".into());
-    }
-    Ok(gate)
-}
-
-pub fn summary(directory: &Path) -> Result<Value, String> {
-    let file = directory.join("shiqu.sqlite");
-    if !file.exists() {
-        if needs_upgrade(directory)? {
-            return Err("LIBRARY_UPGRADE_REQUIRED".into());
-        }
-        return Ok(json!({"stories": []}));
-    }
-    let _gate = gate(directory)?;
-    let read = || -> Result<Value, Box<dyn std::error::Error>> {
-        let database = Connection::open_with_flags(file, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
-        database.busy_timeout(Duration::from_secs(1))?;
-        let value: String =
-            database.query_row(include_str!("../../desktop/library.sql"), [], |row| {
-                row.get(0)
-            })?;
-        let mut result: Value = serde_json::from_str(&value)?;
-        let report = directory.join(".desktop-upgrade-result.json");
-        if report.exists() {
-            let report: Value = serde_json::from_slice(&std::fs::read(report)?)?;
-            if let Some(backup) = report["backup"].as_str() {
-                result["upgradeBackup"] = json!(backup);
-            }
-        }
-        Ok(result)
-    };
-    read().map_err(|_| "无法读取本地书架，请检查数据目录及数据库版本。".into())
-}
-
-pub fn set_deleted(directory: &Path, id: &str, deleted: bool) -> Result<(), String> {
-    let _gate = gate(directory)?;
-    let update = || -> Result<(), Box<dyn std::error::Error>> {
-        let mut database = Connection::open_with_flags(
-            directory.join("shiqu.sqlite"),
-            OpenFlags::SQLITE_OPEN_READ_WRITE,
-        )?;
-        database.busy_timeout(Duration::from_secs(5))?;
-        let transaction =
-            database.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-        let exists: bool = transaction.query_row(
-            "SELECT EXISTS(SELECT 1 FROM stories WHERE id=?1)",
-            [id],
-            |row| row.get(0),
-        )?;
-        if !exists {
-            return Err("Story not found".into());
-        }
-        transaction.execute(
-            if deleted {
-                include_str!("../../desktop/library-delete.sql")
-            } else {
-                include_str!("../../desktop/library-restore.sql")
-            },
-            [id],
-        )?;
-        transaction.commit()?;
-        Ok(())
-    };
-    update().map_err(|_| "故事暂时无法更新，请重试。".into())
-}
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
     #[test]
-    fn version_refusal_and_shared_gate_precede_native_writes() {
+    fn refusal_precedes_ownership_writes() {
         let folder =
-            std::env::temp_dir().join(format!("shiqu-library-gate-{}", std::process::id()));
+            std::env::temp_dir().join(format!("shiqu-format-refusal-{}", std::process::id()));
         std::fs::create_dir_all(&folder).unwrap();
         let file = folder.join("shiqu.sqlite");
         let db = Connection::open(&file).unwrap();
-        db.execute_batch(
-            "CREATE TABLE stories(id TEXT,user_id TEXT,document TEXT); PRAGMA user_version=2;",
-        )
-        .unwrap();
+        db.execute_batch("PRAGMA user_version=999").unwrap();
         drop(db);
         let before = std::fs::read(&file).unwrap();
-        assert!(summary(&folder).unwrap_err().contains("NEWER_SCHEMA"));
-        assert!(set_deleted(&folder, "id", true)
-            .unwrap_err()
-            .contains("NEWER_SCHEMA"));
-        assert_eq!(std::fs::read(&file).unwrap(), before);
-        std::fs::write(folder.join(".desktop-upgrade.json"), r#"{"version":1,"work":".desktop-upgrade-00000000-0000-0000-0000-000000000000","backup":null}"#).unwrap();
         assert!(needs_upgrade(&folder).unwrap_err().contains("NEWER_SCHEMA"));
-        std::fs::remove_file(folder.join(".desktop-upgrade.json")).unwrap();
-        assert!(!folder.join(".desktop-upgrade-lock.sqlite").exists());
-        let db = Connection::open(&file).unwrap();
-        db.execute_batch("PRAGMA user_version=1; CREATE TABLE app_migrations(name TEXT PRIMARY KEY, applied_at TEXT NOT NULL)").unwrap();
-        db.execute(
-            "INSERT INTO app_migrations VALUES (?1,'2026-11-04')",
-            [latest_migration()],
-        )
-        .unwrap();
-        drop(db);
-        let lock = Connection::open(folder.join(".desktop-upgrade-lock.sqlite")).unwrap();
-        lock.execute_batch("BEGIN EXCLUSIVE").unwrap();
-        assert!(summary(&folder).unwrap_err().contains("DATA_BUSY"));
-        assert!(set_deleted(&folder, "id", true)
-            .unwrap_err()
-            .contains("DATA_BUSY"));
-        drop(lock);
-        std::fs::remove_dir_all(folder).unwrap();
-    }
-
-    #[test]
-    fn summary_reads_existing_data_without_creating_a_missing_library() {
-        let folder =
-            std::env::temp_dir().join(format!("shiqu-library-summary-{}", std::process::id()));
-        assert_eq!(summary(&folder).unwrap(), json!({"stories": []}));
-        assert!(!folder.exists());
-        std::fs::create_dir(&folder).unwrap();
-        let file = folder.join("shiqu.sqlite");
-        let database = Connection::open(&file).unwrap();
-        for migration in [
-            include_str!("../../drizzle/0000_bitter_dragon_lord.sql"),
-            include_str!("../../drizzle/0001_perfect_lester.sql"),
-            include_str!("../../drizzle/0002_absent_tempest.sql"),
-            include_str!("../../drizzle/0003_flowery_jetstream.sql"),
+        assert_eq!(before, std::fs::read(&file).unwrap());
+        std::fs::remove_file(&file).unwrap();
+        for journal in [
+            r#"{"version":999}"#,
+            r#"{"version":1}"#,
+            r#"{"version":1,"work":"../bad","backup":null}"#,
         ] {
-            database.execute_batch(migration).unwrap();
+            std::fs::write(folder.join(".desktop-upgrade.json"), journal).unwrap();
+            assert!(needs_upgrade(&folder).is_err());
+            assert!(!folder.join(".desktop.lock").exists());
+            assert!(!folder.join(".desktop-owner.sqlite").exists());
         }
-        database.execute("INSERT INTO reader_sessions (id,user_id,selection,document,state,created_at,updated_at) VALUES ('test','owner','{\"bookId\":\"book\",\"storyTitle\":\"故事\"}','{\"plan\":null,\"images\":[]}', 'idle','2026-10-29','2026-10-29')", []).unwrap();
-        database.execute_batch("DROP TABLE stories; DROP TABLE jobs; DROP TABLE progress; ALTER TABLE reader_sessions RENAME TO stories; PRAGMA user_version=1; CREATE TABLE app_migrations(name TEXT PRIMARY KEY, applied_at TEXT NOT NULL);").unwrap();
-        drop(database);
-        // A consolidated library missing a bundled migration must be upgraded by Node first.
-        assert!(summary(&folder).unwrap_err().contains("UPGRADE_REQUIRED"));
-        let database = Connection::open(&file).unwrap();
-        database
-            .execute(
-                "INSERT INTO app_migrations VALUES (?1,'2026-11-04')",
-                [latest_migration()],
-            )
-            .unwrap();
-        drop(database);
-        let before = std::fs::read(&file).unwrap();
-        let result = summary(&folder).unwrap();
-        assert_eq!(result["stories"][0]["title"], "故事");
-        assert_eq!(result["stories"][0]["jobs"], 0);
-        assert_eq!(std::fs::read(&file).unwrap(), before);
-        set_deleted(&folder, "test", true).unwrap();
-        set_deleted(&folder, "test", true).unwrap();
-        assert_eq!(summary(&folder).unwrap(), json!({"stories": []}));
-        set_deleted(&folder, "test", false).unwrap();
-        set_deleted(&folder, "test", false).unwrap();
-        assert_eq!(summary(&folder).unwrap(), result);
-        assert!(set_deleted(&folder, "missing", true).is_err());
         std::fs::remove_dir_all(folder).unwrap();
     }
 }

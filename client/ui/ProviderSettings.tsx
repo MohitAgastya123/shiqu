@@ -54,7 +54,7 @@ function KeyField({name,title,present,action,onAction,value,onValue}:{name:strin
   <p className={action==='remove'?'danger':undefined}>{action==='remove'?'保存后移除本机密钥，重启后停止使用。':present||action==='replace'?'已存密钥不会显示或返回浏览器。':'尚未设置密钥，该服务暂时无法生成。'}</p>
  </div>;
 }
-export default function ProviderSettings({onRuntime}:{onRuntime?:(runtime:Runtime|null)=>void}){
+export default function ProviderSettings({onRuntime,onAvailability,openRequest=0,showEntry=true,showPrompt=false}:{onRuntime?:(runtime:Runtime|null)=>void;onAvailability?:(allowed:boolean)=>void;openRequest?:number;showEntry?:boolean;showPrompt?:boolean}){
  const [open,setOpen]=useState(false),[view,setView]=useState<ProviderSettingsView|null>(null),[draft,setDraft]=useState<Settings|null>(null);
  const [runtime,setRuntime]=useState<ProviderSettingsView['runtime']|null>(null);
  useEffect(()=>{onRuntime?.(runtime);},[runtime,onRuntime]);
@@ -69,19 +69,21 @@ export default function ProviderSettings({onRuntime}:{onRuntime?:(runtime:Runtim
   catch(e){
    if(live.current&&version===readVersion.current){
     const status=(e as {status?:number}).status;
-    if(status===403||status===404){setView(null);setDraft(null);setError(status===403?'编辑设置仅限本机访问。若已在本机，请完整重启 pnpm dev 或 CLI 服务后重新读取。':'当前入口不提供设置编辑，请使用桌面设置或 CLI 配置。');}
+    if(status===403||status===404){setView(null);setDraft(null);setError('请在运行服务的电脑上，使用本机回环地址打开生成服务设置。');}
     else setError(e instanceof Error?e.message:'暂时无法读取生成设置。');
    }
-   // Running provider information is public reader metadata, independent of local editing access.
+   // 运行配置属于公开阅读元数据，与本机编辑权限无关。
    try{const status=await request('reader/status');if(live.current&&version===readVersion.current)setRuntime({provider:status.provider,imageProvider:status.imageProvider,models:status.models,configured:status.configured,taskReasoningEfforts:status.taskReasoningEfforts});}catch{}
   }
   finally{if(live.current&&version===readVersion.current)setBusy(false);}
  }
  useEffect(()=>{live.current=true;void load();return()=>{live.current=false;};},[]);
+ useEffect(()=>{onAvailability?.(!!view);},[!!view,onAvailability]);
+ useEffect(()=>{if(openRequest&&view)setOpen(true);},[openRequest,!!view]);
  function update<K extends keyof Settings>(field:K,value:Settings[K]){setDraft(old=>old?{...old,[field]:value}:old);setMessage('');}
  function selectProvider(provider:Settings['provider']){
   if(!draft)return;
-  // "Same as text" stays unset; a typed image key survives unless the effective image provider changes.
+  // 与文本相同时不保存独立值；实际图片服务不变时保留尚未提交的图片密钥。
   const imageProvider=draft.imageProvider===provider?undefined:draft.imageProvider;
   if(effectiveImageProvider({provider,imageProvider})!==effectiveImageProvider(draft)){setImageKey('');setImageKeyAction('keep');}
   setDraft({...draft,provider,imageProvider,...(provider==='gemini'?{taskReasoningEfforts:Object.fromEntries(reasoningTasks.map(task=>[task,(geminiReasoningEfforts as readonly string[]).includes(draft.taskReasoningEfforts[task])?draft.taskReasoningEfforts[task]:taskReasoningDefaults[task]])) as Settings['taskReasoningEfforts']}:{})});setKey('');setKeyAction('keep');setError('');setMessage('');
@@ -111,7 +113,15 @@ export default function ProviderSettings({onRuntime}:{onRuntime?:(runtime:Runtim
   if(effectiveImageProvider({provider:provider!,imageProvider:next})!==imageProvider){setImageKey('');setImageKeyAction('keep');}
   update('imageProvider',next);
  }
- return <><button type="button" onClick={()=>{setOpen(true);void load();}}><Cpu size={20}/>生成服务与模型<ChevronRight size={18}/></button>
+ async function savedAction(action:'check'|'reset'){
+  if(!view||saving.current)return;
+  if(action==='reset'&&!window.confirm('重置所有生成服务配置和密钥？故事、本机路径与网络设置都会保留；运行中的生成保持不变。'))return;
+  saving.current=true;setBusy(true);setError('');setMessage('');
+  try{const result=await request('local/provider-settings','POST',{action,expectedRevision:view.revision});if(action==='reset'){adopt(result);setMessage('生成设置已重置，重启服务后生效。');}else setMessage(result.message);}
+  catch(e){setError(e instanceof Error?e.message:'操作失败，请重新读取设置。');}
+  finally{saving.current=false;setBusy(false);}
+ }
+ return <>{showPrompt&&runtime?.configured===false&&!open&&<aside className="yu-provider-setup" role="status">请先配置生成服务。{view?<a href="#provider-settings">打开生成服务与模型</a>:<span>请在运行服务的电脑上，使用本机回环地址打开 我的 → 生成服务与模型。</span>}</aside>}{showEntry&&view&&<button type="button" onClick={()=>{setOpen(true);void load();}}><Cpu size={20}/>生成服务与模型<ChevronRight size={18}/></button>}
  {open&&<Sheet title="生成服务与模型" busy={saving.current} onClose={()=>{setOpen(false);setKey('');setKeyAction('keep');setImageKey('');setImageKeyAction('keep');}}>
   <div className="yu-provider-settings">
    <p className="yu-provider-intro">与桌面、CLI 和技能共用，保存后重启服务生效。</p>
@@ -151,6 +161,7 @@ export default function ProviderSettings({onRuntime}:{onRuntime?:(runtime:Runtim
      {draft&&<button type="submit" className="yu-primary" disabled={!dirty||busy}>{saving.current?'正在保存…':'保存设置'}</button>}
     </div>
    </form>
+   {view&&<div className="yu-provider-maintenance"><button type="button" className="yu-provider-ghost" disabled={busy} onClick={()=>void savedAction('check')}>检查已保存配置的连接</button><button type="button" className="yu-provider-ghost" disabled={busy} onClick={()=>void savedAction('reset')}>重置所有生成服务配置</button><p>检查只使用已保存配置及启动覆盖，不提交未保存的更改，不生成内容。</p></div>}
   </div>
  </Sheet>}</>;
 }

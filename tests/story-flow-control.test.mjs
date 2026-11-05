@@ -213,7 +213,6 @@ test('a failed search leaves a prepared story confirmable without repeating any 
  f.generation.suggestions=async()=>{throw Error('controlled failure');};
  await setup(f,id,{action:'more'});await searchIs(f,id,'failed');
  const s=await f.read(id);assert.equal(s.state,'idle');assert.equal(s.error,null);assert.equal(s.intake.phase,'confirming');assert.ok(s.intake.search.error);assert.equal(s.retryAllowed,false);assert.equal(shelfGenerationStatus(s).group,'待制作确认');
- const {readLibrarySummary}=await import('../desktop/library-preview.ts'),summary=readLibrarySummary(f.dataDirectory).stories.find(row=>row.id===id);assert.equal(summary.failed,0);assert.equal(summary.state,'idle');assert.equal(summary.production.intakePhase,'confirming');
  f.generation.suggestions=async()=>({stories:[],note:'暂无更多。'});
  await setup(f,id,{action:'more'});await searchIs(f,id,'idle');assert.equal((await f.read(id)).intake.batches.length,2,'Retrying the search appends');
  assert.equal(f.control.recommendations.length,before);
@@ -224,7 +223,6 @@ test('a candidate can be chosen while a search runs, and the late result is refu
  const f=await fixture(t),id=await create(f);await phase(f,id,'choosing');await searchIs(f,id,'idle');
  const held=heldSearch(f);await setup(f,id,{action:'more'});await until(()=>held.reading);
  const s=await f.read(id);assert.equal(s.intake.phase,'discovering');assert.equal(s.productionState,'running');assert.equal(s.state,'idle');
- const summaryRow=(await import('../desktop/library-preview.ts')).readLibrarySummary(f.dataDirectory).stories.find(row=>row.id===id);assert.equal(summaryRow.running,1,'Finding a story is what this story is doing');
  const chosen=await setup(f,id,{action:'choose',batch:0,index:1},s);assert.equal(chosen.intake.phase,'preparing');assert.equal(held.reading.signal.aborted,false);
  held.release();await searchIs(f,id,'idle');const after=await f.read(id);assert.equal(after.intake.batches.length,1);assert.equal(after.intake.phase,'preparing','The late result cannot append or change the selected phase');
 });
@@ -448,13 +446,4 @@ test('the migration carries saved searches over without new work or lost choices
  assert.equal(sqlite.prepare("SELECT document FROM reader_sessions WHERE id='broken'").get().document,'{not json');assert.equal(read('broken').state,'failed');
  assert.deepEqual(sqlite.prepare('SELECT id FROM production_jobs').all().map(job=>job.id),['done']);
  sqlite.close();
-});
-
-test('the desktop summary reads a historical library after its required rename',()=>{
- const sqlite=oldLibrary(name=>name<'0004');
- sqlite.prepare("INSERT INTO reader_sessions(id,user_id,selection,document,state,created_at,updated_at) VALUES('test','owner','{\"bookId\":\"book\",\"storyTitle\":\"故事\"}','{\"plan\":null,\"images\":[]}','idle','2026-10-29','2026-10-29')").run();
- // This SQL fixture proves summary compatibility after rename; production readiness performs the full upgrade.
- sqlite.exec('DROP TABLE stories; DROP TABLE jobs; DROP TABLE progress; ALTER TABLE reader_sessions RENAME TO stories; PRAGMA user_version=1');
- const summary=JSON.parse(Object.values(sqlite.prepare(readFileSync('desktop/library.sql','utf8')).get())[0]);
- assert.equal(summary.stories[0].title,'故事');assert.equal(summary.stories[0].jobs,0);sqlite.close();
 });
