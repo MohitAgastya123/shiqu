@@ -43,13 +43,15 @@ pnpm dev local
 SHIQU_API_PORT=3005 pnpm dev local --port 3004
 ```
 
-`local` 强制使用当前 checkout 的 `.data/dev-local`（SQLite、媒体和缓存），忽略 `.env` 或环境变量里的 `SHIQU_DATA_DIR`；不读取桌面书库设置。普通 `pnpm dev` 仍保留共享书库规则。
+`local` 强制使用当前 checkout 的 `.data/dev-local`（SQLite、媒体和缓存），忽略环境变量里的 `SHIQU_DATA_DIR` 和桌面书库路径；生成配置仍复用共享设置。普通 `pnpm dev` 跟随已保存的书库目录，可用 shell 中的 `SHIQU_DATA_DIR` 显式覆盖。私有书库及备份不得放入 Vite 的 `public` 目录。
 
-开发版从 `.env` 读取 AI 配置，**不读取桌面保存的密钥**。默认书架跟随桌面版的数据目录；可用 `SHIQU_DATA_DIR` 显式覆盖。两端共享书架时均需使用当前版本，两端均无需配对。私有书库及备份不得放入 Vite 的 `public` 目录。
+开发后端与桌面、浏览器 CLI、技能调用的 CLI 共用 `desktop.sqlite` 中保存的提供方、对应密钥、模型和任务推理档位；显式 shell 环境变量仅覆盖本次运行，不写回数据库。开发后端不自动加载项目 `.env`，避免旧配置把已选择的 Google 切回 Codex。Vite 的前端环境文件规则仍独立适用，不要把密钥放入 `VITE_` 变量。独立 `pnpm start` / Docker 的环境配置方式不变。
+
+`pnpm run setup` 只检查运行时、安装锁定依赖并安装 hooks，不再创建提供方 `.env`。首次使用在桌面设置中保存服务，或运行 `pnpm cli --configure`；该命令保存后退出，不启动生成。修改后重启开发/桌面/浏览器 CLI 服务；技能与 CLI 的下一次 `run` 读取新配置。两端使用同一书库时先停止占用它的服务，再切换入口。
 
 ## 生成服务配置
 
-CLI 和桌面普通运行无需预设环境变量：首次问答/设置页面保存后复用。下面变量用于开发入口或本次调用覆盖。
+开发、CLI 和桌面普通运行无需预设环境变量：首次问答/设置页面保存后复用。下面变量可在 shell 中显式设置，用于本次调用覆盖；CLI 也支持 `--config /absolute/private.env`，已有 shell 变量优先。开发后端不自动读取 `.env`；复制 [.env.example](../.env.example) 仅用于明确需要该文件的 Docker/独立服务。
 
 OpenAI API 示例：
 

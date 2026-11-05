@@ -60,6 +60,22 @@ test('invocation overrides choose only the effective provider key and never save
  assert.equal(effective.OPENAI_API_KEY,'env-only');assert.equal(effective.OPENAI_TEXT_MODEL,'env-model');assert.equal(store.key('openai'),'saved-openai');assert.equal(store.settings().provider,'gemini');assert.equal(store.revision(),revision);
  const mapped=settingsVariables({...store.settings(),provider:'codex'},'never-for-codex');assert.equal(mapped.OPENAI_API_KEY,undefined);assert.equal(mapped.GEMINI_API_KEY,undefined);
 });
+test('development and CLI share saved provider models, credentials and per-task reasoning defaults',async t=>{
+ const f=await fixture(t),store=new SystemSettingsStore(f.file,f.library);t.after(()=>store.close());
+ const efforts={suggest:'low',art:'medium',frames:'high',outline:'low',plan:'medium',review:'high',repair:'low'};
+ store.save({provider:'gemini',providerConfigured:true,textModel:'saved-google-text',imageModel:'saved-google-image',taskReasoningEfforts:efforts},{provider:'gemini',value:'saved-google-key'});
+ store.save({provider:'openai',openaiTextModel:'saved-openai-text',openaiImageModel:'saved-openai-image'},{provider:'openai',value:'saved-openai-key'});store.save({provider:'gemini'});
+ const before=store.settings(),revision=store.revision(),variables=effectiveProviderVariables(store,{});
+ assert.equal(variables.SHIQU_AI_PROVIDER,'gemini');assert.equal(variables.GEMINI_API_KEY,'saved-google-key');assert.equal(variables.OPENAI_API_KEY,undefined);
+ assert.equal(variables.GEMINI_TEXT_MODEL,'saved-google-text');assert.equal(variables.GEMINI_IMAGE_MODEL,'saved-google-image');
+ for(const [task,effort] of Object.entries(efforts))assert.equal(variables['SHIQU_REASONING_'+task.toUpperCase()],effort);
+ assert.deepEqual(await cliProviderConfiguration(store,{}),variables);
+ const override=effectiveProviderVariables(store,{SHIQU_AI_PROVIDER:'openai',OPENAI_TEXT_MODEL:'override-text',SHIQU_REASONING_PLAN:'low'});
+ assert.equal(override.OPENAI_API_KEY,'saved-openai-key');assert.equal(override.GEMINI_API_KEY,undefined);assert.equal(override.OPENAI_TEXT_MODEL,'override-text');assert.equal(override.OPENAI_IMAGE_MODEL,'saved-openai-image');assert.equal(override.SHIQU_REASONING_PLAN,'low');
+ assert.equal(effectiveProviderVariables(store,{GEMINI_API_KEY:''}).GEMINI_API_KEY,'');
+ assert.throws(()=>effectiveProviderVariables(store,{SHIQU_AI_PROVIDER:'unknown'}),/SHIQU_AI_PROVIDER/);
+ assert.deepEqual(store.settings(),before);assert.equal(store.revision(),revision);assert.equal(store.key('gemini'),'saved-google-key');
+});
 test('reset clears only provider settings, keeping library/network state and no API key in story data',async t=>{
  const f=await fixture(t),store=new SystemSettingsStore(f.file,f.library);t.after(()=>store.close());
  store.save({provider:'openai',providerConfigured:true,port:3400,internetEnabled:true,libraryConfigured:true},{provider:'openai',value:'test-only-key'});
