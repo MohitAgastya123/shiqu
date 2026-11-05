@@ -1,6 +1,8 @@
-// Edit shared provider defaults locally; saved keys are presence flags and live generation stays unchanged.
+// 生成服务与模型：在本机编辑与桌面、CLI、技能共用的提供方默认值；已存密钥只回传是否存在，运行中的生成不受影响。
+// 运维版式：顶部状态卡展示当前进程实际运行的服务、待重启与启动覆盖；提供方以卡片单选并标出密钥状态；
+// 各分区标记未保存更改；推理档位以分段控件逐项展示；底部常驻操作栏提供放弃更改、重新读取与保存。
 import {useEffect,useRef,useState} from 'react';
-import {ChevronRight,Settings2} from 'lucide-react';
+import {AlertTriangle,ChevronRight,Image as ImageIcon,KeyRound,RefreshCw,RotateCcw,Settings2,SlidersHorizontal,Type} from 'lucide-react';
 import Sheet from './StorySheet';
 import {request} from './shared';
 import type {ProviderSettings as Settings,ProviderSettingsSave,ProviderSettingsView} from '@/lib/provider-settings';
@@ -11,11 +13,46 @@ import './ProviderSettings.css';
 
 const labels:Record<string,string>={gemini:'Google / Gemini',openai:'OpenAI API',codex:'Codex · ChatGPT 订阅',readonly:'只读',claude:'Claude Code',deepseek:'DeepSeek API'};
 type Runtime=ProviderSettingsView['runtime'];
+type Tone='ok'|'warn'|'idle';
+type KeyAction=ProviderSettingsSave['keyAction'];
+type Option<T extends string>={value:T;label:string;hint?:string;badge?:{tone:Tone;text:string};disabled?:boolean};
+
+// 运行状态只取当前进程上报的配置，资料页摘要与设置面板共用同一口径。
+function runtimeState(runtime:Runtime|null):{tone:Tone;label:string}{
+ if(!runtime)return {tone:'idle',label:'读取中'};
+ if(runtime.provider==='readonly')return {tone:'idle',label:'只读'};
+ return runtime.configured===false?{tone:'warn',label:'未接通'}:{tone:'ok',label:'运行中'};
+}
+function RuntimeRows({runtime}:{runtime:Runtime}){
+ return <dl className="yu-provider-runtime">
+  <dt><Type size={14}/>文本</dt><dd title={runtime.models.text}><span>{labels[runtime.provider]||runtime.provider}</span><code>{runtime.models.text||'默认模型'}</code></dd>
+  <dt><ImageIcon size={14}/>图片</dt><dd title={runtime.models.image}><span>{labels[runtime.imageProvider||runtime.provider]||runtime.imageProvider}</span><code>{runtime.models.image||'默认模型'}</code></dd>
+ </dl>;
+}
 export function ProviderRuntimeSummary({runtime}:{runtime:Runtime|null}){
- return <section className="yu-provider-summary" aria-label="当前运行配置"><div><span>当前运行</span>{runtime&&<strong>{labels[runtime.provider]||runtime.provider}</strong>}</div>
-  {!runtime?<p role="status">正在读取生成配置…</p>:runtime.provider==='readonly'?<p>只读模式，不生成内容。</p>:<dl><dt>文本</dt><dd title={runtime.models.text}>{runtime.models.text||'—'}</dd><dt>图片</dt><dd title={runtime.models.image}>{runtime.imageProvider?`${labels[runtime.imageProvider]} · `:''}{runtime.models.image||'—'}</dd></dl>}
+ const state=runtimeState(runtime);
+ return <section className="yu-provider-summary" aria-label="当前运行配置"><div><span>当前运行</span><em className={`yu-provider-pill ${state.tone}`}>{state.label}</em></div>
+  {!runtime?<p role="status">正在读取生成配置…</p>:runtime.provider==='readonly'?<p>只读模式，不生成内容。</p>:<RuntimeRows runtime={runtime}/>}
   {runtime?.configured===false&&runtime.provider!=='readonly'&&<p>生成服务尚未接通。</p>}
  </section>;
+}
+// 卡片与分段控件都基于原生 radio，保留方向键切换，并随外层 fieldset 一起禁用。
+function Choices<T extends string>({name,label,value,options,onChange,variant='cards'}:{name:string;label:string;value:T;options:Option<T>[];onChange:(value:T)=>void;variant?:'cards'|'segments'}){
+ return <div role="radiogroup" aria-label={label} className={variant==='cards'?'yu-provider-cards':'yu-provider-segments'}>{options.map(option=><label key={option.value} className={option.value===value?'selected':undefined}>
+  <input type="radio" name={name} value={option.value} checked={option.value===value} disabled={option.disabled} onChange={()=>onChange(option.value)}/>
+  <strong>{option.label}</strong>{option.hint&&<small>{option.hint}</small>}{option.badge&&<em className={`yu-provider-pill ${option.badge.tone}`}>{option.badge.text}</em>}
+ </label>)}</div>;
+}
+function Group({icon,title,label,changed,children}:{icon:React.ReactNode;title:string;label:string;changed:boolean;children:React.ReactNode}){
+ return <section className="yu-provider-group" aria-label={label}><header>{icon}<h3>{title}</h3>{changed&&<i className="yu-provider-changed">已修改</i>}</header>{children}</section>;
+}
+function KeyField({name,title,present,action,onAction,value,onValue}:{name:string;title:string;present:boolean;action:KeyAction;onAction:(action:KeyAction)=>void;value:string;onValue:(value:string)=>void}){
+ return <div className="yu-provider-key">
+  <div className="yu-provider-key-head"><span><KeyRound size={14}/>{title}</span><em className={`yu-provider-pill ${present?'ok':'warn'}`}>{present?'已保存':'未设置'}</em></div>
+  <Choices name={name} label={`${title}操作`} variant="segments" value={action} onChange={onAction} options={[{value:'keep',label:present?'保留':'暂不设置'},{value:'replace',label:present?'替换':'输入密钥'},{value:'remove',label:'移除',disabled:!present}]}/>
+  {action==='replace'&&<label className="yu-provider-field">新{title}<input type="password" autoComplete="off" spellCheck={false} value={value} onChange={e=>onValue(e.target.value)} required maxLength={4096} placeholder="粘贴后保存，之后不再显示"/></label>}
+  <p className={action==='remove'?'danger':undefined}>{action==='remove'?'保存后移除本机密钥，重启后停止使用。':present||action==='replace'?'已存密钥不会显示或返回浏览器。':'尚未设置密钥，该服务暂时无法生成。'}</p>
+ </div>;
 }
 export default function ProviderSettings({onRuntime}:{onRuntime?:(runtime:Runtime|null)=>void}){
  const [open,setOpen]=useState(false),[view,setView]=useState<ProviderSettingsView|null>(null),[draft,setDraft]=useState<Settings|null>(null);
@@ -62,43 +99,57 @@ export default function ProviderSettings({onRuntime}:{onRuntime?:(runtime:Runtim
  const imageProvider=draft?effectiveImageProvider(draft):null,separateImage=!!imageProvider&&imageProvider!==provider,imageApi=separateImage&&isApiProvider(imageProvider)?imageProvider:null;
  const dirty=!!draft&&!!view&&(JSON.stringify(draft)!==JSON.stringify(view.settings)||keyAction!=='keep'||imageKeyAction!=='keep');
  const notice=message||(view?.restartRequired?'已保存的设置尚未应用，重启服务后生效。':'');
+ const state=runtimeState(runtime),codexBlocked=view?.platform==='win32';
+ const changed=(...fields:(keyof Settings)[])=>!!draft&&!!view&&fields.some(field=>JSON.stringify(draft[field])!==JSON.stringify(view.settings[field]));
+ const textModelField=provider==='openai'?'openaiTextModel':provider==='codex'?'codexModel':'textModel',imageModelField=imageProvider==='openai'?'openaiImageModel':'imageModel';
+ const keyBadge=(name:'gemini'|'openai'):Option<string>['badge']=>view?(view.keyPresent[name]?{tone:'ok',text:'密钥已存'}:{tone:'warn',text:'缺少密钥'}):undefined;
+ const providerOptions:Option<NonNullable<Settings['imageProvider']>>[]=[{value:'gemini',label:'Gemini',hint:'Google API 计费',badge:keyBadge('gemini')},{value:'openai',label:'OpenAI',hint:'OpenAI API 计费',badge:keyBadge('openai')},{value:'codex',label:'Codex',hint:codexBlocked?'Windows 暂不支持':'ChatGPT 订阅额度',disabled:codexBlocked}];
+ function discard(){if(view){adopt(view);setError('');setMessage('');}}
+ function selectImageProvider(value:NonNullable<Settings['imageProvider']>|''){
+  // 选“与文本相同”时保持未设置；实际图片服务变化时清空已输入的图片密钥。
+  const next=value&&value!==provider?value:undefined;
+  if(effectiveImageProvider({provider:provider!,imageProvider:next})!==imageProvider){setImageKey('');setImageKeyAction('keep');}
+  update('imageProvider',next);
+ }
  return <><button type="button" onClick={()=>{setOpen(true);void load();}}><Settings2 size={20}/>生成服务与模型<ChevronRight size={18}/></button>
  {open&&<Sheet title="生成服务与模型" busy={saving.current} onClose={()=>{setOpen(false);setKey('');setKeyAction('keep');setImageKey('');setImageKeyAction('keep');}}>
   <div className="yu-provider-settings">
-   <p>与桌面、CLI 和技能共用，保存后重启服务生效。</p>
+   <p className="yu-provider-intro">与桌面、CLI 和技能共用，保存后重启服务生效。</p>
+   <section className={`yu-provider-status ${state.tone}`} aria-label="运行状态">
+    <header><i className="yu-provider-dot"/><strong>{runtime?.provider==='readonly'?'只读模式':`生成服务${state.label}`}</strong>
+     {view?.restartRequired&&<em className="yu-provider-pill warn">待重启</em>}
+     {!!view?.overrides.length&&<em className="yu-provider-pill warn">{view.overrides.length} 项启动覆盖</em>}
+    </header>
+    {runtime&&runtime.provider!=='readonly'?<RuntimeRows runtime={runtime}/>:<p>{runtime?'当前不调用任何生成服务。':'正在读取运行配置…'}</p>}
+    {!!view?.overrides.length&&<details className="yu-provider-overrides"><summary><AlertTriangle size={14}/>查看覆盖项</summary><ul>{view.overrides.map(name=><li key={name}><code>{name}</code></li>)}</ul><p>移除对应的启动覆盖后，保存值才会生效。</p></details>}
+   </section>
    {error?<p className="yu-batch-error" role="alert">{error}</p>:notice&&<p className="yu-provider-message" role="status">{notice}</p>}
-   {!!view?.overrides.length&&<details className="yu-provider-overrides"><summary>本次启动有 {view.overrides.length} 项覆盖</summary><ul>{view.overrides.map(name=><li key={name}><code>{name}</code></li>)}</ul><p>移除对应的启动覆盖后，保存值才会生效。</p></details>}
    <form onSubmit={e=>{e.preventDefault();void save();}}>
     {draft?<fieldset disabled={busy} aria-label="生成服务设置">
-     <section className="yu-provider-group" aria-label="提供方与模型">
-      <h3>提供方与模型</h3>
-      <label>文本服务<select value={provider} onChange={e=>selectProvider(e.target.value as Settings['provider'])}><option value="gemini">Google / Gemini</option><option value="openai">OpenAI API</option><option value="codex" disabled={view?.platform==='win32'}>Codex · ChatGPT 订阅</option><option value="readonly">只读</option></select></label>
-      <p>{api?'按 API 项目计费。':provider==='codex'?'使用本机已登录的 Codex CLI 和订阅额度。':'只读模式，不调用生成服务。'}</p>
-      {provider!=='readonly'&&<label>图片服务<select value={draft.imageProvider||''} onChange={e=>{const value=e.target.value as NonNullable<Settings['imageProvider']>|'';const next=value&&value!==provider?value:undefined;if(effectiveImageProvider({provider:provider!,imageProvider:next})!==imageProvider){setImageKey('');setImageKeyAction('keep');}update('imageProvider',next);}}><option value="">与文本服务相同</option><option value="gemini">Google / Gemini</option><option value="openai">OpenAI API</option><option value="codex" disabled={view?.platform==='win32'}>Codex · ChatGPT 订阅</option></select></label>}
-      {api&&<div className="yu-provider-models"><label>文本模型<input value={provider==='openai'?draft.openaiTextModel:draft.textModel} onChange={e=>update(provider==='openai'?'openaiTextModel':'textModel',e.target.value)} spellCheck={false} required/></label>{!separateImage&&<label>图片模型<input value={provider==='openai'?draft.openaiImageModel:draft.imageModel} onChange={e=>update(provider==='openai'?'openaiImageModel':'imageModel',e.target.value)} spellCheck={false} required/></label>}</div>}
-      {provider==='codex'&&<label>文本模型<input value={draft.codexModel} onChange={e=>update('codexModel',e.target.value)} placeholder="留空使用 CLI 默认模型" spellCheck={false}/></label>}
-     </section>
-     {api&&<section className="yu-provider-group" aria-label="API 密钥设置">
-      <div className="yu-provider-group-heading"><h3>API 密钥</h3><span>{view?.keyPresent[provider]?'已保存':'未设置'}</span></div>
-      <label>密钥操作<select aria-label="API 密钥操作" value={keyAction} onChange={e=>{setKeyAction(e.target.value as ProviderSettingsSave['keyAction']);setKey('');setMessage('');}}><option value="keep">保留已保存密钥</option><option value="replace">输入新密钥</option><option value="remove">移除已保存密钥</option></select></label>
-      {keyAction==='replace'&&<label>新 API 密钥<input type="password" autoComplete="off" spellCheck={false} value={key} onChange={e=>setKey(e.target.value)} required maxLength={4096}/></label>}
-      <p>{keyAction==='remove'?'保存后移除本机密钥，重启后停止使用。':'已存密钥不会显示或返回浏览器。'}</p>
-     </section>}
-     {separateImage&&<section className="yu-provider-group" aria-label="图片服务设置">
-      <div className="yu-provider-group-heading"><h3>图片服务 · {labels[imageProvider!]}</h3>{imageApi&&<span>{view?.keyPresent[imageApi]?'密钥已保存':'密钥未设置'}</span>}</div>
-      <p>只用于绘制插图；选题、分镜与审核仍使用文本服务，制作流程不变。</p>
-      {imageApi?<>
-       <label>图片模型<input value={imageApi==='openai'?draft.openaiImageModel:draft.imageModel} onChange={e=>update(imageApi==='openai'?'openaiImageModel':'imageModel',e.target.value)} spellCheck={false} required/></label>
-       <label>图片服务密钥操作<select aria-label="图片服务 API 密钥操作" value={imageKeyAction} onChange={e=>{setImageKeyAction(e.target.value as ProviderSettingsSave['imageKeyAction']);setImageKey('');setMessage('');}}><option value="keep">保留已保存密钥</option><option value="replace">输入新密钥</option><option value="remove">移除已保存密钥</option></select></label>
-       {imageKeyAction==='replace'&&<label>图片服务新 API 密钥<input type="password" autoComplete="off" spellCheck={false} value={imageKey} onChange={e=>setImageKey(e.target.value)} required maxLength={4096}/></label>}
-      </>:<p>使用本机已登录的 Codex CLI 和订阅额度绘图。</p>}
-     </section>}
-     {provider!=='readonly'&&<details className="yu-provider-efforts"><summary>高级设置 · 推理档位</summary>
-      {provider==='codex'&&<label className="yu-provider-codex-effort">其他请求推理档位<select value={draft.codexReasoningEffort} onChange={e=>update('codexReasoningEffort',e.target.value as Settings['codexReasoningEffort'])}><option value="">跟随 Codex 默认</option>{codexReasoningEfforts.map(value=><option key={value}>{value}</option>)}</select></label>}
-      <div>{reasoningTasks.map(task=><label key={task}>{taskReasoningLabels[task]}<select value={draft.taskReasoningEfforts[task]} onChange={e=>update('taskReasoningEfforts',{...draft.taskReasoningEfforts,[task]:e.target.value as Settings['taskReasoningEfforts'][typeof task]})}>{efforts.map(value=><option key={value}>{value}</option>)}</select></label>)}</div>
+     <Group icon={<Type size={16}/>} title="文本服务" label="提供方与模型" changed={changed('provider',textModelField)||keyAction!=='keep'}>
+      <Choices name="provider" label="文本服务" value={provider!} onChange={selectProvider} options={[...providerOptions,{value:'readonly',label:'只读',hint:'不调用生成服务'}]}/>
+      {provider!=='readonly'&&<label className="yu-provider-field">文本模型<input value={draft[textModelField]} onChange={e=>update(textModelField,e.target.value)} placeholder={provider==='codex'?'留空使用 CLI 默认模型':undefined} spellCheck={false} required={api}/></label>}
+      {api&&<KeyField name="key-action" title="API 密钥" present={!!view?.keyPresent[provider]} action={keyAction} onAction={value=>{setKeyAction(value);setKey('');setMessage('');}} value={key} onValue={setKey}/>}
+     </Group>
+     {provider!=='readonly'&&<Group icon={<ImageIcon size={16}/>} title="图片服务" label="图片服务设置" changed={changed('imageProvider',imageModelField)||imageKeyAction!=='keep'}>
+      <Choices name="image-provider" label="图片服务" value={draft.imageProvider||''} onChange={selectImageProvider} options={[{value:'',label:'与文本相同',hint:labels[provider!]},...providerOptions.filter(option=>option.value!==provider)]}/>
+      {separateImage&&<p>只用于绘制插图；选题、分镜与审核仍使用文本服务，制作流程不变。</p>}
+      {isApiProvider(imageProvider)?<label className="yu-provider-field">图片模型<input value={draft[imageModelField]} onChange={e=>update(imageModelField,e.target.value)} spellCheck={false} required/></label>:<p>使用本机已登录的 Codex CLI 和订阅额度绘图。</p>}
+      {imageApi?<KeyField name="image-key-action" title="图片服务 API 密钥" present={!!view?.keyPresent[imageApi]} action={imageKeyAction} onAction={value=>{setImageKeyAction(value);setImageKey('');setMessage('');}} value={imageKey} onValue={setImageKey}/>:!separateImage&&api&&<p>沿用文本服务的 API 密钥。</p>}
+     </Group>}
+     {provider!=='readonly'&&<details className="yu-provider-efforts"><summary><SlidersHorizontal size={16}/><span>推理档位</span><small>{reasoningTasks.length} 项任务</small>{changed('taskReasoningEfforts','codexReasoningEffort')&&<i className="yu-provider-changed">已修改</i>}</summary>
+      <div className="yu-provider-effort-rows">
+       {provider==='codex'&&<div className={draft.codexReasoningEffort!==view?.settings.codexReasoningEffort?'changed':undefined}><span>其他请求</span><Choices name="effort-codex" label="其他请求推理档位" variant="segments" value={draft.codexReasoningEffort} onChange={value=>update('codexReasoningEffort',value)} options={[{value:'',label:'默认'},...codexReasoningEfforts.map(value=>({value,label:value}))]}/></div>}
+       {reasoningTasks.map(task=><div key={task} className={draft.taskReasoningEfforts[task]!==view?.settings.taskReasoningEfforts[task]?'changed':undefined}><span>{taskReasoningLabels[task]}</span><Choices<string> name={`effort-${task}`} label={`${taskReasoningLabels[task]}推理档位`} variant="segments" value={draft.taskReasoningEfforts[task]} onChange={value=>update('taskReasoningEfforts',{...draft.taskReasoningEfforts,[task]:value as Settings['taskReasoningEfforts'][typeof task]})} options={efforts.map(value=>({value,label:value}))}/></div>)}
+      </div>
      </details>}
     </fieldset>:busy?<p role="status">正在读取本机设置…</p>:!error&&<p role="status">重新读取后可编辑设置。</p>}
-    <div className="yu-provider-actions"><button type="button" className="yu-provider-reload" aria-label="重新读取设置" disabled={busy} onClick={()=>void load()}>重新读取</button>{draft&&<button type="submit" className="yu-primary" disabled={!dirty||busy}>{saving.current?'正在保存…':'保存设置'}</button>}</div>
+    <div className="yu-provider-actions">
+     <span className={dirty?'dirty':undefined}>{dirty?'有未保存的更改':view?.restartRequired?'已保存，重启后生效':draft?'与已保存设置一致':''}</span>
+     <button type="button" className="yu-provider-ghost" aria-label="重新读取设置" title="重新读取设置" disabled={busy} onClick={()=>void load()}><RefreshCw size={16}/></button>
+     {dirty&&<button type="button" className="yu-provider-ghost" disabled={busy} onClick={discard}><RotateCcw size={16}/>放弃</button>}
+     {draft&&<button type="submit" className="yu-primary" disabled={!dirty||busy}>{saving.current?'正在保存…':'保存设置'}</button>}
+    </div>
    </form>
   </div>
  </Sheet>}</>;
