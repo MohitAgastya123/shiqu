@@ -17,7 +17,7 @@ Automatically produce proper multi-panel comic pages in the reader and exports. 
 - [x] AC5: Reader arrows navigate comic pages; saved progress and production API indices continue identifying original frames. Scene selection opens the containing comic page. Phone users can zoom/pan and read an accessible transcript. Missing images remain visibly incomplete.
 - [x] AC6: PDF, page PNG/overview and offline HTML share the same page plan. ZIP keeps compatible numbered frame WebPs, source/credit/signature/hash/XMP rules and adds layout metadata without re-encoding ZIP-input images. Embedded raster balloons are never painted twice.
 - [x] AC7: Automatic fitting promotes dense panels rather than shrinking text indefinitely, clipping or dropping dialogue. Impossible content fails clearly with its panel number. Whole illustrations remain intact and artwork-toned margins handle differing aspect ratios.
-- [ ] AC8: Production-path tests, desktop/phone browser inspection and rendered PDF inspection verify the result. Commit and push the completed changes to the user's existing feature branch.
+- [x] AC8: Production-path tests, desktop/phone browser inspection and rendered PDF inspection verify the result. Commit and push the completed changes to the user's existing feature branch.
 
 ## Constraints
 

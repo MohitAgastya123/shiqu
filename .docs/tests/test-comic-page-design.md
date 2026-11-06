@@ -8,6 +8,6 @@
 - [x] Verify old missing hints, all span types, long narration/dialogue, long tokens, overflow promotion and explicit impossible-content errors. Test one and eighty frames. No lost/duplicated/reordered frames or silently clipped text.
 - [x] Assert a 24-unit final-sheet minimum for narration/dialogue across normal, two-cell and splash layouts. Include a new composed frame with recorded lettering too small at a proposed display scale; reject or promote it rather than repainting. Verify known impossible splash density yields a panel-numbered error and unknown embedded lettering remains a full-page preserved raster.
 - [x] Convert a ZIP and verify signed WebP bytes and metadata are preserved. Embedded balloons do not render twice; offline preview loads comic lettering without network access.
-- [ ] Run production-focused tests, selected regression/native checks and independent review, then commit/push the feature branch and verify the remote commit.
+- [x] Run production-focused tests, selected regression/native checks and independent review, then commit/push the feature branch and verify the remote commit.
 
 Production/browser/export tests and independent review passed; full selected suite: 1,514 tests, zero skips/cancellations. Typecheck/lint/diff checks passed, native source-only checks: 24 tests and rustfmt. All six production-PDF renders were inspected; desktop Vite preview and IAB desktop/390px phone zoom/transcript checks passed. See the AP acceptance matrix and final completion document for evidence.

@@ -64,8 +64,8 @@ AR fixed: final-sheet minimum font, bounded promotion, exact shared geometry and
 ### Phase 5 - Completion and push
 
 - [x] Update README, user guide, CLI skill, existing bubble docs and the E2E spec to match comic pages and export contracts.
-- [ ] Complete the VR acceptance matrix and concise completion doc with actual evidence, limitations and any pre-existing failures.
-- [ ] Commit only this feature, push `feature/comic-bubbles` to origin and verify its remote head matches; leave main unchanged.
+- [x] Complete the VR acceptance matrix and concise completion doc with actual evidence, limitations and any pre-existing failures.
+- [x] Commit only this feature, push `feature/comic-bubbles` to origin and verify its remote head matches; leave main unchanged.
 
 ## Validation
 
@@ -91,8 +91,10 @@ Independent CR passed after fixing stale image-metadata navigation subscriptions
 | AC5 | complete | Actual dimension-regroup keyboard/wheel regression, canonical jump/reload E2E, phone zoom/pan/initial position/transcripts and visible incomplete-panel unit checks. |
 | AC6 | complete | Production PDF/PNG/ZIP/HTML tests; full-panel marker and unknown legacy provenance; canonical-map/dimension validation, signed XMP/hash checks and public ZIP byte equality. |
 | AC7 | complete | Final-sheet 24-unit minimum, finite promotion and numbered density errors; full-art containment tests; explicit PNG size limits; cached result/edit/mutation regressions. |
-| AC8 | incomplete | Focused checks, desktop/phone IAB, all six production-PDF renders and independent CR passed. Final full selected suite passed 1,514/1,514; Git commit/push remain to be recorded. |
+| AC8 | complete | Focused checks, desktop/phone IAB, all six production-PDF renders and independent CR passed. Final full selected suite passed 1,514/1,514. Feature commit `2482803` pushed to origin; `git ls-remote` matched its full hash. |
 
 Visual verification: `pnpm desktop:preview` at 1420, isolated reader, IAB desktop and 390×844 phone, zoom and speaker-preserving transcript. PDF `/tmp/shiqu-comic-page-design.pdf` was generated through the production exporter and all six Poppler renders inspected: four mixed comic sheets plus two complete English ending/credit/source-note sheets. Test artwork is synthetic and does not claim paid-provider visual fidelity. [Desktop preview](../../../../assets/comic-pages-desktop.png) · [Phone preview](../../../../assets/comic-pages-phone.png).
 
 The first full regression run found five failures: one controlled image-route setup and four assertions tied to the intentional frame/page presentation changes (media preflight count, PDF page grouping, script labels and editor labels). Those expectations were updated without removing source/hash/byte/progress assertions; focused reruns passed. The final selected suite passed **1,514/1,514**, with zero failures, skips or cancellations across **186 JS test files**. Receipt: `.data/test-plans/2026-11-06T20-38-32-197Z-ece76ee9/run.json`. `pnpm typecheck`, `pnpm lint` and `git diff --check` passed. Selected native source-only CI checks passed **24 tests** plus rustfmt; only the designated prepared-bundle test was filtered with the CI resource override. The complete Comic Neue copyright/OFL text is included in root `NOTICE`, already shipped by desktop and npm packaging; no desktop package was built.
+
+VR passed: all eight acceptance criteria are complete in code, tests, observable output and documentation. Feature commit `24828032452d0e281be762f99483d565c92da9ce` is on `origin/feature/comic-bubbles`; main was not merged. Completion documentation follows in a docs-only commit.
