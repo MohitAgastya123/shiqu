@@ -1,6 +1,5 @@
-// Fast runs (`pnpm test`, PR CI) exercise production flows once with a controlled Codex adapter and skip
-// exhaustive cases. `pnpm test:providers` and `pnpm test:full` set SHIQU_TEST_TIER=full for every provider
-// and the heavy cases. Provider adapter contract tests always cover every provider.
+// 快速层保留提供方契约和小型完整性冒烟；制作流程与真实原著套件由共享选择器分开运行。
+// 完整提供方和重型用例由 SHIQU_TEST_TIER=full 开启。
 export const fullTier=process.env.SHIQU_TEST_TIER==='full';
 const fastProvider='codex';
 // Providers for a production-flow test matrix: all of them in the full tier, one in fast runs.
@@ -9,6 +8,5 @@ export function flowProviders(names){return fullTier?names:names.includes(fastPr
 export function flowProvider(name,names=['codex','gemini']){return flowProviders(names).includes(name)?{}:{skip:'provider matrix: run pnpm test:providers'};}
 // Options for exhaustive or long-running cases kept out of fast runs.
 export const heavy=fullTier?{}:{skip:'heavy case: run pnpm test:providers'};
-// Options for checks of the shipped book contents (editions, glyphs, chapters). The books change only when
-// added or replaced by hand, so run `pnpm test:books` then; loader and integrity logic stays in fast runs.
+// 导入 books 的文件属于真实原著套件；test:books 开启其中的逐字、版本和章节检查。
 export const books=fullTier||process.env.SHIQU_TEST_BOOKS==='1'?{}:{skip:'shipped book contents: run pnpm test:books'};

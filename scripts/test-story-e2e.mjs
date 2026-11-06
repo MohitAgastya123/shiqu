@@ -1,5 +1,5 @@
-// Release gates run critical production-backed smoke checks; full regressions remain an explicit selection.
-// Each file runs once with provenance; plain test:e2e retains the exhaustive user-flow selection.
+// 发布门禁运行关键冒烟；扩展服务 E2E 与完整回归通过独立入口选择，共用执行与证据记录。
+// 同一文件只运行一次；默认 test:e2e 保留现有用户流程范围。
 import path from 'node:path';
 import {randomUUID,createHash} from 'node:crypto';
 import {spawn,execFileSync} from 'node:child_process';
@@ -15,6 +15,12 @@ export const userFlowTests=[
  'tests/system-settings.test.mjs','tests/settings-faults.test.mjs',
 ];
 
+export const extendedFlowTests=[
+ 'tests/adaptive-storyboard-review.e2e.mjs','tests/book-reference-star.e2e.mjs',
+ 'tests/character-continuity-edits.e2e.mjs','tests/frame-count-gate.e2e.mjs',
+ 'tests/incremental-story-library.e2e.mjs','tests/story-discovery-speed-accuracy.e2e.mjs',
+];
+
 const releaseSmokeTests=[
  'tests/release-smoke.playwright.e2e.mjs','tests/story-generation-state-machine.e2e.mjs',
  'tests/headless-cli.test.mjs','tests/npm-cli.test.mjs','tests/system-settings.test.mjs',
@@ -24,11 +30,12 @@ const releaseSmokeTests=[
 export async function selectTests(gate,root=process.cwd()){
  if(gate==='release')return [...releaseSmokeTests,'tests/release-pre-push.test.mjs'];
  if(gate==='npm')return [...releaseSmokeTests];
+ if(gate==='extended')return [...extendedFlowTests];
  if(gate==='full'){
   const regressionTests=(await readdir(path.join(root,'tests'))).filter(name=>name.endsWith('.test.mjs')).sort().map(name=>'tests/'+name);
-  return [...new Set([...regressionTests,...userFlowTests])];
+  return [...new Set([...regressionTests,...userFlowTests,...extendedFlowTests])];
  }
- if(gate!==undefined)throw Error('Usage: pnpm test:e2e [--gate=release|--gate=npm|--gate=full]');
+ if(gate!==undefined)throw Error('Usage: pnpm test:e2e [--gate=release|--gate=npm|--gate=extended|--gate=full]');
  return [...userFlowTests];
 }
 
@@ -51,12 +58,12 @@ async function runUserFlows(gate){
  for(const signal of ['SIGINT','SIGTERM'])process.once(signal,()=>child.kill(signal));
  const exitCode=await new Promise((resolve,reject)=>{child.once('error',reject);child.once('exit',code=>resolve(code??1));});
  await new Promise(resolve=>log.end(resolve));
- await writeFile(path.join(directory,'run.json'),JSON.stringify({runId,build,commit,startedAt,finishedAt:new Date().toISOString(),exitCode,tests,model:'controlled production adapters; no live inference',databasePolicy:'isolated .data/e2e browser stores; disposable CLI/configuration/recovery libraries and homes; dev local startup uses a disposable checkout',browser:'independent Playwright Chromium'},null,2));
+ await writeFile(path.join(directory,'run.json'),JSON.stringify({runId,gate:gate??'user-flows',build,commit,startedAt,finishedAt:new Date().toISOString(),exitCode,tests,model:'controlled production adapters; no live inference',databasePolicy:'isolated .data/e2e browser stores; disposable CLI/configuration/recovery libraries and homes; dev local startup uses a disposable checkout',browser:gate==='extended'?'none (service/engine E2E)':'independent Playwright Chromium'},null,2));
  console.log(`Story E2E ${exitCode===0?'PASS':'FAIL'} — ${directory}`);process.exitCode=exitCode;
 }
 
 if(process.argv[1]&&realpathSync(process.argv[1])===realpathSync(fileURLToPath(import.meta.url))){
  const args=process.argv.slice(2);
- if(args.length>1||(args.length&&!['--gate=release','--gate=npm','--gate=full'].includes(args[0])))throw Error('Usage: pnpm test:e2e [--gate=release|--gate=npm|--gate=full]');
+ if(args.length>1||(args.length&&!['--gate=release','--gate=npm','--gate=extended','--gate=full'].includes(args[0])))throw Error('Usage: pnpm test:e2e [--gate=release|--gate=npm|--gate=extended|--gate=full]');
  await runUserFlows(args[0]?.slice('--gate='.length));
 }

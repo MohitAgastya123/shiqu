@@ -118,21 +118,34 @@ pnpm typecheck
 pnpm lint
 ```
 
-`pnpm test`（以及 PR 的 CI「Shared checks」）是单元层：不运行受控模拟大模型的制作流程测试（调用 `productionFixture()` 的文件），这些流程测试用 `pnpm test:flows` 运行，`pnpm test:providers` 与 `pnpm test:full` 也包含它们。快速层其余规则：制作流程类测试只用受控 Codex 适配器跑一次，跳过超长用例（多处 80 幅流程、完整幅数矩阵、真实 PTY 与无服务 CLI 子命令全流程）。提供方适配器契约测试（`prompt-contracts`、`story-brief`、`task-reasoning`、各提供方 schema/错误测试等）始终覆盖全部提供方。随应用附带的 24 部原著只在手动增补或替换时变化，逐字、版本与章节完整性检查不在 CI 中运行；原文加载、校验与失败即停的逻辑测试仍在快速层。
+`pnpm test` 是快速回归层，保留小型原著完整性冒烟、提供方契约，以及通用缓存、SQLite、HTTP 和 CLI 集成测试。`book-integrity-smoke.test.mjs` 用几 KB 的临时原著调用正式加载器，检查字节哈希、缺失文件、目录越界和失效/不可读出处。`local-server.test.mjs` 的原著夹具用于验证真实 SQLite 锁，不按书籍变更跳过；通用发现缓存测试也保持常跑。
+
+受控模拟大模型的制作流程文件由 `pnpm test:flows` 运行。真实原著的内容、格式、出处及阅读流程测试归入 `pnpm test:books`，默认快速层不加载这些文件；其中包括从混合发现测试抽出的三项全书容量、发现和历史进度迁移检查。`pnpm test:providers` 和 `pnpm test:full` 仍覆盖全部回归文件。提供方矩阵在普通流程运行中仅使用受控 Codex 适配器，完整提供方矩阵和超长用例通过完整层开启。
 
 ```bash
-pnpm test:books       # 增补或替换原著后：全部原著内容检查（含 24 部目录、世说全书扫描）
-pnpm test:providers   # 修改提供方或发布前：Gemini 与 Codex 制作流程矩阵、超长用例及原著检查
-pnpm test:full        # 上述完整层，再加浏览器与 CLI 用户流程
+pnpm test            # 快速回归，包含小型完整性冒烟
+pnpm test:books      # 全部真实原著套件，开启逐字、版本、章节及全书扫描
+pnpm test:flows      # 受控制作流程
+pnpm test:e2e:extended # 六组扩展服务/引擎 E2E，使用受控提供方与隔离数据
+pnpm test:providers  # 全部提供方、重型用例和原著检查
+pnpm test:full       # 全部回归、默认用户流程与扩展服务 E2E，每个文件只运行一次
 ```
 
-分层由 `tests/fixtures/test-tier.mjs` 控制：新的制作流程矩阵用 `flowProviders([...])`，超长用例加 `heavy`，原著内容检查加 `books`；不要删除用例来提速。发布与 npm 门禁（`pnpm test:e2e --gate=…`）和 `pnpm test:pty` 按完整层运行。
+`pnpm test:e2e:extended` 共用正式 E2E 执行器与证据目录，选择六个服务/引擎文件：自适应分镜审核、书籍星标参考、人物连续性修改、幅数门禁、增量故事库及选题速度/准确性。它们使用受控提供方和临时 SQLite/媒体，不启动浏览器，也不发起真实模型请求。该入口等同于 `pnpm test:e2e --gate=extended`，在 `.data/e2e/<run>/` 保存日志和注明 `extended` 范围的 `run.json`；失败返回非零退出码。`pnpm test:full` 同时包含这些文件，默认 `pnpm test:e2e` 和发布/npm 冒烟门禁保留原范围。新增 `.e2e.mjs` 文件必须归入完整、默认或发布选择之一，范围回归测试会检查遗漏。
 
-快速层仍包含真实 CLI、HTTP、SQLite 与辅助进程集成检查。纯配置测试使用 `settingsFixture()`，需要迁移、种子和静态资源的进程测试使用 `startupFixture()`；单书故障测试通过 `copyBookLibrary()` 只复制涉及的原著和补卷，保留正式目录和原始字节。锁超时测试断言正式两秒配置后缩短测试连接的等待；隧道超时测试等辅助进程启动后直接触发正式超时回调，继续验证进程和配置清理。不要通过跳过这些检查来提速。
+`scripts/test-tiers.mjs` 统一选择快速层、制作流程层和原著层。导入 `tests/fixtures/test-tier.mjs` 的 `books` 标记的整个文件归入原著层，`pnpm test:books` 开启其中的全部检查；混合文件应先拆出真实原著用例，避免把无关回归一起移走。新的制作流程矩阵用 `flowProviders([...])`，超长用例加 `heavy`。不要删除用例来提速。
 
-合并到 `main` 后，CI 的「Pipeline flows」在 macOS 上运行 `pnpm test:flows`（不阻塞 PR，新的推送会取消旧的运行）。CI 对所有 PR 报告「Shared checks」（macOS：安装、类型检查、lint、快速层 `pnpm test`），只改文档（`*.md`、`.docs/**`、`LICENSE`、`NOTICE`）时跳过实际检查并按通过处理，可设为 `main` 的必需检查。Rust 格式、`desktop:test`（含 `cargo test`）以及 macOS/Windows 安装包构建与冒烟只在推送 `v*` 标签或手动运行时执行；发布标签的本地 pre-push 门禁仍检查 Rust 格式。
+CI 对每个 PR 报告「Shared checks」，可继续作为必需检查：
 
-「Shared checks」与「Pipeline flows」缓存 pnpm store，以系统、架构、固定的 Node/pnpm 版本和锁文件区分缓存；命中缓存后仍执行 `pnpm install --frozen-lockfile`。缓存不包含用户书库、密钥或 `node_modules`。
+- 代码 PR 运行类型检查、lint 和 `pnpm test`；纯文档 PR 安装依赖后只运行小型完整性冒烟，因此每个 PR 都有完整性检查。
+- `scripts/ci-scope.mjs` 对明确无关的 `client/`、`desktop/`、`src-tauri/`、`public/` 与文档变更跳过较大的原著套件。`server/`、`lib/`、`data/`、脚本、测试、内置技能、数据库、依赖/Node 配置及未知路径默认触发 `pnpm test:books`；这些目录中的 Markdown 原著或夹具也算相关变更。混合 PR 按相关变更处理，改名比较保留旧路径，空范围或 Git 比较失败时运行全部检查。
+- 合并到 `main` 后始终运行「Pipeline flows」和完整「Book integrity」。发布 `v*` 标签与手动 CI 也始终运行完整原著套件；原著检查失败会阻止安装包构建。新的 main 推送取消较旧的同类检查。
+
+Rust 格式、`desktop:test`（含 `cargo test`）以及 macOS/Windows 安装包构建与冒烟仍只在推送 `v*` 标签或手动运行时执行；本地发布标签的 pre-push 门禁仍检查 Rust 格式。
+
+纯配置测试使用 `settingsFixture()`，进程测试使用包含正式迁移、种子和静态资源的 `startupFixture()`。真实原著故障测试通过 `copyBookLibrary()` 只复制涉及的原著和补卷，保留原始字节。锁超时测试断言正式两秒配置后缩短测试连接等待；隧道超时测试在辅助进程启动后触发正式超时回调，继续检查清理行为。
+
+「Shared checks」「Pipeline flows」与「Book integrity」都缓存 pnpm store，以系统、架构、固定 Node/pnpm 版本和锁文件区分缓存；命中后仍执行 `pnpm install --frozen-lockfile`。缓存不包含用户书库、密钥或 `node_modules`。
 
 `pre-push` 只对推送的 `refs/tags/v*` 执行发布检查：解析标签目标提交，在隔离 checkout 中验证 Node/pnpm 固定版本，安装锁定依赖，再运行 `pnpm release:check`。同一提交的多个发布标签只检查一次；普通分支、非 v 标签和删除标签不触发。可通过 `pnpm hooks:install` 为新 checkout 启用 hook。
 

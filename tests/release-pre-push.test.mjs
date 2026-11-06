@@ -1,11 +1,11 @@
-// Exercise real Git pushes into a temporary bare remote; pnpm is controlled to avoid recursive suites.
+// 通过临时 Git 仓库与受控测试文件验证发布门禁、扩展 E2E 的执行范围及失败传播。
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
 import {mkdtemp,mkdir,writeFile,copyFile,chmod,readFile,readdir,rm} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import {userFlowTests,selectTests} from '../scripts/test-story-e2e.mjs';
+import {userFlowTests,extendedFlowTests,selectTests} from '../scripts/test-story-e2e.mjs';
 
 test('both local publication gates require the production-backed lifecycle E2E',async()=>{
  const manifest=JSON.parse(await readFile(new URL('../package.json',import.meta.url),'utf8'));
@@ -25,7 +25,7 @@ test('smoke gates stay focused while the explicit full selection preserves all r
  const unitTests=(await readdir(new URL('./',import.meta.url))).filter(name=>name.endsWith('.test.mjs')).map(name=>'tests/'+name);
  assert.match(manifest.scripts['test:full'],/test:e2e --gate=full$/);
  const full=await selectTests('full');
- assert.equal(full.length,new Set(full).size);assert.deepEqual(new Set(full),new Set([...unitTests,...userFlowTests]));
+ assert.equal(full.length,new Set(full).size);assert.deepEqual(new Set(full),new Set([...unitTests,...userFlowTests,...extendedFlowTests]));
  for(const gate of ['release','npm']){
   const selected=await selectTests(gate);
   assert.equal(selected.length,new Set(selected).size);
@@ -39,14 +39,29 @@ test('smoke gates stay focused while the explicit full selection preserves all r
  await assert.rejects(selectTests('typo'),/Usage:/);
 });
 
+test('all E2E files have an aggregate runner and the six extended service files have a dedicated command',async()=>{
+ const manifest=JSON.parse(await readFile(new URL('../package.json',import.meta.url),'utf8'));
+ assert.match(manifest.scripts['test:e2e:extended'],/^pnpm test:e2e --gate=extended$/);
+ const extended=await selectTests('extended'),full=await selectTests('full');
+ assert.deepEqual(new Set(extended),new Set([
+  'tests/adaptive-storyboard-review.e2e.mjs','tests/book-reference-star.e2e.mjs',
+  'tests/character-continuity-edits.e2e.mjs','tests/frame-count-gate.e2e.mjs',
+  'tests/incremental-story-library.e2e.mjs','tests/story-discovery-speed-accuracy.e2e.mjs',
+ ]));
+ assert.equal(extended.length,new Set(extended).size);
+ for(const filename of extended){assert.ok(full.includes(filename));assert.ok(!userFlowTests.includes(filename));}
+ const owned=new Set([...full,...await selectTests('release'),...await selectTests('npm')]);
+ for(const name of (await readdir(new URL('./',import.meta.url))).filter(name=>name.endsWith('.e2e.mjs')))assert.ok(owned.has('tests/'+name),name+' needs an aggregate runner');
+});
+
 async function fixture(t,{failedFlow}={}){
  const root=await mkdtemp(path.join(os.tmpdir(),'shiqu hook test '));t.after(()=>rm(root,{recursive:true,force:true}));
  const checkout=path.join(root,'checkout'),remote=path.join(root,'remote.git'),bin=path.join(root,'bin'),log=path.join(root,'checks.log');
  await mkdir(checkout);await mkdir(bin);await mkdir(path.join(checkout,'scripts'));await mkdir(path.join(checkout,'.githooks'));
  for(const file of ['scripts/pre-push.mjs','scripts/test-story-e2e.mjs','.githooks/pre-push'])await copyFile(new URL('../'+file,import.meta.url),path.join(checkout,file));
- // Only the release runner is under test here; disposable cases make its exit propagation observable.
+ // 发布与扩展执行器使用临时用例，验证失败传播时不递归运行真实套件。
  await mkdir(path.join(checkout,'tests'));
- for(const file of new Set([...userFlowTests,...await selectTests('release')]))await writeFile(path.join(checkout,file),`import test from 'node:test';\ntest('release flow probe',()=>{${file===failedFlow?"throw Error('CONTROLLED_USER_FLOW_FAILURE');":''}});\n`);
+ for(const file of new Set([...userFlowTests,...extendedFlowTests,...await selectTests('release')]))await writeFile(path.join(checkout,file),`import test from 'node:test';\ntest('release flow probe',()=>{${file===failedFlow?"throw Error('CONTROLLED_USER_FLOW_FAILURE');":''}});\n`);
  await chmod(path.join(checkout,'.githooks/pre-push'),0o755);
  await writeFile(path.join(checkout,'.nvmrc'),process.versions.node);
  await writeFile(path.join(checkout,'package.json'),JSON.stringify({packageManager:'pnpm@11.25.0'}));
@@ -77,6 +92,16 @@ if(args[0]==='run'&&args[1]==='release:check'&&process.env.PRE_PUSH_REAL_FLOWS==
  const receipts=async()=>{try{return (await readFile(log,'utf8')).trim().split('\n').filter(Boolean).map(line=>JSON.parse(line));}catch(error){if(error.code==='ENOENT')return [];throw error;}};
  return {checkout,git,receipts};
 }
+
+test('extended runner executes all six files under inherited test context and records a failing exit',async t=>{
+ const f=await fixture(t,{failedFlow:extendedFlowTests[0]});
+ const result=spawnSync(process.execPath,['scripts/test-story-e2e.mjs','--gate=extended'],{cwd:f.checkout,env:{...process.env,NODE_TEST_CONTEXT:'child-v8'},encoding:'utf8',timeout:15000});
+ assert.equal(result.error,undefined);assert.equal(result.status,1,result.stdout+result.stderr);assert.match(result.stdout+result.stderr,/CONTROLLED_USER_FLOW_FAILURE/);
+ const directory=path.join(f.checkout,'.data/e2e'),runs=await readdir(directory);assert.equal(runs.length,1);
+ const report=JSON.parse(await readFile(path.join(directory,runs[0],'run.json'),'utf8'));
+ assert.deepEqual(report.tests,extendedFlowTests);assert.equal(report.gate,'extended');assert.equal(report.exitCode,1);assert.equal(report.browser,'none (service/engine E2E)');
+ assert.match(await readFile(path.join(directory,runs[0],'test.log'),'utf8'),/pass 5/);
+});
 
 test('release pushes check the tagged snapshot once for lightweight and annotated tags; branches and deletions bypass', {skip:process.platform==='win32'},async t=>{
  const f=await fixture(t);
