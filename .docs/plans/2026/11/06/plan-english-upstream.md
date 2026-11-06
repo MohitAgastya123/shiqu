@@ -24,13 +24,13 @@ Perform a real no-commit Git merge on the existing integration branch, then reso
 - [x] Translate newly introduced visible strings, active entry-point docs and applicable comments; reconcile AGENTS.md with the user's English/pnpm instructions.
 ### Phase 4 - Shared verification and corrections
 - [x] Register all four English suites and their covered sources in tests/manifest.json; update language-specific expectations in affected upstream tests without weakening behavior assertions.
-- [ ] Install frozen dependencies using pinned Node/pnpm, run pnpm test:changed --plan, then pnpm typecheck, pnpm lint and pnpm test:changed for the selected combined task.
+- [x] Install frozen dependencies using pinned Node/pnpm, run pnpm test:changed --plan, then pnpm typecheck, pnpm lint and pnpm test:changed for the selected combined task.
 - [x] Run applicable desktop/native source checks using isolated Rust 1.93.0 and pinned Node: formatting and 24 native tests passed, with only the CI-designated prepared-bundle test filtered.
 - [x] Execute the English reader and new service-console browser scenarios with isolated temporary libraries and controlled providers; attempt desktop preview through the in-app browser and record its unavailable tool surface. Automated screenshots were inspected separately.
-- [ ] Review the combined diff and rerun only checks justified by corrections or unresolved failures; confirm no conflict markers or accidental source/data changes remain.
+- [x] Review the combined diff and rerun only checks justified by corrections or unresolved failures; confirm no conflict markers or accidental source/data changes remain.
 ### Phase 5 - Acceptance and Git completion
-- [ ] Record acceptance evidence and current limitations in .docs/done/2026/11/06/english-upstream.md; update this plan and requirement only with observed outcomes.
-- [ ] Verify scoped staged changes and create the merge checkpoint with both parents after checks and review; preserve origin/english-app.
+- [x] Record acceptance evidence and current limitations in .docs/done/2026/11/06/english-upstream.md; update this plan and requirement only with observed outcomes.
+- [x] Verify scoped staged changes and create the merge checkpoint with both parents after checks and review; preserve origin/english-app.
 - [ ] Provide the user the next single publishing/usage step and distinguish the tested integration branch from main and the saved English checkpoint.
 
 ## Validation
@@ -41,3 +41,18 @@ The public origin/english-app checkpoint and user's original edited folder/dated
 
 ## Architecture Review
 AR passed: no blocking architecture flaws. Independent reviews confirmed provider delegation, retained desktop deletions, native settings/format contracts and full English test ownership. Verification must record actual planner-selected browser/native commands and environment limitations.
+
+## Final Acceptance Verification
+
+VR passed for the local integration; publishing is the next user step. Merge 7f2d1f1 retains English e0d62bb and upstream d9005d4 as its two parents.
+
+| Acceptance point | Status | Evidence |
+| --- | --- | --- |
+| Shared Git ancestry and saved English checkpoint | Complete | Both merge-base ancestry checks pass; origin/english-app remains e0d62bb |
+| Upstream console, shelf, composed providers and redraw | Complete | Full 176-file source qualification and 24 native tests |
+| English active interfaces and new runtime messages | Complete | English SSR/browser cases, source review and inspected automated desktop/mobile screenshots |
+| Saved translation, export/recovery and immutable source | Complete | Translation/restart receipt and cache-fence regressions; unchanged migration 0021 and source-book bytes |
+| Test ownership and actual verification | Complete | 1,462 JS tests, typecheck/lint, Rust formatting and 24 native tests; in-app tool limitation recorded |
+| Accurate fork/setup documentation | Complete | README and active guides distinguish source customizations, upstream releases and unsupported imports |
+
+The temporary desktop preview was stopped. No personal-library migration, live inference, installer build or remote push was performed by this integration task. Independent CR passed after fixture and ownership corrections.
