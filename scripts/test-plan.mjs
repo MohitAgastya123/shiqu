@@ -57,7 +57,9 @@ export function changeScope(files,metadata=loadMetadata()){
   if(test){test.groups.forEach(group=>selected.add(group));native||=test.level==='native';reasons.push(file);continue;}
   const rule=rules.find(([pattern])=>pattern.test(file));
   if(!rule||!rule[1])return fullScope(file);
-  rule[1].forEach(group=>selected.add(group));native||=Boolean(rule[2]);reasons.push(file);
+  rule[1].forEach(group=>selected.add(group));native||=Boolean(rule[2]);
+  for(const consumer of metadata.tests.filter(entry=>entry.covers.includes(file))){consumer.groups.forEach(group=>selected.add(group));native||=consumer.level==='native';}
+  reasons.push(file);
  }
  return {code,books:selected.has('books'),native,full:false,groups:[...selected].sort(),reasons};
 }

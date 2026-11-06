@@ -5,6 +5,8 @@ import {mkdtemp,mkdir,writeFile,readdir,rm,readFile} from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import {tierTests} from '../scripts/test-tiers.mjs';
+import {createRequire} from 'node:module';
+import {createPlan,changeScope} from '../scripts/test-plan.mjs';
 import {loadMetadata,supported} from '../scripts/test-metadata.mjs';
 
 test('metadata partitions all regressions, owns every E2E/native module and preserves safety checks',async()=>{
@@ -31,10 +33,27 @@ test('metadata ignores fixture-looking source text and rejects missing, duplicat
  for(const entry of entries)await writeFile(path.join(root,entry.file),'productionFixture(); import {books} from "anything";');
  await save();assert.equal((await tierTests('unit',root)).length,2);assert.equal((await tierTests('flows',root)).length,0);
  await writeFile(path.join(root,'tests/new.test.mjs'),'');assert.throws(()=>loadMetadata(root),/Unregistered/);await rm(path.join(root,'tests/new.test.mjs'));
- for(const [field,value,pattern] of [['groups',['typo'],/groups/],['platforms',['macos'],/platforms/],['level','guessed',/Invalid metadata/],['gates',['typo'],/gates/]]){
+ for(const [field,value,pattern] of [['groups',['typo'],/groups/],['platforms',['macos'],/platforms/],['level','guessed',/Invalid metadata/],['gates',['typo'],/gates/],['covers',['../private'],/source ownership/],['covers',['lib/a.ts','lib/a.ts'],/source ownership/]]){
   const saved=entries[1][field];entries[1][field]=value;await save();assert.throws(()=>loadMetadata(root),pattern);entries[1][field]=saved;
  }
  metadata.tests.push(entries[0]);await save();assert.throws(()=>loadMetadata(root),/duplicate/);metadata.tests.pop();
  entries[1].file='tests/missing.test.mjs';await save();assert.throws(()=>loadMetadata(root),/Missing registered/);
  await assert.rejects(tierTests('invalid',root),/unit, flows or books/);
+});
+
+
+test('explicit source ownership retains every direct production import consumer with full flags',async()=>{
+ const ts=createRequire(import.meta.url)('typescript'),metadata=loadMetadata();
+ for(const entry of metadata.tests){
+  if(entry.level==='native')continue;
+  const source=await readFile(entry.file,'utf8'),ast=ts.createSourceFile(entry.file,source,ts.ScriptTarget.Latest,true,ts.ScriptKind.JS),imports=new Set();
+  function add(spec){if(!spec?.startsWith('.'))return;const file=path.posix.normalize(path.posix.join(path.posix.dirname(entry.file),spec));if(/^(?:server|lib|scripts|client|data)\//.test(file))imports.add(file);}
+  function visit(node){if(ts.isImportDeclaration(node)&&ts.isStringLiteral(node.moduleSpecifier))add(node.moduleSpecifier.text);if(ts.isCallExpression(node)&&node.expression.kind===ts.SyntaxKind.ImportKeyword&&ts.isStringLiteral(node.arguments[0]))add(node.arguments[0].text);ts.forEachChild(node,visit);}visit(ast);
+  for(const file of imports){
+   assert.ok(entry.covers.includes(file),entry.file+' must declare '+file);
+   const plan=createPlan(changeScope([file],metadata),metadata);if(!supported(entry))continue;
+   const selected=plan.tests.find(test=>test.file===entry.file);assert.ok(selected,entry.file+' is a consumer of '+file);assert.equal(selected.mode,'full');
+  }
+ }
+ for(const entry of metadata.tests.filter(entry=>entry.level==='native'))for(const source of entry.covers)assert.ok(changeScope([source],metadata).native,source+' requires '+entry.file);
 });

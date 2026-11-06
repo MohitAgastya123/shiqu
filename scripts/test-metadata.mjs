@@ -25,6 +25,7 @@ export function loadMetadata(root=process.cwd()){
  for(const entry of metadata.tests){
   if(typeof entry.file!=='string'||!(/^(?:tests\/[\w.-]+\.(?:test|e2e)\.mjs|src-tauri\/src\/[\w/.-]+\.rs)$/).test(entry.file)||entry.file.includes('..')||seen.has(entry.file))throw Error(`Invalid/duplicate test file: ${entry.file}`);
   seen.add(entry.file);
+  if(!Array.isArray(entry.covers)||new Set(entry.covers).size!==entry.covers.length||entry.covers.some(file=>typeof file!=='string'||!file||file.startsWith('/')||file.includes('\\')||file.split('/').includes('..')||path.posix.normalize(file)!==file||[...file].some(char=>char.charCodeAt(0)<32)))throw Error(`Invalid source ownership: ${entry.file}`);
   values(entry.groups,groups,entry.file+' groups');values(entry.platforms,platforms,entry.file+' platforms');values(entry.gates,gates,entry.file+' gates');
   if(!entry.groups.length||!entry.platforms.length||!levels.includes(entry.level)||!['fast','standard','heavy'].includes(entry.cost)||!['unit','flows','books','e2e','native'].includes(entry.suite)||!['always','code','affected'].includes(entry.pr))throw Error(`Invalid metadata: ${entry.file}`);
   if((entry.level==='native')!==(entry.suite==='native')||(entry.suite==='native')!==entry.file.endsWith('.rs'))throw Error(`Invalid native metadata: ${entry.file}`);

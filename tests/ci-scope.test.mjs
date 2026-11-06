@@ -78,7 +78,7 @@ test('workflow event gates qualify main/tags and aggregate selected JS/native fa
   const result=spawnSync('bash',['-e','-c',shell],{env:{...process.env,JS_RESULT:js,NATIVE_RESULT:native,NATIVE_REQUIRED:required},stdio:'pipe'});assert.equal(result.status===0,success,`${js}/${native}/${required}`);
  }
  assert.match(job('javascript'),/pnpm test:pr --full/);assert.match(job('javascript'),/pnpm exec playwright install chromium/);
- assert.match(job('native'),/"resources":\[\]/);assert.doesNotMatch(job('native'),/desktop:prepare|desktop:build|scripts\/desktop-node/);
+ assert.match(job('native'),/"resources":\[\]/);assert.match(job('native'),/"frontendDist":\["\.\.\/desktop\/index\.html"\]/);assert.doesNotMatch(job('native'),/desktop:prepare|desktop:build|scripts\/desktop-node/);
  assert.match(job('build'),/pnpm run desktop:test/);assert.match(job('build'),/toolchain: 1.93.0/);assert.match(job('native'),/toolchain: 1.93.0/);
 });
 

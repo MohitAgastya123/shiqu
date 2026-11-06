@@ -139,7 +139,7 @@ jobs:
       - run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
       - name: Native source tests without bundle preparation
         env:
-          TAURI_CONFIG: '{"bundle":{"resources":[]}}'
+          TAURI_CONFIG: '{"bundle":{"resources":[]},"build":{"frontendDist":["../desktop/index.html"]}}'
         # 此用例验证已准备的安装包资源，保留在发布构建的完整 cargo test 中。
         run: cargo test --manifest-path src-tauri/Cargo.toml --locked --lib -- --skip runtime::tests::desktop_uses_verified_bundle_and_ignores_saved_system_path
 

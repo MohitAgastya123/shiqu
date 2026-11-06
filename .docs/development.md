@@ -121,7 +121,7 @@ pnpm lint
 
 多人或多代理共享 checkout 时，先检查预览。只验证本任务可用 `pnpm test:pr --files server/claude-runner.ts tests/claude-provider.test.mjs`，传入本任务全部改动路径；不要替并行任务修改代码或隐藏未知影响的全量回退。无改动、Git 比较失败、未知路径、共享模型/提示词、数据库 schema、依赖或 Node/构建/测试基础设施变化会选择完整源码回归。
 
-`tests/manifest.json` 显式声明每个 JS 文件和 Rust 测试模块的责任域、执行层、成本、平台、传统套件、PR 策略及门禁归属。新增测试未注册、文件不存在或元数据无效时执行器报错，不会悄悄跳过。适配器的请求/配置契约与真实启动/生产流程分文件；注册表选择不再检查源码是否含 `productionFixture()` 或 `books` 导入。`flowProviders()`、`heavy`、`books` 仅控制文件内部的矩阵。
+`tests/manifest.json` 显式声明每个 JS 文件和 Rust 测试模块的责任域、执行层、成本、平台、传统套件、PR 策略、门禁归属及 `covers` 源码消费者关系。新增测试未注册、文件不存在或元数据无效时执行器报错，不会悄悄跳过。适配器的请求/配置契约与真实启动/生产流程分文件；注册表选择不再检查源码是否含 `productionFixture()` 或 `books` 导入。`flowProviders()`、`heavy`、`books` 仅控制文件内部的矩阵。
 
 `pnpm test` 是显式快速契约层，保留原著完整性冒烟、适配器/配置及小型队列、状态和 HTTP/SQLite 边界测试。`local-server.test.mjs` 的原著夹具用于验证 SQLite 锁，不按书籍变更跳过。`book-integrity-smoke.test.mjs` 用几 KB 的临时原著调用正式加载器，检查字节哈希、缺失文件、目录越界和失效/不可读出处。
 
@@ -141,7 +141,7 @@ CI 对每个 PR 报告必需检查「Shared checks」：
 
 - 文档 PR 只运行小型完整性冒烟；代码 PR 运行类型、lint、小型契约与受影响域的集成/浏览器流程。书籍内容及相关读取/发现代码触发较大原著套件。
 - 发现、准备、审核、队列及书籍参考等核心变更追加全部六个扩展服务 E2E。多个域取并集；改名保留旧/新路径；未知影响回退完整 JS，并要求原生源码检查。
-- Rust、共享设置/配置、存储升级及相关桌面资源脚本触发 macOS/Windows 原生源码测试和格式检查；安装 Node/JS 依赖供跨语言配置测试使用。源码检查通过 `bundle.resources: []` 避免准备安装包，只排除 `runtime::tests::desktop_uses_verified_bundle_and_ignores_saved_system_path`，该测试仍在发布构建的完整 `cargo test` 中运行。JS 与选中的原生检查任一失败，聚合检查失败。
+- Rust、共享设置/配置、`server/desktop.ts`、存储升级及相关桌面资源脚本触发 macOS/Windows 原生源码测试和格式检查；安装 Node/JS 依赖供跨语言配置测试使用。源码检查通过 `bundle.resources: []` 与 `build.frontendDist: ["../desktop/index.html"]` 使用已提交 HTML 作为编译上下文，避免准备安装包，只排除 `runtime::tests::desktop_uses_verified_bundle_and_ignores_saved_system_path`，该测试仍在发布构建的完整 `cargo test` 中运行。JS 与选中的原生检查任一失败，聚合检查失败。
 - `main`、`v*` 标签及手动 CI 对当前提交运行完整 JS，包含全部原著、提供方、长用例和浏览器流程。安装包构建仍仅在标签/手动运行，并等待源码资格检查成功；已准备安装包的原生检查与产物冒烟继续保留。新 main/PR 推送可取消旧的同类 JS 检查。
 
 JS/原生任务缓存 pnpm store，按系统、架构、固定 Node/pnpm 和锁文件区分；命中后仍执行 `pnpm install --frozen-lockfile`。浏览器缓存按平台/架构/锁文件区分；Rust 编译缓存按平台/架构/Rust 版本及 Cargo、JS 锁文件和 Node 区分。不缓存用户库、密钥或 `node_modules`。完整触发表和旧/新耗时对比见[测试触发与成本](testing-triggers.md)，逐场景清单见[测试盘点](testing-inventory.md)。

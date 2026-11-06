@@ -5,7 +5,7 @@ Inventory date: 2026-11-05. Source base: `75a1331d3594edb140b13125d3fd278c12a164
 ## Counts and ownership
 
 - 172 JavaScript files: 156 regressions and 16 E2Es; six browser files, ten service/process/engine files.
-- 1,127 scenario declarations/templates, including 120 matrix definitions. Runtime expansion is counted separately by Node.
+- 1,128 scenario declarations/templates, including 120 matrix definitions. Runtime expansion is counted separately by Node.
 - 26 native test functions across four explicitly registered Rust modules; conditional platform functions remain visible.
 - 77 committed/current-story legacy acceptance specs and 7 managed lifecycle cases; these overlap automated coverage and are not added to executable totals.
 - `tests/manifest.json` owns domain, execution level, cost, platform, suite, PR policy and gate membership. Missing/invalid registrations fail before execution. Test source markers do not choose suites.
@@ -17,8 +17,8 @@ See [trigger rules and timing comparison](testing-triggers.md) and [developer co
 
 | Entry | Registered files | Policy |
 | --- | ---: | --- |
-| `pnpm test` | 77 | Explicit suite; per-case fast/full switches remain available. |
-| `pnpm test:flows` | 69 | Explicit suite; per-case fast/full switches remain available. |
+| `pnpm test` | 76 | Explicit suite; per-case fast/full switches remain available. |
+| `pnpm test:flows` | 70 | Explicit suite; per-case fast/full switches remain available. |
 | `pnpm test:books` | 10 | Explicit suite; per-case fast/full switches remain available. |
 | `pnpm test:e2e` | 18 | Explicit gate membership; full flags. |
 | `pnpm test:e2e:extended` | 6 | Explicit gate membership; full flags. |
@@ -34,7 +34,7 @@ Counts below use the first declared domain to avoid double-counting files; addit
 
 | Domain | JS files | Declarations |
 | --- | ---: | ---: |
-| `safety` | 4 | 17 |
+| `safety` | 4 | 18 |
 | `books` | 12 | 65 |
 | `discovery` | 21 | 173 |
 | `preparation` | 10 | 63 |
@@ -96,14 +96,15 @@ Domains: safety, tooling; level: `contract`; cost: `fast`; platforms: darwin, li
 
 #### tests/test-tiers.test.mjs
 
-[tests/test-tiers.test.mjs](../tests/test-tiers.test.mjs) — 2 declarations.
+[tests/test-tiers.test.mjs](../tests/test-tiers.test.mjs) — 3 declarations.
 
 Domains: safety; level: `contract`; cost: `fast`; platforms: darwin, linux, win32; suite: `unit`; PR: `code`; gates: full only. Whole-file full qualification always applies on supported platforms.
 
 | Line | Scenario/template | Matrix/options |
 | ---: | --- | --- |
-| 10 | metadata partitions all regressions, owns every E2E/native module and preserves safety checks |   |
-| 26 | metadata ignores fixture-looking source text and rejects missing, duplicate and invalid ownership |   |
+| 12 | metadata partitions all regressions, owns every E2E/native module and preserves safety checks |   |
+| 28 | metadata ignores fixture-looking source text and rejects missing, duplicate and invalid ownership |   |
+| 45 | explicit source ownership retains every direct production import consumer with full flags |   |
 
 ### books
 
@@ -1460,15 +1461,15 @@ Domains: production, reader, preparation, review, media, discovery; level: `brow
 
 | Line | Scenario/template | Matrix/options |
 | ---: | --- | --- |
-| 15 | STORY-LIFECYCLE-C001: create, wait, extract, edit preparation, confirm and read |  options |
-| 16 | STORY-LIFECYCLE-C002: all edit paths preserve one family, history and eligible images |  options |
-| 51 | STORY-LIFECYCLE-C003: pause drains in-flight work, refresh stays paused, explicit resume completes |  options |
-| 59 | STORY-LIFECYCLE-C004: failure survives observation and only a retry link authorizes a new attempt |  options |
-| 67 | STORY-LIFECYCLE-C005: replacement waits, cancel conserves parent, choosing commits one new version |  options |
-| 78 | `STORY-LIFECYCLE-C004-${manual?'review-edit':'review-override'}: blocked audit requires an explicit user decision before drawing` | for(const manual of [true,false])test(`STORY-LIFECYCLE-C004-${manual?'review-edit':'review-override'}: blocked audit requires an explicit user decision before drawing`,options,asyn options |
-| 97 | STORY-LIFECYCLE-C006: one workflow panel survives first artwork and is shared with reading while shelf stays a reader entry |  options |
-| 136 | STORY-LIFECYCLE-C007: shelf cards keep reading and the reader gear opens the workflow without generating |  options |
-| 155 | STORY-LIFECYCLE-C008: all shelf and reader entries share one settings layout through generation |  options |
+| 14 | STORY-LIFECYCLE-C001: create, wait, extract, edit preparation, confirm and read |  options |
+| 15 | STORY-LIFECYCLE-C002: all edit paths preserve one family, history and eligible images |  options |
+| 50 | STORY-LIFECYCLE-C003: pause drains in-flight work, refresh stays paused, explicit resume completes |  options |
+| 58 | STORY-LIFECYCLE-C004: failure survives observation and only a retry link authorizes a new attempt |  options |
+| 66 | STORY-LIFECYCLE-C005: replacement waits, cancel conserves parent, choosing commits one new version |  options |
+| 77 | `STORY-LIFECYCLE-C004-${manual?'review-edit':'review-override'}: blocked audit requires an explicit user decision before drawing` | for(const manual of [true,false])test(`STORY-LIFECYCLE-C004-${manual?'review-edit':'review-override'}: blocked audit requires an explicit user decision before drawing`,options,asyn options |
+| 96 | STORY-LIFECYCLE-C006: one workflow panel survives first artwork and is shared with reading while shelf stays a reader entry |  options |
+| 135 | STORY-LIFECYCLE-C007: shelf cards keep reading and the reader gear opens the workflow without generating |  options |
+| 154 | STORY-LIFECYCLE-C008: all shelf and reader entries share one settings layout through generation |  options |
 
 #### tests/story-revision-flow.test.mjs
 
@@ -2687,7 +2688,7 @@ Domains: tooling; level: `contract`; cost: `fast`; platforms: darwin, linux, win
 | Line | Scenario/template | Matrix/options |
 | ---: | --- | --- |
 | 15 | development LAN proxy allows direct access and protects preserved/private workspace stores |   |
-| 47 | Vite refuses libraries and private aliases inside its public directory |   |
+| 48 | Vite refuses libraries and private aliases inside its public directory |   |
 
 #### tests/development-cache.test.mjs
 
@@ -2738,7 +2739,7 @@ Domains: tooling; level: `integration`; cost: `standard`; platforms: darwin, lin
 
 [tests/release-pre-push.test.mjs](../tests/release-pre-push.test.mjs) — 8 declarations.
 
-Domains: tooling; level: `contract`; cost: `fast`; platforms: darwin, linux, win32; suite: `unit`; PR: `code`; gates: release. Whole-file full qualification always applies on supported platforms.
+Domains: tooling; level: `integration`; cost: `standard`; platforms: darwin, linux, win32; suite: `flows`; PR: `affected`; gates: release. Whole-file full qualification always applies on supported platforms.
 
 | Line | Scenario/template | Matrix/options |
 | ---: | --- | --- |

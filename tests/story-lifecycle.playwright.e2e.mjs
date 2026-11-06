@@ -1,5 +1,4 @@
-// Prove visible creation, editing, control, recovery and replacement paths over the real production state machine.
-// Controlled provider gates inject failures; browser actions own every business mutation, with read-only DB/API oracles.
+// 用受控回执验证真实浏览器生命周期；先等待 UI 状态同步，再断言用户操作边界。
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {storyBrowser} from './fixtures/story-browser.mjs';
@@ -79,7 +78,7 @@ for(const manual of [true,false])test(`STORY-LIFECYCLE-C004-${manual?'review-edi
  const b=await storyBrowser(t,manual?'C004-review-edit':'C004-review-override');await b.execute(async()=>{
   const {f,page}=b,base=f.control.beforeText;let blocked=true;
   f.control.beforeText=async(kind,payload,schema)=>{
-   if(kind==='review'&&blocked)return {issues:[{page:1,category:'caption',problem:'受控审核：配文未说明可见行动。',instruction:'保留原文事件，明确第一幅的可见动作。'}]};
+   if(kind==='review'&&blocked)return {...await base(kind,payload,schema),issues:[{page:1,category:'caption',problem:'受控审核：配文未说明可见行动。',instruction:'保留原文事件，明确第一幅的可见动作。'}]};
    if(kind==='repair'&&blocked)return {pages:payload.requestedPages.map(page=>({page,...payload.plan.pages[page-1]}))};
    return base(kind,payload,schema);
   };
@@ -123,7 +122,7 @@ test('STORY-LIFECYCLE-C006: one workflow panel survives first artwork and is sha
   const interrupted=f.control.calls.find(call=>call.page===1);interrupted.reject(Error('controlled failure after first artwork'));
   for(const call of f.control.calls)if(call!==interrupted)call.resolve();
   await until(async()=>(await f.read(saved.id)).state==='failed');const partial=await f.read(saved.id);
-  await panel.getByRole('link',{name:'重试生成',exact:true}).waitFor();assert.equal(await panel.getByRole('link',{name:'暂停生成',exact:true}).count(),0);
+  await panel.getByRole('link',{name:'重试生成',exact:true}).waitFor();await panel.getByRole('link',{name:'暂停生成',exact:true}).waitFor({state:'hidden'});assert.equal(await panel.getByRole('link',{name:'暂停生成',exact:true}).count(),0);
   await panel.getByRole('button',{name:'关闭',exact:true}).click();panel=await b.settings();
   await panel.getByRole('link',{name:'重试生成',exact:true}).click();await b.completed(saved.id);
   const completed=await f.read(saved.id);assert.equal(completed.story.pages[0].image,partial.story.pages[0].image);assert.equal(f.control.calls.length,4);
