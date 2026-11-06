@@ -1,5 +1,6 @@
 // English product text and generation contracts; canonical source evidence remains unchanged.
 // Validate saved story documents; complete drafts wait for a separately edited title and ending before review.
+// Panel emphasis is optional on saved frames; production generation requests it for automatic page composition.
 import type {RequirementsSetup} from './reader-requirements.ts';
 import {z} from 'zod';
 import {pageBubblesSchema} from './reader-bubbles.ts';
@@ -28,7 +29,9 @@ export const displayTitleSchema=z.string().trim().min(1,'Enter a story title.').
 export const discoverySchema=z.discriminatedUnion('mode',[z.object({mode:z.literal('auto')}),z.object({mode:z.literal('title'),title:z.string().trim().min(1,'Enter the story title to find.').max(100).regex(/^[^\r\n]+$/,'Write the requested title on one line.')})]);
 export const selectionSchema=z.object({bookId:z.string().min(1).max(100),customBook:z.string().max(500).optional(),discovery:discoverySchema.optional(),storyTitle:z.string().max(100).optional(),displayTitle:displayTitleSchema.optional(),source:localSourceSchema.optional(),discoverySources:z.array(localSourceSchema).min(1).max(24).optional(),theme:z.string().trim().min(1).max(100),artStyle:z.enum(artStyleIds).default('ink-pencil'),productionPrompt:z.string().max(1200).default(''),acceptancePrompt:acceptancePromptSchema.optional(),narrativeDetail:narrativeDetailSchema.optional(),length:z.union([z.number().int().min(readerMinFrames).max(readerMaxFrames),z.literal('auto')]).default('auto'),voice:z.boolean().default(false).transform(()=>false)});
 export type Selection=z.infer<typeof selectionSchema>;
-export const planSchema=z.object({title:z.string().min(1).max(160),summary:z.string().trim().min(1).max(2400),sourceReference:z.string().min(1).max(150),adaptationNote:z.string().min(1).max(600),reflection:z.string().min(1).max(400),characters:z.string().min(20).max(6000),pages:z.array(z.object({caption:z.string().max(500),prompt:z.string().min(20).max(4000),bubbles:pageBubblesSchema.optional()})).min(readerMinFrames).max(readerMaxFrames)});
+export const comicPanelKinds=['normal','wide','large','splash'] as const;
+export const comicPanelSchema=z.enum(comicPanelKinds);
+export const planSchema=z.object({title:z.string().min(1).max(160),summary:z.string().trim().min(1).max(2400),sourceReference:z.string().min(1).max(150),adaptationNote:z.string().min(1).max(600),reflection:z.string().min(1).max(400),characters:z.string().min(20).max(6000),pages:z.array(z.object({caption:z.string().max(500),prompt:z.string().min(20).max(4000),bubbles:pageBubblesSchema.optional(),panel:comicPanelSchema.optional()})).min(readerMinFrames).max(readerMaxFrames)});
 export type Plan=z.infer<typeof planSchema>;
 export const reflectionCandidatesSchema=z.array(planSchema.shape.reflection.trim().min(1)).length(3).superRefine((values,ctx)=>{
  if(new Set(values).size!==3)ctx.addIssue({code:z.ZodIssueCode.custom,message:'Ending candidates must be distinct'});

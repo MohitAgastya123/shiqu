@@ -1,4 +1,4 @@
-// Delay actual startup responses to protect a single current-library load and persisted reader actions.
+// Delay startup responses and verify canonical panel progress survives grouped comic-page navigation.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {storyBrowser} from './fixtures/story-browser.mjs';
@@ -38,7 +38,7 @@ for(const delayed of ['sessions','deletions'])test(`startup waits for ${delayed}
 
  if(delayed==='sessions'){
   await page.getByRole('button',{name:'Continue reading '+story.title,exact:true}).click();
-  await page.getByRole('button',{name:'Next page',exact:true}).click();
+  await page.getByRole('button',{name:'Scene list',exact:true}).click();await page.getByRole('button',{name:'Go to panel 2',exact:true}).click();
   await until(async()=>(await f.read(story.id)).page===1);
   await page.getByRole('button',{name:'Favorite story',exact:true}).click();
   await until(async()=>(await f.read(story.id)).saved===true);

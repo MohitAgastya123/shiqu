@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {comicBubbleSchema,pageBubblesSchema,comicBubbleJsonSchema,autoPlaceBubbles,validateBubbleEvidence,BubbleDensityError} from '../lib/reader-bubbles.ts';
-import {fitBubbleText,computeBubbleLayout} from '../lib/comic-bubble-layout.ts';
+import {fitBubbleText,computeBubbleLayout,bubbleTailStart} from '../lib/comic-bubble-layout.ts';
 import {planSchema,storyboardBatchSchema} from '../lib/reader-model.ts';
 import {storyDraftJson,imagePrompt} from '../lib/reader-generation-contract.ts';
 import {applyStructuralEdits,structuralEditsJson} from '../lib/reader-structure.ts';
@@ -44,7 +44,7 @@ test('generation evidence is an exact source quotation, including explicit thoug
 test('automatic placement is deterministic, readable, ordered and preserves speaker targets without mutating input',()=>{
  const input=[balloon(),thought()],original=structuredClone(input),placed=autoPlaceBubbles(input);
  assert.deepEqual(input,original);assert.deepEqual(autoPlaceBubbles(input),placed);assert.deepEqual(placed.map(({id,text,sourceQuote,tailX,tailY})=>({id,text,sourceQuote,tailX,tailY})),original.map(({id,text,sourceQuote,tailX,tailY})=>({id,text,sourceQuote,tailX,tailY})));
- for(const bubble of placed){assert.ok(bubble.x>=0&&bubble.y>=0&&bubble.x+bubble.width<=1&&bubble.y+bubble.height<=.60000001);assert.ok(bubble.y+bubble.height>=.55);const fit=fitBubbleText(bubble.text,bubble.width*900,bubble.height*1350,bubble.kind,bubble.speaker);assert.ok(fit.fontSize>=26);assert.doesNotThrow(()=>computeBubbleLayout(bubble,900,1350));}
+ for(const bubble of placed){assert.ok(bubble.x>=0&&bubble.y>=0&&bubble.x+bubble.width<=1&&bubble.y+bubble.height<=1);const start=bubbleTailStart(bubble);assert.ok(Math.hypot((start.x-bubble.tailX)*900,(start.y-bubble.tailY)*1350)<=90);const fit=fitBubbleText(bubble.text,bubble.width*900,bubble.height*1350,bubble.kind,bubble.speaker);assert.ok(fit.fontSize>=24);assert.doesNotThrow(()=>computeBubbleLayout(bubble,900,1350));}
  const [a,b]=placed;assert.ok(a.x+a.width<=b.x||a.y+a.height<=b.y||b.x+b.width<=a.x||b.y+b.height<=a.y);
 });
 
@@ -52,14 +52,14 @@ test('long words, multiple thought clouds and maximum density have explicit read
  const long=autoPlaceBubbles([balloon({text:'W'.repeat(180)})]);assert.equal(long[0].text,'W'.repeat(180));assert.ok(fitBubbleText(long[0].text,long[0].width*900,long[0].height*1350,'speech','Mara').lines.length>2);
  const thoughts=autoPlaceBubbles(Array.from({length:4},(_,index)=>thoughtWith(index)));assert.equal(thoughts.length,4);assert.ok(thoughts.every(bubble=>computeBubbleLayout(bubble,900,1350).circles.length===3));
  const dense=Array.from({length:4},(_,index)=>thoughtWith(index,{text:'W'.repeat(220),speaker:'W'.repeat(80)}));assert.throws(()=>autoPlaceBubbles(dense),BubbleDensityError);assert.ok(dense.every(bubble=>bubble.text.length===220));
- assert.throws(()=>autoPlaceBubbles([balloon({tailX:.5,tailY:.04})]),BubbleDensityError);
- assert.throws(()=>autoPlaceBubbles([balloon({tailX:.85}),balloon({id:'other',tailX:.15})]),BubbleDensityError);
+ const highSpeaker=autoPlaceBubbles([balloon({tailX:.5,tailY:.04})]),highStart=bubbleTailStart(highSpeaker[0]);assert.equal(highSpeaker[0].tailY,.04);assert.ok(Math.hypot((highStart.x-.5)*900,(highStart.y-.04)*1350)<=90,'A high speaker retains a nearby body and short tail.');
+ const reversed=autoPlaceBubbles([balloon({tailX:.85}),balloon({id:'other',tailX:.15})]);assert.deepEqual(reversed.map(b=>b.tailX),[.85,.15]);assert.ok(reversed[1].y>reversed[0].y,'A vertical arrangement preserves dialogue order for reversed speakers.');
  function thoughtWith(index,overrides={}){return balloon({id:'thought-'+index,kind:'thought',text:'I should wait.',tailX:.13+index*.24,tailY:.82,...overrides});}
 });
 
 test('image prompt stays textless and unchanged by editable balloon content or geometry',()=>{
  const original=plan(),changed=structuredClone(original);changed.pages[0].bubbles[0]={...changed.pages[0].bubbles[0],text:'Wait for me.',x:.5,y:.2,tailX:.8};
- const before=imagePrompt(original,0,'ink-pencil','',false);assert.equal(imagePrompt(changed,0,'ink-pencil','',false),before);assert.match(before,/upper 60%/);assert.match(before,/No text/);assert.doesNotMatch(before,/We should cross|sourceQuote/);
+ const before=imagePrompt(original,0,'ink-pencil','',false);assert.equal(imagePrompt(changed,0,'ink-pencil','',false),before);assert.match(before,/modest uncluttered local space/);assert.doesNotMatch(before,/upper 60%/);assert.match(before,/No text/);assert.doesNotMatch(before,/We should cross|sourceQuote/);
 });
 
 test('production automatically places source-grounded speech and thought before drawing and retains them after restart',async t=>{

@@ -2,7 +2,9 @@
 // Project saved production checkpoints into read-only history. Missing historical evidence stays missing;
 // only a unique call from this version can establish ordering or restore an earlier frame.
 // Frame snapshots include balloons so content-only repairs remain visible in the production audit.
+// Keep optional panel emphasis in both historical sides without fabricating metadata for old snapshots.
 import {pageBubblesSchema} from './reader-bubbles.ts';
+import {comicPanelSchema} from './reader-model.ts';
 import type {Document,Plan,SessionRow} from './reader-model.ts';
 import type {ReviewCheckpoint,ReviewIssue,ReviewRecordMeta,ReviewRepairRecord,FrameCountReview,FrameRequirement,RepairedPage} from './reader-review.ts';
 import type {AcceptanceResult} from './reader-acceptance.ts';
@@ -25,7 +27,7 @@ type ObjectValue=Record<string,unknown>;
 const object=(value:unknown):ObjectValue|null=>value!==null&&typeof value==='object'&&!Array.isArray(value)?value as ObjectValue:null;
 const numbers=(value:unknown)=>Array.isArray(value)&&value.every(x=>Number.isInteger(x))?value as number[]:null;
 const samePages=(a:number[],b:number[])=>JSON.stringify([...new Set(a)].sort((x,y)=>x-y))===JSON.stringify([...new Set(b)].sort((x,y)=>x-y));
-const frame=(value:unknown):Frame|null=>{const item=object(value);if(typeof item?.caption!=='string'||typeof item?.prompt!=='string')return null;const bubbles=pageBubblesSchema.safeParse(item.bubbles);return {caption:item.caption,prompt:item.prompt,...(bubbles.success?{bubbles:bubbles.data}:{})};};
+const frame=(value:unknown):Frame|null=>{const item=object(value);if(typeof item?.caption!=='string'||typeof item?.prompt!=='string')return null;const bubbles=pageBubblesSchema.safeParse(item.bubbles),panel=comicPanelSchema.safeParse(item.panel);return {caption:item.caption,prompt:item.prompt,...(bubbles.success?{bubbles:bubbles.data}:{}),...(panel.success?{panel:panel.data}:{})};};
 function input(value:string|undefined){try{return object(JSON.parse(value||''));}catch{return null;}}
 function inputPlan(value:ObjectValue|null){return object(value?.plan)||object(value?.draft);}
 function inputFrame(value:ObjectValue|null,page:number){const pages=inputPlan(value)?.pages;return Array.isArray(pages)?frame(pages[page-1]):null;}

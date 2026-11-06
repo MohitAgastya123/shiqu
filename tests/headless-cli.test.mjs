@@ -1,3 +1,4 @@
+// Headless production exports retain source frames while sharing the reader’s composed comic sheets.
 // Verify English runtime messages while preserving source/content fixtures.
 // Run the real command dispatcher with production API/queue/SQLite and controlled adapters, without HTTP or DOM.
 import test from 'node:test';
@@ -276,7 +277,7 @@ test('same native/browser export core produces credited public ZIP, PDF, PNG and
  for(const [i,page]of saved.pages.entries())assertStoryWebp(files[page.image],zipMetadataStory(saved),i,page);
  assert.deepEqual(await readFile(path.join(f.dataDirectory,'media',source)),original);
  const pdfFile=path.join(f.root,'story.pdf'),pngFile=path.join(f.root,'story.png');await call(['export',id,'--format','pdf','--output',pdfFile]);await call(['export',id,'--format','png','--output',pngFile]);
- assert.ok((await PDFDocument.load(await readFile(pdfFile))).getPageCount()>=9);assert.ok((await loadImage(await readFile(pngFile))).height>1000);
+ const pdfPages=(await PDFDocument.load(await readFile(pdfFile))).getPageCount();assert.equal(saved.comicPages.length,2);assert.ok(pdfPages>=saved.comicPages.length+1&&pdfPages<saved.pages.length,'Composed comic sheets precede complete source and credit notes.');assert.ok((await loadImage(await readFile(pngFile))).height>1000);
  await call(['stories','rename',id,'--title','<script>alert(1)</script>']);const preview=path.join(f.root,'preview.html');await call(['preview',id,'--output',preview]);const html=await readFile(preview,'utf8');assert.ok(html.includes('&lt;script&gt;'));assert.ok(!html.includes('<script>'));assert.ok(html.includes('data:image/png;base64,'));
  await assert.rejects(call(['export',id,'--output',zipFile]),/EEXIST/);
 });

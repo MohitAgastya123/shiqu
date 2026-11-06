@@ -10,6 +10,7 @@ import {PDFDocument,PDFName,PDFDict} from 'pdf-lib';
 import {computeBubbleLayout,fitBubbleText,paintComicBubbles,bubbleTailStart} from '../lib/comic-bubble-layout.ts';
 import {createStoryZip} from '../lib/reader-zip.ts';
 import {createStoryPng} from '../lib/reader-png.ts';
+import {layoutComicPages,layoutComicPanel} from '../lib/comic-page-layout.ts';
 import {createStoryPdf} from '../lib/reader-pdf.ts';
 import {storyZipData,storyZipFiles,publicStoryZipData,zipMetadataStory} from '../lib/reader-zip-content.ts';
 import {publicStoryZip} from '../lib/public-story-zip.mjs';
@@ -29,9 +30,9 @@ const white=pixel=>pixel[0]>220&&pixel[1]>220&&pixel[2]>220;
 
 test('one deterministic layout supplies SVG geometry, fitted lines, and distinct thought/speech connectors',()=>{
  const a=computeBubbleLayout(speech,900,1350),again=computeBubbleLayout({...speech},900,1350),b=computeBubbleLayout(thought,900,1350);
- assert.deepEqual(a,again);assert.ok(a.fontSize>=26);assert.ok(a.tailPath);assert.equal(a.circles.length,0);assert.equal(b.tailPath,undefined);assert.equal(b.circles.length,3);assert.notEqual(a.path,b.path);
- assert.equal(a.lines[0].text,'Sam:');assert.equal(a.lines.slice(1).map(line=>line.text).join(' '),speech.text);assert.ok(a.lines.every(line=>line.width<=a.bounds.width*.72+1e-8));
- const start=bubbleTailStart(speech);assert.equal(start.y,speech.y+speech.height);assert.ok(start.x>=speech.x&&start.x<=speech.x+speech.width);
+ assert.deepEqual(a,again);assert.ok(a.fontSize>=24);assert.equal(a.tailPath,undefined);assert.ok(a.bodyCommands.length>8);assert.equal(a.circles.length,0);assert.equal(b.tailPath,undefined);assert.equal(b.circles.length,3);assert.notEqual(a.path,b.path);
+ assert.ok(a.lines.every(line=>!line.text.includes('Sam:')));assert.equal(a.lines.map(line=>line.text).join(' '),speech.text.toUpperCase());assert.ok(a.lines.every(line=>line.width<=a.bounds.width*.72+1e-8));
+ const start=bubbleTailStart(speech);assert.ok(start.y>speech.y+speech.height/2);assert.ok(start.x>=speech.x&&start.x<=speech.x+speech.width);
  const resized=computeBubbleLayout(speech,1800,2700);assert.equal(resized.fontSize,a.fontSize*2);assert.deepEqual(resized.lines.map(line=>line.text),a.lines.map(line=>line.text));
  const word='W'.repeat(60),fit=fitBubbleText(word,500,600);assert.ok(fit);assert.equal(fit.lines.join(''),word);
  assert.equal(fitBubbleText('W'.repeat(220),40,40),null);assert.throws(()=>computeBubbleLayout({...speech,width:.02,height:.02},900,1350),/too dense/);
@@ -47,7 +48,7 @@ test('shared canvas painting changes artwork pixels and keeps the original media
 test('production ZIP composites balloons before signatures and keeps public conversion byte-preserving',async()=>{
  const {base,runtime}=await fixture(),saved=story(),archive=await createStoryZip(saved,null,()=>{},runtime),files=unzipSync(new Uint8Array(await archive.arrayBuffer())),data=JSON.parse(strFromU8(files['故事.json']));
  assert.equal(data.pages[0].bubbleRendering,'embedded');assert.deepEqual(data.pages[0].bubbles,[speech,thought]);assert.equal(data.pages[0].originalSha256,sha256Hex(base));
- assertStoryWebp(files['图片/01.webp'],zipMetadataStory(data),0,data.pages[0]);const rendered=await pixels(files['图片/01.webp']);assert.ok(white(rendered.at(100,100)));
+ assertStoryWebp(files['图片/01.webp'],zipMetadataStory(data),0,data.pages[0]);const rendered=await pixels(files['图片/01.webp']),presentation=layoutComicPanel(saved.pages[0],layoutComicPages(saved.pages)[0].panels[0]),bubble=presentation.bubbles[0];assert.ok(white(rendered.at((bubble.x+bubble.width/2)*presentation.rect.width,(bubble.y+bubble.height*.15)*presentation.rect.height)));assert.deepEqual(data.pages[0].comicRendering,{width:836,height:1200,minFontSize:24});assert.deepEqual(convertedLayout(data),[0]);
  const converted=publicStoryZip(new Uint8Array(await archive.arrayBuffer())),publicFiles=unzipSync(converted.bytes);assert.deepEqual(publicFiles['图片/01.webp'],files['图片/01.webp']);assert.deepEqual(converted.story.pages[0].bubbles,[speech,thought]);assert.equal(converted.story.pages[0].bubbleRendering,'embedded');
  assert.deepEqual(unzipSync(publicStoryZip(converted.bytes).bytes)['图片/01.webp'],files['图片/01.webp']);
  assert.match(strFromU8(publicFiles['分镜.md']),/1\. Sam \(speech\): We can cross here\./);assert.match(strFromU8(publicFiles['分镜.md']),/2\. Lee \(thought\): Perhaps there is another way\./);
@@ -66,26 +67,31 @@ test('silent panels remain valid public archives with empty narration and no bal
 });
 
 test('raster ZIP and offline HTML do not repaint balloons marked as already embedded',async t=>{
- const {base,app,runtime}=await fixture([{...speech,x:.53,tailX:.75}]),saved=story([speech]);saved.pages[0].bubbleRendering='embedded';
+ const {base,app,runtime}=await fixture([{...speech,x:.53,tailX:.75}]),dataHash=sha256Hex(base),saved=story([speech]);saved.pages[0].bubbleRendering='embedded';
  const archive=await createStoryZip(saved,null,()=>{},runtime),files=unzipSync(new Uint8Array(await archive.arrayBuffer())),raster=await pixels(files['图片/01.webp']);
- assert.ok(!white(raster.at(100,100)),'Saved overlay coordinates must not cause a second balloon.');assert.ok(white(raster.at(600,100)),'The existing embedded balloon remains visible.');
+ const metadata=JSON.parse(strFromU8(files['故事.json']));assert.equal(metadata.pages[0].comicRendering.minFontSize,null);assert.equal(metadata.comicPages[0].panels[0].span,'splash');const quarter=structuredClone(metadata);quarter.comicPages[0].panels[0].width/=2;quarter.comicPages[0].panels[0].height/=2;assert.throws(()=>publicStoryZipData(quarter),/canonical panel templates/);
+ const reexportStory={...saved,pages:[{...saved.pages[0],comicRendering:metadata.pages[0].comicRendering}]},reexportRuntime={...runtime,read:async()=>new Blob([files['图片/01.webp']],{type:'image/webp'})},again=unzipSync(new Uint8Array(await(await createStoryZip(reexportStory,null,()=>{},reexportRuntime)).arrayBuffer()));assert.equal(JSON.parse(strFromU8(again['故事.json'])).pages[0].comicRendering.minFontSize,null);
+ const panel=layoutComicPages(saved.pages)[0].panels[0],presentation=layoutComicPanel(saved.pages[0],panel),point=(x,y)=>({x:presentation.art.x-presentation.rect.x+x*presentation.art.width,y:presentation.art.y-presentation.rect.y+y*presentation.art.height});const empty=point(.26,.14),existing=point(.74,.14);
+ assert.ok(!white(raster.at(empty.x,empty.y)),'Saved overlay coordinates must not cause a second balloon.');assert.ok(white(raster.at(existing.x,existing.y)),'The existing embedded balloon remains visible.');
  const directory=await mkdtemp(path.join(os.tmpdir(),'shiqu-bubble-embedded-'));t.after(()=>rm(directory,{recursive:true,force:true}));const output=path.join(directory,'preview.html');
  await exportLocalStory(process.cwd(),app,{state:'completed',story:saved},{format:'html',output,preview:true});
- const html=await readFile(output,'utf8'),image=html.match(/src="data:image\/png;base64,([^"]+)"/);assert.ok(image);assert.deepEqual(Buffer.from(image[1],'base64'),base);
+ const html=await readFile(output,'utf8'),image=html.match(/src="data:image\/png;base64,([^"]+)"/);assert.ok(image);const sheet=await pixels(Buffer.from(image[1],'base64'));assert.ok(!white(sheet.at(empty.x+presentation.rect.x,empty.y+presentation.rect.y)));assert.ok(white(sheet.at(existing.x+presentation.rect.x,existing.y+presentation.rect.y)));assert.equal(sha256Hex(base),dataHash);
 });
 
 test('PDF preserves full artwork for balloon pages and PNG visibly paints the same overlays',async()=>{
  const {runtime}=await fixture(),saved=story(),pdf=await PDFDocument.load(await createStoryPdf(saved,()=>{},runtime));assert.ok(pdf.getPageCount()>=2);
  const resources=pdf.getPage(0).node.Resources(),objects=resources.lookup(PDFName.of('XObject'),PDFDict);const jpeg=pdf.context.lookup(objects.values()[0]);const rendered=await pixels(jpeg.contents);
- assert.ok(white(rendered.at(180,220)));assert.ok(!white(rendered.at(450,1150)));
- const png=await createStoryPng(saved,()=>{},runtime),sheet=await pixels(new Uint8Array(await png.arrayBuffer()));let found=false;
- for(let y=0;y<sheet.height;y++){const pixel=sheet.at(50,y);if(Math.abs(pixel[0]-36)<5&&Math.abs(pixel[1]-80)<5){found=true;assert.ok(white(sheet.at(90,y+45)));break;}}
- assert.ok(found,'The full source illustration remains on the overview.');
+ const presentation=layoutComicPanel(saved.pages[0],layoutComicPages(saved.pages)[0].panels[0]),bubble=presentation.bubbles[0],x=presentation.rect.x+(bubble.x+bubble.width/2)*presentation.rect.width,y=presentation.rect.y+(bubble.y+bubble.height*.15)*presentation.rect.height;
+ assert.ok(white(rendered.at(x,y)));assert.ok(!white(rendered.at(presentation.art.x+presentation.art.width/2,presentation.art.y+presentation.art.height*.9)));
+ const png=await createStoryPng(saved,()=>{},runtime),sheet=await pixels(new Uint8Array(await png.arrayBuffer()));assert.ok(sheet.width>=900&&sheet.height>=1350);
+ let found=false;for(let row=0;row<sheet.height&&!found;row+=4)for(let column=0;column<sheet.width;column+=4){const pixel=sheet.at(column,row);if(Math.abs(pixel[0]-36)<5&&Math.abs(pixel[1]-80)<5&&Math.abs(pixel[2]-120)<5){found=true;break;}}assert.ok(found,'The full source illustration remains on the comic overview.');
 });
 
 test('offline HTML embeds composited pixels and escapes its accessible dialogue transcript',async t=>{
  const {app}=await fixture(),directory=await mkdtemp(path.join(os.tmpdir(),'shiqu-bubble-preview-'));t.after(()=>rm(directory,{recursive:true,force:true}));
  const saved=story([{...speech,text:'<script>Stay here</script>'}]),output=path.join(directory,'preview.html');await exportLocalStory(process.cwd(),app,{state:'completed',story:saved},{format:'html',output,preview:true});
  const html=await readFile(output,'utf8');assert.ok(!html.includes('<script>Stay here</script>'));assert.match(html,/&lt;script&gt;Stay here&lt;\/script&gt;/);
- const image=html.match(/src="data:image\/png;base64,([^"]+)"/);assert.ok(image);assert.ok(white((await pixels(Buffer.from(image[1],'base64'))).at(100,100)));
+ const image=html.match(/src="data:image\/png;base64,([^"]+)"/);assert.ok(image);const rendered=await pixels(Buffer.from(image[1],'base64'));assert.equal(rendered.width,900);assert.equal(rendered.height,1350);assert.match(html,/Comic page 1/);assert.match(html,/Read this page as text/);
 });
+
+function convertedLayout(data){return data.comicPages.flatMap(page=>page.panels.map(panel=>panel.frameIndex));}

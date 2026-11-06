@@ -75,9 +75,9 @@ For access from another network, install `cloudflared`, stop the desktop service
 4. Edit production instructions and acceptance criteria, then confirm production. No storyboard or illustration is generated before this confirmation.
 5. Follow the timeline through storyboard, title/ending, review, targeted repairs, recheck, and illustration generation.
 
-Each story supports **1–80 illustrated frames**. Automatic frame counts may change during review to fit the source. Long storyboards use an outline and batches of up to 20 frames. A source book can produce multiple independent comic stories.
+Each story supports **1–80 illustrated panels**. The historical API calls them frames or `pages`; they are grouped into comic pages for reading and export. Automatic frame counts may change during review to fit the source. Long storyboards use an outline and batches of up to 20 frames. A source book can produce multiple independent comic stories.
 
-Speech balloons have a pointed tail; thought clouds use a trail of circles. Production selects the important source-supported words, attributes them to characters and places the balloons automatically. You do not need to open an editor or position them. Illustration composition reserves space for text, and the fitting step keeps balloons readable and apart. A crowded page is retried through production rather than silently losing dialogue. Thoughts are only used when the source explicitly supports them; narration carries the remaining action.
+Speech balloons have oval bodies with short attached tails; thought clouds use a trail of circles. Production selects source-supported words and attributes them to characters, while visible balloons contain only the words. Bundled comic lettering works offline. Light fills follow the artwork's colours while preserving dark readable ink. You do not need to open an editor or position anything. A crowded panel receives more space rather than smaller and smaller text; impossible density is reported clearly. Thoughts require explicit source support; narration carries the remaining action.
 
 Automatic placement follows the planned characters and scene composition. It does not inspect faces in the final image pixels. If you want to refine a result, open the storyboard revision editor: balloon controls are optional. Reading an old story does not generate or add balloons automatically.
 
@@ -112,7 +112,9 @@ Selective image redraw accepts one-based frame numbers through `stories edit`: `
 
 ## Reading and organization
 
-Balloon pages show the complete artwork with narration below it. The accessible transcript identifies each speaker and whether they speak or think, in the saved reading order. Optional balloon editing supports text, speaker, kind, order, position, size and tail. Pointer, keyboard and percentage inputs provide alternate controls. Closing the editor keeps its local draft for the current story; save explicitly to create a version, or discard the draft. Position-only changes reuse the existing review and artwork. Dialogue and attribution changes go through the ordinary source review; changing a scene's illustration prompt can also redraw that artwork.
+Comic pages normally combine four panels, with wider, taller or full-page panels for important or text-heavy scenes. Full illustrations are preserved, with artwork-toned space for differing aspect ratios. Arrows turn comic pages, while the scene list selects an original panel and opens its containing page. Saved progress still identifies the original panel. Use page zoom and pan on a phone; the ordered accessible transcript includes narration, speakers and whether they speak or think.
+
+Optional balloon editing supports text, speaker, kind, order, position, size and tail. Pointer, keyboard and percentage inputs provide alternate controls. Closing the editor keeps its local draft for the current story; save explicitly to create a version, or discard the draft. Position or panel-span changes reuse the existing review and artwork. Dialogue and attribution changes go through the ordinary source review; changing a scene's illustration prompt can also redraw that artwork. Page composition can reflow balloon bodies around their planned speaker targets.
 
 The bookshelf separates active production from readable stories and contains current revisions, favorites, recent reading, and generation status. Reading progress is saved locally and shared by browsers connected to that library. You can inspect English source text, storyboard, production notes, review history, and revision history. Deleted stories can be restored.
 
@@ -120,7 +122,7 @@ Star a suitable illustration as the reference for its source book. Later image t
 
 ## Exports
 
-Speech and thought balloons appear in the exported images, PDF, ZIP and offline HTML preview. JSON and Markdown preserve their text, speakers and reading order. Raster archive pages are marked as already containing balloons to prevent a second overlay. Public ZIP conversion keeps the existing signed WebP bytes intact. Use this app version or later to edit balloon stories; older apps may omit unfamiliar fields when saving.
+PDF, PNG and offline HTML use the same multi-panel page plan, typography and colours. Numbered ZIP WebPs contain the complete panel presentation, while JSON and Markdown retain narration, dialogue, speakers, panel emphasis and reading order. Fully composed panels have an explicit `comicRendering` marker; older balloon-only images retain `bubbleRendering`. Old baked lettering stays on a full-page panel because its original font size is unknown. Readers skip already-baked content instead of drawing it twice. Public ZIP conversion keeps signed WebP bytes intact. Use this app version or later to edit comic stories; older apps may omit unfamiliar fields when saving.
 
 Exports run locally and do not call AI. Complete PDF, PNG, and ZIP exports require every current-revision image to exist and be readable. Missing images must be completed; an older revision is not substituted.
 

@@ -1,6 +1,7 @@
 // English browser controls exercise the same production workflow and preserve Chinese source fixtures.
 // Run the production app behind the real development proxy with controlled inference and retained SQLite.
 // UI tests mutate only through browser controls; helpers expose read-only state and model completion gates.
+// Metadata-loading regressions may block service workers so controlled image routes remain interceptable.
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import {mkdir,writeFile} from 'node:fs/promises';
@@ -15,7 +16,7 @@ import {libraryFixture} from './story-library.mjs';
 export const runId=process.env.SHIQU_E2E_RUN_ID||new Date().toISOString().replace(/[:.]/g,'-')+'-'+process.pid;
 export const runDirectory=path.resolve('.data/e2e',runId);
 async function reservePort(){const server=createHttpServer(async()=>new Response('reserved'));await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const port=server.address().port;await new Promise(resolve=>server.close(resolve));return port;}
-export async function storyBrowser(t,caseId){
+export async function storyBrowser(t,caseId,{serviceWorkers='allow'}={}){
  const directory=path.join(runDirectory,caseId);await mkdir(directory,{recursive:true});
  const f=await productionFixture(undefined,'codex',{}, {parentDirectory:directory,retain:true}),library=libraryFixture();
  let api,vite,browser,capture;
@@ -46,7 +47,7 @@ export async function storyBrowser(t,caseId){
  await new Promise(resolve=>api.listen(0,'127.0.0.1',resolve));
  vite=await createServer({envFile:false,cacheDir:path.join(f.root,'vite-cache'),logLevel:'error',plugins:[protectDevelopmentLibrary(f.dataDirectory)],server:developmentServerOptions({port,apiPort:api.address().port,library:f.dataDirectory})});
  await vite.listen();browser=await chromium.launch({headless:true});
- const context=await browser.newContext({viewport:{width:1280,height:1000}});await context.tracing.start({screenshots:true,snapshots:true,sources:true});
+ const context=await browser.newContext({viewport:{width:1280,height:1000},serviceWorkers});await context.tracing.start({screenshots:true,snapshots:true,sources:true});
  await context.addInitScript(()=>localStorage.setItem('shiqu-last-tab','shelf'));
  const page=await context.newPage(),url=`http://127.0.0.1:${port}`,errors=[],transitions=[],commands=[];let result='PASS',failure,closed=false;
  page.setDefaultTimeout(10000);

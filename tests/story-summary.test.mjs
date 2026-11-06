@@ -1,5 +1,5 @@
 // English workflow expectations preserve source evidence, saved work and recovery contracts.
-// Exercise a real pre-summary library upgrade, paid image receipts, file retries and read contracts.
+// Exercise summary upgrades and paid receipts; script disclosures retain canonical panel labels.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,mkdir,cp,rm,readFile,writeFile,symlink,stat} from 'node:fs/promises';
@@ -101,5 +101,5 @@ test('target job identity collisions abort the upgrade without discarding either
 test('script disclosure renders the summary with the existing storyboard',async()=>{
  const file='client/ui/StoryScript.tsx',compiled=await transform(await readFile(file,'utf8'),{loader:'tsx',format:'cjs',jsx:'automatic'}),compiledModule={exports:{}};
  new Function('require','module','exports',compiled.code)(createRequire(import.meta.url),compiledModule,compiledModule.exports);
- const html=renderToStaticMarkup(createElement(compiledModule.exports.default,{story:makeStory(),standalone:true}));assert.match(html,/测试人物经历变故/);assert.match(html,/Page 1/);assert.doesNotMatch(html,/测试引子/);
+ const html=renderToStaticMarkup(createElement(compiledModule.exports.default,{story:makeStory(),standalone:true}));assert.match(html,/测试人物经历变故/);assert.match(html,/Panel 1/);assert.doesNotMatch(html,/测试引子/);
 });

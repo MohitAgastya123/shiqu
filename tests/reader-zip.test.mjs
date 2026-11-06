@@ -1,4 +1,5 @@
 // Verify English export metadata and preserve legacy archive image bytes.
+import {createCanvas} from '@napi-rs/canvas';
 import {themeLabel} from '../lib/reader-language.ts';
 // English product expectations; historical source fixtures remain explicit test data.
 // Verify complete saved prompt exports, pixel attribution and fail-closed history/image reads.
@@ -25,10 +26,10 @@ function browserImages(t){
  globalThis.document={querySelector(){return null;},body:{appendChild(){}},createElement(tag){
   if(tag==='a')return {click(){controls.downloads.push({href:this.href,download:this.download});},remove(){}};
   assert.equal(tag,'canvas');
-  const canvas={width:0,height:0,getContext(){return controls.failure==='context'?null:{save(){},restore(){},translate(){},rotate(){},measureText(text){return {width:[...text].length*20};},fillRect(){},fillText(text,x,y,maxWidth){(canvas.labels||=[]).push({text,x,y,font:this.font,maxWidth});},drawImage(image,x,y){assert.equal(x,0);assert.equal(y,0);canvas.image=image;}};},toBlob(callback,type,quality){
+  const canvas={width:0,height:0,getContext(){return controls.failure==='context'?null:{save(){},restore(){},translate(){},rotate(){},measureText(text){return {width:[...text].length*20};},fillRect(){},strokeRect(){},fillText(text,x,y,maxWidth){(canvas.labels||=[]).push({text,x,y,font:this.font,maxWidth});},drawImage(image,x,y,width,height){assert.ok(Number.isFinite(x)&&Number.isFinite(y));if(width!==undefined)assert.ok(width>0&&height>0);canvas.image=image;}};},toBlob(callback,type,quality){
    assert.equal(type,'image/webp');assert.equal(quality,.85);
    canvas.encodedSize=[canvas.width,canvas.height];
-   callback(controls.failure==='empty'?null:new Blob([mockEncoded],{type:controls.failure==='format'?'image/png':'image/webp'}));
+   if(controls.failure==='empty'){callback(null);return;}const output=createCanvas(canvas.width,canvas.height);output.getContext('2d').fillRect(0,0,canvas.width,canvas.height);void output.encode('webp',85).then(bytes=>{canvas.output=bytes;callback(new Blob([bytes],{type:controls.failure==='format'?'image/png':'image/webp'}));});
   }};
   canvases.push(canvas);return canvas;
  }};
@@ -63,7 +64,7 @@ test('ZIP preserves images and public metadata while exporting requirements, pag
  const formats=['png','jpeg','webp'],bodies=Array.from({length:12},(_,i)=>new Uint8Array([i,4,8,15,16,23,42]));
  const fetched=[];
  t.mock.method(globalThis,'fetch',async (url,options)=>{
-  const i=fetched.length;fetched.push(url);
+  const i=Number(new URL(url).pathname.match(/test-(\d+)/)[1]);fetched.push(url);
   assert.equal(options.credentials,'same-origin');
   return new Response(bodies[i],{headers:{'Content-Type':`image/${formats[i%3]}`}});
  });
@@ -92,7 +93,7 @@ test('ZIP preserves images and public metadata while exporting requirements, pag
  assert.equal(json.pages.length,12);
  for(let i=0;i<12;i++){
   const filename=`图片/${String(i+1).padStart(2,'0')}.webp`;
-  assert.equal(webpPayloadHash(files[filename]),webpPayloadHash(mockEncoded));
+  assert.equal(webpPayloadHash(files[filename]),webpPayloadHash(browser.canvases.filter(canvas=>canvas.encodedSize)[i].output));
   assert.equal(json.pages[i].sha256,createHash('sha256').update(files[filename]).digest('hex'));
   assert.equal(json.pages[i].originalSha256,createHash('sha256').update(bodies[i]).digest('hex'));
   assert.equal(json.pages[i].imagePayloadSha256,webpPayloadHash(files[filename]));
@@ -105,9 +106,9 @@ test('ZIP preserves images and public metadata while exporting requirements, pag
  assert.ok(script.indexOf('## Frame 2')<script.indexOf('## Frame 10'));
  for(const text of [story.title,story.summary,story.reflection,story.adaptationNote,story.sourceReference,story.artStyleLabel])assert.ok(script.includes(text));
  assert.ok(progress.includes('Packaging frame 12 / 12'));
- assert.equal(browser.canvases.length,12);
- assert.equal(browser.revoked.length,12);
- for(const canvas of browser.canvases){assert.equal(canvas.encodedSize[0],941);assert.equal(canvas.encodedSize[1],1672);assert.equal(canvas.labels.length,1);assert.ok(canvas.labels.some(label=>label.text.includes('AI-generated')));assert.equal(canvas.width,0);assert.equal(canvas.height,0);}
+ assert.equal(browser.canvases.filter(canvas=>canvas.encodedSize).length,12);
+ assert.equal(browser.revoked.length,24);
+ for(const canvas of browser.canvases){if(canvas.encodedSize){assert.equal(canvas.encodedSize[0],409);assert.equal(canvas.encodedSize[1],591);assert.ok(canvas.labels.some(label=>label.text.includes('AI-generated')));}assert.equal(canvas.width,0);assert.equal(canvas.height,0);}
 });
 
 test('ZIP exports stories without generation metadata with an empty model list',async t=>{
@@ -133,9 +134,9 @@ test('ZIP rejects failed decoding, missing canvas, empty encoding and PNG fallba
  t.mock.method(globalThis,'fetch',async()=>new Response('image',{headers:{'Content-Type':'image/png'}}));
  for(const failure of ['decode','context','empty','format']){
   browser.failure=failure;
-  await assert.rejects(createStoryZip(makeStory(1),null),/Frame 1.*WebP/);
+  await assert.rejects(createStoryZip(makeStory(1),null),/Frame 1.*WebP|Panel 1.*unreadable/);
  }
- assert.equal(browser.revoked.length,4);
+ assert.equal(browser.revoked.length,6);
  assert.ok(browser.canvases.every(canvas=>canvas.width===0&&canvas.height===0));
 });
 
@@ -219,7 +220,7 @@ test('download loads actual prompt history on demand and excludes API previews a
   return new Response('image',{headers:{'Content-Type':'image/png'}});
  });
  const progress=[],result=await downloadStoryZip(story,value=>progress.push(value));
- assert.deepEqual(calls,[`/api/reader/sessions/${story.id}/prompts`,`http://localhost:3000${story.pages[0].image}`]);
+ assert.deepEqual(calls,[`/api/reader/sessions/${story.id}/prompts`,`http://localhost:3000${story.pages[0].image}`,`http://localhost:3000${story.pages[0].image}`]);
  assert.deepEqual(browser.downloads,[{href:result.url,download:result.filename}]);
  const files=unzipSync(new Uint8Array(await browser.urls.get(result.url).arrayBuffer()));
  assert.deepEqual(JSON.parse(strFromU8(files['提示词.json'])),archivePromptHistory(history));
@@ -244,8 +245,8 @@ test('ZIP applies the saved watermark size to WebP canvases and retains it in st
  const publication={author:'测试制作人',workUrl:'',contact:'',sourceNote:'',reuse:'',watermarkFontSize:40};
  const story={...makeStory(2),publication},blob=await createStoryZip(story,null);
  const files=unzipSync(new Uint8Array(await blob.arrayBuffer())),saved=JSON.parse(strFromU8(files['故事.json']));
- assert.deepEqual(saved.publication,publication);assert.equal(browser.canvases.length,2);
- for(const canvas of browser.canvases){assert.match(canvas.labels[0].font,/300 40px /);assert.equal(canvas.labels[0].maxWidth,941*.94);assert.deepEqual(canvas.encodedSize,[941,1672]);}
+ assert.deepEqual(saved.publication,publication);const encoded=browser.canvases.filter(canvas=>canvas.encodedSize);assert.equal(encoded.length,2);
+ for(const canvas of encoded){const label=canvas.labels.find(label=>label.font.startsWith('300 '));assert.match(label.font,/300 40px /);assert.equal(label.maxWidth,836*.94);assert.deepEqual(canvas.encodedSize,[836,591]);}
 });
 
 test('collection export consumes the browser ZIP with its signed WebPs and shared public serialization',async t=>{
@@ -260,7 +261,7 @@ test('collection export consumes the browser ZIP with its signed WebPs and share
  assert.ok(!strFromU8(files['分镜.md']).includes('Scene prompt'));assert.ok(!files['提示词.json']);
  assert.deepEqual(files['署名与转载.txt'],full['署名与转载.txt']);
  for(const page of data.pages){assert.ok(!('prompt' in page));assert.deepEqual(files[page.image],full[page.image]);}
- for(const canvas of browser.canvases)assert.match(canvas.labels[0].font,/300 40px /);
+ for(const canvas of browser.canvases.filter(canvas=>canvas.encodedSize))assert.match(canvas.labels.find(label=>label.font.startsWith('300 ')).font,/300 40px /);
 });
 
 test('legacy signed ZIP imports retain their exact disclosure and WebP bytes without relaxing metadata verification',async t=>{

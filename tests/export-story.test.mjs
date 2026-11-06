@@ -1,5 +1,5 @@
 // Validate English export content and unchanged public archive protocol.
-// Exercise the actual public-export path with signed app-format fixtures and isolated output files.
+// Exercise signed public archives and shared comic-panel encoding with isolated output files.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile,mkdtemp,readdir,rm,writeFile} from 'node:fs/promises';
@@ -65,7 +65,7 @@ test('named Node export reads the complete story, applies default credits and en
    const decoded=await loadImage(Buffer.from(files[page.image]));assert.ok(decoded.width>0&&decoded.height>0);
   }
   for(const name of ['故事.json','分镜.md','署名与转载.txt'])assert.ok(!strFromU8(files[name]).includes('PRIVATE_'));
-  assert.equal(state.requests.filter(route=>route.includes('/media/')).length,story.pages.length);
+  assert.equal(state.requests.filter(route=>route.includes('/media/')).length,story.pages.length*2,'Read dimensions before planning, then encode every original frame.');
   assert.deepEqual(await readdir(root),[path.basename(result.path)]);
  }finally{await rm(root,{recursive:true,force:true});}
 });

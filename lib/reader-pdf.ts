@@ -1,10 +1,10 @@
 // English product text and generation contracts; canonical source evidence remains unchanged.
-// Export saved stories; balloon pages preserve full artwork and keep narration outside its bounds.
+// Export automatic comic sheets using the shared full-art panel presentation, followed by source notes.
 import {themeLabel} from './reader-language.ts';
 import type {Story} from './content';
 import {browserExportRuntime,type ExportRuntime} from './story-export-runtime.ts';
 import {publicationCredit,publicationText} from './story-publication.ts';
-import {paintComicBubbles} from './comic-bubble-layout.ts';
+import {layoutComicPages,paintComicPage,readComicImageSizes} from './comic-page-layout.ts';
 
 const W=900,H=1350,M=72;
 const serif='"Noto Serif SC", "Songti SC", "STSong", serif';
@@ -43,40 +43,18 @@ export async function createStoryPdf(story:Story,onProgress:(text:string)=>void=
   const image=await pdf.embedJpg(await blob.arrayBuffer());pdf.addPage([360,540]).drawImage(image,{x:0,y:0,width:360,height:540});
  }
  try{
-  for(let i=0;i<story.pages.length;i++){
-   onProgress(`Preparing frame ${i+1} / ${story.pages.length}`);
-   const scene=story.pages[i],blob=await runtime.read(scene.image,i);
-   if(scene.bubbles?.length){
-    ctx.clearRect(0,0,W,H);ctx.fillStyle='#f7f6ef';ctx.fillRect(0,0,W,H);
-    font(28);const narration=scene.caption.trim()?lines(scene.caption):[],artTop=120,artHeight=H-artTop-120-narration.length*40;
-    if(artHeight<120)throw Error(`Frame ${i+1} has too much narration to export with its balloons.`);
-    await runtime.image(blob,image=>{
-     const scale=Math.min((W-2*M)/image.width,artHeight/image.height),width=image.width*scale,height=image.height*scale,x=(W-width)/2,y=artTop+(artHeight-height)/2;
-     ctx.drawImage(image.value,x,y,width,height);
-     if(scene.bubbleRendering!=='embedded'){ctx.save();try{ctx.translate(x,y);paintComicBubbles(ctx,scene.bubbles,width,height);}finally{ctx.restore();}}
-    });
-    font(27,sans);ctx.fillStyle='#2a493b';lines(story.title,W-2*M-120).forEach((line,j)=>ctx.fillText(line,M,45+j*36));
-    ctx.textAlign='right';ctx.fillText(`${String(i+1).padStart(2,'0')} / ${story.pages.length}`,W-M,45);ctx.textAlign='left';
-    font(28);narration.forEach((line,j)=>ctx.fillText(line,M,artTop+artHeight+20+j*40));
-    font(21,sans);ctx.fillStyle='#65745d';ctx.fillText(publicationCredit(story),M,H-65,W-2*M);
-    await addCanvas();continue;
-   }
-   await runtime.image(blob,image=>{
-    const scale=Math.max(W/image.width,H/image.height),width=image.width*scale,height=image.height*scale;
-    ctx.clearRect(0,0,W,H);ctx.drawImage(image.value,(W-width)/2,(H-height)/2,width,height);
-   });
-   const top=ctx.createLinearGradient(0,0,0,260);top.addColorStop(0,'rgba(14,34,25,.72)');top.addColorStop(1,'rgba(14,34,25,0)');ctx.fillStyle=top;ctx.fillRect(0,0,W,260);
-   font(27,sans);ctx.fillStyle='#f1efdf';lines(story.title,W-2*M-120).forEach((line,j)=>ctx.fillText(line,M,55+j*39));
-   ctx.textAlign='right';ctx.fillText(`${String(i+1).padStart(2,'0')} / ${story.pages.length}`,W-M,55);ctx.textAlign='left';
-   font(32);const caption=lines(scene.caption),captionTop=H-140-caption.length*47;
-   const shade=ctx.createLinearGradient(0,Math.max(300,captionTop-200),0,H);shade.addColorStop(0,'rgba(14,34,25,0)');shade.addColorStop(.5,'rgba(14,34,25,.8)');shade.addColorStop(1,'rgba(14,34,25,.96)');ctx.fillStyle=shade;ctx.fillRect(0,Math.max(300,captionTop-200),W,H);
-   ctx.fillStyle='#fff9e9';caption.forEach((line,j)=>ctx.fillText(line,M,captionTop+j*47));
-   font(21,sans);ctx.fillStyle='#c7d1bc';ctx.fillText(publicationCredit(story),M,H-65,W-2*M);
+  const imageSizes=await readComicImageSizes(story.pages,runtime),comicPages=layoutComicPages(story.pages,{imageSizes});
+  for(const page of comicPages){
+   onProgress(`Preparing comic page ${page.index+1} / ${comicPages.length}`);
+   await paintComicPage(ctx,story.pages,page,runtime);
+   font(20,sans);ctx.fillStyle='#263a2e';lines(story.title,W-2*M-120).forEach((line,index)=>ctx.fillText(line,M,20+index*23));
+   ctx.textAlign='right';ctx.fillText(`${page.index+1} / ${comicPages.length}`,W-M,30);ctx.textAlign='left';
+   font(18,sans);ctx.fillText(publicationCredit(story),M,H-30,W-2*M);
    await addCanvas();
   }
   onProgress('Preparing the ending and source notes');
   let y=0,appendix=0;
-  function paper(){ctx.fillStyle='#f7f6ef';ctx.fillRect(0,0,W,H);font(22,sans);ctx.fillStyle='#7b8b74';ctx.fillText('Shiqu / After the story',M,50);ctx.textAlign='right';ctx.fillText(String(story.pages.length+1+appendix++).padStart(2,'0'),W-M,50);ctx.textAlign='left';y=140;}
+  function paper(){ctx.fillStyle='#f7f6ef';ctx.fillRect(0,0,W,H);font(22,sans);ctx.fillStyle='#7b8b74';ctx.fillText('Shiqu / After the story',M,50);ctx.textAlign='right';ctx.fillText(String(comicPages.length+1+appendix++).padStart(2,'0'),W-M,50);ctx.textAlign='left';y=140;}
   paper();
   async function block(label:string,text:string,size=30){
    if(!text.trim())return;
@@ -88,7 +66,7 @@ export async function createStoryPdf(story:Story,onProgress:(text:string)=>void=
   }
   await block('A final thought',story.reflection,40);
   await block('Source reference',storySourceReference(story));
-  await block('About this adaptation',story.adaptationNote.replace('','。'));
+  await block('About this adaptation',story.adaptationNote);
   await block('Credits and reuse',publicationText(story),25);
   if(story.sourceUrl)await block('Source URL',story.sourceUrl,23);
   await addCanvas();onProgress('Saving PDF');

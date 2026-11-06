@@ -1,7 +1,8 @@
 // Validate attributed comic balloons and exact source evidence without changing historical pages.
-// Generated balloons are automatically packed with the same readable text metrics as production rendering.
+// Pack content-sized oval bodies close to planned speakers, using final-sheet pixel references for reflow.
 import {z} from 'zod';
-import {fitBubbleText,bubbleTailStart,bubbleReferenceWidth,bubbleReferenceHeight} from './comic-bubble-layout.ts';
+import {measureBubbleText,bubbleTailStart,bubbleReferenceWidth,bubbleReferenceHeight} from './comic-bubble-layout.ts';
+import type {BubbleReference} from './comic-bubble-layout.ts';
 
 const coordinate=z.number().finite().min(0).max(1);
 export const comicBubbleSchema=z.object({
@@ -49,27 +50,39 @@ function connectorsCross(a:ComicBubble,b:ComicBubble){
  const px=other.x-start.x,py=other.y-start.y,t=(px*oy-py*ox)/det,u=(px*dy-py*dx)/det;
  return t>0&&t<1&&u>0&&u<1;
 }
-function partitions(count:number):number[][]{
- if(!count)return [[]];
- return Array.from({length:count},(_,index)=>index+1).flatMap(first=>partitions(count-first).map(rest=>[first,...rest]));
-}
-export function autoPlaceBubbles(input:ComicBubble[]):ComicBubble[]{
+export function autoPlaceBubbles(input:ComicBubble[],reference:BubbleReference={}):ComicBubble[]{
  const bubbles=pageBubblesSchema.parse(input);if(!bubbles.length)return bubbles;
- const margin=.03,gap=.025,available=1-margin*2;
- // Place compact readable rows near their speakers instead of attaching long needles to the image top.
- const bottom=Math.min(.6,...bubbles.map(bubble=>bubble.tailY-.06));
- for(const rows of partitions(bubbles.length).sort((a,b)=>a.length-b.length))for(const height of [.22,.28,.34,.42,.50,.57]){
-  const top=bottom-height,rowHeight=(height-gap*(rows.length-1))/rows.length;if(top<margin-1e-9||rowHeight<=0)continue;
-  let offset=0;
-  const placed=rows.flatMap((count,row)=>{
-   const width=(available-gap*(count-1))/count;
-   return Array.from({length:count},(_,column)=>({...bubbles[offset++],x:margin+column*(width+gap),y:top+row*(rowHeight+gap),width,height:rowHeight}));
-  });
-  if(placed.some(bubble=>!fitBubbleText(bubble.text,bubble.width*bubbleReferenceWidth,bubble.height*bubbleReferenceHeight,bubble.kind,bubble.speaker)))continue;
-  if(placed.some((bubble,index)=>placed.some((other,j)=>index!==j&&(overlap(bubble,other)||connectorCrosses(bubble,other)||connectorsCross(bubble,other)))))continue;
-  // Tail targets identify visible speakers below the reserved area, never inside a balloon body.
-  if(placed.some(bubble=>bubble.tailX>=bubble.x&&bubble.tailX<=bubble.x+bubble.width&&bubble.tailY>=bubble.y&&bubble.tailY<=bubble.y+bubble.height))continue;
-  return pageBubblesSchema.parse(placed);
+ const rw=reference.referenceWidth??bubbleReferenceWidth,rh=reference.referenceHeight??bubbleReferenceHeight;
+ if(![rw,rh].every(n=>Number.isFinite(n)&&n>0))throw new BubbleDensityError();
+ const margin=12,placed:ComicBubble[]=[];
+ const candidates=bubbles.map(bubble=>{
+  const result:ComicBubble[]=[];
+  for(const fraction of [.72,.88,.96]){
+   const fit=measureBubbleText(bubble.text,bubble.kind,{maxWidth:rw*fraction-margin*2,maxHeight:rh*(bubbles.length>2?.48:.62)});if(!fit)continue;
+   const width=fit.width,height=fit.height,tx=bubble.tailX*rw,ty=bubble.tailY*rh,gap=bubble.kind==='thought'?48:18;
+   // Saved positions guide placement, but the short attached tail and reading order take precedence.
+   const positions=[[tx-width/2,ty-height-gap],[tx-width-gap,ty-height-gap],[tx+gap,ty-height-gap],[tx-width-gap,ty-height/2],[tx+gap,ty-height/2],[tx-width/2,ty+gap],[bubble.x*rw,bubble.y*rh]];
+   for(const [px,py]of positions){
+    const x=Math.max(margin,Math.min(rw-margin-width,px)),y=Math.max(margin,Math.min(rh-margin-height,py));
+    if(width>rw-margin*2||height>rh-margin*2)continue;
+    const next={...bubble,x:x/rw,y:y/rh,width:width/rw,height:height/rh},start=bubbleTailStart(next);
+    if(start.x===next.x+next.width/2&&start.y===next.y+next.height/2)continue;
+    if(Math.hypot((start.x-bubble.tailX)*rw,(start.y-bubble.tailY)*rh)>Math.min(90,Math.min(rw,rh)*.25))continue;
+    result.push(next);
+   }
+  }
+  return result;
+ });
+ function search(index:number):boolean{
+  if(index===bubbles.length)return true;
+  for(const candidate of candidates[index]){
+   const previous=placed.at(-1);
+   if(previous&&(candidate.y+candidate.height/2<previous.y+previous.height/2-.04||Math.abs(candidate.y-previous.y)<.035&&candidate.x<previous.x))continue;
+   if(placed.some(other=>overlap(candidate,other)||connectorCrosses(candidate,other)||connectorCrosses(other,candidate)||connectorsCross(candidate,other)))continue;
+   placed.push(candidate);if(search(index+1))return true;placed.pop();
+  }
+  return false;
  }
+ if(search(0))return pageBubblesSchema.parse(placed);
  throw new BubbleDensityError();
 }

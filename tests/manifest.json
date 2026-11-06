@@ -571,6 +571,31 @@
       ]
     },
     {
+      "file": "tests/comic-bubble-design.test.mjs",
+      "groups": [
+        "reader",
+        "media",
+        "production"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "lib/comic-bubble-layout.ts",
+        "lib/reader-bubbles.ts",
+        "lib/comic-bubble-palette.ts",
+        "lib/comic-bubble-font.ts",
+        "server/story-export.ts"
+      ]
+    },
+    {
       "file": "tests/comic-bubble-export.test.mjs",
       "groups": [
         "media",
@@ -594,7 +619,8 @@
         "lib/reader-zip-content.ts",
         "lib/public-story-zip.mjs",
         "lib/story-webp-metadata.ts",
-        "server/story-export.ts"
+        "server/story-export.ts",
+        "lib/comic-page-layout.ts"
       ]
     },
     {
@@ -700,6 +726,31 @@
         "client/ui/StoryFilmstrip.tsx",
         "lib/reader-revision.ts",
         "lib/reader-bubbles.ts"
+      ]
+    },
+    {
+      "file": "tests/comic-panel-contract.test.mjs",
+      "groups": [
+        "production",
+        "reader",
+        "review"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "lib/reader-model.ts",
+        "lib/reader-generation-contract.ts",
+        "lib/reader-revision.ts",
+        "lib/reader-structure.ts",
+        "lib/reader-review-history.ts"
       ]
     },
     {
@@ -2313,7 +2364,8 @@
       "gates": [],
       "covers": [
         "lib/reader-png.ts",
-        "lib/reader-pdf.ts"
+        "lib/reader-pdf.ts",
+        "lib/comic-page-layout.ts"
       ]
     },
     {
@@ -4021,6 +4073,85 @@
       "pr": "code",
       "gates": [],
       "covers": []
+    },
+    {
+      "file": "tests/comic-page-layout.test.mjs",
+      "groups": [
+        "reader",
+        "media",
+        "production"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "lib/comic-page-layout.ts",
+        "lib/reader-pdf.ts",
+        "lib/reader-zip.ts",
+        "lib/public-story-zip.mjs",
+        "lib/reader-zip-content.ts",
+        "server/story-export.ts"
+      ]
+    },
+    {
+      "file": "tests/comic-page-ui.test.mjs",
+      "groups": [
+        "reader",
+        "desktop"
+      ],
+      "level": "contract",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "lib/comic-page-layout.ts",
+        "client/ui/StoryComicPage.tsx",
+        "client/ui/StorySceneList.tsx"
+      ]
+    },
+    {
+      "file": "tests/comic-pages.playwright.e2e.mjs",
+      "groups": [
+        "reader",
+        "production",
+        "desktop"
+      ],
+      "level": "browser-e2e",
+      "cost": "heavy",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "e2e",
+      "pr": "affected",
+      "gates": [
+        "user-flows"
+      ],
+      "covers": [
+        "client/ui/Reader.tsx",
+        "client/ui/StoryComicPage.tsx",
+        "client/ui/StoryFilmstrip.tsx",
+        "client/ui/StoryBubbleLayer.tsx",
+        "client/ui/StorySceneList.tsx",
+        "client/ui/comic-pages.css",
+        "lib/comic-page-layout.ts",
+        "lib/comic-bubble-font.ts",
+        "lib/comic-bubble-palette.ts"
+      ]
     }
   ]
 }

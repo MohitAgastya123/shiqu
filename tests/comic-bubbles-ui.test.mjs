@@ -10,8 +10,8 @@ const compiled=build({stdin:{contents:"export {default as Layer,BubbleTranscript
 const bubbles=[{id:'speech-1',kind:'speech',speaker:'Fisherman',text:'Back to the river you go.',x:.04,y:.03,width:.44,height:.22,tailX:.28,tailY:.72},{id:'thought-1',kind:'thought',speaker:'Fisherman',text:'The river is its home.',x:.52,y:.03,width:.44,height:.22,tailX:.7,tailY:.73}];
 test('reader SVG uses shared production paths, exact line widths and separate speech/thought connectors',async()=>{
  const {Layer,BubbleTranscript}=await compiled,html=renderToStaticMarkup(createElement(Layer,{bubbles}));
- assert.match(html,/data-bubble-kind="speech"/);assert.match(html,/data-bubble-kind="thought"/);assert.match(html,/<circle/);assert.match(html,/yu-bubble-tail/);assert.doesNotMatch(html,/foreignObject/);
- for(const b of bubbles){const layout=computeBubbleLayout(b,900,1350);assert.ok(html.includes(layout.path));for(const line of layout.lines)assert.ok(html.includes(`textLength="${line.width}"`));}
+ assert.match(html,/data-bubble-kind="speech"/);assert.match(html,/data-bubble-kind="thought"/);assert.match(html,/<circle/);assert.doesNotMatch(html,/yu-bubble-tail/);assert.doesNotMatch(html,/Fisherman:/);assert.doesNotMatch(html,/foreignObject|textLength|lengthAdjust/);assert.match(html,/font-kerning:none/);
+ for(const b of bubbles){const layout=computeBubbleLayout(b,900,1350);assert.ok(html.includes(layout.path));for(const line of layout.lines)assert.ok(html.includes(line.text));}
  const transcript=renderToStaticMarkup(createElement(BubbleTranscript,{bubbles}));assert.ok(transcript.indexOf('Fisherman says:')<transcript.indexOf('Fisherman thinks:'));
  const invalid=renderToStaticMarkup(createElement(Layer,{bubbles:[{...bubbles[0],x:.99}]}));assert.match(invalid,/invalid balloon data/);assert.doesNotMatch(invalid,/data-bubble-kind/);
 });

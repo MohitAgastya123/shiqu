@@ -1,5 +1,6 @@
 // English production expectations; original evidence and historical hashes remain unchanged.
 // Verify real provider assembly, shared balloon/narration contracts and historical fingerprints without inference.
+// Comic generation also carries panel emphasis without printing speaker labels in visible dialogue.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
@@ -166,7 +167,8 @@ test('all providers send the same stage-specific instructions, data and strict o
   const page=get(stage).schema.properties.pages.items;
   assert.ok(page.required.includes('bubbles'),stage);assert.equal(page.properties.bubbles.maxItems,4,stage);
   assert.deepEqual(page.properties.bubbles.items.properties.kind.enum,['speech','thought'],stage);assert.ok(page.properties.bubbles.items.required.includes('sourceQuote'),stage);
-  assert.match(get(stage).instructions,/exact continuous quotation/,stage);assert.match(get(stage).instructions,/automatically fits balloon bodies/,stage);
+  assert.ok(page.required.includes('panel'),stage);assert.deepEqual(page.properties.panel.enum,['normal','wide','large','splash'],stage);
+  assert.match(get(stage).instructions,/exact continuous quotation/,stage);assert.match(get(stage).instructions,/automatically fits compact balloon bodies/,stage);assert.match(get(stage).instructions,/not be printed inside balloons/,stage);
  }
  assert.match(get('frames').instructions,/separate ending page is excluded/);
  assert.match(get('review').instructions,/requiresReplan=true/);assert.match(get('review').instructions,/Ordinary|Local/);

@@ -1,5 +1,5 @@
 // English product text and generation contracts; canonical source evidence remains unchanged.
-// Render full frames with shared comic balloons and wrapped narration in a local contact sheet.
+// Export the same automatic comic sheets as the reader and PDF, in a complete overview image.
 import {themeLabel} from './reader-language.ts';
 import type {Story} from './content';
 import {browserExportRuntime,type ExportRuntime} from './story-export-runtime.ts';
@@ -7,70 +7,43 @@ import type {GeneratedStory} from './reader-model';
 import {readerBooks} from './reader-books.ts';
 import {pdfFilename,wrapPdfText} from './reader-pdf.ts';
 import {publicationCredit} from './story-publication.ts';
-import {paintComicBubbles} from './comic-bubble-layout.ts';
+import {layoutComicPages,paintComicPage,readComicImageSizes,comicPageWidth,comicPageHeight} from './comic-page-layout.ts';
+import type {ComicLayoutOptions} from './comic-page-layout.ts';
 
-const M=36,GAP=24,CARD=420,ART=630,LINE=42;
+const M=36,GAP=24;
 const family='"Noto Serif SC", "Songti SC", "STSong", "SimSun", serif';
 export function pngFilename(title:string){return pdfFilename(title).replace(/\.pdf$/,'-overview.png');}
 export function assertPngReady(story:Story){if('generated' in story&&story.generated&&!story.sourceText?.trim())throw Error('Prepare the saved English source before exporting this story.');
  if(!story.pages.length||story.pages.some(page=>!page.image))throw Error('Complete every image before exporting an overview PNG.');
 }
-export function layoutStoryPng(story:Story,measure:(text:string,size:number)=>number){
+export function layoutStoryPng(story:Story,measure:(text:string,size:number)=>number,options:ComicLayoutOptions={}){
  assertPngReady(story);
- const count=story.pages.length,columns=count<=4?count:count<=8?4:count<=10?5:4;
- const width=2*M+columns*CARD+(columns-1)*GAP;
+ const pages=layoutComicPages(story.pages,options),columns=pages.length>1?2:1,width=2*M+columns*comicPageWidth+(columns-1)*GAP;
  const wrap=(text:string,size:number,limit:number)=>wrapPdfText(text,limit,value=>measure(value,size));
- const title=wrap(`${story.title} · ${count}-frame overview`,52,width-2*M);
+ const title=wrap(`${story.title} · ${pages.length} comic ${pages.length===1?'page':'pages'}`,52,width-2*M);
  const generated='generated'in story&&story.generated===true?story as GeneratedStory:null;
  const book=readerBooks.find(book=>book.id===story.bookId)?.title||'Custom story';
- const subtitle=wrap([book,generated?.artStyleLabel,themeLabel(story.theme)].filter(Boolean).join(' · '),26,width-2*M);
- const subtitleY=M+title.length*70+12;
- let y=subtitleY+subtitle.length*40+30;
- const cells:{index:number;x:number;y:number;caption:string[]}[]=[];
- for(let start=0;start<count;start+=columns){
-  const row=story.pages.slice(start,start+columns).map((page,i)=>({index:start+i,x:M+i*(CARD+GAP),y,caption:wrap(page.caption,26,CARD)}));
-  cells.push(...row);
-  y+=ART+58+Math.max(...row.map(cell=>cell.caption.length))*LINE+GAP;
- }
- const footerY=y+6,reflection=wrap(story.reflection?`A final thought: ${story.reflection}`:'The story ends here; the afterthought is yours.',36,width-2*M);
- const credit=wrap(publicationCredit(story),22,width-2*M);
+ const subtitle=wrap([book,generated?.artStyleLabel,themeLabel(story.theme)].filter(Boolean).join(' · '),26,width-2*M),subtitleY=M+title.length*70+12;
+ const firstY=subtitleY+subtitle.length*40+30;
+ const cells=pages.map((page,index)=>({index,x:M+(index%columns)*(comicPageWidth+GAP),y:firstY+Math.floor(index/columns)*(comicPageHeight+GAP),page}));
+ const footerY=firstY+Math.ceil(pages.length/columns)*(comicPageHeight+GAP),reflection=wrap(story.reflection?`A final thought: ${story.reflection}`:'The story ends here; the afterthought is yours.',36,width-2*M),credit=wrap(publicationCredit(story),22,width-2*M);
  const height=footerY+32+reflection.length*56+30+credit.length*32+24;
- return {width,height,columns,title,subtitle,subtitleY,cells,footerY,reflection,credit};
+ if(width>32767||height>32767||width*height>64000000)throw Error('This comic overview is too large for a PNG canvas. Export the complete story as PDF instead.');
+ return {width,height,columns,pages,title,subtitle,subtitleY,cells,footerY,reflection,credit};
 }
-
 export async function createStoryPng(story:Story,onProgress:(text:string)=>void=()=>{},runtime:ExportRuntime=browserExportRuntime()){
- assertPngReady(story);
- await runtime.ready();
- const canvas=runtime.canvas(),context=canvas.getContext('2d');
- if(!context)throw Error('PNG export is not supported by this browser. Try another browser.');
+ assertPngReady(story);await runtime.ready();
+ const canvas=runtime.canvas(),context=canvas.getContext('2d');if(!context)throw Error('PNG export is not supported by this browser. Try another browser.');
  const ctx:CanvasRenderingContext2D=context;
  const font=(size:number)=>{ctx.font=`${size}px ${family}`;ctx.textBaseline='top';};
- const layout=layoutStoryPng(story,(text,size)=>{font(size);return ctx.measureText(text).width;});
- canvas.width=layout.width;canvas.height=layout.height;
+ const imageSizes=await readComicImageSizes(story.pages,runtime),layout=layoutStoryPng(story,(text,size)=>{font(size);return ctx.measureText(text).width;},{imageSizes});canvas.width=layout.width;canvas.height=layout.height;
  try{
   ctx.fillStyle='#f6f2e8';ctx.fillRect(0,0,canvas.width,canvas.height);
-  function text(lines:string[],x:number,y:number,size:number,lineHeight:number,color:string){
-   font(size);ctx.fillStyle=color;lines.forEach((line,i)=>ctx.fillText(line,x,y+i*lineHeight));
-  }
-  text(layout.title,M,M,52,70,'#263a2e');
-  text(layout.subtitle,M,layout.subtitleY,26,40,'#6b7465');
-  for(const cell of layout.cells){
-   onProgress(`Preparing frame ${cell.index+1} / ${story.pages.length}`);
-   const blob=await runtime.read(story.pages[cell.index].image,cell.index);
-   await runtime.image(blob,image=>{
-    const scale=Math.min(CARD/image.width,ART/image.height),w=image.width*scale,h=image.height*scale;
-    const x=cell.x+(CARD-w)/2,y=cell.y+(ART-h)/2,scene=story.pages[cell.index];
-    ctx.drawImage(image.value,x,y,w,h);
-    if(scene.bubbleRendering!=='embedded'){ctx.save();try{ctx.translate(x,y);paintComicBubbles(ctx,scene.bubbles,w,h);}finally{ctx.restore();}}
-   });
-   text([String(cell.index+1).padStart(2,'0')],cell.x,cell.y+ART+14,28,40,'#263a2e');
-   text(cell.caption,cell.x,cell.y+ART+58,26,LINE,'#4b5148');
-  }
-  ctx.strokeStyle='#c9cbbb';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(M,layout.footerY);ctx.lineTo(layout.width-M,layout.footerY);ctx.stroke();
-  text(layout.reflection,M,layout.footerY+32,36,56,'#263a2e');
-  text(layout.credit,M,layout.height-24-layout.credit.length*32,22,32,'#6b7465');
-  onProgress('Saving overview PNG');
-  return await new Promise<Blob>((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(Error('PNG rendering failed. Retry.')),'image/png'));
+  function text(lines:string[],x:number,y:number,size:number,lineHeight:number,color:string){font(size);ctx.fillStyle=color;lines.forEach((line,i)=>ctx.fillText(line,x,y+i*lineHeight));}
+  text(layout.title,M,M,52,70,'#263a2e');text(layout.subtitle,M,layout.subtitleY,26,40,'#6b7465');
+  for(const cell of layout.cells){onProgress(`Preparing comic page ${cell.index+1} / ${layout.pages.length}`);ctx.save();try{ctx.translate(cell.x,cell.y);await paintComicPage(ctx,story.pages,cell.page,runtime);}finally{ctx.restore();}}
+  text(layout.reflection,M,layout.footerY+32,36,56,'#263a2e');text(layout.credit,M,layout.height-24-layout.credit.length*32,22,32,'#6b7465');
+  onProgress('Saving comic overview PNG');return await new Promise<Blob>((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(Error('PNG rendering failed. Retry.')),'image/png'));
  }finally{canvas.width=0;canvas.height=0;}
 }
 

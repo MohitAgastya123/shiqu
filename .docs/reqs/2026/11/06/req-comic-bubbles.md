@@ -1,5 +1,7 @@
 # Comic speech and thought bubbles
 
+This records the initial balloon release. The [comic page redesign](req-comic-page-design.md) supersedes its presentation: connected oval balloons, dialogue-only lettering and automatic multi-panel pages.
+
 ## Problem
 
 The English app tells stories through artwork and bottom captions but cannot reliably present character dialogue or thoughts as editable comic balloons. Readers need a complete comic experience, including saved revisions and exports.

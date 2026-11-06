@@ -1,3 +1,4 @@
+// Grouped comic pages preserve canonical panel selection and all existing lifecycle actions.
 // Exercise the English production browser lifecycle with controlled receipts; await UI state before checking action boundaries.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -27,9 +28,9 @@ test('STORY-LIFECYCLE-C002: all edit paths preserve one family, history and elig
    {name:'Change art style',change:async e=>e.getByRole('radio',{name:'Paper Cut',exact:true}).check(),check:s=>assert.equal(s.selection.artStyle,'paper-cut')},
    {name:'Change narrative detail',change:async e=>e.getByRole('group',{name:'Narrative detail'}).getByRole('button',{name:/^Detailed/}).click(),check:s=>assert.equal(s.selection.narrativeDetail,'detailed')},
    {name:'View storyboard',script:true,change:async e=>e.getByLabel(/^Caption/).fill('渔夫伸出双手，将搁浅的乌龟送回河流。'),reuse:true,check:s=>assert.equal(s.story.pages[0].caption,'渔夫伸出双手，将搁浅的乌龟送回河流。')},
-   {name:'View storyboard',script:true,change:async e=>{await e.getByLabel(/^Choose storyboard page/).selectOption('2');await e.getByLabel(/^Image prompt/).fill('The fisherman carefully lifts the turtle beside a quiet river, with one clear visible gesture.');},redraw:1,check:s=>assert.match(s.story.pages[1].prompt,/carefully lifts the turtle/)},
-   {name:'View storyboard',script:true,change:async e=>{await e.getByText('Character definitions (changes redraw all pages)',{exact:true}).click();await e.getByLabel(/^Character definitions/).fill('An adult Chinese fisherman in a blue linen robe, consistent clothing and facial features across every scene.');},redraw:3,check:()=>{}},
-   {name:'View storyboard',script:true,change:async e=>{await e.getByLabel(/^Choose storyboard page/).selectOption('0');await e.getByLabel(/^Reflection/).fill('一时的善意，也会在后来抵达。');},reuse:true,check:s=>assert.equal(s.story.reflection,'一时的善意，也会在后来抵达。')},
+   {name:'View storyboard',script:true,change:async e=>{await e.getByLabel(/^Choose storyboard panel/).selectOption('2');await e.getByLabel(/^Image prompt/).fill('The fisherman carefully lifts the turtle beside a quiet river, with one clear visible gesture.');},redraw:1,check:s=>assert.match(s.story.pages[1].prompt,/carefully lifts the turtle/)},
+   {name:'View storyboard',script:true,change:async e=>{await e.getByText('Character definitions (changes redraw all panels)',{exact:true}).click();await e.getByLabel(/^Character definitions/).fill('An adult Chinese fisherman in a blue linen robe, consistent clothing and facial features across every scene.');},redraw:3,check:()=>{}},
+   {name:'View storyboard',script:true,change:async e=>{await e.getByLabel(/^Choose storyboard panel/).selectOption('0');await e.getByLabel(/^Reflection/).fill('一时的善意，也会在后来抵达。');},reuse:true,check:s=>assert.equal(s.story.reflection,'一时的善意，也会在后来抵达。')},
   ];
   for(const [index,edit] of edits.entries()){
    await b.reader(current);settings=await b.workflow();await settings.getByRole('link',{name:edit.name,exact:true}).click();
@@ -141,7 +142,7 @@ test('STORY-LIFECYCLE-C007: shelf cards keep reading and the reader gear opens t
   await settings.getByRole('link',{name:'Back to shelf',exact:true}).click();
   assert.equal(await page.getByRole('button',{name:'“'+title+'” story settings',exact:true}).count(),0);
   await page.getByRole('button',{name:'Continue reading “'+title+'”',exact:true}).click();
-  assert.equal(await page.getByRole('dialog').count(),0);await page.getByRole('button',{name:'Next page',exact:true}).click();
+  assert.equal(await page.getByRole('dialog').count(),0);await page.getByRole('button',{name:'Scene list',exact:true}).click();await page.getByRole('button',{name:'Go to panel 2',exact:true}).click();
   settings=await b.settings();await settings.getByRole('list',{name:'Full review workflow'}).waitFor();await settings.getByRole('button',{name:'Close',exact:true}).click();
   await page.setViewportSize({width:390,height:844});settings=await b.settings();await settings.getByRole('list',{name:'Full review workflow'}).waitFor();
   assert.equal(await page.getByRole('dialog').count(),1);await b.screenshot('reader-gear-mobile');

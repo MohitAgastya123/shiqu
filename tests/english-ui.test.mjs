@@ -1,4 +1,4 @@
-// Verify English presentation across actual reader surfaces while preserving canonical selections.
+// Verify English presentation and source-panel labels while preserving canonical selections.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
@@ -18,7 +18,7 @@ test('discovery displays English themes while saved canonical values stay unchan
 test('scene navigation and review history use English labels and correct page/version terminology',async()=>{
  const {Scenes,History}=await compiled;
  const scenes=renderToStaticMarkup(createElement(Scenes,{story:{pages:[{caption:'A traveler reaches a quiet village.',image:''}]},page:0,onSelect:noop}));
- assertEnglish(scenes);assert.match(scenes,/aria-label="Go to page 1"/);assert.match(scenes,/Not drawn yet/);assert.doesNotMatch(scenes,/Page 1\s+pages/);
+ assertEnglish(scenes);assert.match(scenes,/aria-label="Go to panel 1"/);assert.match(scenes,/Not drawn yet/);assert.doesNotMatch(scenes,/Page 1\s+pages/);
  const history=renderToStaticMarkup(createElement(History,{data:{title:'The Traveler',revision:2,entries:[],status:'passed'}}));
  assertEnglish(history);assert.match(history,/Version 2/);assert.match(history,/Review passed/);assert.match(history,/No saved review history/);
 });

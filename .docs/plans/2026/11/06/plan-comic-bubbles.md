@@ -1,5 +1,7 @@
 # Comic bubbles implementation plan
 
+This records the initial balloon release. The [comic page redesign](plan-comic-page-design.md) supersedes its presentation: connected oval balloons, dialogue-only lettering and automatic multi-panel pages.
+
 ## Goal
 
 Implement the complete comic balloon workflow described in [the requirement](../../../../reqs/2026/11/06/req-comic-bubbles.md), from source-grounded generation through editable revisions, reader display and production exports.

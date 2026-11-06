@@ -1,5 +1,7 @@
 # Automatic comic bubbles
 
+This records the initial balloon release. The [comic page redesign](comic-page-design.md) supersedes its presentation: connected oval balloons, dialogue-only lettering and automatic multi-panel pages.
+
 ## Summary
 
 - New production creates source-grounded English speech and thought bubbles, attributes speakers and fits/places them automatically. No placement step is required.

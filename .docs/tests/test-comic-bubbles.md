@@ -1,5 +1,7 @@
 # Comic bubbles E2E specification
 
+This records the initial balloon release. The [comic page redesign](test-comic-page-design.md) supersedes its presentation: connected oval balloons, dialogue-only lettering and automatic multi-panel pages.
+
 Run against an isolated library, fixture image and fake provider using production generation/revision/export code. Never use the user's library or live model account.
 
 - [x] Give the production workflow an English fixture story with explicit spoken words and an explicit thought, and receive the finished comic without opening an editor. Verify attributed speech/thought balloons, exact source evidence, separated narration, automatic non-overlapping in-bounds fitted positions, planned speaker tail targets, saved revision and visible reader layer. Reject unsupported evidence and invalid geometry.

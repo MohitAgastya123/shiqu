@@ -1,8 +1,9 @@
 // English product expectations; historical source fixtures remain explicit test data.
-// Verify contact-sheet completeness and text bounds across supported story sizes.
+// Verify shared comic-sheet completeness, source order and readable narration across supported story sizes.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {makeStory} from './fixtures/story.mjs';
+import {layoutComicPanel} from '../lib/comic-page-layout.ts';
 import {assertPngReady,layoutStoryPng,pngFilename} from '../lib/reader-png.ts';
 
 const measure=(text,size)=>Array.from(text).length*size;
@@ -13,35 +14,23 @@ test('PNG export requires every image and produces a safe PNG filename',()=>{
  assert.equal(pngFilename('故事/名字?'),'故事名字-Shiqu-overview.png');
 });
 
-test('contact sheets retain all frames in reading order for 4, 8, 10, 12, 16 and 30 pages',()=>{
+test('comic overviews retain every source panel in order for 4, 8, 10, 12, 16 and 30 frames',()=>{
  for(const count of [4,8,10,12,16,30]){
-  const base=makeStory(),story={...base,pages:Array.from({length:count},(_,i)=>({...base.pages[i%10],caption:`第${i+1}幅：保留每一个故事细节。`}))};
-  const layout=layoutStoryPng(story,measure);
-  assert.equal(layout.cells.length,count);
-  assert.deepEqual(layout.cells.map(cell=>cell.index),Array.from({length:count},(_,i)=>i));
-  assert.equal(new Set(layout.cells.map(cell=>`${cell.x},${cell.y}`)).size,count);
-  assert.ok(layout.cells.every(cell=>cell.x>=0&&cell.x+420<=layout.width&&cell.y+630<layout.footerY));
-  layout.cells.forEach((cell,i)=>assert.equal(cell.caption.join(''),story.pages[i].caption));
-  assert.ok(layout.height>layout.footerY+layout.reflection.length*56);
-  if(count===10){assert.equal(layout.columns,5);assert.equal(new Set(layout.cells.map(cell=>cell.y)).size,2);}
+  const base=makeStory(),story={...base,pages:Array.from({length:count},(_,i)=>({...base.pages[i%10],caption:`Panel ${i+1} preserves its complete story detail.`}))},layout=layoutStoryPng(story,measure);
+  assert.equal(layout.cells.length,layout.pages.length);assert.deepEqual(layout.pages.flatMap(page=>page.panels.map(panel=>panel.frameIndex)),Array.from({length:count},(_,index)=>index));
+  assert.equal(new Set(layout.cells.map(cell=>`${cell.x},${cell.y}`)).size,layout.pages.length);assert.ok(layout.cells.every(cell=>cell.x>=0&&cell.x+900<=layout.width&&cell.y+1350<layout.footerY));
+  for(const page of layout.pages)for(const panel of page.panels){const presentation=layoutComicPanel(story.pages[panel.frameIndex],panel);assert.equal(presentation.captionLines.map(line=>line.text).join(' '),story.pages[panel.frameIndex].caption);assert.ok(presentation.captionFontSize>=24);}
+  assert.ok(layout.height>layout.footerY+layout.reflection.length*56);assert.equal(layout.columns,layout.pages.length>1?2:1);
  }
 });
 
-test('long titles, narration and reflections expand the layout without overlapping later rows',()=>{
- const base=makeStory();
- const story={...base,title:'很长的故事标题'.repeat(10),reflection:'留下一句值得慢慢回味的话。'.repeat(20),pages:Array.from({length:12},(_,i)=>({...base.pages[i%10],caption:i===0?'一段很长的旁白，需要完整保留而不是截断。'.repeat(20):'简短旁白。'}))};
- const layout=layoutStoryPng(story,measure);
+test('long titles, narration and reflections retain all content without overlapping comic sheets',()=>{
+ const base=makeStory(),story={...base,title:'A very long story title '.repeat(10),reflection:'A final observation worth considering. '.repeat(20),pages:Array.from({length:12},(_,i)=>({...base.pages[i%10],caption:i===0?'The travelers pause to consider a difficult choice before continuing along the river. '.repeat(5).trim():'They continue beside the river.'}))},layout=layoutStoryPng(story,measure);
  assert.ok(layout.title.length>1);assert.ok(layout.reflection.length>1);
- for(const cell of layout.cells){
-  assert.ok(cell.caption.every(line=>measure(line,26)<=420));
-  const nextRow=layout.cells.find(other=>other.y>cell.y);
-  const bottom=cell.y+630+58+cell.caption.length*42;
-  assert.ok(bottom<(nextRow?.y??layout.footerY));
- }
- assert.ok(layout.title.every(line=>measure(line,52)<=layout.width-72));
- assert.ok(layout.reflection.every(line=>measure(line,36)<=layout.width-72));
- assert.equal(layout.cells[0].caption.join(''),story.pages[0].caption);
- assert.equal(layout.reflection.join(''),'A final thought:'+story.reflection);
+ for(const cell of layout.cells){const nextRow=layout.cells.find(other=>other.y>cell.y);assert.ok(cell.y+1350<(nextRow?.y??layout.footerY));for(const panel of cell.page.panels){const presentation=layoutComicPanel(story.pages[panel.frameIndex],panel);assert.ok(presentation.captionLines.every(line=>line.y+presentation.captionLineHeight<=presentation.rect.y+presentation.rect.height-88));}}
+ assert.ok(layout.title.every(line=>measure(line,52)<=layout.width-72));assert.ok(layout.reflection.every(line=>measure(line,36)<=layout.width-72));
+ assert.notEqual(layout.pages[0].panels[0].span,'normal');assert.equal(layoutComicPanel(story.pages[0],layout.pages[0].panels[0]).captionLines.map(line=>line.text).join(' '),story.pages[0].caption);
+ assert.equal(layout.reflection.join(' '),'A final thought: '+story.reflection.trim());
 });
 
 test('English captions wrap between words and generated exports require the saved English source',async()=>{
@@ -52,3 +41,5 @@ test('English captions wrap between words and generated exports require the save
  assert.equal(lines.join(' '),text);
  assert.throws(()=>assertPngReady({...makeStory(1),generated:true,sourceText:''}),/saved English source/);
 });
+
+test('an eighty-splash overview reports the canvas limit rather than dropping or clipping panels',()=>{const base=makeStory(1);assert.throws(()=>layoutStoryPng({...base,pages:Array.from({length:80},()=>({...base.pages[0],panel:'splash'}))},measure),/too large.*PDF/);});

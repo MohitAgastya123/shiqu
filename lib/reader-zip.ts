@@ -1,5 +1,5 @@
 // English product text and generation contracts; canonical source evidence remains unchanged.
-// Export composited comic balloons before the existing credited WebP/hash/XMP pipeline.
+// Export complete shared comic panels before the existing credited WebP/hash/XMP pipeline.
 import {zipSync,strToU8} from 'fflate';
 import type {Story} from './content';
 import type {GeneratedStory} from './reader-model';
@@ -9,25 +9,22 @@ import type {StoryPromptArchive,StoryPromptHistory} from './reader-prompt-record
 import {zipFilename,zipImageFilename,assertZipReady,storyZipData,storyZipFiles} from './reader-zip-content.ts';
 export {zipFilename,assertZipReady} from './reader-zip-content.ts';
 import {drawStoryWatermarks} from './story-watermark.ts';
-import {paintComicBubbles} from './comic-bubble-layout.ts';
+import {layoutComicPages,paintComicPanel,readComicImageSizes} from './comic-page-layout.ts';
+import type {ComicPanel} from './comic-page-layout.ts';
 import {sha256Hex,webpPayloadHash,publicImageXmp,withWebpXmp,assertStoryWebp} from './story-webp-metadata.ts';
 import type {StoryImageHashes} from './story-webp-metadata.ts';
 import {browserExportRuntime,type ExportRuntime,type ExportCanvas} from './story-export-runtime.ts';
 
-async function webpImage(blob:Blob,page:number,story:Story,runtime:ExportRuntime){
+async function webpImage(blob:Blob,page:number,story:Story,runtime:ExportRuntime,panel:ComicPanel){
  let canvas:ExportCanvas|undefined;
  try{
-  return await runtime.image(blob,async image=>{
-   canvas=runtime.canvas();canvas.width=image.width;canvas.height=image.height;
-   const context=canvas.getContext('2d');if(!context)throw Error('CANVAS_UNAVAILABLE');
-   context.drawImage(image.value,0,0);
-   const scene=story.pages[page];
-   if(scene.bubbleRendering!=='embedded')paintComicBubbles(context,scene.bubbles,canvas.width,canvas.height);
-   drawStoryWatermarks(context,canvas.width,canvas.height,story);
-   return await new Promise<Blob>((resolve,reject)=>canvas!.toBlob(result=>{
-    if(!result?.size||result.type!=='image/webp')reject(Error('WEBP_UNAVAILABLE'));else resolve(result);
-   },'image/webp',.85));
-  });
+  canvas=runtime.canvas();canvas.width=Math.round(panel.width*900);canvas.height=Math.round(panel.height*1350);
+  const context=canvas.getContext('2d');if(!context)throw Error('CANVAS_UNAVAILABLE');
+  context.save();try{context.translate(-panel.x*900,-panel.y*1350);await paintComicPanel(context,story.pages[page],panel,runtime,blob);}finally{context.restore();}
+  drawStoryWatermarks(context,canvas.width,canvas.height,story);
+  return await new Promise<Blob>((resolve,reject)=>canvas!.toBlob(result=>{
+   if(!result?.size||result.type!=='image/webp')reject(Error('WEBP_UNAVAILABLE'));else resolve(result);
+  },'image/webp',.85));
  }catch{throw Error(`Frame ${page+1} could not be converted to WebP. Check the image and export runtime.`);}
  finally{if(canvas){canvas.width=0;canvas.height=0;}}
 }
@@ -67,10 +64,11 @@ export async function createStoryZip(story:Story,history:StoryPromptHistory|null
  if(generated&&!history)throw Error('Prompt records are not loaded. Retry before exporting ZIP.');
  await runtime.ready();
  const files:Record<string,Uint8Array>={},images:string[]=[],hashes:StoryImageHashes[]=[];
+ const imageSizes=await readComicImageSizes(story.pages,runtime),comicPages=layoutComicPages(story.pages,{imageSizes}),panels=comicPages.flatMap(page=>page.panels),comicRenderings=panels.map(panel=>({width:Math.round(panel.width*900),height:Math.round(panel.height*1350),minFontSize:story.pages[panel.frameIndex].comicRendering?.minFontSize===null||!story.pages[panel.frameIndex].comicRendering&&story.pages[panel.frameIndex].bubbleRendering==='embedded'?null:24}));
  for(const [index,page] of story.pages.entries()){
   onProgress(`Packaging frame ${index+1} / ${story.pages.length}`);
   const blob=await runtime.read(page.image,index);
-  const webp=await webpImage(blob,index,story,runtime),filename=zipImageFilename(index,story.pages.length);
+  const webp=await webpImage(blob,index,story,runtime,panels[index]),filename=zipImageFilename(index,story.pages.length);
   const encoded=new Uint8Array(await webp.arrayBuffer()),originalSha256=sha256Hex(new Uint8Array(await blob.arrayBuffer())),imagePayloadSha256=webpPayloadHash(encoded);
   const output=withWebpXmp(encoded,publicImageXmp(story,index,originalSha256,imagePayloadSha256));
   const imageHashes={sha256:sha256Hex(output),originalSha256,imagePayloadSha256};
@@ -79,7 +77,7 @@ export async function createStoryZip(story:Story,history:StoryPromptHistory|null
  }
  onProgress('Preparing storyboard and saving ZIP');
  const archive=archivePromptHistory(history);
- Object.assign(files,storyZipFiles(storyZipData(story,images,hashes,history,{bubbleRendering:'embedded'})));
+ Object.assign(files,storyZipFiles(storyZipData(story,images,hashes,history,{bubbleRendering:'embedded',comicPages,comicRenderings})));
  files['提示词.md']=strToU8(promptText(story,archive));
  files['系统提示词.md']=strToU8(systemPromptText(story,archive));
  // Keep full call inputs outside the story metadata consumed by reading sites.

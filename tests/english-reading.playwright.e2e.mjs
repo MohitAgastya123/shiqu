@@ -1,4 +1,4 @@
-// Run English comics and saved English source through the production browser workflow with controlled models.
+// Run English multi-panel comics and saved source through controlled production browser workflows.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {storyBrowser} from './fixtures/story-browser.mjs';
@@ -24,7 +24,7 @@ test('English comic and saved source remain English across reading and reload',{
   };
   const prepared=await b.create({title:'The Grateful Turtle',theme:'Gratitude'});
   await b.confirm();await b.completed(prepared.id);await b.reader(prepared.id);
-  assert.match(await page.locator('.yu-scene-caption').innerText(),/A fisherman finds a turtle/);
+  assert.match((await page.locator('.yu-comic-film-page').first().locator('.yu-comic-narration').allTextContents()).join(' '),/A fisherman finds a turtle/);
   assert.doesNotMatch(await page.locator('body').innerText(),/[\p{Script=Han}]/u);
   await b.screenshot('english-comic');
   await page.getByRole('button',{name:'Source',exact:true}).click();

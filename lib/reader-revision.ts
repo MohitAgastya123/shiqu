@@ -1,5 +1,6 @@
 // Plan revisions from actual illustration inputs and separate balloon layout from editorial changes.
 // Balloon positions and IDs retain review; text, attribution, kind, evidence and order require review.
+// Panel emphasis is presentation metadata and preserves both reviewed content and saved artwork.
 // Captions/reflection never invalidate artwork;
 // a changed anchor, cast, style or global image preference invalidates its dependants.
 // Style and explicit image-only redraws preserve review; content and acceptance edits invalidate it.
@@ -27,7 +28,7 @@ export type RevisionImpact={changed:boolean;replan:boolean;preserveScript:boolea
 export const revisionFrameCount=(base:RevisionBase)=>base.plan?.pages.length??(typeof base.selection.length==='number'?base.selection.length:base.frameRecommendation?.count??8);
 export const preserveRevisionScript=(base:RevisionBase,changes:RevisionChanges)=>!base.plan&&base.savedFrameCount===revisionFrameCount(base)&&(changes.productionPrompt??base.selection.productionPrompt)===base.selection.productionPrompt&&(changes.narrativeDetail??base.selection.narrativeDetail??'balanced')===(base.selection.narrativeDetail||'balanced')&&(changes.length===undefined||changes.length===base.selection.length||changes.length===revisionFrameCount(base));
 // Compare semantic fields explicitly: layout-only edits must not invoke a paid model review.
-const editorialPlan=(plan:Plan|null)=>plan&&({...plan,pages:plan.pages.map(({bubbles,...page})=>({...page,bubbles:(bubbles||[]).map(({kind,speaker,text,sourceQuote})=>({kind,speaker,text,...(sourceQuote?{sourceQuote}:{})}))}))});
+const editorialPlan=(plan:Plan|null)=>plan&&({...plan,pages:plan.pages.map(({bubbles,panel,...page})=>{void panel;return {...page,bubbles:(bubbles||[]).map(({kind,speaker,text,sourceQuote})=>({kind,speaker,text,...(sourceQuote?{sourceQuote}:{})}))};})});
 export function revisionImpact(base:RevisionBase,changes:RevisionChanges):RevisionImpact{
  const selection={...base.selection,productionPrompt:changes.productionPrompt??base.selection.productionPrompt,artStyle:changes.artStyle??base.selection.artStyle};
  const requirements=selection.productionPrompt!==base.selection.productionPrompt;

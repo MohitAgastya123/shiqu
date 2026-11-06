@@ -1,4 +1,4 @@
-// Render real shared UI to guard the confirmation boundary and hide obsolete duplicate controls.
+// Render shared confirmation UI and canonical source-panel labels without duplicate controls.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
@@ -100,13 +100,13 @@ test('discovery stays in the picker and selection opens one continuous story flo
  const targetedPlan={pages:Array.from({length:20},(_,i)=>({caption:`第 ${i+1} 幅已保存的旁白。`,prompt:`Saved scene ${i+1}.`})),characters:'已保存的人物设定。',reflection:'已保存的余味。'};
  const targetEditor={base:{selection,plan:targetedPlan,images:[]},changes:{},tab:'script',scriptPage:18,busy:false,loading:false,setTab:noop,setScriptPage:noop,setChanges:noop,impact:{changed:false,replan:false,total:20},submit:noop,discard:noop};
  const targetMarkup=renderToStaticMarkup(createElement(Editor,{editor:targetEditor}));
- assert.match(targetMarkup,/<option value="18" selected="">Page 18<\/option>/);assert.match(targetMarkup,/aria-label="Edit page 18"/);assert.match(targetMarkup,/>第 18 幅已保存的旁白。<\/textarea>/);assert.doesNotMatch(targetMarkup,/aria-label="Edit page 1"/);
+ assert.match(targetMarkup,/<option value="18" selected="">Panel 18<\/option>/);assert.match(targetMarkup,/aria-label="Edit panel 18"/);assert.match(targetMarkup,/>第 18 幅已保存的旁白。<\/textarea>/);assert.doesNotMatch(targetMarkup,/aria-label="Edit panel 1"/);
  const endingMarkup=renderToStaticMarkup(createElement(Editor,{editor:{...targetEditor,scriptPage:0}}));
- assert.match(endingMarkup,/<option value="0" selected="">Ending<\/option>/);assert.match(endingMarkup,/>已保存的余味。<\/textarea>/);assert.doesNotMatch(endingMarkup,/aria-label="Edit page|Image prompt/);
+ assert.match(endingMarkup,/<option value="0" selected="">Ending<\/option>/);assert.match(endingMarkup,/>已保存的余味。<\/textarea>/);assert.doesNotMatch(endingMarkup,/aria-label="Edit panel|Image prompt/);
  const reviewIssues=[{page:18,category:'action',problem:'缺少第18幅的关键动作。',instruction:'补充第18幅的动作和反应。'},{page:3,category:'caption',problem:'第3幅旁白含混。',instruction:'第3幅补充明确的主语。'},{page:0,category:'reflection',problem:'结语超出了原文。',instruction:'结语收回到原文支持的判断。'}];
  const referenced=renderToStaticMarkup(createElement(Editor,{editor:targetEditor,reviewIssues}));
- assert.match(referenced,/<details open="" class="yu-revision-review" aria-label="Page 18 review notes"/);assert.match(referenced,/<dt>Review issue<\/dt><dd>缺少第18幅的关键动作。<\/dd>/);assert.match(referenced,/<dt>Revision suggestions<\/dt><dd>补充第18幅的动作和反应。<\/dd>/);
- assert.doesNotMatch(referenced,/第3幅旁白含混|结语超出了原文/);assert.ok(referenced.indexOf('缺少第18幅')<referenced.indexOf('aria-label="Edit page 18"'));
+ assert.match(referenced,/<details open="" class="yu-revision-review" aria-label="Panel 18 review notes"/);assert.match(referenced,/<dt>Review issue<\/dt><dd>缺少第18幅的关键动作。<\/dd>/);assert.match(referenced,/<dt>Revision suggestions<\/dt><dd>补充第18幅的动作和反应。<\/dd>/);
+ assert.doesNotMatch(referenced,/第3幅旁白含混|结语超出了原文/);assert.ok(referenced.indexOf('缺少第18幅')<referenced.indexOf('aria-label="Edit panel 18"'));
  const switchedReview=renderToStaticMarkup(createElement(Editor,{editor:{...targetEditor,scriptPage:3},reviewIssues}));
  assert.match(switchedReview,/第3幅旁白含混/);assert.match(switchedReview,/第3幅补充明确的主语/);assert.doesNotMatch(switchedReview,/缺少第18幅|结语超出了原文/);
  const endingReference=renderToStaticMarkup(createElement(Editor,{editor:{...targetEditor,scriptPage:0},reviewIssues}));
@@ -133,7 +133,7 @@ test('discovery stays in the picker and selection opens one continuous story flo
   const disabled=Actions({editor:{...targetEditor,...state},reviewOnSave:true,onDone:noop});assert.equal(findPrimary(disabled).props.disabled,true);
  }
  const shorterMarkup=renderToStaticMarkup(createElement(Editor,{editor:{...targetEditor,changes:{plan:{...targetedPlan,pages:targetedPlan.pages.slice(0,3)}}}}));
- assert.match(shorterMarkup,/aria-label="Edit page 3"/);
+ assert.match(shorterMarkup,/aria-label="Edit panel 3"/);
 
  // Settings edits return to a draft preview; only the explicit production action submits.
  const draftEditor={base:{selection:{...selection,length:5},plan:null,images:[]},changes:{length:'auto',narrativeDetail:'detailed',artStyle:'ink-pencil'},tab:'count',busy:false,loading:false,setTab:noop,setChanges:noop,impact:{changed:true,replan:true,total:30},submit:noop,discard:noop};
