@@ -1,6 +1,6 @@
 // Browser provider settings share the desktop schema without exposing system paths or stored secrets.
 import {z} from 'zod';
-import {systemSettingsSchema} from './system-settings.ts';
+import {systemSettingsSchema,effectiveImageProvider,isApiProvider} from './system-settings.ts';
 import type {ProviderStatus} from './reader-provider.ts';
 import {taskReasoningSchema} from './reader-reasoning.ts';
 
@@ -13,3 +13,11 @@ export const providerSettingsSaveSchema=z.object({settings:providerSettingsPatch
 export type ProviderSettingsSave=z.infer<typeof providerSettingsSaveSchema>;
 export type ProviderSettingsView={settings:ProviderSettings;revision:number;keyPresent:{gemini:boolean;openai:boolean};runtime:Pick<ProviderStatus,'provider'|'imageProvider'|'models'|'taskReasoningEfforts'>&{configured?:boolean};overrides:string[];restartRequired:boolean;platform:string};
 export function loopbackAddress(address:string|undefined){return address==='127.0.0.1'||address==='::1'||address==='::ffff:127.0.0.1';}
+
+type ProviderSelection=Pick<ProviderSettings,'provider'|'imageProvider'>;
+type ImageKeyDraft=Pick<ProviderSettingsSave,'imageKeyAction'|'imageKey'>;
+// 图片密钥输入和操作只属于独立的 API 服务；切换为共用、只读或其他服务时一起清空。
+export function imageKeyDraftForProviderChange(current:ProviderSelection,next:ProviderSelection,draft:ImageKeyDraft):ImageKeyDraft{
+ const image=effectiveImageProvider(next);
+ return isApiProvider(image)&&image!==next.provider&&image===effectiveImageProvider(current)&&image!==current.provider?draft:{imageKeyAction:'keep',imageKey:''};
+}

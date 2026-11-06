@@ -5,7 +5,7 @@ import {useEffect,useRef,useState} from 'react';
 import {AlertTriangle,ChevronRight,Cpu,Image as ImageIcon,KeyRound,RefreshCw,RotateCcw,SlidersHorizontal,Type} from 'lucide-react';
 import Sheet from './StorySheet';
 import {request} from './shared';
-import type {ProviderSettings as Settings,ProviderSettingsSave,ProviderSettingsView} from '@/lib/provider-settings';
+import {imageKeyDraftForProviderChange,type ProviderSettings as Settings,type ProviderSettingsSave,type ProviderSettingsView} from '@/lib/provider-settings';
 import {codexReasoningEfforts} from '@/lib/codex-settings';
 import {reasoningTasks,taskReasoningLabels,taskReasoningDefaults,geminiReasoningEfforts} from '@/lib/reader-reasoning';
 import {effectiveImageProvider,isApiProvider} from '@/lib/system-settings';
@@ -84,9 +84,10 @@ export default function ProviderSettings({onRuntime,onAvailability,openRequest=0
  function update<K extends keyof Settings>(field:K,value:Settings[K]){setDraft(old=>old?{...old,[field]:value}:old);setMessage('');}
  function selectProvider(provider:Settings['provider']){
   if(!draft)return;
-  // 与文本相同时不保存独立值；实际图片服务不变时保留尚未提交的图片密钥。
+  // 与文本相同时不保存独立值；仅在独立图片密钥仍归属同一服务时保留草稿。
   const imageProvider=draft.imageProvider===provider?undefined:draft.imageProvider;
-  if(effectiveImageProvider({provider,imageProvider})!==effectiveImageProvider(draft)){setImageKey('');setImageKeyAction('keep');}
+  const nextKey=imageKeyDraftForProviderChange(draft,{provider,imageProvider},{imageKeyAction,imageKey});
+  setImageKey(nextKey.imageKey);setImageKeyAction(nextKey.imageKeyAction);
   setDraft({...draft,provider,imageProvider,...(provider==='gemini'?{taskReasoningEfforts:Object.fromEntries(reasoningTasks.map(task=>[task,(geminiReasoningEfforts as readonly string[]).includes(draft.taskReasoningEfforts[task])?draft.taskReasoningEfforts[task]:taskReasoningDefaults[task]])) as Settings['taskReasoningEfforts']}:{})});setKey('');setKeyAction('keep');setError('');setMessage('');
  }
  async function save(){
@@ -109,9 +110,11 @@ export default function ProviderSettings({onRuntime,onAvailability,openRequest=0
  const providerOptions:Option<NonNullable<Settings['imageProvider']>>[]=[{value:'gemini',label:'Gemini',hint:'Google API 计费',badge:keyBadge('gemini')},{value:'openai',label:'OpenAI',hint:'OpenAI API 计费',badge:keyBadge('openai')},{value:'codex',label:'Codex',hint:codexBlocked?'Windows 暂不支持':'ChatGPT 订阅额度',disabled:codexBlocked}];
  function discard(){if(view){adopt(view);setError('');setMessage('');}}
  function selectImageProvider(value:NonNullable<Settings['imageProvider']>|''){
-  // 选“与文本相同”时保持未设置；实际图片服务变化时清空已输入的图片密钥。
+  if(!draft)return;
+  // 选“与文本相同”时保持未设置；密钥操作与输入随独立图片服务一同清理。
   const next=value&&value!==provider?value:undefined;
-  if(effectiveImageProvider({provider:provider!,imageProvider:next})!==imageProvider){setImageKey('');setImageKeyAction('keep');}
+  const nextKey=imageKeyDraftForProviderChange(draft,{provider:draft.provider,imageProvider:next},{imageKeyAction,imageKey});
+  setImageKey(nextKey.imageKey);setImageKeyAction(nextKey.imageKeyAction);
   update('imageProvider',next);
  }
  async function savedAction(action:'check'|'reset'){
