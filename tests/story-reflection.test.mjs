@@ -1,3 +1,6 @@
+// English workflow expectations preserve source evidence, saved work and recovery contracts.
+import {englishOriginal} from '../lib/reader-source-types.ts';
+// English workflow expectations preserve source evidence, saved work and recovery contracts.
 // Check ending checkpoints and repair scope with both real adapters and controlled inference.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -22,10 +25,10 @@ for(const provider of ['codex','gemini'])for(const length of [8,25])test(`${prov
    const doc=await document(f,id),session=await f.read(id);
    assert.equal(doc.plan,null);assert.equal(doc.draft.pages.length,length);
    assert.equal(doc.draft.reflection,undefined);assert.equal(doc.storyboard?.outline.reflection,undefined);
-   const {summary:_,...sourceMetadata}=doc.draft;void _;assert.deepEqual(payload.draft,sourceMetadata);assert.equal(payload.verifiedOriginal.text,doc.original.text);
+   const {summary:_,...sourceMetadata}=doc.draft;void _;assert.deepEqual(payload.draft,sourceMetadata);assert.equal(payload.verifiedOriginal.text,englishOriginal(doc.original).text);
    assert.deepEqual(Object.keys(schema.properties),['title','candidates']);
    assert.equal(session.generationProgress.phase,'reflection');assert.equal(session.story,null);
-   assert.match(generationProgress(session,0).steps[2].detail,/分镜已保存.*结语/);
+   assert.match(generationProgress(session,0).steps[2].detail,/Storyboard saved.*ending/);
    assert.equal(readLibrarySummary(f.dataDirectory).stories.find(s=>s.id===id).production.phase,'reflection');
    assert.equal(f.control.calls.length,0);return {candidates:makeReflectionCandidates(ending)};
   }
@@ -96,7 +99,7 @@ test('unchanged ending blocks drawing and manual continuation uses the saved end
  const f=await productionFixture(t),id=await f.createLegacyReader();let unchanged=true;
  f.control.beforeText=async(kind,payload)=>kind==='review'&&f.control.reviews.length===1?{issues:[endingIssue]}:kind==='reflection-repair'?{reflection:unchanged?payload.revision.reflection:ending}:undefined;
  await f.demand(id);await until(async()=>(await f.read(id)).state==='failed');
- const blocked=await f.read(id);assert.match(blocked.error,/结语：/);assert.doesNotMatch(blocked.error,/第 0 幅/);
+ const blocked=await f.read(id);assert.match(blocked.error,/Ending:/);assert.doesNotMatch(blocked.error,/Frame 0/);
  assert.deepEqual(blocked.reviewIssues,[endingIssue]);assert.equal(f.control.calls.length,0);
  assert.equal((await document(f,id)).visualReview.stopReason,'unchanged');
  unchanged=false;await f.demand(id,crypto.randomUUID(),0,true);await until(()=>f.control.calls.length===1);
@@ -105,7 +108,8 @@ test('unchanged ending blocks drawing and manual continuation uses the saved end
 
 test('saved ending receipts and concurrent advances cannot repeat a paid ending',async t=>{
  const f=await productionFixture(t),id=await f.createLegacyReader(),repo=new ReaderRepository(f.app.services.database),g=f.generation.generator();
- await advanceStory(repo,g,owner,id,0);
+ for(let i=0;i<20&&!(await document(f,id)).draft;i++)await advanceStory(repo,g,owner,id,0);
+ assert.ok((await document(f,id)).draft);
  let started,release;const ready=new Promise(r=>started=r),hold=new Promise(r=>release=r);
  f.control.beforeText=async kind=>{if(kind==='reflection'){started();await hold;}};
  const first=advanceStory(repo,g,owner,id,0);await ready;
@@ -136,4 +140,12 @@ test('repairing an ending in a revision retains all existing images',async t=>{
  assert.equal(doc.plan.reflection,ending);assert.equal(f.control.calls.length,imageCalls);
  assert.equal(doc.images.filter(Boolean).length,base.plan.pages.length);
  assert.equal((await document(f,id)).plan.reflection,base.plan.reflection);
+});
+
+test('a resumed saved draft verifies its English source synopsis before writing the ending',async()=>{
+ const {nextStep}=await import('../lib/reader-model.ts');
+ const original={title:'The Butterfly Dream',text:'Zhuang Zhou dreamed he was a butterfly.',url:'https://example.org',kind:'passage',provider:'controlled',retrievedAt:'2026-11-05',storyBrief:{summary:'A philosopher dreams and wakes.',matchReason:'The source supports the dream.',verified:false}};
+ const doc={plan:null,draft:{pages:[]},original,images:[],audio:[],usage:[]},selection={bookId:'zhuangzi',theme:'Original story',length:8,artStyle:'ink-pencil',productionPrompt:'',voice:false};
+ assert.equal(nextStep(doc,selection,0).kind,'recommend');
+ original.storyBrief.verified=true;assert.equal(nextStep(doc,selection,0).kind,'reflection');
 });

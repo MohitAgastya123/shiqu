@@ -1,3 +1,4 @@
+// English product text and generation contracts; canonical source evidence remains unchanged.
 // Renew one viewer's demand while polling individual checkpoints; page changes never cancel
 // server work. Manual control ends demand; durable background work is observed without retries,
 // and tells the server which page is open only so that page is drawn first.
@@ -41,13 +42,13 @@ export async function observeStoryGeneration({sessionId,request,isActive,onSessi
       const next=await request(path+'/setup','POST',{action:'more',automatic:true,requestId:randomId(),generation:intake.generation});
       if(!isActive())break;
       onSession(next);
-     }catch(error){return error instanceof Error?error.message:'连续查找暂时中断，请重试继续。';}
+     }catch(error){return error instanceof Error?error.message:'Continuous discovery was interrupted. Retry to continue.';}
     }
    }catch(error){
     if(!isActive())break;
     // A connection can come back while a choice waits. A refusal, such as a deleted story, will not.
     const status=(error as {status?:number}).status;
-    if(++failures>=3&&!(waiting&&(status===undefined||status>=500)))return error instanceof Error?error.message:'暂时无法更新生成状态，请稍后重新打开。';}
+    if(++failures>=3&&!(waiting&&(status===undefined||status>=500)))return error instanceof Error?error.message:'Cannot update generation status. Reopen shortly.';}
    await sleep(1000);
   }
   return '';
@@ -70,13 +71,13 @@ export async function runQueuedStoryGeneration({sessionId,viewerId,page,request,
     if(needsRecovery){
      if(!command){
       const fault=session.faults?.find(fault=>fault.retryAllowed);
-      if(!fault)return session.error||'没有可恢复的问题，请刷新后再试。';
+      if(!fault)return session.error||'No recoverable issue was found. Refresh and try again.';
       command={requestId:randomId(),faultId:fault.id};
      }
      // A lost reply repeats the same command; never infer a new grant from a later failure.
      session=await request(path+'/recover','POST',command);needsRecovery=false;
     }else if(session.state==='failed'){
-     onSession(session);return session.error||'制作已停止，请选择对应问题重试。';
+     onSession(session);return session.error||'Production stopped. Select the relevant issue to retry.';
     }else if(currentPage!==lastPage||now()-heartbeat>=10000){
      started=true;session=await request(path+'/production','POST',{viewerId,page:currentPage,retry:false});
      lastPage=currentPage;heartbeat=now();
@@ -84,15 +85,15 @@ export async function runQueuedStoryGeneration({sessionId,viewerId,page,request,
     if(!isActive())break;
     transportRetries=0;onSession(session);
     if(session.state==='completed'||session.awaitingFrameCount||session.generationMode==='background'||session.generationControl&&session.generationControl!=='active')return '';
-    if(session.state==='failed')return session.error||'制作已停止，请选择对应问题重试。';
+    if(session.state==='failed')return session.error||'Production stopped. Select the relevant issue to retry.';
     const currentProgress=session.stage+':'+session.ready;
     if(currentProgress!==progress){progress=currentProgress;lastProgress=now();}
-    if(session.state==='running'&&now()-lastProgress>360000)return '这一幅等待较久，请稍后重新打开故事继续。';
+    if(session.state==='running'&&now()-lastProgress>360000)return 'This frame is taking longer. Reopen the story shortly to continue.';
     await sleep(1000);session=await request(path);
    }catch(error){
     if(!isActive())break;
     // HTTP refusals are authoritative; transport errors may replay only the retained command.
-    if((error as {status?:number}).status!==undefined||transportRetries++>=2)return error instanceof Error?error.message:'制作暂停，请重试继续。';
+    if((error as {status?:number}).status!==undefined||transportRetries++>=2)return error instanceof Error?error.message:'Production paused. Retry to continue.';
     session=undefined;await sleep(1000);
    }
   }

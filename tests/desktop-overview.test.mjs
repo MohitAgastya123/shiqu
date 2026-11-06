@@ -1,3 +1,4 @@
+// English UI expectations keep source fixtures and permission boundaries intact.
 // Overview counts must reflect generated-record checkpoints; browser links and native permissions remain scoped.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -10,7 +11,7 @@ import {overviewSummary,overviewStoryState} from '../desktop/library-summary.ts'
 import {localReaderUrl} from '../desktop/reader-url.ts';
 import {defaultSystemSettings} from '../lib/system-settings.ts';
 
-const record=(id,values={})=>({id,title:id,book:'庄子',theme:'人情冷暖',artStyle:'ink-wash',state:'idle',saved:0,page:0,ready:0,total:0,updatedAt:'2026-10-31',jobs:0,queued:0,running:0,failed:0,succeeded:0,...values});
+const record=(id,values={})=>({id,title:id,book:'庄子',theme:'Human warmth and indifference',artStyle:'ink-wash',state:'idle',saved:0,page:0,ready:0,total:0,updatedAt:'2026-10-31',jobs:0,queued:0,running:0,failed:0,succeeded:0,...values});
 test('overview partitions generated records by actionable checkpoint before active/completed and keeps recent SQL order',()=>{
  const stories=[
   record('completed',{state:'completed',saved:1}),
@@ -25,7 +26,7 @@ test('overview partitions generated records by actionable checkpoint before acti
  assert.equal(stats.completed+stats.active+stats.attention,stories.length);
  assert.deepEqual(stats.recent.map(row=>row.id),['completed','choice','confirm','count']);
  assert.deepEqual(stats.actionable.map(row=>row.id),['failed','choice','confirm']);assert.deepEqual(stories,before);
- assert.equal(overviewStoryState(stories[1]).label,'待选故事');assert.equal(overviewStoryState(stories[2]).label,'待制作确认');assert.equal(overviewStoryState(stories[3]).label,'待确认画幅');
+ assert.equal(overviewStoryState(stories[1]).label,'Awaiting story selection');assert.equal(overviewStoryState(stories[2]).label,'Awaiting production confirmation');assert.equal(overviewStoryState(stories[3]).label,'Awaiting page count confirmation');
  assert.equal(overviewStoryState(record('failed-state',{state:'failed',running:1})).kind,'attention');
  assert.equal(overviewStoryState(record('still-running',{state:'completed',running:1})).kind,'active');
  assert.deepEqual(overviewSummary([]),{completed:0,active:0,attention:0,saved:0,recent:[],actionable:[]});
@@ -42,12 +43,12 @@ test('overview renders honest loading and service states, browser-only reading, 
  const compiled={exports:{}};new Function('require','module','exports',bundle.outputFiles[0].text)(createRequire(import.meta.url),compiled,compiled.exports);
  const props={native:true,state:'loading',busy:'',configured:true,settings:{...defaultSystemSettings('/test/library'),provider:'readonly',providerConfigured:true},previewUrl:null,onLaunch(){},onQueue(){},onSettings(){}};
  const render=changes=>renderToStaticMarkup(createElement(compiled.exports.OverviewPane,{...props,...changes}));
- const loading=render({});assert.match(loading,/正在读取服务状态/);assert.match(loading,/正在打开本机书库/);assert.equal((loading.match(/<strong>—<\/strong>/g)||[]).length,4);assert.doesNotMatch(loading,/<iframe/);assert.match(loading,/本机生成记录/);assert.match(loading,/已保存 · 只读模式/);
- const unavailable=render({state:'unavailable'});assert.match(unavailable,/服务状态暂不可用/);assert.match(unavailable,/disabled=""/);
- assert.match(render({state:'stopped'}),/启动并打开拾趣/);assert.match(render({state:'running'}),/打开拾趣/);assert.match(render({configured:false}),/完成设置/);
- const environmentOnly=render({configured:true,settings:defaultSystemSettings('/test/library')});assert.match(environmentOnly,/本次启动使用环境配置/);assert.doesNotMatch(environmentOnly,/已保存的生成配置/);
- const preview=render({native:false,state:'preview',previewUrl:'http://127.0.0.1:3010/'});assert.match(preview,/<a[^>]+href="http:\/\/127\.0\.0\.1:3010\/"[^>]+target="_blank"[^>]+rel="noopener noreferrer"/);assert.doesNotMatch(preview,/预览|原生服务未连接|VITE_DESKTOP_READER_URL|在桌面应用中查看或修改|服务尚未启动|本机服务运行中/);
- assert.match(render({native:false,state:'preview'}),/阅读端尚未连接，请先启动拾趣服务。/);assert.doesNotMatch(render({native:false,state:'preview'}),/href=/);
+ const loading=render({});assert.match(loading,/Reading service status/);assert.match(loading,/Opening local library/);assert.equal((loading.match(/<strong>—<\/strong>/g)||[]).length,4);assert.doesNotMatch(loading,/<iframe/);assert.match(loading,/Local production records/);assert.match(loading,/Saved · Read only/);
+ const unavailable=render({state:'unavailable'});assert.match(unavailable,/Service status unavailable/);assert.match(unavailable,/disabled=""/);
+ assert.match(render({state:'stopped'}),/Start and open Shiqu/);assert.match(render({state:'running'}),/Open Shiqu/);assert.match(render({configured:false}),/Complete setup/);
+ const environmentOnly=render({configured:true,settings:defaultSystemSettings('/test/library')});assert.match(environmentOnly,/Environment configuration is active for this launch/);assert.doesNotMatch(environmentOnly,/Saved generation configuration/);
+ const preview=render({native:false,state:'preview',previewUrl:'http://127.0.0.1:3010/'});assert.match(preview,/<a[^>]+href="http:\/\/127\.0\.0\.1:3010\/"[^>]+target="_blank"[^>]+rel="noopener noreferrer"/);assert.doesNotMatch(preview,/预览|Native service disconnected|VITE_DESKTOP_READER_URL|View or edit in the desktop app|Service not started|Local service running/);
+ assert.match(render({native:false,state:'preview'}),/The reader is not connected. Start the Shiqu service first./);assert.doesNotMatch(render({native:false,state:'preview'}),/href=/);
 });
 
 test('native console no longer grants loopback frame access or remote capabilities',()=>{

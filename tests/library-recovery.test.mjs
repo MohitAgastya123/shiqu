@@ -1,3 +1,4 @@
+// Verify English product projections while preserving original glyph and source identity checks.
 // Recovery lists only owner-visible titles and restores checkpoints without creating production demand.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -40,7 +41,7 @@ test('recovery metadata does not expose foreign generated titles and supports un
  db.prepare("INSERT INTO library_deletions(user_id,story_id,kind,deleted_at) VALUES(?,?,'published','2026-10-29')").run(owner,sample.id);
  let rows=await f.json('deletions');assert.equal(rows.some(row=>row.storyId===sample.id),false);
  db.prepare(`INSERT INTO library_deletions(user_id,story_id,kind,deleted_at) VALUES(?,?,'generated','2026-10-29')`).run(owner,foreign);
- rows=await f.json('deletions');assert.equal(rows.find(row=>row.storyId===foreign).title,'未命名故事');
+ rows=await f.json('deletions');assert.equal(rows.find(row=>row.storyId===foreign).title,'Untitled story');
  assert.equal(JSON.stringify(rows).includes('私有故事'),false);
  assert.equal((await f.request(`library/${sample.id}/restore`,'POST')).status,404);
  assert.equal((await f.json('deletions')).some(row=>row.storyId===sample.id),false);

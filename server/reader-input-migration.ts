@@ -1,3 +1,4 @@
+// English product messages; source evidence and machine identifiers remain stable.
 // Remove display names from persisted work identities before workers start. Move receipts and
 // dependencies together in the caller's migration transaction; collisions abort rather than pay again.
 import {randomUUID} from 'node:crypto';
@@ -50,7 +51,7 @@ export function retainLegacyInputFaults(sqlite:DatabaseSync){
    if(job.version===(job.kind==='script'||job.kind==='prepare'?script:image))continue;
    const changed=sqlite.prepare("UPDATE reader_faults SET kind='job',version='legacy',state='pending',command_id=NULL WHERE job_id=? AND session_id=? AND owner_id=? AND state IN ('pending','recovering')").run(job.id,row.id,row.user_id);
    if(changed.changes)continue;
-   sqlite.prepare("INSERT INTO reader_faults(id,session_id,owner_id,job_id,kind,page,version,message,created_at,updated_at) VALUES(?,?,?,?,'job',?,'legacy',?,?,?)").run(randomUUID(),row.id,row.user_id,job.id,job.kind==='image'||job.kind==='image-publish'?payload.page:null,job.error||'旧显示名任务无法核对当前输入，已保留成果。请核对后明确恢复。',now,now);
+   sqlite.prepare("INSERT INTO reader_faults(id,session_id,owner_id,job_id,kind,page,version,message,created_at,updated_at) VALUES(?,?,?,?,'job',?,'legacy',?,?,?)").run(randomUUID(),row.id,row.user_id,job.id,job.kind==='image'||job.kind==='image-publish'?payload.page:null,job.error||'A legacy task cannot be matched to the current inputs. Results have been retained. Check them and explicitly resume.',now,now);
   }
  }
 }

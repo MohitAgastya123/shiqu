@@ -1,3 +1,4 @@
+// English product messages; source evidence and machine identifiers remain stable.
 // Authenticate the tunnel's separate loopback listener before any reader/API/media route.
 // Pairing secrets stay in URL fragments; all remote responses forbid shared caching.
 import {randomBytes,timingSafeEqual} from 'node:crypto';
@@ -14,11 +15,11 @@ export function desktopRemote(handle:(request:Request)=>Promise<Response>){
   response.headers.set('Cache-Control','private, no-store');response.headers.set('Referrer-Policy','no-referrer');
   response.headers.set('X-Content-Type-Options','nosniff');response.headers.set('X-Frame-Options','DENY');return response;
  }
- const denied=(status=401)=>protect(Response.json({error:'请扫描桌面应用中的私密二维码，重新连接书架。'},{status}));
- const bootstrap=`<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>连接拾趣</title><body><main><h1>连接你的故事书房</h1><p id="status">正在连接…</p></main><script nonce="${nonce}">
+ const denied=(status=401)=>protect(Response.json({error:'Scan the private QR code in the desktop app to reconnect to the bookshelf.'},{status}));
+ const bootstrap=`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Connect to Shiqu</title><body><main><h1>Connect to your story library</h1><p id="status">Connecting…</p></main><script nonce="${nonce}">
 const token=location.hash.slice(1);history.replaceState(null,'','/connect');
-if(!token)document.getElementById('status').textContent='请扫描桌面应用中的私密二维码，或打开完整访问链接。';
-else fetch('/connect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token})}).then(response=>{if(!response.ok)throw Error();location.replace('/');}).catch(()=>{document.getElementById('status').textContent='连接失败或链接已失效，请重新扫描桌面应用中的二维码。';});
+if(!token)document.getElementById('status').textContent='Scan the private QR code in the desktop app, or open the complete access link.';
+else fetch('/connect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token})}).then(response=>{if(!response.ok)throw Error();location.replace('/');}).catch(()=>{document.getElementById('status').textContent='Connection failed or the link expired. Scan the desktop QR code again.';});
 </script></body></html>`;
  return {
   activate(publicOrigin:string){

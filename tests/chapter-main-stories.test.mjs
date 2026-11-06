@@ -1,3 +1,4 @@
+// Verify English product projections while preserving original glyph and source identity checks.
 // Verify main-story-first chapter discovery through real provider adapters and nested source filtering.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -56,7 +57,7 @@ for(const name of ['codex','gemini'])test(`${name}: chapter thirty offers Guandu
  const scoped=selectedChapterScope(library,book,[scope]).book,blocks=hydrateReadingPlan(scoped,buildReadingPlan(scoped,name));
  const result=job=>{
   const payload=JSON.parse(job.prompt);if(payload.stories)return JSON.stringify({matches:payload.stories.map(story=>({id:story.id,verdict:'yes',reason:'原文事件与结果支持本次选题。'}))});const input=payload.localBook;jobs.push({instructions:job.instructions,...payload});
-  assert.match(job.instructions,/chapterStoryLevel=main 时只返回一个/);assert.match(job.instructions,/chapterStoryLevel=episodes 时/);assert.match(job.instructions,/不能只缩短范围再推荐同一故事/);
+  assert.match(job.instructions,/chapterStoryLevel=main return only one/);assert.match(job.instructions,/For episodes mode/);assert.match(job.instructions,/identical ranges, renamed duplicates and crossing fragments are not/);
   assert.ok(blocks.some(block=>block.text===input.text));
   assert.doesNotMatch(input.text,/\[sanguo-029-|\[sanguo-031-/);
   if(input.scan.chapterStoryLevel==='main'&&!input.text.includes(`[${main.source.lastUnit}]`)){
@@ -73,7 +74,7 @@ for(const name of ['codex','gemini'])test(`${name}: chapter thirty offers Guandu
  const first=await wrapped.suggestions(selected,[]);
  assert.deepEqual(first.stories.map(s=>s.title),['官渡之战']);const mainCalls=jobs.length;
  assert.ok(jobs.every(job=>job.localBook.scan.chapterStoryLevel==='main'&&job.localBook.scan.maxStories===1));
- assert.match(first.note,/先总故事、后小故事/);
+ assert.match(first.note,/main events to smaller events/);
  wrapped=withLocalBooks(base,library,store);
  assert.deepEqual((await wrapped.suggestions(selected,[])).stories,first.stories);assert.equal(jobs.length,mainCalls);
  const next=await wrapped.suggestions(selected,[main.title],undefined,undefined,[main.source]);
@@ -103,7 +104,7 @@ test('nested complete events may share background while renamed exact ranges rem
  const f=synthetic(),section=f.book.sections[0],main=story('主故事',ref(f.book,section,1,6)),child=story('子故事',ref(f.book,section,2,3));
  f.provider.suggestions=async()=>({stories:[main],note:'',scan:scan()});await f.run();
  f.provider.suggestions=async()=>({stories:[{...main,title:'换名主故事'},child,story('交叉子故事',ref(f.book,section,3,4)),story('独立旁线',ref(f.book,section,0,2))],note:'',scan:scan(true)});
- const next=await f.run([main.source]);assert.deepEqual(next.stories.map(s=>s.title),['子故事','交叉子故事','独立旁线']);assert.match(next.note,/未能完整核对/);
+ const next=await f.run([main.source]);assert.deepEqual(next.stories.map(s=>s.title),['子故事','交叉子故事','独立旁线']);assert.match(next.note,/could not be fully verified/);
  assert.deepEqual((await f.run()).stories.map(s=>s.title),['主故事','子故事','交叉子故事','独立旁线']);
 });
 

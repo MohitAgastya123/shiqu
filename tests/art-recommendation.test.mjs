@@ -1,3 +1,4 @@
+// English production expectations; original evidence and historical hashes remain unchanged.
 // Cover recommendation propagation and user choice without any live AI requests.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -17,7 +18,7 @@ const candidate={title:'夸父逐日',description:'追逐太阳的旅程。',sum
 
 test('recommendations validate real style IDs and bounded nonempty reasons, while old history still loads',()=>{
  assert.deepEqual(artRecommendationSchema.parse(recommendation),recommendation);
- for(const bad of [{...recommendation,artStyle:'invented'},{...recommendation,reason:' '},{...recommendation,reason:'长'.repeat(121)}])assert.throws(()=>artRecommendationSchema.parse(bad));
+ for(const bad of [{...recommendation,artStyle:'invented'},{...recommendation,reason:' '},{...recommendation,reason:'长'.repeat(481)}])assert.throws(()=>artRecommendationSchema.parse(bad));
  const batch=suggestionBatchSchema.parse({stories:[candidate],note:''});
  assert.deepEqual(JSON.parse(JSON.stringify(batch)).stories[0].artRecommendation,recommendation);
  assert.deepEqual(freshSuggestions(batch,[]).stories[0].artRecommendation,recommendation);
@@ -48,15 +49,15 @@ test('discovery defers art while existing recommendation contracts and receipts 
  assert.deepEqual(batch.stories[0].artRecommendation,recommendation);
  assert.equal(batch.stories[0].source.edition,source.edition);
  assert.match(suggestionSystemPrompt,/artRecommendation/);
- assert.match(localReadingPrompt(localBook),/具体故事内容/);
- assert.match(localReadingPrompt(localBook),/baimiao（白描连环画/);
+ assert.match(localReadingPrompt(localBook),/particular story/);
+ assert.match(localReadingPrompt(localBook),/baimiao \(Baimiao Line Drawing/);
  const legacyStyles=legacyLocalScanJson.properties.stories.items.properties.artRecommendation.properties.artStyle.enum;
  assert.equal(legacyStyles.length,14);assert.equal(legacyStyles.includes('baimiao'),false);
  assert.doesNotMatch(legacyLocalReadingPrompt({...localBook,purpose:'scan'}),/baimiao/);
  assert.equal(artRecommendationSchema.parse({artStyle:'baimiao',reason:'墨线适合人物动作。'}).artStyle,'baimiao');
  assert.doesNotMatch(localReadingPrompt({...localBook,purpose:'scan'}),/artRecommendation/);
  assert.equal(localScanJson.properties.stories.items.properties.artRecommendation,undefined);
- assert.match(localReadingPrompt({...localBook,purpose:'scan'}),/未完事件/);
+ assert.match(localReadingPrompt({...localBook,purpose:'scan'}),/unfinished cross-chapter events/);
 });
 
 test('Gemini and Codex omit art work during scans and preserve recommendations in other modes',async()=>{
@@ -88,5 +89,5 @@ test('direct whole-book selection preserves the original content-based art recom
   calls++;assert.equal(input.purpose,'catalog');return {stories:[{title:'故事',description:'真实故事简介',summary:'原文中的人物经历变故并采取行动，事件得到明确结果。',source:{edition:book.edition,sectionId:'s0',firstUnit:'u0',lastUnit:'u0'},artRecommendation:recommendation}],note:'',scan:{blockComplete:true,pendingEvents:[],resolvedEventIds:[]}};
  }};
  const stored=new Map(),media={get:async key=>{const bytes=stored.get(key);return bytes?{arrayBuffer:async()=>bytes.slice().buffer}:null;},put:async(key,bytes)=>{stored.set(key,new Uint8Array(bytes));}};
- const batch=await withLocalBooks(provider,books,media).suggestions(selection,[]);assert.equal(calls,1);assert.equal(batch.stories.length,1);assert.deepEqual(batch.stories[0].artRecommendation,recommendation);assert.equal(batch.stories[0].sourceLabel,'s0');
+ const batch=await withLocalBooks(provider,books,media).suggestions(selection,[]);assert.equal(calls,1);assert.equal(batch.stories.length,1);assert.deepEqual(batch.stories[0].artRecommendation,recommendation);assert.equal(batch.stories[0].sourceLabel,'Classic of Mountains and Seas · Chapter 1');
 });

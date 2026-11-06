@@ -1,3 +1,4 @@
+// English flow labels preserve controls and separately saved source-translation jobs.
 // Prove that drafts, selections and searches survive each other, using real SQLite and files with a controlled provider.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -62,7 +63,7 @@ test('a blocked story shows every issue, can be edited, and draws on the reader\
  await f.json(`sessions/${id}/production-control`,'POST',{action:'resume'});
  await until(async()=>(await f.read(id)).state==='completed',15000);
  assert.equal(f.control.calls.length,4);assert.equal(f.control.reviews.length,reviews,'No further review');assert.equal(f.control.repairs.length,repairs,'No repair of what the reader accepted');
- const done=await f.read(id);assert.equal(done.generationProgress.reviewOverridden,true);assert.equal(generationProgress(done,Date.now()).steps.find(s=>s.id==='recheck').detail,'未解决的问题由你确认放行');
+ const done=await f.read(id);assert.equal(done.generationProgress.reviewOverridden,true);assert.equal(generationProgress(done,Date.now()).steps.find(s=>s.id==='recheck').detail,"You explicitly approved unresolved issues");
  assert.equal((await f.request(`sessions/${id}/review-override`,'POST',{})).status,200,'A lost response can be repeated');assert.equal(f.control.calls.length,4);
  assert.equal((await jobs(f,id)).filter(job=>['queued','failed'].includes(job.state)).length,0,'Nothing is left waiting on the finished story');
  f.control.beforeText=null;const healthy=await f.create(1);await until(async()=>(await f.read(healthy)).state==='completed');assert.equal((await f.request(`sessions/${healthy}/review-override`,'POST',{})).status,409);
@@ -99,7 +100,7 @@ test('a blocked revision that reused its first image can still be drawn past',as
  const before=f.control.calls.length;await f.json(`sessions/${child.id}/review-override`,'POST',{});
  await until(async()=>(await f.read(child.id)).state==='completed',15000);assert.equal(f.control.calls.length,before,'Every image was reusable');
  const stages=generationProgress(await f.read(child.id),Date.now()).steps;
- assert.equal(stages.find(s=>s.id==='recheck').detail,'未解决的问题由你确认放行');assert.notEqual(stages.find(s=>s.id==='review').detail,'初审通过');assert.notEqual(stages.find(s=>s.id==='repair').state,'skipped');
+ assert.equal(stages.find(s=>s.id==='recheck').detail,"You explicitly approved unresolved issues");assert.notEqual(stages.find(s=>s.id==='review').detail,'初审通过');assert.notEqual(stages.find(s=>s.id==='repair').state,'skipped');
 });
 
 test('repeating draw anyway cannot redraw a failed image or clear its marker',async t=>{
@@ -122,7 +123,7 @@ test('a lost image is redrawn in the new version rather than blocking it',async 
  const child=await f.json(`sessions/${id}/revisions`,'POST',{requestId:crypto.randomUUID(),token:after.token,changes:{plan}});
  await until(async()=>(await f.read(child.id)).state==='completed',15000);
  assert.equal(f.control.calls.length-before,1,'Only the lost page is drawn again');
- const done=await f.read(child.id);assert.deepEqual(done.revision.redraw,{previewed:0,actual:1,reason:'lost'});assert.match(redrawNotice(done.revision.redraw),/实际需重绘 1 幅（预览 0 幅）/);
+ const done=await f.read(child.id);assert.deepEqual(done.revision.redraw,{previewed:0,actual:1,reason:'lost'});assert.match(redrawNotice(done.revision.redraw),/Redraw 1 frames \(preview: 0\)/);
  assert.ok(!(await stored(f,id)).images.some(value=>!value),'The original keeps its saved image references');
  const g=await productionFixture(t);g.control.hold=false;const whole=await g.create(3);await until(async()=>(await g.read(whole)).state==='completed');
  const lost=await g.read(whole);await rm(path.join(g.dataDirectory,'media',lost.story.pages[2].image.replace('/api/reader/media/','reader/')),{force:true});
@@ -204,15 +205,15 @@ test('observing a choice survives a dropped connection',async()=>{
  assert.equal(result,'');assert.equal(calls,8,'Keeps trying past the three failures that stop other observers');
  // A refusal will not come back: another device deleted the story, so the page is told.
  let refused=0;
- const gone=await observeStoryGeneration({sessionId:'x',watchChoices:true,isActive:()=>true,onSession:()=>{},sleep:async()=>{},request:async()=>{refused++;if(refused===1)return waiting;throw Object.assign(Error('这篇故事不在你的书架里'),{status:404});}});
- assert.equal(gone,'这篇故事不在你的书架里');assert.equal(refused,4);
+ const gone=await observeStoryGeneration({sessionId:'x',watchChoices:true,isActive:()=>true,onSession:()=>{},sleep:async()=>{},request:async()=>{refused++;if(refused===1)return waiting;throw Object.assign(Error("This story is not on your shelf."),{status:404});}});
+ assert.equal(gone,"This story is not on your shelf.");assert.equal(refused,4);
 });
 
 test('a failed search leaves a prepared story confirmable without repeating any work',async t=>{
  const f=await fixture(t),id=await prepared(f),before=f.control.recommendations.length;
  f.generation.suggestions=async()=>{throw Error('controlled failure');};
  await setup(f,id,{action:'more'});await searchIs(f,id,'failed');
- const s=await f.read(id);assert.equal(s.state,'idle');assert.equal(s.error,null);assert.equal(s.intake.phase,'confirming');assert.ok(s.intake.search.error);assert.equal(s.retryAllowed,false);assert.equal(shelfGenerationStatus(s).group,'待制作确认');
+ const s=await f.read(id);assert.equal(s.state,'idle');assert.equal(s.error,null);assert.equal(s.intake.phase,'confirming');assert.ok(s.intake.search.error);assert.equal(s.retryAllowed,false);assert.equal(shelfGenerationStatus(s).group,"Confirm production");
  const {readLibrarySummary}=await import('../desktop/library-preview.ts'),summary=readLibrarySummary(f.dataDirectory).stories.find(row=>row.id===id);assert.equal(summary.failed,0);assert.equal(summary.state,'idle');assert.equal(summary.production.intakePhase,'confirming');
  f.generation.suggestions=async()=>({stories:[],note:'暂无更多。'});
  await setup(f,id,{action:'more'});await searchIs(f,id,'idle');assert.equal((await f.read(id)).intake.batches.length,2,'Retrying the search appends');
@@ -359,7 +360,7 @@ test('retry restores only the current selection; superseded jobs leave the queue
  const generator=f.generation.generator.bind(f.generation);let reject=true;
  f.generation.generator=()=>{const g=generator();return {...g,recommend:async(...args)=>{if(reject)throw Error('controlled preparation failure');return g.recommend(...args);}};};
  await setup(f,id,{action:'choose',batch:0,index:0});await until(async()=>(await f.read(id)).state==='failed');
- const failed=await jobs(f,id,'prepare');assert.equal(failed.length,1);assert.equal(failed[0].state,'failed');
+ const failed=(await jobs(f,id,'prepare')).filter(job=>job.state==='failed');assert.equal(failed.length,1);assert.equal(failed[0].state,'failed');
  reject=false;await reuseSource(f,id);await setup(f,id,{action:'choose',batch:0,index:1});await phase(f,id,'confirming');
  assert.equal((await jobs(f,id,'prepare')).filter(job=>job.state==='failed').length,0,'The old failure is gone, not requeued or left to be checked');
  const current=await f.read(id);assert.equal((await f.request(`sessions/${id}/production`,'POST',{viewerId:crypto.randomUUID(),page:0,retry:true})).status,400);

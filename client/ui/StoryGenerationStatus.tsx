@@ -1,3 +1,4 @@
+// English interface: labels, accessibility text, and workflow messages use English.
 // Active steps show only their deadline; saved final durations stay on completed checkpoints.
 // Failed work offers recovery in the control slot; only active work offers pause.
 // Standalone flows name the story; embedded settings reuse the title already shown above.
@@ -18,29 +19,29 @@ import StoryFlowHeader from './StoryFlowHeader';
 import type {StoryFlowNavigation} from './StoryFlowHeader';
 
 export default function StoryGenerationStatus({session,busy,controlBusy,error,onControl,onRetry,onBack,onHistory,onAcceptance,navigation,timeline,stages,control,compact=false,reviewTools,stageContent,children,hideBack=false,showSummary=true}:{reviewTools?:ReactNode;stageContent?:Record<string,ReactNode>;compact?:boolean;children?:ReactNode;control?:ReactNode;timeline?:ProductionTimelineNavigation&Pick<ComponentProps<typeof StoryProductionTimeline>,'stageDurations'>;stages?:ProductionStage[];session:SessionView;busy:boolean;controlBusy:boolean;error:string;onControl:(id:string,action:ProductionAction)=>Promise<void>;onRetry:(faultId?:string)=>void;onBack:()=>void;hideBack?:boolean;showSummary?:boolean;onHistory?:()=>void;onAcceptance?:()=>void;navigation?:StoryFlowNavigation}){
- const status=shelfGenerationStatus(session),stopped=status.group==='生成失败'||status.group==='生成已暂停';
+ const status=shelfGenerationStatus(session),stopped=status.group==='Failed'||status.group==='Paused';
  const [,setNow]=useState(Date.now);
  const progress=generationProgress(session,Date.now()),moving=progress.running&&!error&&!stopped;
  useEffect(()=>{
   if(!moving)return;setNow(Date.now());const timer=setInterval(()=>setNow(Date.now()),1000);
   return()=>clearInterval(timer);
  },[session.id,session.generationProgress?.startedAt,moving]);
- const title=session.selection.displayTitle||session.story?.title||session.selection.storyTitle||'你的故事';
- const message=busy&&stopped?(session.state==='failed'?'正在重试生成':'正在请求生成'):error&&session.state!=='failed'?'暂时无法确认生成状态':status.message;
- const failed=!!error||status.group==='生成失败';
+ const title=session.selection.displayTitle||session.story?.title||session.selection.storyTitle||"Your story";
+ const message=busy&&stopped?(session.state==='failed'?"Retrying generation":"Requesting generation"):error&&session.state!=='failed'?"Generation status could not be confirmed":status.message;
+ const failed=!!error||status.group==='Failed';
  const paused=!!session.generationControl&&session.generationControl!=='active';
  const generationControl=control===undefined?(paused||!failed?<StoryGenerationControl session={session} busy={controlBusy} onControl={onControl} primary={paused} link/>:null):control;
  return <div className={'yu-generation-stage has-progress'+(compact||!showSummary?' is-compact':'')+(moving?' is-generating':'')+(failed?' has-error':'')+(session.reviewIssues?.length?' has-review-issues':'')}>
   {showSummary&&(!compact||failed)&&<div className="yu-generation-summary">
    <span className="yu-generation-mark" aria-hidden="true">{failed?<X size={23}/>:stopped?<Pause size={23}/>:session.state==='completed'?<Check size={23}/>:<Feather size={23}/>}</span>
-   <div><p className="yu-generation-kicker">{failed?'需要处理':stopped?'进度已保留':session.state==='completed'?'制作完成':'把故事变成画面'}</p><h3>{title}</h3></div>
+   <div><p className="yu-generation-kicker">{failed?"Needs attention":stopped?"Progress kept":session.state==='completed'?"Production complete":"Turn the story into illustrations"}</p><h3>{title}</h3></div>
   </div>}
-  <StoryFlowHeader title={progress.measured?'画面生成进度':'制作流程'} status={message} {...navigation}/>
-  <section className="yu-generation-progress" aria-label="生成进展">
-   <StoryProductionTimeline session={session} busy={busy||controlBusy} error={error} onRetry={onRetry} onAcceptance={onAcceptance} reviewTools={reviewTools} stageContent={stageContent} onHistory={onHistory} stages={stages||progress.steps} moving={moving} queued={progress.queued} {...timeline} currentTiming={moving?<><Clock3 size={12} aria-hidden="true"/>{progress.remaining===null?'超时信息待同步':progress.remaining>0?`距超时 ${generationDuration(progress.remaining)}`:'已达超时，等待状态更新'}</>:undefined} currentContent={session.state!=='completed'?generationControl:null}/>
+  <StoryFlowHeader title={progress.measured?"Illustration progress":"Production workflow"} status={message} {...navigation}/>
+  <section className="yu-generation-progress" aria-label="Generation progress">
+   <StoryProductionTimeline session={session} busy={busy||controlBusy} error={error} onRetry={onRetry} onAcceptance={onAcceptance} reviewTools={reviewTools} stageContent={stageContent} onHistory={onHistory} stages={stages||progress.steps} moving={moving} queued={progress.queued} {...timeline} currentTiming={moving?<><Clock3 size={12} aria-hidden="true"/>{progress.remaining===null?"Timeout details are syncing":progress.remaining>0?`Time until timeout: ${generationDuration(progress.remaining)}`:"Timed out. Waiting for a status update"}</>:undefined} currentContent={session.state!=='completed'?generationControl:null}/>
   </section>
   {children}
   {!hideBack&&<StoryBackToShelf onBack={onBack} link/>}
-  {!hideBack&&(!session.intake||session.intake.phase==='confirmed')&&<p className="yu-generation-exit-note">{session.state==='completed'?'完整故事已保存在书架。':stopped||failed?'已保存的内容会保留，可在书架中管理和继续生成。':'离开后继续生成整篇，可随时暂停或从书架查看进度。'}</p>}
+  {!hideBack&&(!session.intake||session.intake.phase==='confirmed')&&<p className="yu-generation-exit-note">{session.state==='completed'?"The complete story is saved on your shelf.":stopped||failed?"Saved content is kept. Manage it and continue generation from your shelf.":"Generate the full story after leaving. Pause anytime or check progress on your shelf."}</p>}
  </div>;
 }

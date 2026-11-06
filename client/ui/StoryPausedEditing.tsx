@@ -1,3 +1,4 @@
+// English interface: labels, accessibility text, and workflow messages use English.
 // A paused production keeps edits in its timeline and applies them only on explicit resume.
 import type {ComponentProps} from 'react';
 import {generationProgress} from '@/lib/generation-progress';
@@ -11,11 +12,11 @@ export default function StoryPausedEditing({editor,onReselect,...props}:Props){
  const {session,busy,controlBusy}=props;
  if(!session.generationControl||session.generationControl==='active')return null;
  const changed=!!editor.impact?.changed,locked=busy||controlBusy||editor.busy;
- const stages=changed&&editor.base?revisionDraftSteps(editor.base,editor.changes):generationProgress(session,Date.now()).steps.map(step=>step.id==='source'?{...step,detail:`画风：${getArtStyle(session.selection.artStyle).label}`}:step);
+ const stages=changed&&editor.base?revisionDraftSteps(editor.base,editor.changes):generationProgress(session,Date.now()).steps.map(step=>step.id==='source'?{...step,detail:`Art style: ${getArtStyle(session.selection.artStyle).label}`}:step);
  const edit=(tab:Parameters<typeof editor.open>[0])=>{if(!locked)editor.open(tab);};
- return <StoryGenerationStatus {...props} controlBusy={locked} stages={stages} navigation={{...props.navigation,source:props.navigation?.source?{...props.navigation.source,disabled:props.navigation.source.disabled||locked}:undefined,reselect:{label:'替换选题',onClick:onReselect,disabled:locked},reselecting:props.navigation?.reselecting}} timeline={{
-  links:{source:[{label:'制作要求',onClick:()=>edit('requirements')},{label:'验收要求',onClick:()=>edit('acceptance')}]},
-  detailActions:{source:{label:'修改画风',onClick:()=>edit('style')}},
-  actions:{count:{label:'修改叙事详略',onClick:()=>edit('count')},...(session.story?{plan:{label:'修改分镜',onClick:()=>edit('script')}}:{})}
+ return <StoryGenerationStatus {...props} controlBusy={locked} stages={stages} navigation={{...props.navigation,source:props.navigation?.source?{...props.navigation.source,disabled:props.navigation.source.disabled||locked}:undefined,reselect:{label:"Replace story selection",onClick:onReselect,disabled:locked},reselecting:props.navigation?.reselecting}} timeline={{
+  links:{source:[{label:"Production instructions",onClick:()=>edit('requirements')},{label:"Acceptance criteria",onClick:()=>edit('acceptance')}]},
+  detailActions:{source:{label:"Change art style",onClick:()=>edit('style')}},
+  actions:{count:{label:"Change narrative detail",onClick:()=>edit('count')},...(session.story?{plan:{label:"Edit storyboard",onClick:()=>edit('script')}}:{})}
  }} control={changed?<StoryRevisionActions editor={{...editor,busy:locked}} resuming link/>:undefined}/>;
 }

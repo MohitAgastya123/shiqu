@@ -1,3 +1,5 @@
+// English native controls and diagnostics; persisted identifiers and source data are unchanged.
+// English product messages; source evidence and machine identifiers remain stable.
 // Keep desktop settings and opt-in plaintext keys in private native SQLite, outside the reader library.
 // Version/schema checks precede mutations; settings and key edits commit together without Keychain.
 use rusqlite::{Connection, OpenFlags, OptionalExtension};
@@ -119,21 +121,21 @@ impl Settings {
                 &["low", "medium", "high", "xhigh", "max"][..]
             };
             if !allowed.contains(&effort) {
-                return Err("任务推理档位无效；Gemini 仅支持 low、medium、high。".into());
+                return Err("Invalid task reasoning effort. Gemini supports low, medium, and high only.".into());
             }
         }
         if !["", "low", "medium", "high", "xhigh", "max"]
             .contains(&self.codex_reasoning_effort.as_str())
         {
-            return Err("请选择有效的 Codex 推理档位，或跟随 Codex 默认。".into());
+            return Err("Choose a valid Codex reasoning effort, or follow the Codex default.".into());
         }
         if self.port < 1024
             || !["gemini", "codex", "openai", "readonly"].contains(&self.provider.as_str())
         {
-            return Err("请选择有效的提供方与 1024–65535 之间的端口。".into());
+            return Err("Choose a valid provider and a port from 1024 to 65535.".into());
         }
         if !Path::new(&self.data_directory).is_absolute() || self.data_directory.len() > 4096 {
-            return Err("数据目录必须是有效的绝对路径。".into());
+            return Err("The data directory must be a valid absolute path.".into());
         }
         for model in [
             &self.text_model,
@@ -147,7 +149,7 @@ impl Settings {
                     .bytes()
                     .all(|b| b.is_ascii_alphanumeric() || b"_.-".contains(&b))
             {
-                return Err("模型名称只能包含字母、数字、点、横线和下划线。".into());
+                return Err("Model names may contain only letters, numbers, dots, hyphens, and underscores.".into());
             }
         }
         if self.text_model.is_empty()
@@ -155,7 +157,7 @@ impl Settings {
             || self.openai_text_model.is_empty()
             || self.openai_image_model.is_empty()
         {
-            return Err("请填写文本和图片模型。".into());
+            return Err("Enter text and image model names.".into());
         }
         for value in [
             &self.cloudflared_path,
@@ -165,23 +167,23 @@ impl Settings {
             &self.data_directory,
         ] {
             if value.len() > 4096 || value.contains(['\0', '\n', '\r']) {
-                return Err("文件路径无效。".into());
+                return Err("Invalid file path.".into());
             }
         }
         if !self.cloudflared_path.is_empty() && !Path::new(&self.cloudflared_path).is_absolute() {
-            return Err("cloudflared 路径必须是可执行文件的绝对路径。".into());
+            return Err("The cloudflared path must be an absolute executable path.".into());
         }
         if cfg!(windows) && self.provider == "codex" {
             return Err(
-                "当前 Codex 集成不支持原生 Windows；请选择 OpenAI API、Gemini 或只读。".into(),
+                "The Codex integration does not support native Windows. Choose OpenAI API, Gemini, or read-only mode.".into(),
             );
         }
         Ok(())
     }
 }
 
-const STORE_ERROR: &str = "无法读取或保存桌面数据库；请检查权限，或备份 desktop.sqlite 后重试。";
-const SCHEMA_ERROR: &str = "桌面数据库损坏或版本不兼容；请保留备份，使用兼容版本打开。";
+const STORE_ERROR: &str = "The desktop database could not be read or saved. Check permissions, or back up desktop.sqlite and retry.";
+const SCHEMA_ERROR: &str = "The desktop database is damaged or incompatible. Keep a backup and open it with a compatible version.";
 
 pub enum KeyChange<'a> {
     Keep,
@@ -270,7 +272,7 @@ impl Store {
             let settings: Settings = match fs::read(&legacy) {
                 Ok(bytes) => {
                     let mut saved: Settings = serde_json::from_slice(&bytes)
-                        .map_err(|_| "旧 settings.json 损坏；请备份后修复或移走。")?;
+                        .map_err(|_| "The old settings.json is damaged. Back it up, then repair or move it.")?;
                     saved.library_configured = true;
                     saved.provider_configured =
                         saved.provider == "codex" || saved.provider == "readonly";
@@ -404,7 +406,7 @@ impl Store {
             )
             .map_err(|_| STORE_ERROR)?;
         if expected.is_some_and(|value| value != revision) {
-            return Err("设置已由另一入口修改，请重新读取后保存。".into());
+            return Err("Settings were changed elsewhere. Reload them before saving.".into());
         }
         let value = serde_json::to_string(settings).map_err(|_| STORE_ERROR)?;
         tx.execute(
@@ -416,7 +418,7 @@ impl Store {
             KeyChange::Keep => {}
             KeyChange::Set(value) => {
                 if !["gemini", "openai"].contains(&settings.provider.as_str()) {
-                    return Err("所选服务不使用 API 密钥。".into());
+                    return Err("The selected provider does not use an API key.".into());
                 }
                 let value = validate_key(value)?;
                 tx.execute("INSERT INTO desktop_credentials VALUES (?1,?2) ON CONFLICT(name) DO UPDATE SET value=excluded.value", [&settings.provider,&value]).map_err(|_| STORE_ERROR)?;
@@ -471,7 +473,7 @@ impl Store {
 
 pub fn validate_key(value: &str) -> Result<String, String> {
     if value.trim().is_empty() || value.len() > 4096 || value.contains(['\0', '\n', '\r']) {
-        return Err("密钥格式无效；请填写单行、非空且不超过 4096 字节的密钥。".into());
+        return Err("Invalid key format. Enter a nonempty single-line key of at most 4096 bytes.".into());
     }
     Ok(value.trim().into())
 }
@@ -481,11 +483,11 @@ pub fn directories(app: &tauri::AppHandle) -> Result<(PathBuf, PathBuf), String>
     let config = app
         .path()
         .app_config_dir()
-        .map_err(|_| "无法确定设置目录。")?;
+        .map_err(|_| "The settings directory could not be determined.")?;
     let data = app
         .path()
         .app_data_dir()
-        .map_err(|_| "无法确定数据目录。")?;
+        .map_err(|_| "The data directory could not be determined.")?;
     Ok((config.join("desktop.sqlite"), data))
 }
 

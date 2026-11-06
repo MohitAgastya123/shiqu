@@ -1,3 +1,4 @@
+// English product text and generation contracts; canonical source evidence remains unchanged.
 // Generate story plans and media through Gemini, preserving safe errors and validated results.
 import {formatSystemPrompt} from './reader-prompt-format.ts';
 import {promptRecord} from './reader-prompt-records.ts';
@@ -53,7 +54,7 @@ export function configuredModels(vars:Record<string,string|undefined>):Models {
  return {text:vars.GEMINI_TEXT_MODEL?.trim()||defaultModels.text,image:vars.GEMINI_IMAGE_MODEL?.trim()||defaultModels.image};
 }
 function source(selection:Selection){
- const book=(selection.bookId==='other'?selection.customBook:readerBooks.find(b=>b.id===selection.bookId)?.title||selection.bookId)?.trim();
+ const book=(selection.bookId==='other'?selection.customBook:readerBooks.find(b=>b.id===selection.bookId)?.sourceTitle||selection.bookId)?.trim();
  if(!book)throw new GeminiError('INVALID_SOURCE',400);
  let url='';
  if(/^https?:/i.test(book)){
@@ -76,22 +77,22 @@ export function safeGeminiError(error:unknown){
  // Log only codes and validation paths, never raw provider messages, prompts or credentials.
  console.error('reader_generation_error',JSON.stringify(error instanceof GeminiError?{code:error.message,status:error.status}:error instanceof z.ZodError?{code:'INVALID_OUTPUT',fields:error.issues.map(i=>i.path.join('.'))}:{code:error instanceof Error?error.name:'UNKNOWN'}));
  if(error instanceof GeminiError){
-  if(error.message==='UNSUPPORTED_REASONING_EFFORT')return 'Gemini 文本任务仅支持 low、medium、high，请调整对应任务的推理档位。';
-  if(error.message==='SOURCE_UNAVAILABLE')return '暂时无法读取这个链接，请换一个可公开访问的原文页面。';
-  if(error.message==='INVALID_SOURCE')return '请填写有效的书名或公开网页链接。';
-  if(error.message==='CONTENT_BLOCKED')return '这段内容暂时无法生成，请换一个故事再试。';
-  if(error.message==='SCHEMA_TOO_COMPLEX')return 'Gemini 拒绝了本步骤的输出结构，已保留前面的内容。请更新应用或检查输出结构，不要反复重试同一请求。';
-  if(error.message==='UNSUPPORTED_FIELD')return 'Gemini 不支持本步骤的请求参数，已保留前面的内容。请更新应用或检查模型与请求配置。';
-  if(error.message==='INCOMPLETE_RESPONSE')return 'Gemini 未返回完整结果，已保留前面的内容。请检查输出与推理预算后手动重试。';
-  if(error.message==='INVALID_TEXT'||error.message==='INVALID_JSON')return 'Gemini 返回的内容格式无效，已保留前面的内容。可手动重试。';
-  if(error.status===401||error.status===403)return '生成服务的密钥或模型权限暂不可用，请检查服务配置。';
-  if(error.status===402)return '生成服务的计费或余额暂不可用，请检查 Gemini 项目的计费状态和可用额度。你的选择已保留。';
-  if(error.status===404)return '所选模型暂不可用，请检查服务配置。';
-  if(error.status===429)return '生成服务繁忙或额度暂不可用，已保留你的故事。';
-  if(error.status===400)return 'Gemini 拒绝了本步骤的请求参数，已保留前面的内容。请检查应用诊断与模型配置。';
+  if(error.message==='UNSUPPORTED_REASONING_EFFORT')return 'Gemini text tasks support low, medium and high. Adjust the task reasoning setting.';
+  if(error.message==='SOURCE_UNAVAILABLE')return 'Cannot read this link. Use a publicly accessible source page.';
+  if(error.message==='INVALID_SOURCE')return 'Enter a valid book title or public webpage URL.';
+  if(error.message==='CONTENT_BLOCKED')return 'This content cannot be generated. Try another story.';
+  if(error.message==='SCHEMA_TOO_COMPLEX')return 'Gemini rejected this output schema. Progress is saved. Update the app or check the schema before retrying.';
+  if(error.message==='UNSUPPORTED_FIELD')return 'Gemini does not support these request parameters. Progress is saved. Update the app or check the model configuration.';
+  if(error.message==='INCOMPLETE_RESPONSE')return 'Gemini returned an incomplete result. Progress is saved. Check output and reasoning budgets, then retry.';
+  if(error.message==='INVALID_TEXT'||error.message==='INVALID_JSON')return 'Gemini returned an invalid format. Progress is saved; retry explicitly.';
+  if(error.status===401||error.status===403)return 'The provider key or model permissions are unavailable. Check provider settings.';
+  if(error.status===402)return 'Provider billing or balance is unavailable. Check the Gemini project billing and quota. Your selection is saved.';
+  if(error.status===404)return 'The selected model is unavailable. Check provider settings.';
+  if(error.status===429)return 'The provider is busy or quota is unavailable. Your story is saved.';
+  if(error.status===400)return 'Gemini rejected these parameters. Progress is saved. Check diagnostics and model settings.';
  }
- if(error instanceof Error&&/timeout|abort/i.test(error.name))return '生成等待超时，已保留前面的内容。可手动重试。';
- return '这一步暂时没能生成，已保留前面的内容。可手动重试。';
+ if(error instanceof Error&&/timeout|abort/i.test(error.name))return 'Generation timed out. Progress is saved; retry explicitly.';
+ return 'This step could not generate. Progress is saved; retry explicitly.';
 }
 function client(key:string,transport:typeof fetch){
  return async(model:string,input:Record<string,unknown>,task:ReasoningTask|'image')=>{
@@ -139,7 +140,7 @@ export async function suggestStories(key:string,selection:Selection,config:Parti
   const {candidate,metadata}=await client(key,transport)(models.text,textRequest(models.text,
    localBook?localReadingPrompt(localBook):suggestionSystemPrompt,
    localSuggestionPayload(book,selection.theme,excludeTitles,localBook,maxStories),localBook?.purpose==='catalog'?localCatalogOutputJson(localBook):scanning?localScanJson:localBook?localChoicesJson:choicesJson,url,localBook?.purpose==='catalog'?localCatalogOutputTokens(localBook.scan?.maxStories||1):scanning?10000:localBook?5000:2500,reasoning.suggest),'suggest');report(metadata);
-  if(url&&!wasRead(candidate,url))return {stories:[],note:'暂时无法读取这个链接，请提供可公开访问的原文页面，或直接输入书名。'};
+  if(url&&!wasRead(candidate,url))return {stories:[],note:'Cannot read this link. Provide a public source page or enter the book title.'};
   const batch=localBook?localChoices(parseText(candidate),localBook):choicesSchema.parse(parseText(candidate));
   const fresh=scanning?batch:freshSuggestions(batch,excludeTitles);report({acceptedCount:fresh.stories.length});
   return maxStories?{...fresh,stories:fresh.stories.slice(0,maxStories)}:fresh;

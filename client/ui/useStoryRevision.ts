@@ -1,3 +1,4 @@
+// English interface: labels, accessibility text, and workflow messages use English.
 'use client';
 // Keep edits separate from live production until one explicit, idempotent revision submission.
 // A draft outlives progress on its story. Review links select saved frame numbers; zero selects the ending.
@@ -17,7 +18,7 @@ export function useStoryRevision(storyId:string|undefined,onSubmitted:(session:S
  async function load(){
   if(!storyId)return;const serial=++read.current,id=storyId;setLoading(true);setError('');
   try{const snapshot:RevisionSnapshot=await request(`reader/sessions/${id}/revisions`);if(latest.current===id&&read.current===serial){setBase(snapshot);setChanges({});setConflict(false);submission.current=null;}}
-  catch(e){if(latest.current===id&&read.current===serial)setError(e instanceof Error?e.message:'编辑内容暂时无法载入。');}
+  catch(e){if(latest.current===id&&read.current===serial)setError(e instanceof Error?e.message:"Could not load editable content.");}
   finally{if(latest.current===id&&read.current===serial)setLoading(false);}
  }
  // Compare a saved draft with its story again; newer images only improve what can be reused.
@@ -35,7 +36,7 @@ export function useStoryRevision(storyId:string|undefined,onSubmitted:(session:S
  function discard(){setBase(null);setChanges({});setTab(null);setError('');setConflict(false);submission.current=null;}
  async function submit(){
   if(!base||!storyId||lock.current)return;
-  try{checkedRevision(base,changes);}catch(e){setError(e instanceof Error?e.message:'请检查修改内容。');return;}
+  try{checkedRevision(base,changes);}catch(e){setError(e instanceof Error?e.message:"Check your changes.");return;}
   const signature=JSON.stringify([storyId,base.token,changes]);
   if(submission.current?.signature!==signature)submission.current={signature,id:randomId()};
   lock.current=true;setBusy(true);setError('');
@@ -45,7 +46,7 @@ export function useStoryRevision(storyId:string|undefined,onSubmitted:(session:S
    if(latest.current!==originId)return;
    setTab(null);setBase(null);setChanges({});submission.current=null;
    await callback.current(session);
-  }catch(e){setError(e instanceof Error?e.message:'新版暂未提交，请重试。');if((e as {status?:number}).status===409)await refresh();}
+  }catch(e){setError(e instanceof Error?e.message:"The new version was not submitted. Try again.");if((e as {status?:number}).status===409)await refresh();}
   finally{lock.current=false;setBusy(false);}
  }
  return {sessionId:storyId,tab,setTab,scriptPage,setScriptPage,base,changes,setChanges,loading,busy,error,conflict,load,open,discard,submit,impact:base?revisionImpact(base,changes):null};

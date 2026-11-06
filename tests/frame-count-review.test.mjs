@@ -1,3 +1,4 @@
+// English production expectations; original evidence and historical hashes remain unchanged.
 // Require a consistent count decision backed by concrete structural issues, while reading historical reports unchanged.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -32,9 +33,9 @@ test('count verdicts respect the current count, direction, bounds and correspond
  assert.ok(reviewReportSchema(3).parse({titleReview,issues:[]}),'Historical reports have no mandatory new field');
 });
 test('the original audit remains intact and the appended count audit follows the requested four-step order',()=>{
- const steps=['1. 从完整原文','2. 找这些任务','3. 判断压缩损失','4. 将缺失、重复或失衡写成具体修订要求'];
+ const steps=['1. Read the complete original','2. Locate each task','3. Identify actual compression losses','4. Turn each omission'];
  const positions=steps.map(text=>frameCountReviewDirection.indexOf(text));assert.ok(positions.every((p,i)=>p>=0&&(!i||p>positions[i-1])));
- assert.match(reviewSystemPrompt,/逐对比较相邻画面/);assert.match(reviewSystemPrompt,/结语标准/);assert.match(frameCountReviewDirection,/不能先定一个新数量再凑内容/);assert.match(frameCountReviewDirection,/诗词和人物讲述/);assert.match(frameCountReviewDirection,/不能只列一串结论便算表现/);assert.match(frameCountReviewDirection,/合并、删除或重分配/);assert.match(frameCountReviewDirection,/不含封面或系统另页展示的plan.reflection/);
+ assert.match(reviewSystemPrompt,/Compare adjacent frames/);assert.match(reviewSystemPrompt,/Ending standards/);assert.match(frameCountReviewDirection,/never choose a desired total and invent content/);assert.match(frameCountReviewDirection,/poems and reported stories/);assert.match(frameCountReviewDirection,/list of conclusions does not express several layers/);assert.match(frameCountReviewDirection,/combine, delete or redistribute/);assert.match(frameCountReviewDirection,/excludes a cover or separately displayed plan\.reflection/);
 });
 for(const provider of ['codex','gemini','openai'])test(`${provider}: automatic audit requires count decision without changing review effort or budget`,async()=>{
  const selection={...legacy,length:'auto',narrativeDetail:'balanced'},plan=makePlan(3),original={title:'原文',text:'甲赠物，乙未接，稍后转身离去。',url:'https://example.org',kind:'passage',provider:'fixture',retrievedAt:'2026-11-01'};
@@ -49,19 +50,19 @@ test('local count audits reject mismatched saved source before invoking the prov
  let calls=0;const raw={generator:()=>({reviewFrameCount:async()=>{calls++;return {value:{}};}})};
  const generator=withLocalBooks(raw,{},{}).generator();
  const source={edition:'edition',sectionId:'honglou-003',firstUnit:'honglou-003-001',lastUnit:'honglou-003-002'};
- await assert.rejects(()=>generator.reviewFrameCount({...legacy,bookId:'红楼梦',length:'auto',source},makePlan(3),{text:'原文',localSource:{...source,sectionId:'honglou-004'}}),/核对/);
+ await assert.rejects(()=>generator.reviewFrameCount({...legacy,bookId:'红楼梦',length:'auto',source},makePlan(3),{text:'原文',localSource:{...source,sectionId:'honglou-004'}}),/not been verified locally/);
  assert.equal(calls,0);
 });
 test('structure revision receives every complete requirement, while the recommendation remains advisory',async()=>{
  let payload,instructions;const gen=(await import('../lib/reader-review.ts')).storyboardReviewGenerator(async(_task,direction,input)=>{payload=input;instructions=direction;return {value:{edits:[{from:2,to:2,pages:[]}]},model:'fixture',usage:null};});
  const context={frameCountReview:{decision:'expand',proposedCount:4,reason:'回应需要空间'},requirements:[requirement,{...requirement,task:'第二层承受',instruction:'保留完整第二项，不得被合并字数截断。'}]};
  await gen.restructure({...legacy,length:'auto'},makePlan(3),{title:'原文',text:'甲赠物，乙未接。'},[issue],[],context);
- assert.deepEqual(payload.frameCountContext,context);assert.match(instructions,/不是新硬锁/);
+ assert.deepEqual(payload.frameCountContext,context);assert.match(instructions,/proposed count is guidance/);
 });
 
 test('count and full audits reuse the same story scope instead of divergent title-based boundaries',async()=>{
  const {storyboardReviewGenerator}=await import('../lib/reader-review.ts');const directions=[];let count=true;
  const gen=storyboardReviewGenerator(async(_task,direction)=>{directions.push(direction);return {value:count?{frameCountReview:{decision:'keep',proposedCount:3,reason:'任务足够'},requirements:[]}:{titleReview,issues:[],coverage:[{quote:'乙未接',task:'回应',pages:[2],assessment:'adequate',reason:'已有',issuePage:0}]},model:'fixture',usage:null};});
  const s={...legacy,length:'auto'},p=makePlan(3),o={title:'原文',text:'甲赠物，乙未接。'};await gen.reviewFrameCount(s,p,o);count=false;await gen.review(s,p,o);
- assert.ok(directions.every(d=>d.includes(storyScopeDirection)));assert.ok(directions[1].includes('身体和环境处境'));assert.ok(directions.every(d=>d.includes('共同反应显露既有亲疏')&&d.includes('辨认身份、层级或规矩')&&d.includes('有独立作用不等于必须独占一幅')));
+ assert.ok(directions.every(d=>d.includes(storyScopeDirection)));assert.ok(directions[1].includes('bodily and environmental conditions'));assert.ok(directions.every(d=>d.includes('shared reactions can reveal relationships')&&d.includes('identity, hierarchy or constraints')&&d.includes('A distinct role does not require its own frame')));
 });

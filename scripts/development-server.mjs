@@ -1,3 +1,4 @@
+// English product messages; source evidence and machine identifiers remain stable.
 // Keep LAN development available without serving private libraries through Vite's file paths.
 import path from 'node:path';
 import {existsSync,realpathSync,readdirSync,lstatSync} from 'node:fs';
@@ -10,7 +11,7 @@ export function protectLocalProviderSettings(proxyToken){
   server.middlewares.use((request,response,next)=>{
    if(new URL(request.url||'/', 'http://localhost').pathname===providerSettingsPath){
     if(!loopbackAddress(request.socket.remoteAddress)){
-     response.statusCode=403;response.setHeader('Content-Type','application/json');response.setHeader('Cache-Control','no-store');response.end(JSON.stringify({error:'生成服务设置仅可在本机打开。'}));return;
+     response.statusCode=403;response.setHeader('Content-Type','application/json');response.setHeader('Cache-Control','no-store');response.end(JSON.stringify({error:'Provider settings can be opened only on this computer.'}));return;
     }
     request.headers[providerSettingsProofHeader]=proxyToken;
    }

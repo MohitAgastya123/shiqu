@@ -1,3 +1,4 @@
+// English CLI guidance; canonical archive names and source identities stay stable.
 // Export named stories with the production Node renderer and the running app's read-only API.
 // Preserve signed artwork in ZIP inputs; validate current revisions and public archives before replacement.
 import assert from 'node:assert/strict';
@@ -34,15 +35,15 @@ export async function exportStory(input,{output,outputDirectory=path.join(collec
    const filename=path.join(outputDirectory,name),saved=savedJSON(new Uint8Array(await readFile(filename)));
    if(saved.id===story.id||resolveCurrentId&&await resolveCurrentId(saved.id)===story.id)matches.push(filename);
   }
-  assert(matches.length<=1,'输出目录已有同一作品的多个 ZIP，请先清理重复文件。');
+  assert(matches.length<=1,'The output directory has multiple ZIPs for this work. Remove duplicates first.');
   if(matches.length)target=matches[0];
  }
  let existing;
- try{assert((await lstat(target)).isFile(),'输出路径必须是普通文件。');existing=await readFile(target);}
+ try{assert((await lstat(target)).isFile(),'The output path must be a regular file.');existing=await readFile(target);}
  catch(error){if(error.code!=='ENOENT')throw error;}
  if(existing&&!output){
   const id=savedJSON(new Uint8Array(existing)).id;
-  assert(id===story.id||resolveCurrentId&&await resolveCurrentId(id)===story.id,'同名 ZIP 属于另一作品，请用 --output 明确指定输出路径。');
+  assert(id===story.id||resolveCurrentId&&await resolveCurrentId(id)===story.id,'The ZIP with this name belongs to another work. Specify --output explicitly.');
  }
  const temporary=target+'.tmp',backup=await mkdtemp(path.join(tmpdir(),'shiqu-export-'));
  let replaced=false,wroteTemporary=false;
@@ -50,7 +51,7 @@ export async function exportStory(input,{output,outputDirectory=path.join(collec
   await writeFile(temporary,bytes,{flag:'wx'});wroteTemporary=true;
   if(existing)await copyFile(target,path.join(backup,'previous.zip'));
   await rename(temporary,target);replaced=true;
-  const saved=await readFile(target);assert(digest(saved)===digest(bytes),'保存后的 ZIP 与导出内容不符。');
+  const saved=await readFile(target);assert(digest(saved)===digest(bytes),'The saved ZIP does not match the exported bytes.');
   await collectionCheck(saved);
  }catch(error){
   if(replaced){if(existing){await copyFile(path.join(backup,'previous.zip'),temporary);await rename(temporary,target);}else await rm(target);}
@@ -61,39 +62,39 @@ export async function exportStory(input,{output,outputDirectory=path.join(collec
 
 export function selectExportSession(sessions,name){
  const matches=sessions.filter(session=>!session.superseded&&(session.id===name||session.story?.title===name||session.selection?.storyTitle===name));
- assert(matches.length,`书架没有找到：${name}`);
- assert(matches.length===1,`同名故事不止一篇，请指定作品 ID：${matches.map(session=>`${session.story?.title||name} (${session.id})`).join('；')}`);
+ assert(matches.length,`Not found on the bookshelf: ${name}`);
+ assert(matches.length===1,`Multiple stories have this title. Specify a work ID: ${matches.map(session=>`${session.story?.title||name} (${session.id})`).join('; ')}`);
  const session=matches[0],pages=session.story?.pages;
- assert(pages?.length,'这篇故事尚未保存分镜。');
+ assert(pages?.length,'This story has no saved storyboard yet.');
  const missing=pages.flatMap((page,index)=>page.image?[]:[index+1]);
- assert(!missing.length,`缺少第 ${missing.join('、')} 幅图片；请完成当前版本，不导出旧版。`);
- assert(session.state==='completed','当前故事版本尚未制作完成，请完成后再导出。');
+ assert(!missing.length,`Missing images for frames ${missing.join(', ')}. Complete the current revision; an older revision will not be exported.`);
+ assert(session.state==='completed','The current story revision is incomplete. Finish it before exporting.');
  return session;
 }
 
 export async function exportNamedStory(name,{appUrl='http://localhost:3000',onProgress=()=>{},...options}={}){
- const base=new URL(appUrl);assert(['http:','https:'].includes(base.protocol),'应用地址必须使用 http 或 https。');
+ const base=new URL(appUrl);assert(['http:','https:'].includes(base.protocol),'The app address must use HTTP or HTTPS.');
  const app={handle:request=>{const url=new URL(request.url);return fetch(new URL(url.pathname+url.search,base),{redirect:'error',signal:AbortSignal.timeout(30000)});}};
  async function api(route,optional=false){
   const response=await app.handle(new Request('http://shiqu.local/api/reader/'+route));
   if(optional&&response.status===404)return null;
-  assert(response.ok,`无法读取拾趣 ${route}：HTTP ${response.status}。请确认应用地址及访问权限。`);
+  assert(response.ok,`Could not read Shiqu ${route}: HTTP ${response.status}. Check the app address and access permissions.`);
   return response.json();
  }
  const selected=selectExportSession(await api('sessions'),name);
  // Shelf summaries omit saved original text; the production exporter needs the complete current story.
  const session=selectExportSession([await api(`sessions/${selected.id}`)],selected.id);
- assert((await api(`sessions/${session.id}/current`)).id===session.id,'书架已切换到新版，请重新导出。');
- onProgress(`已选择：${session.story.title} · 版本 ${session.revision?.number||1} · ${session.story.pages.length} 幅`);
+ assert((await api(`sessions/${session.id}/current`)).id===session.id,'The bookshelf has switched to a newer revision. Export again.');
+ onProgress(`Selected: ${session.story.title} · Revision ${session.revision?.number||1} · ${session.story.pages.length} frames`);
  const temporary=await mkdtemp(path.join(tmpdir(),'shiqu-native-export-'));
  try{
   const {exportLocalStory}=await import('../server/story-export.ts');
   const input=path.join(temporary,'story.zip');
-  onProgress('正在通过 Node 生成公开 ZIP…');
+  onProgress('Generating public ZIP through Node…');
   await exportLocalStory(project,app,session,{format:'zip',output:input});
   const data=savedJSON(new Uint8Array(await readFile(input)));
-  assert(data.id===session.id&&data.revision===(session.revision?.number||1),'导出文件不是所选的当前版本。');
-  assert((await api(`sessions/${session.id}/current`)).id===session.id,'导出期间书架已切换到新版，请重新导出。');
+  assert(data.id===session.id&&data.revision===(session.revision?.number||1),'The export is not the selected current revision.');
+  assert((await api(`sessions/${session.id}/current`)).id===session.id,'The bookshelf switched to a newer revision during export. Export again.');
   const currentIds=new Map();
   async function resolveCurrentId(id){
    if(!currentIds.has(id)){
@@ -102,7 +103,7 @@ export async function exportNamedStory(name,{appUrl='http://localhost:3000',onPr
    }
    return currentIds.get(id);
   }
-  onProgress('正在验证并保存公开 ZIP…');
+  onProgress('Verifying and saving public ZIP…');
   return await exportStory(input,{...options,resolveCurrentId});
  }finally{await rm(temporary,{recursive:true,force:true});}
 }
@@ -110,11 +111,11 @@ export async function exportNamedStory(name,{appUrl='http://localhost:3000',onPr
 async function main(){
  const {values,positionals}=parseArgs({options:{output:{type:'string'},url:{type:'string',default:'http://localhost:3000'},help:{type:'boolean',short:'h'}},allowPositionals:true});
  if(values.help){
-  console.log('用法：pnpm export:story <故事名、作品ID或已下载的.zip> [--url http://localhost:3000] [--output 输出.zip]\n故事名/ID：从运行中的应用读取当前版本，使用生产 Node 导出器生成公开 ZIP；无需浏览器或 Playwright。\nZIP 文件：直接转换现有下载，保留图片字节。默认保存到 ../awesome-shiqu/works/yysun，并沿用同作品的已有文件名。');return;
+  console.log('Usage: pnpm export:story <story-title, work-id, or downloaded.zip> [--url http://localhost:3000] [--output output.zip]\nStory title/ID: read the current revision from the running app and create a public ZIP using the production Node exporter. No browser or Playwright is needed.\nZIP file: convert an existing download while preserving image bytes. Output defaults to ../awesome-shiqu/works/yysun and retains the existing filename for the same work.');return;
  }
- assert(positionals.length===1,'请提供一个故事名、作品 ID 或已下载的 ZIP；详见 pnpm export:story --help。');
+ assert(positionals.length===1,'Provide a story title, work ID, or downloaded ZIP. See pnpm export:story --help.');
  const input=positionals[0],options={output:values.output};
  const result=/\.zip$/i.test(input)?await exportStory(input,options):await exportNamedStory(input,{...options,appUrl:values.url,onProgress:console.log});
- console.log(`已导出：${result.path}\n${result.pages} 幅，${(result.bytes/1024/1024).toFixed(2)} MiB\nSHA-256：${result.sha256}`);
+ console.log(`Exported: ${result.path}\n${result.pages} frames, ${(result.bytes/1024/1024).toFixed(2)} MiB\nSHA-256: ${result.sha256}`);
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(path.resolve(process.argv[1])).href)main().catch(error=>{console.error(error.message);process.exitCode=1;});

@@ -1,3 +1,4 @@
+// English product messages; source evidence and machine identifiers remain stable.
 // Read whole local books, assign deterministic citation units, and resolve receipts exactly.
 // Unit lookup verifies a story anchor; generation also saves its complete chapters so anchors cannot truncate a story.
 import path from 'node:path';
@@ -26,11 +27,11 @@ export type LocalUnit={id:string;text:string;narrative?:boolean;unreadable?:bool
 export type LocalSection={id:string;title:string;units:LocalUnit[];url?:string;provider?:string};
 type BookEntry={id:string;title:string;originalFile:string;originalFiles?:(Omit<HtmlOriginal,'sourceUrl'>&{sourceUrl?:string})[];format?:'wikisource-html'|'shidian-html'|'licensed-wikisource'|'kanripo-text';source:{url:string;provider:string;sha256:string};supplements:{file:string;sha256:string;sourceUrl:string;chapter:number;scope:string}[]};
 export type LocalBook={id:string;title:string;edition:string;url:string;provider:string;sections:LocalSection[];input:WholeBookInput};
-const aliases:Record<string,string>=Object.fromEntries(readerBooks.flatMap(book=>[[book.id,book.id],[book.title,book.id]]));
+const aliases:Record<string,string>=Object.fromEntries(readerBooks.flatMap(book=>[[book.id,book.id],[book.title,book.id],[book.sourceTitle,book.id]]));
 // Normalize legacy chapter labels only. Never convert source body glyphs.
 const simplifiedLabel=Converter({from:'t',to:'cn'});
-function unavailable(){return new ReaderError(503,'本地书库文件缺失或版本校验失败，请检查随应用发布的书籍资料。');}
-function invalid(){return new ReaderError(400,'本地出处无法核对，请重新按主题选择故事。');}
+function unavailable(){return new ReaderError(503,'Local book files are missing or failed verification. Check the book data included with the app.');}
+function invalid(){return new ReaderError(400,'The local source could not be verified. Select a story by theme again.');}
 export function originalBody(raw:string,provider:string){
  let text=raw.replace(/^\uFEFF/,'');
  if(provider==='Project Gutenberg'){
@@ -175,7 +176,7 @@ export class LocalBooks{
   const [first,...continuations]=ranges;
   const title=sections.length===1?sections[0].title:sections[0].title+' → '+sections.at(-1)!.title;
   const chapterContext={title:`《${book.title}·${title}》`,text:sections.map(section=>`篇章 ${section.id}：${section.title}\n`+section.units.map(unit=>`[${unit.id}]\n${unit.text}`).join('\n\n')).join('\n\n'),source:{...first,...(continuations.length?{continuations}:{}),edition:book.edition}};
-  if(chapterContext.text.length>2000000||readingTokens(original.text+JSON.stringify(chapterContext))>wholeInputTokens)throw new ReaderError(400,'故事涉及的完整章节超出单次制作范围，请选择涉及章节较少的故事；原文不会截断。');
+  if(chapterContext.text.length>2000000||readingTokens(original.text+JSON.stringify(chapterContext))>wholeInputTokens)throw new ReaderError(400,'The complete chapters exceed the production input budget. Choose a story involving fewer chapters. Original text is never truncated.');
   return {...original,chapterContext};
  }
  async legacy(selection:Selection,plan:SourceHint){

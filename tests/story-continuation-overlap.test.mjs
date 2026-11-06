@@ -1,3 +1,4 @@
+// Verify English runtime projections while retaining canonical Chinese source evidence.
 // Reproduce the captured public-domain story ranges without live inference or private session metadata.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -33,7 +34,7 @@ for(const mode of ['duplicate-range','unknown-resolved'])test(`continuation evid
  if(mode==='unknown-resolved')receipt.scan.resolvedEventIds.push('unknown-event');
  await f.cache.write(f.key,initial);
  f.provider.suggestions=async(_s,_e,input)=>{const result=localChoices(receipt,input);return result;};
- if(mode==='unknown-resolved')assert.equal((await f.run()).stories[0].title,receipt.stories[0].title);else await assert.rejects(f.run(),/保留进度/);
+ if(mode==='unknown-resolved')assert.equal((await f.run()).stories[0].title,receipt.stories[0].title);else await assert.rejects(f.run(),/Progress has been retained/);
  const state=[...f.store.values.values()].map(bytes=>JSON.parse(new TextDecoder().decode(bytes))).find(doc=>doc.key===f.key).value;
  assert.equal(state.stories.length,initial.stories.length+(mode==='unknown-resolved'?1:0));if(mode==='unknown-resolved'){assert.deepEqual(state.pendingEvents,initial.pendingEvents);assert.equal(state.stories.at(-1).continuedFrom,undefined);}else assert.equal(state.pendingEvents.length,0);
 });
@@ -65,7 +66,7 @@ for(const mode of ['covered-union','same-title','invalid-source','no-progress'])
  const old=[story('事件甲',ref(1,4)),story('事件乙',ref(5,8))],expected={'covered-union':'no-new-evidence','same-title':'duplicate','invalid-source':'invalid-source','no-progress':'no-progress'}[mode];
  await f.cache.write(f.key,{...f.fixture.catalog,stories:old,pendingEvents:[],cursor:2,readThrough:2});
  f.provider.suggestions=async()=>({stories:mode==='no-progress'?[]:[story(mode==='same-title'?'事件甲':'交叉拼接',mode==='invalid-source'?{...ref(3,6),firstUnit:'unknown'}:ref(3,6))],note:'',scan:{blockComplete:false,pendingEvents:[],resolvedEventIds:[]}});
- await assert.rejects(f.run(),/已保留进度/);
+ await assert.rejects(f.run(),/Progress has been retained/);
  const read=()=>[...f.store.values.values()].map(bytes=>JSON.parse(new TextDecoder().decode(bytes))).find(doc=>doc.key===f.key).value;
  assert.deepEqual(read().stories,old);assert.equal(read().cursor,2);assert.equal(read().lastRejection.code,expected);assert.ok(!JSON.stringify(read().lastRejection).includes('text'));
  f.provider.suggestions=async()=>({stories:[story('合法新故事',ref(9,10))],note:'',scan:{blockComplete:true,pendingEvents:[],resolvedEventIds:[]}});

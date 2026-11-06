@@ -1,3 +1,4 @@
+// English product text and generation contracts; canonical source evidence remains unchanged.
 // Persist book/theme intent and user confirmation gates before any storyboard is commissioned.
 // Search keeps its own state beside the selection: finding more stories never changes the chosen one.
 import {z} from 'zod';
@@ -22,7 +23,7 @@ export function intakeSearch(intake:StoryIntake):IntakeSearch{return intake.sear
 const common={requestId:z.string().uuid(),generation:z.number().int().min(0)};
 export const intakeActionSchema=z.discriminatedUnion('action',[
  z.object({...common,action:z.literal('conditions'),conditions:z.object({bookId:z.string().min(1).max(100),customBook:z.string().max(500).optional(),theme:z.string().trim().min(1).max(100),discoverySources:z.array(localSourceSchema).min(1).max(24).optional(),productionPrompt:z.string().max(1200)}).strict()}).strict(),
- z.object({...common,action:z.literal('search'),title:z.string().trim().max(100).regex(/^[^\r\n]*$/,'故事标题请写在一行内。')}).strict(),
+ z.object({...common,action:z.literal('search'),title:z.string().trim().max(100).regex(/^[^\r\n]*$/,'Write the story title on one line.')}).strict(),
  z.object({...common,action:z.literal('choose'),settings:setupSettingsSchema.optional(),batch:z.number().int().min(0).max(39),index:z.number().int().min(0).max(4)}).strict(),
  z.object({...common,action:z.literal('more'),automatic:z.boolean().optional(),settings:setupSettingsSchema.optional()}).strict(),
  z.object({...common,action:z.literal('recommend'),settings:setupSettingsSchema}).strict(),

@@ -1,3 +1,4 @@
+// English workflow expectations preserve source evidence, saved work and recovery contracts.
 // Exercise durable storyboard checkpoints and the complete-script barrier through real HTTP and SQLite.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -87,7 +88,8 @@ for(const action of ['pause','stop','leave'])test(`${action} between batches ret
 
 test('concurrent batch advances and replayed queue receipts do not repeat saved paid work',async t=>{
  const f=await productionFixture(t),id=await f.createLegacyReader(45),repo=new ReaderRepository(f.app.services.database),g=f.generation.generator();
- await advanceStory(repo,g,owner,id,0); // Outline.
+ for(let i=0;i<20&&!(await document(f,id)).storyboard;i++)await advanceStory(repo,g,owner,id,0);
+ assert.ok((await document(f,id)).storyboard); // Saved source preparation and outline.
  let release,started;const hold=new Promise(r=>release=r),ready=new Promise(r=>started=r);
  f.control.beforeText=async(kind,payload)=>{if(kind==='batch'&&payload.batch.first===1){started();await hold;}};
  const first=advanceStory(repo,g,owner,id,0);await ready;
@@ -106,8 +108,8 @@ test('concurrent batch advances and replayed queue receipts do not repeat saved 
 
 for(const provider of ['codex','gemini'])test(`${provider}: selected-story stages retain theme context without restoring legacy automatic scene prescriptions`,async t=>{
  const f=await productionFixture(t,provider),generator=f.generation.generator();
- const {defaultProductionDirection,defaultProductionPrompt}=await import('../lib/reader-prompts.ts');
- const faithful=defaultProductionPrompt(),shared=defaultProductionDirection.slice('按原文自身的事件、人物与因果展开，不额外套入主题或要求反转。'.length);
+ const {defaultProductionPrompt}=await import('../lib/reader-prompts.ts');
+ const faithful=defaultProductionPrompt(),shared='完整讲清原文主事件的起因、关键行动与结果，首幅自然介绍人物与处境。按事件顺序展开，保留关键对白、反应和停顿；每幅一个静态可见瞬间，相邻幅各有任务。配文自然明白，画面动作与关系可读。结语在独立结束页提炼一层有据的认识，不复述情节、不虚构动机或扩大因果。';
  const legacy='让人物因执念陷入困境，再通过一次具体遭遇看见另一种可能；转变要自然，保留放下之前的挣扎。'+shared;
  const selection={bookId:'zhuangzi',storyTitle:'庄周梦蝶',theme:'放下执念',length:8,artStyle:'ink-pencil',voice:false,productionPrompt:legacy};
  const original={title:'《庄子·齐物论》',text:'昔者庄周梦为胡蝶。',url:'https://example.org',kind:'passage',provider:'controlled',retrievedAt:'2026-11-01'};

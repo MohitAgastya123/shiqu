@@ -1,3 +1,4 @@
+// Verify English runtime messages while preserving source/content fixtures.
 // Exercise configuration precedence through real isolated CLI processes and explicit provider/library tables.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -33,10 +34,10 @@ const launches=[
  {name:'unselected .env is ignored',dotenv:true,expected:'gemini',port:'saved'},
  {name:'no saved profile with complete config-file override',fresh:true,file:true,expected:'openai',port:'file',library:'file'},
  {name:'no saved profile with complete environment override',fresh:true,shell:true,expected:'gemini',port:'shell',library:'shell'},
- {name:'explicit empty shell key beats file and saved key',file:true,emptyKey:true,error:/交互终端/},
+ {name:'explicit empty shell key beats file and saved key',file:true,emptyKey:true,error:/interactive terminal/},
  {name:'invalid explicit provider fails without mutation',invalidProvider:true,error:/SHIQU_AI_PROVIDER/},
- {name:'missing provider credentials fail noninteractively',missingKeys:true,error:/交互终端/},
- {name:'incomplete explicit provider never borrows another provider key',onlyGemini:true,openaiOverride:true,error:/交互终端/},
+ {name:'missing provider credentials fail noninteractively',missingKeys:true,error:/interactive terminal/},
+ {name:'incomplete explicit provider never borrows another provider key',onlyGemini:true,openaiOverride:true,error:/interactive terminal/},
  {name:'fully explicit read-only startup bypasses corrupt saved settings',corrupt:true,explicit:true,expected:'readonly',port:'flag',library:'flag'},
 ];
 for(const row of launches)test('CLI startup matrix: '+row.name,{timeout:30000},async t=>{

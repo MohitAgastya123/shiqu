@@ -38,7 +38,7 @@ for(const body of [false,true])test(`a stalled ${body?'JSON body':'connection'} 
    signal.addEventListener('abort',()=>controller.error(signal.reason),{once:true});
   }}));
  });
- const failed=assert.rejects(request('reader/sessions'),/读取超时.*重试/);
+ const failed=assert.rejects(request('reader/sessions'),/Reading timed out.*retry/);
  await setImmediate();t.mock.timers.tick(15000);await failed;
  assert.equal(calls,1);assert.equal(signal.aborted,true);
  assert.deepEqual(await request('reader/sessions'),[{id:'retained-story'}]);
@@ -53,7 +53,7 @@ test('read retries share a deadline instead of extending a stalled refresh indef
   if(signals.length===1)throw new TypeError('connection lost');
   return new Promise((resolve,reject)=>init.signal.addEventListener('abort',()=>reject(init.signal.reason),{once:true}));
  });
- const failed=assert.rejects(request('reader/sessions'),/读取超时/);
+ const failed=assert.rejects(request('reader/sessions'),/Reading timed out/);
  await setImmediate();t.mock.timers.tick(250);await setImmediate();
  assert.equal(signals.length,2);assert.equal(signals[0],signals[1]);
  t.mock.timers.tick(14750);await failed;assert.equal(signals.length,2);

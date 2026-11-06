@@ -1,12 +1,7 @@
+// English product text and generation contracts; canonical source evidence remains unchanged.
 // Format assembled system instructions without rewriting rules, reordering sections or touching inputs.
 // Apply only before dispatch/new captures; historical prompt records remain immutable.
-const digits=['零','一','二','三','四','五','六','七','八','九'];
-function sectionNumber(value:number):string{
- if(value<10)return digits[value];
- if(value<20)return '十'+(value%10?digits[value%10]:'');
- if(value<100)return digits[Math.floor(value/10)]+'十'+(value%10?digits[value%10]:'');
- return String(value);
-}
+const sectionNumber=(value:number)=>String(value);
 function ruleLines(body:string,bullets:boolean){
  return body.trim().split(/\n/).map(line=>{
   const text=line.trim();if(!text)return '';
@@ -24,9 +19,9 @@ export function formatSystemPrompt(prompt:string):string{
  let number=0;
  const formatted=sections.map(section=>{
   const newline=section.indexOf('\n'),heading=newline<0?section.trim():section.slice(0,newline).trim(),body=newline<0?'':section.slice(newline+1).trim();
-  const task=/^任务(?:与|$)/.test(heading);
-  const boundary=/^(?:输入|输出|本次输出|报告契约|结构输出|修订范围与输出|语言与输入)/.test(heading);
-  const title=task||boundary||!body?heading+'：':sectionNumber(++number)+'、'+heading;
+  const task=/^(?:Task|任务)(?: and|与|$)/i.test(heading);
+  const boundary=/^(?:Input|Output|Required output|Report contract|Structural output|Repair scope|输入|输出|本次输出|报告契约|结构输出|修订范围与输出|语言与输入)/i.test(heading);
+  const title=task||boundary||!body?heading+':':sectionNumber(++number)+'. '+heading;
   return title+(body?'\n'+ruleLines(body,!task):'');
  });
  return [...(prefix.trim()?[ruleLines(prefix,false)]:[]),...formatted].join('\n\n');

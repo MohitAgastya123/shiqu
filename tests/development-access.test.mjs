@@ -1,5 +1,6 @@
 // A real LAN-capable Vite server must allow direct APIs and deny private direct/raw/@fs requests.
 // Close its writers before removing the temporary root so dependency scans cannot race cleanup.
+// Use a reserved ephemeral port so a developer's existing default Vite server is never queried.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,mkdir,writeFile,rm,symlink} from 'node:fs/promises';
@@ -11,6 +12,7 @@ import {createServer} from 'vite';
 import {createHttpServer} from '../server/http.ts';
 import {developmentAccess} from '../server/development-access.ts';
 import {developmentServerOptions,protectDevelopmentLibrary} from '../scripts/development-server.mjs';
+import {freeStartupPort} from './fixtures/startup.mjs';
 
 test('development LAN proxy allows direct access and protects preserved/private workspace stores',async t=>{
  const root=await mkdtemp(path.join(os.tmpdir(),'shiqu direct-development ')),library=path.join(root,'private-shelf[1]');
@@ -27,7 +29,8 @@ test('development LAN proxy allows direct access and protects preserved/private 
  let protectedApi=async()=>new Response('not ready',{status:503});
  backend=createHttpServer(request=>protectedApi(request));backend.listen(0,'127.0.0.1');await once(backend,'listening');
  const apiPort=backend.address().port;
- frontend=await createServer({configFile:false,root,logLevel:'silent',plugins:[protectDevelopmentLibrary(library)],server:developmentServerOptions({port:0,apiPort,library})});await frontend.listen();
+ const requestedPort=await freeStartupPort();
+ frontend=await createServer({configFile:false,root,logLevel:'silent',plugins:[protectDevelopmentLibrary(library)],server:developmentServerOptions({port:requestedPort,apiPort,library})});await frontend.listen();
  const port=frontend.httpServer.address().port,origin=`http://127.0.0.1:${port}`;
  protectedApi=developmentAccess(async()=>Response.json({privateStory:true}),{SHIQU_DEV_FRONTEND_PORT:String(port)},apiPort);
  assert.equal(frontend.httpServer.address().address,'0.0.0.0');

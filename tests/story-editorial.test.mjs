@@ -1,3 +1,4 @@
+// English production expectations; original evidence and historical hashes remain unchanged.
 // Preserve theme/source context through scene work, then independently audit title and ending before drawing.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -34,7 +35,7 @@ for(const provider of ['codex','gemini'])for(const theme of ['放下执念','原
  assert.equal(f.control.reflections.length,1);assert.equal(f.control.reviews.length,1);assert.equal(f.control.plans.length,1);
 });
 
-for(const invalid of [{title:'',reason:'标题不准确。'},{title:'   ',reason:'标题不准确。'},{title:'字'.repeat(41),reason:'标题太长。'},{title:'庄周梦蝶',reason:''}])test(`invalid title audit ${JSON.stringify(invalid)} cannot change the plan or authorize drawing`,async t=>{
+for(const invalid of [{title:'',reason:'标题不准确。'},{title:'   ',reason:'标题不准确。'},{title:'字'.repeat(161),reason:'标题太长。'},{title:'庄周梦蝶',reason:''}])test(`invalid title audit ${JSON.stringify(invalid)} cannot change the plan or authorize drawing`,async t=>{
  const f=await productionFixture(t),id=await f.createLegacyReader();let bad=true;
  f.control.beforeText=async(kind,payload)=>kind==='reflection'?{title:'庄周梦蝶',candidates}:kind==='review'?{issues:[],titleReview:bad?invalid:{title:'庄周梦蝶',reason:'标题对应完整故事。'},reflectionChoice:{index:1,reason:'保留原文支持的认识。'}}:undefined;
  await f.demand(id);await until(async()=>(await f.read(id)).state==='failed');

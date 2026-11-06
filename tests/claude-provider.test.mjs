@@ -1,3 +1,4 @@
+// Verify English messages without changing credential, process, or source fixtures.
 // Validate the real subprocess transport and shared production boundary without paid inference.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -43,7 +44,7 @@ const job={instructions:'Production instructions',prompt:'Private source text',s
 test('Claude failures survive production diagnostic export without raw data or arbitrary error codes',async t=>{
  const directory=await mkdtemp(path.join(os.tmpdir(),'shiqu claude diagnostics '));t.after(()=>rm(directory,{recursive:true,force:true}));
  const original=console.error;console.error=()=>{};const restore=installDiagnostics(directory);
- try{safeClaudeError(new ClaudeError('CLAUDE_LOGIN_REQUIRED'));safeClaudeError(new ClaudeError('INVALID_PROTOCOL'));assert.match(safeClaudeError(new ClaudeError('RATE_LIMITED')),/额度/);console.error('claude_generation_error',JSON.stringify({code:'private-key /Users/private 原文',stderr:'private-key',prompt:'原文'}));}
+ try{safeClaudeError(new ClaudeError('CLAUDE_LOGIN_REQUIRED'));safeClaudeError(new ClaudeError('INVALID_PROTOCOL'));assert.match(safeClaudeError(new ClaudeError('RATE_LIMITED')),/limit/);console.error('claude_generation_error',JSON.stringify({code:'private-key /Users/private 原文',stderr:'private-key',prompt:'原文'}));}
  finally{restore();console.error=original;}
  const report=diagnosticReport(directory,'0.8.5');assert.deepEqual(report.events.map(event=>event.code),['CLAUDE_LOGIN_REQUIRED','INVALID_PROTOCOL','RATE_LIMITED','UNKNOWN']);assert.equal(safeErrorCode(new ClaudeError('INVALID_PROTOCOL')),'ClaudeError');
  const filename=path.join(directory,'.diagnostics/events.jsonl');assert.doesNotMatch(await readFile(filename,'utf8'),/private-key|Users|原文/);

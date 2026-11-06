@@ -9,15 +9,16 @@ import {makeGenerator,suggestStories,GeminiError,safeGeminiError,configuredModel
 import {view,selectionSchema} from '../lib/reader-model.ts';
 import {runStoryGeneration} from '../lib/reader-generation.ts';
 import {changeIntake} from '../server/reader-intake.ts';
-const original={title:'《庄子·齐物论》',text:'昔者庄周梦为胡蝶，栩栩然胡蝶也。',url:'https://zh.wikisource.org/zh-hans/莊子/齊物論',kind:'passage',provider:'维基文库',retrievedAt:'2026-10-26T00:00:00Z'};
+const original={title:'《庄子·齐物论》',text:'昔者庄周梦为胡蝶，栩栩然胡蝶也。',url:'https://zh.wikisource.org/zh-hans/莊子/齊物論',englishSource:{title:'Zhuangzi: On the Equality of Things',text:'Once Zhuang Zhou dreamed he was a butterfly, fluttering freely as a butterfly.'},kind:'passage',provider:'维基文库',retrievedAt:'2026-10-26T00:00:00Z'};
 const selection={bookId:'zhuangzi',storyTitle:'庄周梦蝶',theme:'放下执念',length:8,voice:false};
 const plan={title:'谁在梦中',summary:'醒来后，他忽然不敢确定自己是谁。',sourceReference:'《庄子·齐物论》庄周梦蝶',adaptationNote:'用现代旁白重述梦蝶，画面细节为AI演绎。',reflection:'醒来之后，你更确定自己了吗？',characters:'Zhuang Zhou: adult male philosopher, plain blue-green robe, tied long black hair, calm face.',pages:Array.from({length:8},(_,i)=>({caption:'庄周做了一个梦，梦里的世界比醒着时还要清楚。',prompt:'Ancient Chinese philosopher in a calm garden, thoughtful adult face, scene number '+i}))};
 function setup(){const db=new DatabaseSync(':memory:');for(const file of readdirSync('drizzle').filter(f=>f.endsWith('.sql')).sort())db.exec(readFileSync('drizzle/'+file,'utf8'));const adapter={prepare(query){let args=[];return {bind(...values){args=values;return this;},async first(){return db.prepare(query).get(...args)||null;},async all(){return {results:db.prepare(query).all(...args)};},async run(){const r=db.prepare(query).run(...args);return {meta:{changes:Number(r.changes)}};}};}};return {repo:new ReaderRepository(adapter),db};}
 function fake(){const calls=[];return {calls,recommend:async()=>({value:{count:8,reason:'完整讲述事件。',storySummary:plan.summary,storyMatchReason:'原文支持梦与醒的经历。'},model:'mock',requestId:'mock',usage:null}),reflection:async()=>({value:plan.reflection,model:'mock',requestId:'mock',usage:null}),reflectionCandidates:async()=>({value:{title:plan.title,candidates:[plan.reflection,'醒来之后，梦中的自在仍值得回味。','梦与醒的分界，也未必是心境的分界。']},model:'mock',requestId:'mock',usage:null}),review:async(_s,_p,_o,_outline,candidates)=>({value:{issues:[],titleReview:{title:_p.title,reason:'标题准确对应当前故事。'},...(candidates?{reflectionChoice:{index:1,reason:'保留原文支持的认识。'}}:{})},model:'mock',requestId:'mock',usage:null}),async original(){return {source:structuredClone(original),message:'',searchUrl:''};},async plan(){calls.push('plan');return {value:structuredClone(plan),model:'fake-text',requestId:'test',usage:{input_tokens:10,output_tokens:20}};},async image(p,page,id){calls.push('image:'+page);return {value:`/api/reader/media/${id}/${page}.webp`,model:'fake-image',requestId:'test',usage:null};},async audio(text,id,page){calls.push('audio:'+page);return {value:`/api/reader/media/${id}/${page}.wav`,model:'fake-audio',requestId:'test',usage:null};},safeError(){return '生成暂时失败，已保留内容';}};}
 function client(repo,g,id,overrides={}){
+ let requestCount=0;
  return {sessionId:id,throughPage:1,retries:new Map(),isActive:()=>true,onSession:()=>{},
   sleep:async()=>assert.fail('Checkpoint retries must not wait for a countdown'),
-  request:async(path,method,data)=>method==='POST'?advanceStory(repo,g,'alice',id,data.throughPage,data.retry):view(await repo.get(id,'alice')),
+  request:async(path,method,data)=>{if(++requestCount>100)throw Error('Generation did not advance: '+JSON.stringify(view(await repo.get(id,'alice'))));return method==='POST'?advanceStory(repo,g,'alice',id,data.throughPage,data.retry):view(await repo.get(id,'alice'));},
   ...overrides};
 }
 test('client automatically recovers planning, source and each image without delays or repeating completed work',async()=>{
@@ -122,22 +123,22 @@ test('generation saves the original before drawing and keeps it on later checkpo
  await repo.create(id,'alice',selection);
  const draft=await advanceStory(repo,g,'alice',id,1);assert.equal(draft.story,null);
  const planned=await advanceStory(repo,g,'alice',id,1);
- assert.equal(planned.story.sourceText,original.text);assert.equal(planned.story.sourceUrl,original.url);
+ assert.equal(planned.story.sourceText,original.englishSource.text);assert.equal(planned.story.sourceUrl,original.url);
  assert.deepEqual((({storyBrief,...source})=>source)(JSON.parse((await repo.get(id,'alice')).document).original),original);
  assert.equal(planned.ready,0);
  const draw=g.image;g.image=async(...args)=>{assert.deepEqual((({storyBrief,...source})=>source)(JSON.parse((await repo.get(id,'alice')).document).original),original);return draw(...args);};
  await advanceStory(repo,g,'alice',id,1);await advanceStory(repo,g,'alice',id,1);
- assert.equal(lookups,1);assert.equal(view(await repo.get(id,'alice')).story.sourceText,original.text);
+ assert.equal(lookups,1);assert.equal(view(await repo.get(id,'alice')).story.sourceText,original.englishSource.text);
 });
 test('unavailable original blocks summary and planning, and recovery saves each paid result once',async()=>{
  const {repo}=setup(),id=crypto.randomUUID(),g=fake();let lookups=0;
  g.original=async()=>++lookups===1?{source:null,message:'原文来源无法连接。',searchUrl:''}:{source:original,message:'',searchUrl:''};
  await repo.create(id,'alice',selection);const failed=await advanceStory(repo,g,'alice',id,1);
- assert.equal(failed.state,'failed');assert.match(failed.error,/原文未能核对/);assert.deepEqual(g.calls,[]);
+ assert.equal(failed.state,'failed');assert.match(failed.error,/The source could not be verified/);assert.deepEqual(g.calls,[]);
  let doc=JSON.parse((await repo.get(id,'alice')).document);assert.equal(doc.draft,undefined);assert.equal(doc.plan,null);assert.equal(doc.usage.length,0);
  await advanceStory(repo,g,'alice',id,1);assert.equal(lookups,1);
  await advanceStory(repo,g,'alice',id,1,true);doc=JSON.parse((await repo.get(id,'alice')).document);assert.equal(doc.original.storyBrief.verified,true);assert.equal(doc.draft.summary,plan.summary);
- const resumed=await advanceStory(repo,g,'alice',id,1);assert.equal(resumed.story.sourceText,original.text);assert.deepEqual(g.calls,['plan']);
+ const resumed=await advanceStory(repo,g,'alice',id,1);assert.equal(resumed.story.sourceText,original.englishSource.text);assert.deepEqual(g.calls,['plan']);
  await advanceStory(repo,g,'alice',id,1);await advanceStory(repo,g,'alice',id,1);assert.deepEqual(g.calls,['plan','image:0']);assert.equal(lookups,2);
 });
 test('legacy backfill preserves images and progress and rejects an outdated document or active generation',async()=>{
@@ -175,7 +176,7 @@ test('source recovery remains explicit after repeated outages and never repeats 
  assert.equal((await repo.get(id,'alice')).step_attempts,5);
  available=true;result=await advanceStory(repo,g,'alice',id,0,true);
  assert.equal(result.state,'idle');assert.equal(result.retryAllowed,true);assert.equal(result.story,null);
- result=await advanceStory(repo,g,'alice',id,0);assert.equal(result.story.sourceText,original.text);
+ result=await advanceStory(repo,g,'alice',id,0);assert.equal(result.story.sourceText,original.englishSource.text);
  assert.deepEqual(g.calls,['plan']);
  await advanceStory(repo,g,'alice',id,0);await advanceStory(repo,g,'alice',id,0);assert.deepEqual(g.calls,['plan','image:0']);
  assert.equal(JSON.parse((await repo.get(id,'alice')).document).usage.filter(u=>u.step==='plan').length,1);
@@ -197,7 +198,7 @@ for(const length of ['auto',45])test(`legacy URL ${length} prepares source and s
  let lookups=0;g.original=async()=>({source:++lookups===1?null:original,message:'controlled outage',searchUrl:''});
  await repo.create(id,'alice',chosen);const failed=await advanceStory(repo,g,'alice',id,0);assert.equal(failed.state,'failed');assert.equal(requests.length,0);assert.equal(failed.retryStage,'source');
  await advanceStory(repo,g,'alice',id,0,true);assert.equal(requests.length,2);assert.equal(lookups,2);
- for(const item of requests){assert.equal(item.body.tools,undefined);assert.equal(item.payload.verifiedOriginal.text,original.text);}
+ for(const item of requests){assert.equal(item.body.tools,undefined);assert.equal(item.payload.verifiedOriginal.text,original.englishSource.text);}
  const saved=JSON.parse((await repo.get(id,'alice')).document);assert.equal(saved.original.storyBrief.verified,true);assert.equal(saved.storyboard.outline.summary,plan.summary);
  const batch=await advanceStory(repo,g,'alice',id,0);assert.equal(batch.generationProgress.storyboardFrames,20);assert.equal(requests.length,3);assert.equal(lookups,2);
 });
@@ -236,10 +237,10 @@ test('Gemini failures are redacted, not retried, and never fall back to a differ
  let count=0;const g=makeGenerator('unit-test-only',memoryAssets(),{},async()=>{count++;return new Response('sensitive provider detail',{status:429});});
  await assert.rejects(g.plan(selection,'seed'));assert.equal(count,1);
  assert.ok(!g.safeError(new Error('sensitive provider detail')).includes('sensitive'));
- assert.match(safeGeminiError(new GeminiError('PROVIDER_ERROR',429)),/额度/);
- assert.match(safeGeminiError(new GeminiError('PROVIDER_ERROR',402)),/计费状态和可用额度/);
+ assert.match(safeGeminiError(new GeminiError('PROVIDER_ERROR',429)),/quota/);
+ assert.match(safeGeminiError(new GeminiError('PROVIDER_ERROR',402)),/billing and quota/);
  const timeoutMessage=safeGeminiError(new DOMException('expired','TimeoutError'));
- assert.match(timeoutMessage,/等待超时.*已保留.*手动重试/);assert.doesNotMatch(timeoutMessage,/费用|计费|收费/);
+ assert.match(timeoutMessage,/timed out.*saved.*Retry/i);assert.doesNotMatch(timeoutMessage,/fees|billing|charges/i);
 });
 test('book suggestions preserve selected book and custom theme; stale URL fields are ignored',async()=>{
  let body;const result=await suggestStories('unit-test-only',{...selection,customBook:'https://example.org/old',theme:'一个小人物的选择'},{},async(url,init)=>{body=JSON.parse(init.body);return geminiResponse([{text:JSON.stringify({stories:[{title:'庄周梦蝶',description:'一个醒来后的疑问。'}],note:''})}]);});
@@ -295,7 +296,7 @@ test('chosen art direction persists across resume and reaches every image call',
  await advanceStory(repo,g,'alice',id,1);
  await advanceStory(repo,g,'alice',id,1);
  const resumed=await advanceStory(repo,g,'alice',id,1);
- assert.equal(resumed.selection.artStyle,'ink-wash');assert.equal(resumed.story.artStyleLabel,'水墨写意');
+ assert.equal(resumed.selection.artStyle,'ink-wash');assert.equal(resumed.story.artStyleLabel,'Ink Wash');
  assert.deepEqual(styles,['ink-wash','ink-wash']);
  const oldId=crypto.randomUUID();await repo.create(oldId,'bob',selection);
  assert.equal((await advanceStory(repo,g,'bob',oldId,0)).selection.artStyle,'ink-pencil');
@@ -319,8 +320,8 @@ test('five story choices are requested and accepted without inventing a missing 
  assert.equal(result.stories.length,5);
  assert.equal(body.generationConfig.responseFormat.text.schema.properties.stories.maxItems,undefined);
  assert.match(body.generationConfig.responseFormat.text.schema.properties.stories.description,/At most 5 items/);
- assert.match(body.systemInstruction.parts[0].text,/未提供时至多5篇/);
- assert.match(body.systemInstruction.parts[0].text,/为1时只寻找一篇，找到即返回/);
+ assert.match(body.systemInstruction.parts[0].text,/default at most 5/);
+ assert.match(body.systemInstruction.parts[0].text,/If 1, return immediately after finding one/);
  const unknown=await suggestStories('unit-test-only',selection,{},async()=>geminiResponse([{text:JSON.stringify({stories:[],note:'请补充原文。'})}]));
  assert.equal(unknown.stories.length,0);
 });

@@ -1,4 +1,6 @@
+// English product text and generation contracts; canonical source evidence remains unchanged.
 // Render a complete story as a single contact sheet locally, preserving full frames and wrapped text.
+import {themeLabel} from './reader-language.ts';
 import type {Story} from './content';
 import {browserExportRuntime,type ExportRuntime} from './story-export-runtime.ts';
 import type {GeneratedStory} from './reader-model';
@@ -8,19 +10,19 @@ import {publicationCredit} from './story-publication.ts';
 
 const M=36,GAP=24,CARD=420,ART=630,LINE=42;
 const family='"Noto Serif SC", "Songti SC", "STSong", "SimSun", serif';
-export function pngFilename(title:string){return pdfFilename(title).replace(/\.pdf$/,'-一页.png');}
-export function assertPngReady(story:Story){
- if(!story.pages.length||story.pages.some(page=>!page.image))throw Error('等所有画面生成完成后，就能一页输出 PNG。');
+export function pngFilename(title:string){return pdfFilename(title).replace(/\.pdf$/,'-overview.png');}
+export function assertPngReady(story:Story){if('generated' in story&&story.generated&&!story.sourceText?.trim())throw Error('Prepare the saved English source before exporting this story.');
+ if(!story.pages.length||story.pages.some(page=>!page.image))throw Error('Complete every image before exporting an overview PNG.');
 }
 export function layoutStoryPng(story:Story,measure:(text:string,size:number)=>number){
  assertPngReady(story);
  const count=story.pages.length,columns=count<=4?count:count<=8?4:count<=10?5:4;
  const width=2*M+columns*CARD+(columns-1)*GAP;
  const wrap=(text:string,size:number,limit:number)=>wrapPdfText(text,limit,value=>measure(value,size));
- const title=wrap(`${story.title} · ${count}幅故事总览`,52,width-2*M);
+ const title=wrap(`${story.title} · ${count}-frame overview`,52,width-2*M);
  const generated='generated'in story&&story.generated===true?story as GeneratedStory:null;
- const book=readerBooks.find(book=>book.id===story.bookId)?.title||'自选故事';
- const subtitle=wrap([book,generated?.artStyleLabel,story.theme].filter(Boolean).join(' · '),26,width-2*M);
+ const book=readerBooks.find(book=>book.id===story.bookId)?.title||'Custom story';
+ const subtitle=wrap([book,generated?.artStyleLabel,themeLabel(story.theme)].filter(Boolean).join(' · '),26,width-2*M);
  const subtitleY=M+title.length*70+12;
  let y=subtitleY+subtitle.length*40+30;
  const cells:{index:number;x:number;y:number;caption:string[]}[]=[];
@@ -29,7 +31,7 @@ export function layoutStoryPng(story:Story,measure:(text:string,size:number)=>nu
   cells.push(...row);
   y+=ART+58+Math.max(...row.map(cell=>cell.caption.length))*LINE+GAP;
  }
- const footerY=y+6,reflection=wrap(story.reflection?`余味：${story.reflection}`:'故事到这里，余味留给你。',36,width-2*M);
+ const footerY=y+6,reflection=wrap(story.reflection?`A final thought: ${story.reflection}`:'The story ends here; the afterthought is yours.',36,width-2*M);
  const credit=wrap(publicationCredit(story),22,width-2*M);
  const height=footerY+32+reflection.length*56+30+credit.length*32+24;
  return {width,height,columns,title,subtitle,subtitleY,cells,footerY,reflection,credit};
@@ -39,7 +41,7 @@ export async function createStoryPng(story:Story,onProgress:(text:string)=>void=
  assertPngReady(story);
  await runtime.ready();
  const canvas=runtime.canvas(),context=canvas.getContext('2d');
- if(!context)throw Error('当前浏览器暂不支持 PNG 导出，请换个浏览器试试。');
+ if(!context)throw Error('PNG export is not supported by this browser. Try another browser.');
  const ctx:CanvasRenderingContext2D=context;
  const font=(size:number)=>{ctx.font=`${size}px ${family}`;ctx.textBaseline='top';};
  const layout=layoutStoryPng(story,(text,size)=>{font(size);return ctx.measureText(text).width;});
@@ -52,7 +54,7 @@ export async function createStoryPng(story:Story,onProgress:(text:string)=>void=
   text(layout.title,M,M,52,70,'#263a2e');
   text(layout.subtitle,M,layout.subtitleY,26,40,'#6b7465');
   for(const cell of layout.cells){
-   onProgress(`正在整理第 ${cell.index+1} / ${story.pages.length} 幅`);
+   onProgress(`Preparing frame ${cell.index+1} / ${story.pages.length}`);
    const blob=await runtime.read(story.pages[cell.index].image,cell.index);
    await runtime.image(blob,image=>{
     const scale=Math.min(CARD/image.width,ART/image.height),w=image.width*scale,h=image.height*scale;
@@ -64,8 +66,8 @@ export async function createStoryPng(story:Story,onProgress:(text:string)=>void=
   ctx.strokeStyle='#c9cbbb';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(M,layout.footerY);ctx.lineTo(layout.width-M,layout.footerY);ctx.stroke();
   text(layout.reflection,M,layout.footerY+32,36,56,'#263a2e');
   text(layout.credit,M,layout.height-24-layout.credit.length*32,22,32,'#6b7465');
-  onProgress('正在保存一页 PNG');
-  return await new Promise<Blob>((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(Error('PNG 排版失败，请重试。')),'image/png'));
+  onProgress('Saving overview PNG');
+  return await new Promise<Blob>((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(Error('PNG rendering failed. Retry.')),'image/png'));
  }finally{canvas.width=0;canvas.height=0;}
 }
 

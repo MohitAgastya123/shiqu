@@ -1,3 +1,5 @@
+import {englishOriginal} from '../lib/reader-source-types.ts';
+// English workflow expectations preserve source evidence, saved work and recovery contracts.
 // Protect saved candidate choices, restart safety and the all-rejected repair path through real adapters.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -17,7 +19,7 @@ for(const provider of ['codex','gemini'])for(const index of [2,3])test(`${provid
    const doc=await document(f,id);frames=structuredClone(doc.plan.pages);
    assert.deepEqual(doc.reflectionCandidates,candidates);assert.deepEqual(payload.reflectionCandidates,candidates);
    assert.equal(payload.theme,undefined);
-   assert.equal(payload.verifiedOriginal.text,doc.original.text);assert.equal(payload.plan.reflection,candidates[0]);
+   assert.equal(payload.verifiedOriginal.text,englishOriginal(doc.original).text);assert.equal(payload.plan.reflection,candidates[0]);
    assert.ok(schema.required.includes('reflectionChoice'));assert.equal(f.control.calls.length,0);
    return {issues:[],reflectionChoice:choice(index)};
   }

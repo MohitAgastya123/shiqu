@@ -1,3 +1,4 @@
+// English product messages; source evidence and machine identifiers remain stable.
 // Share the Responses text adapter with DeepSeek; only OpenAI supports image generation here.
 // Never log provider bodies or credentials, fetch returned image URLs, retry, or fall back to another provider.
 import {formatSystemPrompt} from '../lib/reader-prompt-format.ts';
@@ -50,13 +51,13 @@ export function safeOpenAIError(error:unknown){
  const code=error instanceof OpenAIError?error.message:error instanceof z.ZodError?'INVALID_OUTPUT':error instanceof Error&&/abort|timeout/i.test(error.name)?'TIMEOUT':'PROVIDER_ERROR';
  console.error('openai_request_failed',JSON.stringify({code,status:error instanceof OpenAIError?error.status:undefined}));
  if(error instanceof OpenAIError){
-  if(code==='MODEL_UNAVAILABLE')return 'OpenAI 未采用指定的主题匹配模型，请检查 Luna 模型权限后重试。';
-  if(error.status===401||error.status===403)return 'OpenAI API 密钥或模型权限不可用，请检查服务配置。';
-  if(error.status===402||error.status===429)return 'OpenAI API 计费、额度或速率限制暂不可用；进度已保留。';
-  if(error.status===404)return 'OpenAI API 模型不可用，请检查文本与图片模型设置。';
-  if(code==='REFUSED')return 'OpenAI 暂时无法生成这段内容，请调整故事或制作要求。';
+  if(code==='MODEL_UNAVAILABLE')return 'OpenAI did not use the requested theme matching model. Check Luna model access and retry.';
+  if(error.status===401||error.status===403)return 'The OpenAI API key or model access is unavailable. Check provider settings.';
+  if(error.status===402||error.status===429)return 'OpenAI API billing, quota, or rate limits prevent this request. Progress has been retained.';
+  if(error.status===404)return 'The OpenAI API model is unavailable. Check text and image model settings.';
+  if(code==='REFUSED')return 'OpenAI could not generate this content. Adjust the story or production instructions.';
  }
- return code==='TIMEOUT'?'OpenAI API 等待超时，已保留进度。':'OpenAI API 暂时无法完成这一步，已保留进度。';
+ return code==='TIMEOUT'?'OpenAI API timed out. Progress has been retained.':'OpenAI API could not complete this step. Progress has been retained.';
 }
 export function createOpenAIProvider(variables:Record<string,string|undefined>,media:MediaStore,transport:typeof fetch):ReaderProvider{
  return createResponsesProvider('openai',variables,media,transport);
@@ -69,11 +70,11 @@ function safeDeepSeekError(error:unknown){
  const code=error instanceof OpenAIError?error.message:error instanceof z.ZodError?'INVALID_OUTPUT':validation|| (error instanceof Error&&/abort|timeout/i.test(error.name)?'TIMEOUT':'PROVIDER_ERROR');
  console.error('deepseek_request_failed',JSON.stringify({code,status:error instanceof OpenAIError?error.status:undefined}));
  if(error instanceof OpenAIError){
-  if(error.status===401||error.status===403)return 'DeepSeek API 密钥或模型权限不可用，请检查服务配置。';
-  if(error.status===402||error.status===429)return 'DeepSeek API 计费、额度或速率限制暂不可用；进度已保留。';
-  if(error.status===404)return 'DeepSeek API 模型不可用，请检查文本模型设置。';
+  if(error.status===401||error.status===403)return 'The DeepSeek API key or model access is unavailable. Check provider settings.';
+  if(error.status===402||error.status===429)return 'DeepSeek API billing, quota, or rate limits prevent this request. Progress has been retained.';
+  if(error.status===404)return 'The DeepSeek API model is unavailable. Check text model settings.';
  }
- return code==='TIMEOUT'?'DeepSeek API 等待超时，已保留进度。':'DeepSeek API 暂时无法完成这一步，已保留进度。';
+ return code==='TIMEOUT'?'DeepSeek API timed out. Progress has been retained.':'DeepSeek API could not complete this step. Progress has been retained.';
 }
 function deepSeekEffort(effort:ReasoningEffort):ReasoningEffort{
  // DeepSeek maps medium and xhigh to high; expose the effective effort in saved call metadata.
@@ -117,11 +118,11 @@ function createResponsesProvider(provider:'openai'|'deepseek',variables:Record<s
   return {value:evidence.resolve(restoreOptional(parsed,evidence.schema)),model:value.model||requestedModel,requestId:value.id||requestId,usage:value.usage||null,reasoningEffort:effort,promptRecord:promptRecord(instructions,evidence.payload,outputSchema)};
  }
  function book(selection:Parameters<ReaderProvider['suggestions']>[0]){
-  const source=storySource(selection);if(source.isUrl)throw new ReaderError(400,label+' 模式请使用内置书籍或书名；网页 URL 来源请使用 Gemini。');return source.book;
+  const source=storySource(selection);if(source.isUrl)throw new ReaderError(400,label+' mode requires a built-in book or book title. Use Gemini for webpage URLs.');return source.book;
  }
  return {
   generationTimeoutMs:phase=>['recommend','plan','reflection','review','repair','image'].includes(phase)?timeoutMs:null,
-  async status(){return {configured:!!key,provider,models,voiceEnabled:false,taskReasoningEfforts:reasoning,themeMatching:{model:matchingModel,reasoningEffort:matchingEffort},...(deepseek&&!key?{message:'请通过 DEEPSEEK_API_KEY 提供 DeepSeek 密钥；不会使用其他提供方的密钥。'}:{})};},
+  async status(){return {configured:!!key,provider,models,voiceEnabled:false,taskReasoningEfforts:reasoning,themeMatching:{model:matchingModel,reasoningEffort:matchingEffort},...(deepseek&&!key?{message:'Provide a DeepSeek key through DEEPSEEK_API_KEY. Keys from other providers are never used.'}:{})};},
   async suggestions(selection,excluded,localBook,reading){
    const scanning=localBook?.purpose==='scan'||localBook?.purpose==='catalog';
    const run=async(report:(meta:{model?:string;usage?:unknown;acceptedCount?:number})=>void)=>{
@@ -138,7 +139,7 @@ function createResponsesProvider(provider:'openai'|'deepseek',variables:Record<s
    });
   },
   async recommendArt(selection,original){
-   if(!original?.localSource)throw new ReaderError(400,'请先选择已核对出处的故事。');
+   if(!original?.localSource)throw new ReaderError(400,'Select a story with a verified source first.');
    const result=await text(selectedArtRecommendationPrompt,selectedArtRecommendationPayload(selection,original),artRecommendationJson,reasoning.art,2048);return artRecommendationSchema.parse(result.value);
   },
   generator(){return {
@@ -151,7 +152,7 @@ function createResponsesProvider(provider:'openai'|'deepseek',variables:Record<s
     const value=storyDraftSchema.parse(result.value);if(selection.length!=='auto'&&value.pages.length!==selection.length)throw new OpenAIError('PLAN_LENGTH');return {...result,value};
    },
    async image(plan,page,id,reference,style='ink-pencil',productionPrompt='',artifactId){
-    if(deepseek)throw new ReaderError(400,'DeepSeek 当前仅支持文字制作，请在分镜审核后停止；不会自动调用其他提供方生图。');
+    if(deepseek)throw new ReaderError(400,'DeepSeek supports text production only. Stop after storyboard review; another provider will not be called automatically for images.');
     const size=imageRequestSize(variables.IMAGE_SIZE);if(!size)throw new OpenAIError('INVALID_IMAGE_SIZE',400);
     const prompt=imagePrompt(plan,page,style,productionPrompt,!!reference);
     let body:Record<string,unknown>|FormData={model:models.image,prompt,n:1,size:size.size,output_format:'png'},route='/images/generations';
@@ -170,7 +171,7 @@ function createResponsesProvider(provider:'openai'|'deepseek',variables:Record<s
     const asset=readerImageAsset(id,page,imageTypes[mime],artifactId);await media.put(asset.key,bytes,{contentType:mime});
     return {value:asset.url,model:models.image,requestId,usage:value.usage||null,promptRecord:promptRecord('',prompt,undefined,reference||undefined)};
    },
-   async audio(){throw new ReaderError(400,'当前不提供配音。');},safeError,
+   async audio(){throw new ReaderError(400,'Audio narration is not currently available.');},safeError,
   };},safeError,
  };
 }

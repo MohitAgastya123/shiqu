@@ -35,7 +35,7 @@ test('cancel never saves; whitespace is rejected; a failed save keeps the draft 
  const submit=()=>find(render(),node=>node.type==='form').props.onSubmit({preventDefault(){}});
  const button=()=>find(render(),node=>node.props?.type==='submit');
  assert.equal(button().props.disabled,true);
- find(render(),node=>node.type==='button'&&node.props.children==='取消').props.onClick();
+ find(render(),node=>node.type==='button'&&node.props.children==="Cancel").props.onClick();
  assert.equal(closed,1);assert.deepEqual(names,[]);closed=0;
  input().props.onChange({target:{value:'   '}});assert.equal(button().props.disabled,true);
  input().props.onChange({target:{value:'  新故事名  '}});assert.equal(button().props.disabled,false);
@@ -54,7 +54,7 @@ test('source-only sessions can open naming and their saved display names appear 
  const {Panel,Shelf,beginRender}=module.exports;
  const session={id:'source-only',story:null,selection:{bookId:'西游记',storyTitle:'三打白骨精',displayTitle:'白虎岭上的误解',theme:'原典故事',artStyle:'ink-pencil'},state:'idle',generationControl:'paused',intake:{phase:'confirming'},page:0,saved:false};
  const names=[],props={story:null,session,busy:false,disabled:false,onRename:(...args)=>names.push(args)};
- const panel=Panel(props),button=find(panel,node=>node.type==='button'&&node.props.children==='修改故事名');
+ const panel=Panel(props),button=find(panel,node=>node.type==='button'&&node.props.children==="Edit story title");
  assert.equal(button.props.disabled,false);button.props.onClick();
  assert.deepEqual(names,[[session.id,'白虎岭上的误解']]);
  assert.equal(find(Panel({...props,onRename:undefined}),node=>node.type==='button').props.disabled,true);

@@ -1,3 +1,4 @@
+# Verify English terminal messages with the same isolated onboarding interactions.
 """Test real terminal input against disposable CLI homes; never use personal settings or live providers."""
 import errno
 import json
@@ -165,23 +166,23 @@ class StartupTerminalTests(unittest.TestCase):
         return json.loads(settings), revision, keys
 
     def choose(self, child, provider, key=None, models=("", "")):
-        child.expect("输入编号或名称")
+        child.expect("Enter a number or name")
         child.send(provider + "\n")
         if provider in ["openai", "gemini"]:
-            child.expect("API 密钥（输入隐藏")
+            child.expect("API key (hidden input")
             child.send((key or "") + "\n")
-            child.expect("文本模型")
+            child.expect("Text model")
             child.send(models[0] + "\n")
-            child.expect("图片模型")
+            child.expect("Image model")
             child.send(models[1] + "\n")
         elif provider == "codex":
-            child.expect("Codex 模型")
+            child.expect("Codex model")
             child.send("\n")
 
     def configure(self, provider, key=None, models=("", "")):
         child = self.start("--configure")
         self.choose(child, provider, key, models)
-        child.expect("服务配置已保存。")
+        child.expect("Provider settings saved.")
         child.finish()
         if key:
             self.assertNotIn(key.encode(), child.output)
@@ -203,10 +204,10 @@ class StartupTerminalTests(unittest.TestCase):
                         if shelf.exists():
                             shutil.rmtree(shelf)
                 child, port = self.running()
-                child.expect("请输入要使用或创建的目录")
+                child.expect("Enter a directory to use or create")
                 child.send("\n")
                 self.choose(child, provider, "test-only-" + provider)
-                child.expect("拾趣: http://")
+                child.expect("Shiqu: http://")
                 if provider != "codex":
                     status = child.request_json(f"http://127.0.0.1:{port}/api/reader/status")
                     self.assertEqual(status["provider"], provider)
@@ -214,9 +215,9 @@ class StartupTerminalTests(unittest.TestCase):
                 child.close()
                 self.children.remove(child)
                 restarted, _ = self.running()
-                restarted.expect("拾趣: http://")
-                self.assertNotIn("选择生成服务".encode(), restarted.output)
-                self.assertNotIn("请输入要使用或创建的目录".encode(), restarted.output)
+                restarted.expect("Shiqu: http://")
+                self.assertNotIn("Choose a generation provider".encode(), restarted.output)
+                self.assertNotIn("Enter a directory to use or create".encode(), restarted.output)
                 restarted.close()
                 self.children.remove(restarted)
 
@@ -226,19 +227,19 @@ class StartupTerminalTests(unittest.TestCase):
         self.assertFalse(settings["libraryConfigured"])
         self.assertFalse(Path(settings["dataDirectory"]).exists())
         child, _ = self.running()
-        child.expect("请输入要使用或创建的目录")
+        child.expect("Enter a directory to use or create")
         child.send(str(self.root / "confirmed shelf") + "\n")
-        child.expect("拾趣: http://")
-        self.assertNotIn("选择生成服务".encode(), child.output)
+        child.expect("Shiqu: http://")
+        self.assertNotIn("Choose a generation provider".encode(), child.output)
         self.assertEqual(self.state()[0]["dataDirectory"], str(self.root / "confirmed shelf"))
 
     def test_cancelled_first_library_choice_has_no_database(self):
         for cancel in ["\x03", "\x04"]:
             with self.subTest(cancel=repr(cancel)):
                 child, _ = self.running()
-                child.expect("请输入要使用或创建的目录")
+                child.expect("Enter a directory to use or create")
                 child.send(cancel)
-                child.expect("已取消选择书库")
+                child.expect("Library selection canceled")
                 child.finish(1)
                 self.assertFalse(self.database.exists())
 
@@ -248,22 +249,22 @@ class StartupTerminalTests(unittest.TestCase):
         for cancel in ["\x03", "\x04"]:
             with self.subTest(cancel=repr(cancel)):
                 child = self.start("--configure")
-                child.expect("输入编号或名称")
+                child.expect("Enter a number or name")
                 child.send("gemini\n")
-                child.expect("API 密钥（输入隐藏")
+                child.expect("API key (hidden input")
                 child.send("test-only-discarded" + cancel)
-                child.expect("已取消服务配置")
+                child.expect("Provider setup canceled")
                 child.finish(1)
                 self.assertNotIn(b"test-only-discarded", child.output)
                 self.assertEqual(self.state(), before)
         child = self.start("--configure")
-        child.expect("输入编号或名称")
+        child.expect("Enter a number or name")
         child.send("gemini\n")
-        child.expect("API 密钥（输入隐藏")
+        child.expect("API key (hidden input")
         child.send("test-only-discarded\n")
-        child.expect("文本模型")
+        child.expect("Text model")
         child.send("\x04")
-        child.expect("已取消服务配置")
+        child.expect("Provider setup canceled")
         child.finish(1)
         self.assertEqual(self.state(), before)
 
@@ -285,7 +286,7 @@ class StartupTerminalTests(unittest.TestCase):
             db.execute("UPDATE desktop_settings SET value=?,revision=revision+1", [json.dumps(settings)])
         reset = self.start("--reset-providers")
         self.choose(reset, "readonly")
-        reset.expect("服务配置已保存。")
+        reset.expect("Provider settings saved.")
         reset.finish()
         after, _, keys = self.state()
         self.assertEqual(keys, {})
@@ -297,13 +298,13 @@ class StartupTerminalTests(unittest.TestCase):
         self.configure("readonly")
         before = self.state()
         child = self.start("--configure")
-        child.expect("输入编号或名称")
+        child.expect("Enter a number or name")
         child.send("invalid-provider\n")
-        child.expect("输入编号或名称")
+        child.expect("Enter a number or name")
         child.send("openai\n")
-        child.expect("API 密钥（输入隐藏")
+        child.expect("API key (hidden input")
         child.send("\n")
-        child.expect("未输入 API 密钥")
+        child.expect("No API key was entered")
         child.finish(1)
         self.assertEqual(self.state(), before)
 

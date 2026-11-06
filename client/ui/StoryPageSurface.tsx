@@ -1,3 +1,4 @@
+// English interface: labels, accessibility text, and workflow messages use English.
 // Edge taps turn pages; center taps toggle metadata and controls while narration stays visible.
 // Swipes, drags and touch long presses must not trigger an extra tap action.
 import {useRef,type PointerEvent,type MouseEvent} from 'react';
@@ -34,7 +35,7 @@ export default function StoryPageSurface({onTurn,onDrag,onToggleMetadata}:{onTur
   suppressClick.current=!!direction||travel>8||event.timeStamp-start.startedAt>450;
   if(direction)onTurn(direction);
  }
- return <button type="button" className="yu-swipe-surface" aria-label="点击画面中间显示或隐藏阅读信息与控件，旁白始终显示，左侧边缘返回上一页，右侧边缘进入下一页，也可上下或左右滑动翻页"
+ return <button type="button" className="yu-swipe-surface" aria-label="Tap the center to show or hide reading controls. Captions stay visible. Tap the left or right edge for the previous or next page, or swipe to turn pages."
   onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={cancel}
   onContextMenu={event=>{if(event.button!==2||pointerType.current==='touch')return;event.preventDefault();cancel();const direction=edgeDirection(event);if(direction)onTurn(direction);}}
   onClick={event=>{if(event.detail===0)onToggleMetadata();else if(!suppressClick.current){const direction=edgeDirection(event);if(direction)onTurn(direction);else onToggleMetadata();}suppressClick.current=true;}}/>;

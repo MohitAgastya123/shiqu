@@ -1,4 +1,6 @@
+// English interface: labels, accessibility text, and workflow messages use English.
 // Resolve saved source receipts through the book directory so reopened and replacement pickers name the originals.
+import {themeLabel} from '../english-labels';
 import {useEffect,useState} from 'react';
 import type {Selection} from '@/lib/reader-model';
 import type {BookContents,BookContentEntry} from '@/lib/reader-contents';
@@ -16,16 +18,16 @@ export default function StoryExtractionContext({selection,book}:{selection:Selec
   request('reader/books/'+encodeURIComponent(bookId)+'/contents').then((contents:BookContents)=>{
    const directory=new Map(contents.entries.filter(entry=>entry.source).map(entry=>[localSourceKey(entry.source!),entry]));
    const entries=sources.flatMap(source=>{const entry=directory.get(localSourceKey(source));return entry?[entry]:[];});
-   if(live)setLoaded({key,entries,...(entries.length!==sources.length?{error:'部分已选原文已更新，请返回核对原文范围。'}:{})});
-  }).catch(()=>{if(live)setLoaded({key,entries:[],error:'所选原文名称暂未加载，请重试。'});});
+   if(live)setLoaded({key,entries,...(entries.length!==sources.length?{error:"Some selected source text has changed. Go back and verify the source scope."}:{})});
+  }).catch(()=>{if(live)setLoaded({key,entries:[],error:"Could not load the selected source titles. Try again."});});
   return()=>{live=false;};
  },[key,retry]);
  const current=loaded?.key===key?loaded:null;
- return <section className="yu-extraction-context" aria-label="已选原文与主题">
-  <p className="yu-extraction-book">《{book}》</p>
-  <dl><dt>原文范围</dt><dd>{!sources.length?'自动（未限定章节或段落）':!current?<span role="status">正在读取已选原文…</span>:<>
+ return <section className="yu-extraction-context" aria-label="Selected source and theme">
+  <p className="yu-extraction-book">“{book}”</p>
+  <dl><dt>Source scope</dt><dd>{!sources.length?"Automatic (no chapter or passage limit)":!current?<span role="status">Loading selected source…</span>:<>
    {!!current.entries.length&&<ul>{current.entries.map(entry=><li key={entry.id}><strong>{entry.title}</strong>{entry.kind==='story'&&<p>{entry.excerpt}</p>}</li>)}</ul>}
-   {current.error&&<div role="status"><p>{current.error}</p><button type="button" className="yu-context-retry" onClick={()=>setRetry(value=>value+1)}>重新加载原文名称</button></div>}
-  </>}</dd><dt>主题</dt><dd>{selection.theme==='原典故事'?'不限定主题':selection.theme}</dd></dl>
+   {current.error&&<div role="status"><p>{current.error}</p><button type="button" className="yu-context-retry" onClick={()=>setRetry(value=>value+1)}>Reload source titles</button></div>}
+  </>}</dd><dt>Theme</dt><dd>{selection.theme==='原典故事'?"Any theme":themeLabel(selection.theme)}</dd></dl>
  </section>;
 }

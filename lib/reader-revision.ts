@@ -1,3 +1,4 @@
+// English product text and generation contracts; canonical source evidence remains unchanged.
 // Plan revisions from actual image inputs. Captions/reflection never invalidate artwork;
 // a changed anchor, cast, style or global image preference invalidates its dependants.
 // Style alone preserves the saved script's review; content and acceptance edits invalidate it.
@@ -38,13 +39,13 @@ export function revisionImpact(base:RevisionBase,changes:RevisionChanges):Revisi
 }
 export function checkedRevision(base:RevisionBase,changes:RevisionChanges){
  const parsed=revisionChangesSchema.safeParse(changes);
- if(!parsed.success){const issue=parsed.error.issues[0],page=issue.path.indexOf('pages');throw new ReaderError(400,page>=0?`第 ${Number(issue.path[page+1])+1} 幅内容长度不符合要求：旁白 8–90 字，画面提示词 20–1800 字。`:'请检查制作要求、人物设定及余味的内容长度。');}
+ if(!parsed.success){const issue=parsed.error.issues[0],page=issue.path.indexOf('pages');throw new ReaderError(400,page>=0?`Frame ${Number(issue.path[page+1])+1} has invalid text length: caption 8–500 characters; scene prompt 20–4000 characters.`:'Check the lengths of creative requirements, character descriptions and ending.');}
  const impact=revisionImpact(base,changes);
- if(changes.plan&&!base.plan)throw new ReaderError(400,'完整分镜保存后才可手动修改分镜。');
- if(!impact.changed)throw new ReaderError(400,'尚未修改内容，无需创建新版。');
- if(impact.conflict)throw new ReaderError(400,'重新编排与手动分镜不能同时提交，请选择保留哪一类修改。');
- if(changes.plan&&(['title','summary','sourceReference','adaptationNote'] as const).some(key=>changes.plan![key]!==base.plan![key]))throw new ReaderError(400,'本次仅修改分镜、人物与余味，原文出处和故事元信息保持不变。');
- if(changes.plan&&changes.plan.pages.length!==base.plan!.pages.length)throw new ReaderError(400,'请调整叙事详略，由模型重新编排数量，不要直接增删分镜。');
+ if(changes.plan&&!base.plan)throw new ReaderError(400,'Save the complete storyboard before editing frames manually.');
+ if(!impact.changed)throw new ReaderError(400,'No content has changed; a new version is unnecessary.');
+ if(impact.conflict)throw new ReaderError(400,'Replanning and manual storyboard edits cannot be submitted together. Choose which changes to retain.');
+ if(changes.plan&&(['title','summary','sourceReference','adaptationNote'] as const).some(key=>changes.plan![key]!==base.plan![key]))throw new ReaderError(400,'This revision may change frames, characters and ending; source and story metadata must remain unchanged.');
+ if(changes.plan&&changes.plan.pages.length!==base.plan!.pages.length)throw new ReaderError(400,'Adjust narrative detail to replan the count rather than directly adding or removing frames.');
  const selection:Selection={...base.selection,...(changes.acceptancePrompt!==undefined?{acceptancePrompt:changes.acceptancePrompt}:{}),productionPrompt:changes.productionPrompt??base.selection.productionPrompt,artStyle:changes.artStyle??base.selection.artStyle,narrativeDetail:changes.narrativeDetail??base.selection.narrativeDetail,length:changes.length??(impact.replan?'auto':base.selection.length)};
  return {impact,selection,plan:impact.replan?null:structuredClone(changes.plan||base.plan)};
 }

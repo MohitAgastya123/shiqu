@@ -1,3 +1,4 @@
+// English product messages; source identities and historical evidence stay stable.
 // Read real whole-book progress; stalled or disconnected streams must release the picker.
 import {suggestionBatchSchema,suggestionProgressSchema} from './reader-suggestions.ts';
 import type {SuggestionBatch,SuggestionProgress} from './reader-suggestions.ts';
@@ -13,8 +14,8 @@ export async function requestSuggestions(data:unknown,signal:AbortSignal,onProgr
  let reader:ReadableStreamDefaultReader<Uint8Array>|undefined;
  try{
   const response=await transport('/api/reader/suggestions',{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/x-ndjson'},body:JSON.stringify(data),signal:abort.signal});
-  if(!response.ok){let message='选题服务暂时不可用，请稍后重试。';try{const value=await response.json();if(typeof value.error==='string')message=value.error;}catch{}throw new Error(message);}
-  if(!response.body||!response.headers.get('content-type')?.includes('application/x-ndjson'))throw new Error('选题连接已中断，请重试。');
+  if(!response.ok){let message='Story discovery is unavailable. Retry shortly.';try{const value=await response.json();if(typeof value.error==='string')message=value.error;}catch{}throw new Error(message);}
+  if(!response.body||!response.headers.get('content-type')?.includes('application/x-ndjson'))throw new Error('Story discovery disconnected. Retry.');
   reader=response.body.getReader();
   const decoder=new TextDecoder();let buffer='';
   while(true){
@@ -26,13 +27,13 @@ export async function requestSuggestions(data:unknown,signal:AbortSignal,onProgr
     const event=JSON.parse(line);
     if(event.type==='progress'){onProgress(suggestionProgressSchema.parse(event.progress));touch();}
     else if(event.type==='result')return suggestionBatchSchema.parse(event.batch);
-    else if(event.type==='error')throw new Error(typeof event.error==='string'?event.error:'选题暂时不可用，请重试。');
-    else throw new Error('选题响应不完整，请重试。');
+    else if(event.type==='error')throw new Error(typeof event.error==='string'?event.error:'Story discovery is unavailable. Retry.');
+    else throw new Error('Story discovery returned an incomplete response. Retry.');
    }
-   if(done)throw new Error('选题连接已中断，请重试。');
+   if(done)throw new Error('Story discovery disconnected. Retry.');
   }
  }catch(error){
-  if(timedOut)throw new Error('通读等待超时，请重试。前面的推荐批次已保留。');
+  if(timedOut)throw new Error('Source reading timed out. Retry; earlier candidate batches are saved.');
   throw error;
  }finally{
   clearTimeout(timer);signal.removeEventListener('abort',cancel);

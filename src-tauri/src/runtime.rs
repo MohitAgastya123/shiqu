@@ -1,3 +1,4 @@
+// English native controls and diagnostics; persisted identifiers and source data are unchanged.
 // Verify bundled Node on every desktop launch, then supervise the runtime over private stdin.
 use crate::config::Settings;
 use fs2::FileExt;
@@ -40,13 +41,13 @@ struct BundleManifest {
 }
 
 fn digest(file: &Path) -> Result<String, String> {
-    let mut input = File::open(file).map_err(|_| "内置 Node 资源缺失，请重新安装拾趣。")?;
+    let mut input = File::open(file).map_err(|_| "Bundled Node resources are missing. Reinstall Shiqu.")?;
     let mut hash = Sha256::new();
     let mut buffer = [0u8; 65536];
     loop {
         let size = input
             .read(&mut buffer)
-            .map_err(|_| "无法校验内置 Node，请重新安装拾趣。")?;
+            .map_err(|_| "Bundled Node could not be verified. Reinstall Shiqu.")?;
         if size == 0 {
             break;
         }
@@ -56,12 +57,12 @@ fn digest(file: &Path) -> Result<String, String> {
 }
 
 pub fn node_info(_explicit: &str, root: &Path) -> Result<NodeInfo, String> {
-    let directory = root.parent().ok_or("应用资源目录无效。")?.join("node");
+    let directory = root.parent().ok_or("Invalid app resources directory.")?.join("node");
     let manifest: BundleManifest = serde_json::from_slice(
         &fs::read(directory.join("manifest.json"))
-            .map_err(|_| "内置 Node 清单缺失，请重新安装拾趣。")?,
+            .map_err(|_| "The bundled Node manifest is missing. Reinstall Shiqu.")?,
     )
-    .map_err(|_| "内置 Node 清单损坏，请重新安装拾趣。")?;
+    .map_err(|_| "The bundled Node manifest is damaged. Reinstall Shiqu.")?;
     let binary = if cfg!(windows) { "node.exe" } else { "node" };
     let platform = if cfg!(target_os = "macos") {
         "darwin"
@@ -81,17 +82,17 @@ pub fn node_info(_explicit: &str, root: &Path) -> Result<NodeInfo, String> {
         || manifest.arch != arch
         || manifest.binary != binary
     {
-        return Err("内置 Node 与应用版本或平台不匹配，请重新安装拾趣。".into());
+        return Err("Bundled Node does not match the app version or platform. Reinstall Shiqu.".into());
     }
     let executable = directory.join(binary);
     if digest(&executable)? != manifest.sha256
         || digest(&directory.join("LICENSE"))? != manifest.license_sha256
     {
-        return Err("内置 Node 校验失败，请重新安装拾趣。".into());
+        return Err("Bundled Node verification failed. Reinstall Shiqu.".into());
     }
-    let info = probe(&executable).map_err(|_| "内置 Node 无法运行，请重新安装拾趣。")?;
+    let info = probe(&executable).map_err(|_| "Bundled Node could not run. Reinstall Shiqu.")?;
     if info.version != version || info.platform != platform || info.arch != arch {
-        return Err("内置 Node 版本或架构不兼容，请重新安装拾趣。".into());
+        return Err("The bundled Node version or architecture is incompatible. Reinstall Shiqu.".into());
     }
     Ok(info)
 }
@@ -148,16 +149,16 @@ fn wait(child: &mut Child, timeout: Duration) -> Result<(), String> {
                 return if status.success() {
                     Ok(())
                 } else {
-                    Err("子进程检查失败，请确认可执行文件与运行环境。".into())
+                    Err("The subprocess check failed. Check the executable and runtime environment.".into())
                 }
             }
-            Err(_) => return Err("无法读取进程状态。".into()),
+            Err(_) => return Err("The process status could not be read.".into()),
             _ => {}
         }
         if Instant::now() >= deadline {
             let _ = child.kill();
             let _ = child.wait();
-            return Err("进程检查超时，请检查可执行文件。".into());
+            return Err("The process check timed out. Check the executable.".into());
         }
         thread::sleep(Duration::from_millis(25));
     }
@@ -170,39 +171,39 @@ pub fn probe(binary: &Path) -> Result<NodeInfo, String> {
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .spawn()
-        .map_err(|_| "内置 Node 无法运行，请重新安装拾趣。")?;
+        .map_err(|_| "Bundled Node could not run. Reinstall Shiqu.")?;
     wait(&mut child, Duration::from_secs(8))?;
     let mut text = String::new();
     child
         .stdout
         .take()
-        .ok_or("Node 未返回状态。")?
+        .ok_or("Node did not return a status.")?
         .take(4096)
         .read_to_string(&mut text)
-        .map_err(|_| "无法读取 Node 检查结果。")?;
+        .map_err(|_| "The Node check result could not be read.")?;
     let info: NodeInfo = serde_json::from_str(&text)
-        .map_err(|_| "Node 未返回有效状态；需要支持 SQLite 的 Node 24。")?;
+        .map_err(|_| "Node returned an invalid status. Node 24 with SQLite support is required.")?;
     validate_node(&info)?;
     Ok(info)
 }
 fn validate_node(info: &NodeInfo) -> Result<(), String> {
     if info.version.split('.').next() != Some("24") || !info.sqlite {
-        return Err("需要 Node 24（推荐 24.22.1）及内置 SQLite；当前运行时不兼容。".into());
+        return Err("Node 24 (24.22.1 recommended) with built-in SQLite is required. The current runtime is incompatible.".into());
     }
     Ok(())
 }
 
 fn lock(directory: &Path) -> Result<File, String> {
-    fs::create_dir_all(directory).map_err(|_| "无法创建数据目录。")?;
+    fs::create_dir_all(directory).map_err(|_| "The data directory could not be created.")?;
     let file = OpenOptions::new()
         .create(true)
         .truncate(false)
         .read(true)
         .write(true)
         .open(directory.join(".desktop.lock"))
-        .map_err(|_| "无法打开数据目录锁。")?;
+        .map_err(|_| "The data directory lock could not be opened.")?;
     file.try_lock_exclusive()
-        .map_err(|_| "此数据目录已由另一个桌面实例使用。")?;
+        .map_err(|_| "Another desktop instance is using this data directory.")?;
     Ok(file)
 }
 
@@ -267,7 +268,7 @@ pub fn launch(
     let node = node_info(&settings.node_path, root)?;
     let entry = root.join("dist/server/desktop.js");
     if !entry.is_file() {
-        return Err("应用运行资源缺失，请重新安装拾趣。".into());
+        return Err("App runtime resources are missing. Reinstall Shiqu.".into());
     }
     let mut child = command(Path::new(&node.path))
         .arg("--no-warnings")
@@ -277,19 +278,19 @@ pub fn launch(
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .spawn()
-        .map_err(|_| "无法启动 Node 服务。")?;
+        .map_err(|_| "The Node service could not be started.")?;
     let input = json!({"action":action,"settings":settings,"key":key});
     let wrote = child
         .stdin
         .as_mut()
-        .ok_or("无法打开服务输入。")?
+        .ok_or("The service input could not be opened.")?
         .write_all(format!("{}\n", input).as_bytes());
     if wrote.is_err() {
         let _ = child.kill();
         let _ = child.wait();
-        return Err("无法发送服务配置。".into());
+        return Err("The service configuration could not be sent.".into());
     }
-    let output = child.stdout.take().ok_or("无法打开服务状态流。")?;
+    let output = child.stdout.take().ok_or("The service status stream could not be opened.")?;
     let (send, receive) = mpsc::channel();
     thread::spawn(move || {
         stream_status(output, send);
@@ -306,7 +307,7 @@ pub fn launch(
     let Some(response) = response else {
         drop(child.stdin.take());
         let _ = wait(&mut child, Duration::from_secs(8));
-        return Err("服务未及时启动。请检查 Node 24、端口和数据目录。".into());
+        return Err("The service did not start in time. Check Node 24, the port, and the data directory.".into());
     };
     if let Some(message) = response.get("error").and_then(Value::as_str) {
         drop(child.stdin.take());
@@ -326,7 +327,7 @@ pub fn ensure_library(settings: &Settings, root: &Path) -> Result<(), String> {
     drop(child.stdin.take());
     wait(&mut child, Duration::from_secs(8))?;
     if response["upgraded"] != true {
-        return Err("书库升级未完成。".into());
+        return Err("The library upgrade is incomplete.".into());
     }
     Ok(())
 }
@@ -381,7 +382,7 @@ mod tests {
         assert!(node_info("/usr/local/bin/node", &root)
             .err()
             .unwrap()
-            .contains("校验失败"));
+            .contains("verification failed"));
         fs::remove_dir_all(folder).unwrap();
     }
     #[test]

@@ -23,7 +23,7 @@ export function hydrateReadingPlan(book:LocalBook,manifest:ReadingManifest):Read
   const rows:Row[]=[];
   for(const range of block.ranges){const section=book.sections.find(s=>s.id===range.sectionId);if(!section)throw Error('Unknown reading chapter');const first=section.units.findIndex(u=>u.id===range.firstUnit),last=section.units.findIndex(u=>u.id===range.lastUnit);if(first<0||last<first)throw Error('Invalid reading boundary');rows.push(...section.units.slice(first,last+1).map(unit=>({section,unit})));}
   const ids=rows.map(r=>r.unit.id);seen.push(...ids);
-  return {text:manifest.mode==='whole'?book.input.text:render(rows),visible:new Set(ids),chars:rows.reduce((n,r)=>n+Array.from(r.unit.text.replace(/\s/gu,'')).length,0),chapters:[...new Set(rows.map(r=>r.section.title))]};
+  return {text:manifest.mode==='whole'?book.input.text:render(rows),visible:new Set(ids),chars:rows.reduce((n,r)=>n+Array.from(r.unit.text.replace(/\s/gu,'')).length,0),chapters:[...new Set(rows.map(r=>`Chapter ${book.sections.findIndex(section=>section.id===r.section.id)+1}`))]};
  });
  if(JSON.stringify(seen)!==JSON.stringify(expected)||manifest.mode==='whole'&&blocks.length!==1)throw Error('Reading manifest does not cover original');
  return blocks;

@@ -1,3 +1,4 @@
+// Verify English runtime messages while preserving source/content fixtures.
 // Validate shared settings migration, transactional updates, secret isolation and terminal setup using temporary data only.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -34,7 +35,7 @@ test('legacy JSON import retains the confirmed library without inventing API cre
 test('patches preserve concurrent unrelated updates, stale revisions and key failures roll back',async t=>{
  const f=await fixture(t),first=new SystemSettingsStore(f.file,f.library),second=new SystemSettingsStore(f.file,f.library);t.after(()=>first.close());t.after(()=>second.close());
  const revision=first.revision();second.save({port:3200});
- assert.throws(()=>first.save({port:3300},undefined,revision),/另一入口/);assert.equal(first.settings().port,3200);
+ assert.throws(()=>first.save({port:3300},undefined,revision),/changed elsewhere/);assert.equal(first.settings().port,3200);
  first.save({provider:'openai'},{provider:'openai',value:'test-only'});second.save({codexModel:'another-model'});
  assert.equal(first.settings().codexModel,'another-model');assert.equal(second.settings().provider,'openai');
  const before=first.settings();assert.throws(()=>first.save({port:3400},{provider:'openai',value:'bad\nkey'}));assert.deepEqual(first.settings(),before);assert.equal(first.key('openai'),'test-only');

@@ -1,9 +1,9 @@
+// English browser controls exercise the same production workflow and preserve Chinese source fixtures.
 // Run the production app behind the real development proxy with controlled inference and retained SQLite.
 // UI tests mutate only through browser controls; helpers expose read-only state and model completion gates.
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import {mkdir,writeFile} from 'node:fs/promises';
-import {execFileSync} from 'node:child_process';
 import {createServer} from 'vite';
 import {chromium} from 'playwright';
 import {createHttpServer} from '../../server/http.ts';
@@ -51,33 +51,33 @@ export async function storyBrowser(t,caseId){
  }finally{reading=false;}}
  const timer=setInterval(()=>void sample(),30);
  capture=async()=>{await sample();closed=true;clearInterval(timer);await page.screenshot({path:path.join(directory,'final.png'),fullPage:true}).catch(()=>{});await context.tracing.stop({path:path.join(directory,'trace.zip')});
-  await writeFile(path.join(directory,'result.json'),JSON.stringify({caseId,result,failure,build:process.env.SHIQU_E2E_BUILD_ID||execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim()+'+development',database:path.join(f.dataDirectory,'shiqu.sqlite'),url,errors,commands,transitions,calls:{catalog:library.calls.catalog.length,plans:f.control.plans.length,images:f.control.calls.length,reviews:f.control.reviews.length}},null,2));
+  await writeFile(path.join(directory,'result.json'),JSON.stringify({caseId,result,failure,build:process.env.SHIQU_E2E_BUILD_ID||'source-folder+development',database:path.join(f.dataDirectory,'shiqu.sqlite'),url,errors,commands,transitions,calls:{catalog:library.calls.catalog.length,plans:f.control.plans.length,images:f.control.calls.length,reviews:f.control.reviews.length}},null,2));
  };
  async function execute(body){try{await body();assert.deepEqual(errors,[],'No uncaught browser errors');}catch(error){result='FAIL';failure=error.stack;throw error;}}
  async function screenshot(name){await page.screenshot({path:path.join(directory,name+'.png'),fullPage:true});}
  async function create({title,theme,prepare=true}={}){
-  await page.goto(url);await page.getByRole('button',{name:'新建故事',exact:true}).click();
-  const sheet=page.getByRole('dialog',{name:'这一篇，想怎样读？'});
-  await sheet.getByRole('group',{name:'选择书籍'}).getByRole('button',{name:'庄子',exact:true}).click();
-  if(theme){await sheet.getByRole('group',{name:'故事主题'}).getByRole('button',{name:'其他',exact:true}).click();await sheet.getByLabel('写下想看的主题').fill(theme);}
+  await page.goto(url);await page.getByRole('button',{name:"New story",exact:true}).click();
+  const sheet=page.getByRole('dialog',{name:"How would you like to read this story?"});
+  await sheet.getByRole('group',{name:"Choose book"}).getByRole('button',{name:"Zhuangzi",exact:true}).click();
+  if(theme){await sheet.getByRole('group',{name:"Story theme"}).getByRole('button',{name:'Other',exact:true}).click();await sheet.getByLabel("Enter a theme to explore").fill(theme);}
   const creation=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/reader/sessions'&&response.request().method()==='POST');
-  await sheet.getByRole('button',{name:'进入故事提取',exact:true}).click();const saved=await(await creation).json();
-  const picker=page.getByRole('dialog',{name:'故事设置',exact:true});await picker.getByRole('button',{name:'开始提取',exact:true}).waitFor();
+  await sheet.getByRole('button',{name:"Find stories",exact:true}).click();const saved=await(await creation).json();
+  const picker=page.getByRole('dialog',{name:"Story settings",exact:true});await picker.getByRole('button',{name:"Start discovery",exact:true}).waitFor();
   assert.equal(saved.intake.search.state,'idle');assert.equal(library.calls.catalog.length,0);
   if(!prepare)return saved;
   return extract(saved,title);
  }
  async function extract(saved,title){
-  const picker=page.getByRole('dialog',{name:'故事设置',exact:true});
-  if(title){await picker.getByRole('button',{name:'输入标题',exact:true}).click();await picker.getByLabel('故事标题',{exact:true}).fill(title);await picker.getByRole('button',{name:'按标题提取',exact:true}).click();}
-  else await picker.getByRole('button',{name:'开始提取',exact:true}).click();
+  const picker=page.getByRole('dialog',{name:"Story settings",exact:true});
+  if(title){await picker.getByRole('button',{name:"Enter title",exact:true}).click();await picker.getByLabel("Story title",{exact:true}).fill(title);await picker.getByRole('button',{name:"Find by title",exact:true}).click();}
+  else await picker.getByRole('button',{name:"Start discovery",exact:true}).click();
   await picker.getByRole('button').filter({has:page.getByText(title||'乌龟报恩',{exact:true})}).click();
-  await until(async()=>(await f.read(saved.id)).intake.phase==='confirming',15000);await page.getByRole('link',{name:'开始制作',exact:true}).waitFor();return f.read(saved.id);
+  await until(async()=>(await f.read(saved.id)).intake.phase==='confirming',15000);await page.getByRole('link',{name:"Start production",exact:true}).waitFor();return f.read(saved.id);
  }
- async function confirm(){await page.getByRole('link',{name:'开始制作',exact:true}).click();}
+ async function confirm(){await page.getByRole('link',{name:"Start production",exact:true}).click();}
  async function completed(id){await until(async()=>(await f.read(id)).state==='completed',20000);}
- async function reader(id){await page.goto(url+'/?id='+id);await page.getByRole('button',{name:'故事设置',exact:true}).waitFor();}
+ async function reader(id){await page.goto(url+'/?id='+id);await page.getByRole('button',{name:"Story settings",exact:true}).waitFor();}
  async function workflow(){return settings();}
- async function settings(){await page.getByRole('button',{name:'故事设置',exact:true}).click();return page.getByRole('dialog',{name:'故事设置',exact:true});}
+ async function settings(){await page.getByRole('button',{name:"Story settings",exact:true}).click();return page.getByRole('dialog',{name:"Story settings",exact:true});}
  return {f,library,page,context,url,directory,execute,screenshot,create,extract,confirm,completed,reader,settings,workflow,commands,transitions};
 }

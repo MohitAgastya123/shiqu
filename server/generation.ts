@@ -1,3 +1,4 @@
+// English product messages; source evidence and machine identifiers remain stable.
 // Select a complete provider explicitly; subscription mode never falls back to API billing.
 import {formatSystemPrompt} from '../lib/reader-prompt-format.ts';
 import {promptRecord} from '../lib/reader-prompt-records.ts';
@@ -29,34 +30,34 @@ import {artRecommendationJson,artRecommendationSchema,selectedArtRecommendationP
 import {configuredTaskReasoning} from '../lib/reader-reasoning.ts';
 
 function codexMessage(code:string){
- if(code==='INVALID_REASONING_EFFORT')return 'Codex 推理档位无效，请使用 low、medium、high、xhigh、max，或留空继承默认值。';
- if(code==='MODEL_UNAVAILABLE')return 'Codex 未采用指定的主题匹配模型，请检查 Luna 模型权限后重试。';
- if(code==='REASONING_EFFORT_UNAVAILABLE')return 'Codex 未采用指定推理档位，请检查 CLI 版本及模型支持后重试。';
- if(code==='CHATGPT_LOGIN_REQUIRED')return '请先运行 codex login，使用 ChatGPT 账号登录 Codex。订阅模式不会使用 API 密钥。';
- if(code==='UNSUPPORTED_PLATFORM')return 'Codex 订阅模式目前支持 macOS 和 Linux；Windows 请使用 OpenAI API、Gemini 或只读模式。';
- if(code==='CLI_UNAVAILABLE')return '未找到 Codex CLI。请安装 Codex，或设置 CODEX_BIN 后重启服务。';
- if(code==='TIMEOUT')return 'Codex 生成等待超时，已保留前面的内容。可稍后重试。';
- if(code==='UNSAFE_CONFIGURATION')return 'Codex 的工具隔离配置不可用，请使用支持的 Codex 版本并检查设置。';
- if(code==='IMAGE_UNAVAILABLE'||code==='INVALID_IMAGE')return 'Codex 未返回有效图片。请检查订阅额度与图片生成权限后重试。';
- return 'Codex 暂时无法完成这一步，请检查订阅额度和登录状态。已保留前面的内容。';
+ if(code==='INVALID_REASONING_EFFORT')return 'Invalid Codex reasoning effort. Use low, medium, high, xhigh, max, or leave blank for the default.';
+ if(code==='MODEL_UNAVAILABLE')return 'Codex did not use the requested theme matching model. Check Luna model access and retry.';
+ if(code==='REASONING_EFFORT_UNAVAILABLE')return 'Codex did not use the requested reasoning effort. Check the CLI version and model support.';
+ if(code==='CHATGPT_LOGIN_REQUIRED')return 'Run codex login and sign in with your ChatGPT account. Subscription mode does not use API keys.';
+ if(code==='UNSUPPORTED_PLATFORM')return 'Codex subscription mode supports macOS and Linux. On Windows, choose OpenAI API, Gemini, or read-only mode.';
+ if(code==='CLI_UNAVAILABLE')return 'Codex CLI was not found. Install Codex or set CODEX_BIN, then restart the service.';
+ if(code==='TIMEOUT')return 'Codex generation timed out. Previous content has been retained. Retry later.';
+ if(code==='UNSAFE_CONFIGURATION')return 'Codex tool isolation is unavailable. Use a supported Codex version and check settings.';
+ if(code==='IMAGE_UNAVAILABLE'||code==='INVALID_IMAGE')return 'Codex did not return a valid image. Check subscription usage and image generation access, then retry.';
+ return 'Codex could not complete this step. Check subscription usage and sign-in status. Previous content has been retained.';
 }
 export function safeCodexError(error:unknown){const code=error instanceof CodexError?error.message:'INVALID_OUTPUT';console.error('codex_generation_error',JSON.stringify({code}));return codexMessage(code);}
 export function safeClaudeError(error:unknown){
  const code=error instanceof ClaudeError?error.message:'INVALID_OUTPUT';
  console.error('claude_generation_error',JSON.stringify({code}));
- if(code==='CLAUDE_LOGIN_REQUIRED'||code==='SUBSCRIPTION_REQUIRED')return '请运行 claude auth login，使用 Claude 订阅账号登录；不会使用 API 计费。';
- if(code==='CLI_UNAVAILABLE')return '未找到 Claude Code CLI，请安装或设置 CLAUDE_BIN。';
- if(code==='RATE_LIMITED')return 'Claude 订阅使用额度已达上限，请等待额度重置后重试；已保留进度，不会切换到 API 计费。';
- if(code==='TEXT_ONLY')return 'Claude Code 提供方仅支持文本；请在生图前停止。';
- if(code==='TIMEOUT')return 'Claude Code 生成等待超时，已保留前面的内容。';
- if(code==='UNSAFE_CONFIGURATION'||code==='UNEXPECTED_TOOL')return 'Claude Code 的工具隔离配置不可用，已停止本次调用。';
- return 'Claude Code 暂时无法完成这一步，请检查登录、模型和订阅额度；已保留进度。';
+ if(code==='CLAUDE_LOGIN_REQUIRED'||code==='SUBSCRIPTION_REQUIRED')return 'Run claude auth login with a Claude subscription account. API billing is not used.';
+ if(code==='CLI_UNAVAILABLE')return 'Claude Code CLI was not found. Install it or set CLAUDE_BIN.';
+ if(code==='RATE_LIMITED')return 'The Claude subscription limit has been reached. Wait for the limit to reset. Progress has been retained; API billing will not be used.';
+ if(code==='TEXT_ONLY')return 'The Claude Code provider supports text only. Stop before image generation.';
+ if(code==='TIMEOUT')return 'Claude Code generation timed out. Previous content has been retained.';
+ if(code==='UNSAFE_CONFIGURATION'||code==='UNEXPECTED_TOOL')return 'Claude Code tool isolation is unavailable. This call has been stopped.';
+ return 'Claude Code could not complete this step. Check sign-in, model access, and subscription usage. Progress has been retained.';
 }
 export function createReaderProvider(variables:Record<string,string|undefined>,media:MediaStore,transport:typeof fetch,runner?:CodexRunner):ReaderProvider{
  const name=variables.SHIQU_AI_PROVIDER?.trim()||'gemini';
  if(name==='readonly'){
-  const unavailable=()=>{throw new ReaderError(503,'当前为只读模式，请通过 --configure 或桌面设置配置生成服务。');};
-  return {async status(){return {configured:false,provider:'readonly',models:{text:'',image:''},voiceEnabled:false};},suggestions:async()=>unavailable(),generator:()=>({plan:async()=>unavailable(),original:async()=>unavailable(),image:async()=>unavailable(),audio:async()=>unavailable(),reflection:async()=>unavailable(),reflectionCandidates:async()=>unavailable(),safeError:()=> '当前为只读模式，请先配置生成服务。'}),safeError:()=> '当前为只读模式，请先配置生成服务。'};
+  const unavailable=()=>{throw new ReaderError(503,'Read-only mode is active. Configure a generation provider with --configure or desktop settings.');};
+  return {async status(){return {configured:false,provider:'readonly',models:{text:'',image:''},voiceEnabled:false};},suggestions:async()=>unavailable(),generator:()=>({plan:async()=>unavailable(),original:async()=>unavailable(),image:async()=>unavailable(),audio:async()=>unavailable(),reflection:async()=>unavailable(),reflectionCandidates:async()=>unavailable(),safeError:()=> 'Read-only mode is active. Configure a generation provider first.'}),safeError:()=> 'Read-only mode is active. Configure a generation provider first.'};
  }
  if(name==='openai')return createOpenAIProvider(variables,media,transport);
  if(name==='deepseek')return createDeepSeekProvider(variables,media,transport);
@@ -64,7 +65,7 @@ export function createReaderProvider(variables:Record<string,string|undefined>,m
  const taskReasoningEfforts=configuredTaskReasoning(variables);
  if(name==='gemini'){
   const key=variables.GEMINI_API_KEY?.trim()||'',models=configuredModels(variables);
-  return {generationTimeoutMs:phase=>['recommend','plan','reflection','review','repair','image'].includes(phase)?geminiGenerationTimeoutMs:null,async status(){return {configured:!!key,provider:'gemini',models,voiceEnabled:false,taskReasoningEfforts,themeMatching:{model:models.text,reasoningEffort:themeMatchEffort}};},suggestions:(selection,excluded,localBook,reading)=>suggestStories(key,selection,models,transport,excluded,localBook,taskReasoningEfforts,reading?.maxStories,reading),matchStories:(theme,stories,context)=>matchStoryThemes(key,theme,stories,models,transport,context),async recommendArt(selection,original){if(!original?.localSource)throw new ReaderError(400,'请先选择已核对出处的故事。');return recommendStoryArt(key,selection,original,models,transport,taskReasoningEfforts);},generator:()=>makeGenerator(key,media,models,transport,taskReasoningEfforts),safeError:safeGeminiError};
+  return {generationTimeoutMs:phase=>['recommend','plan','reflection','review','repair','image'].includes(phase)?geminiGenerationTimeoutMs:null,async status(){return {configured:!!key,provider:'gemini',models,voiceEnabled:false,taskReasoningEfforts,themeMatching:{model:models.text,reasoningEffort:themeMatchEffort}};},suggestions:(selection,excluded,localBook,reading)=>suggestStories(key,selection,models,transport,excluded,localBook,taskReasoningEfforts,reading?.maxStories,reading),matchStories:(theme,stories,context)=>matchStoryThemes(key,theme,stories,models,transport,context),async recommendArt(selection,original){if(!original?.localSource)throw new ReaderError(400,'Select a story with a verified source first.');return recommendStoryArt(key,selection,original,models,transport,taskReasoningEfforts);},generator:()=>makeGenerator(key,media,models,transport,taskReasoningEfforts),safeError:safeGeminiError};
  }
  const claude=name==='claude',safeError=claude?safeClaudeError:safeCodexError,message=claude?(code:string)=>safeClaudeError(new ClaudeError(code)):codexMessage;
  const rawRunner=runner||(claude?createClaudeRunner(variables):createCodexRunner(variables)),cli:CodexRunner={status:()=>rawRunner.status(),run:job=>rawRunner.run({...job,instructions:formatSystemPrompt(job.instructions)})},models=claude?{text:variables.CLAUDE_MODEL?.trim()||'opus',image:''}:{text:variables.CODEX_MODEL?.trim()||'codex-default',image:'codex-image-generation'};
@@ -72,7 +73,7 @@ export function createReaderProvider(variables:Record<string,string|undefined>,m
  let cached:Promise<ProviderStatus>|undefined,expires=0;
  function book(selection:Parameters<ReaderProvider['suggestions']>[0]){
   const source=storySource(selection);
-  if(source.isUrl)throw new ReaderError(400,`${claude?'Claude Code':'Codex'} 订阅模式请填写书名；网页 URL 来源请使用 Gemini 模式。`);
+  if(source.isUrl)throw new ReaderError(400,`${claude?'Claude Code':'Codex'} subscription mode requires a book title. Use Gemini for webpage URLs.`);
   return source.book;
  }
  const provider:ReaderProvider={
@@ -99,7 +100,7 @@ export function createReaderProvider(variables:Record<string,string|undefined>,m
    });
   },
   async recommendArt(selection,original){
-   if(!original?.localSource)throw new ReaderError(400,'请先选择已核对出处的故事。');
+   if(!original?.localSource)throw new ReaderError(400,'Select a story with a verified source first.');
    const result=await cli.run({instructions:selectedArtRecommendationPrompt,prompt:JSON.stringify(selectedArtRecommendationPayload(selection,original)),schema:artRecommendationJson,timeoutMs:codexGenerationTimeoutMs,reasoningEffort:taskReasoningEfforts.art});
    return artRecommendationSchema.parse(JSON.parse(result.text));
   },

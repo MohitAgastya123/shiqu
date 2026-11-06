@@ -1,3 +1,4 @@
+// English product messages; source evidence and machine identifiers remain stable.
 // Run the existing reader under a native supervisor, accepting secrets only through private stdin.
 // EOF and explicit stop revoke access and terminate generation before releasing data ownership.
 import path from 'node:path';
@@ -27,20 +28,20 @@ export function desktopVariables(settings:DesktopSettings,key:string){return set
 export async function testDesktopProvider(settings:DesktopSettings,key:string,root:string,transport:typeof fetch=fetch){
  if(settings.provider==='codex'){
   const provider=createReaderProvider(desktopVariables(settings,key),new FileMedia(path.join(root,'unused')),transport);
-  const status=await provider.status();return {ok:status.configured,message:status.configured?'Codex 已登录；此检查未生成内容。':status.message||'Codex 尚未连接。'};
+  const status=await provider.status();return {ok:status.configured,message:status.configured?'Codex is signed in. This check did not generate content.':status.message||'Codex is not connected.'};
  }
- if(settings.provider==='readonly')return {ok:true,message:'当前为只读模式，不调用生成服务。'};
- if(!key)return {ok:false,message:'请先填写或保存 API 密钥。'};
+ if(settings.provider==='readonly')return {ok:true,message:'Read-only mode is active. No generation provider is called.'};
+ if(!key)return {ok:false,message:'Enter or save an API key first.'};
  try{
   // Metadata only: no generation endpoint, prompt, or paid output.
   for(const model of new Set(settings.provider==='openai'?[settings.openaiTextModel,settings.openaiImageModel]:[settings.textModel,settings.imageModel])){
    const openai=settings.provider==='openai';
    const response=await transport(openai?`https://api.openai.com/v1/models/${model}`:`https://generativelanguage.googleapis.com/v1beta/models/${model}`,{headers:openai?{Authorization:'Bearer '+key}:{'x-goog-api-key':key},signal:AbortSignal.timeout(10000),redirect:'error'});
-   if(!response.ok)return {ok:false,message:`模型访问检查失败（HTTP ${response.status}）。请检查密钥及模型权限。`};
+   if(!response.ok)return {ok:false,message:`Model access check failed (HTTP ${response.status}). Check the key and model permissions.`};
    await response.body?.cancel();
   }
-  return {ok:true,message:'密钥和模型元数据可访问；未生成内容，不代表生成额度充足。'};
- }catch{return {ok:false,message:'连接超时或网络不可用；未生成内容。'};}
+  return {ok:true,message:'The key and model metadata are accessible. No content was generated; this does not verify available generation quota.'};
+ }catch{return {ok:false,message:'The connection timed out or the network is unavailable. No content was generated.'};}
 }
 export async function startDesktop(settings:DesktopSettings,key:string,root:string,options:{signal?:AbortSignal;onStatus?:(status:unknown)=>void}={}){
  const release=await ownDesktopData(settings.dataDirectory);
@@ -68,7 +69,7 @@ export async function startDesktop(settings:DesktopSettings,key:string,root:stri
     options.signal?.throwIfAborted();status.publicUrl=remote.activate(tunnel.origin);
     void tunnel.closed.then(async()=>{
      remote.revoke();status.publicUrl='';
-     if(!stopped){status.internetError='公网隧道已断开，本机和局域网仍可使用。停止并重新启动服务以重试。';options.onStatus?.({...status});}
+     if(!stopped){status.internetError='The internet tunnel disconnected. Local and LAN access remain available. Stop and restart the service to retry.';options.onStatus?.({...status});}
      await close(remoteServer);await tunnel?.stop();
     });
    }catch(error){
@@ -76,7 +77,7 @@ export async function startDesktop(settings:DesktopSettings,key:string,root:stri
     // propagates to the outer handler and releases the complete runtime.
     if(options.signal?.aborted)throw error;
     remote.revoke();await tunnel?.stop();await close(remoteServer);remoteServer=undefined;
-    status.internetError=(error instanceof TunnelError?error.message:'公网隧道启动失败。')+' 本机和局域网仍可使用，无需配对 ID。';
+    status.internetError=(error instanceof TunnelError?error.message:'The internet tunnel failed to start.')+' Local and LAN access remain available without a pairing ID.';
    }
   }
   options.signal?.throwIfAborted();recordDiagnostic(settings.dataDirectory,'service_started');return {server,status,stop};
@@ -85,11 +86,11 @@ export async function startDesktop(settings:DesktopSettings,key:string,root:stri
 export function desktopFailure(error:unknown){
  if(error instanceof TunnelError)return error.message;
  const code=(error as NodeJS.ErrnoException)?.code,message=(error as Error)?.message;
- if(code==='EADDRINUSE')return '端口已被占用，请更换端口或停止其他实例。';
+ if(code==='EADDRINUSE')return 'The port is in use. Choose another port or stop the other instance.';
  if(message&&/^(LIBRARY_|BACKUP_|DATA_BUSY:)/.test(message))return message;
- if(message==='DATA_BUSY')return '此数据目录仍由另一个 CLI 或桌面服务使用，请等待它退出或选择其他目录。';
- if(code==='EACCES'||code==='EPERM')return '无法访问所选文件或数据目录，请检查权限。';
- return '服务启动失败。请确认 Node 24、应用资源和数据目录可用。';
+ if(message==='DATA_BUSY')return 'Another CLI or desktop service is using this data directory. Wait for it to exit or choose another directory.';
+ if(code==='EACCES'||code==='EPERM')return 'The selected file or data directory cannot be accessed. Check permissions.';
+ return 'The service failed to start. Check Node 24, app resources, and the data directory.';
 }
 async function main(){
  const lines=createInterface({input:process.stdin,crlfDelay:Infinity});
@@ -101,7 +102,7 @@ async function main(){
  for(const signal of ['SIGINT','SIGTERM'] as const)process.on(signal,()=>{abort.abort();if(!starting)void stop();});
  process.on('exit',()=>{void stopCodexProcesses();void stopClaudeProcesses();});
  // Discard raw exception/provider output: the parent receives only safe status messages.
- process.on('uncaughtException',()=>{send({error:'服务意外退出，请重新启动。'});void stop();});
+ process.on('uncaughtException',()=>{send({error:'The service exited unexpectedly. Restart it.'});void stop();});
  lines.on('line',line=>{
   if(line.length>20000){void stop();return;}
   if(runtime){try{if(JSON.parse(line).action==='stop')void stop();}catch{void stop();}return;}

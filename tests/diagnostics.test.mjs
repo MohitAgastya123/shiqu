@@ -1,3 +1,4 @@
+// Verify English messages without changing credential, process, or source fixtures.
 // Test diagnostic privacy, bounded storage, unavailable disks and real CLI/desktop lifecycle integration.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -42,7 +43,7 @@ test('production Gemini failures persist safe rejection details and survive diag
  try{
   const provider=createReaderProvider({SHIQU_AI_PROVIDER:'gemini',GEMINI_API_KEY:privateText},{},async()=>Response.json({error:{status:'INVALID_ARGUMENT',message:'The input schema has too many states for serving. '+privateText}},{status:400}));
   await assert.rejects(provider.suggestions({bookId:'西游记',theme:'原典故事',length:'auto',artStyle:'ink-pencil',voice:false},[]),error=>{
-   assert.match(provider.safeError(error),/已保留前面的内容/);return true;
+   assert.match(provider.safeError(error),/Progress is saved|content has been retained/);return true;
   });
  }finally{restore();console.error=original;}
  const events=diagnosticReport(directory,'0.8.0').events;

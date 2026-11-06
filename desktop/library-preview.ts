@@ -1,3 +1,4 @@
+// English interface: labels, accessibility text, and workflow messages use English.
 // Loopback-only desktop preview: summaries plus explicit, reversible story deletion; no credential access.
 import {DatabaseSync} from 'node:sqlite';
 import {existsSync,readFileSync} from 'node:fs';
@@ -18,11 +19,11 @@ export function setLibraryStoryDeleted(directory:string,id:string,deleted:boolea
 function setDeleted(directory:string,id:string,deleted:boolean){
  if(inspectLibrary(directory)!=='current')throw Error('LIBRARY_UPGRADE_REQUIRED');
  const filename=path.join(directory,'shiqu.sqlite');
- if(!existsSync(filename))throw Error('这篇故事不在书架里。');
+ if(!existsSync(filename))throw Error("This story is not on your shelf.");
  const database=new DatabaseSync(filename);
  try{
   database.exec('PRAGMA busy_timeout=5000; BEGIN IMMEDIATE');
-  if(!database.prepare('SELECT id FROM stories WHERE id=?').get(id))throw Error('这篇故事不在书架里。');
+  if(!database.prepare('SELECT id FROM stories WHERE id=?').get(id))throw Error("This story is not on your shelf.");
   database.prepare(deleted?deleteStorySql:restoreStorySql).run(id);
   database.exec('COMMIT');
  }catch(error){if(database.isTransaction)database.exec('ROLLBACK');throw error;}
@@ -54,10 +55,10 @@ export function desktopPreview():Plugin{
    try{
     if(request.method==='GET'&&route==='/'){response.end(JSON.stringify(readLibrarySummary(developmentLibraryDirectory())));return;}
     const match=route.match(/^\/([^/]{1,200})$/);
-    if(!mutation||!match){response.statusCode=404;response.end(JSON.stringify({error:'书架操作不存在。'}));return;}
+    if(!mutation||!match){response.statusCode=404;response.end(JSON.stringify({error:"Shelf action not found."}));return;}
     setLibraryStoryDeleted(developmentLibraryDirectory(),decodeURIComponent(match[1]),request.method==='DELETE');
     response.end(JSON.stringify({ok:true}));
-   }catch(error){response.statusCode=500;const message=error instanceof Error&&/^(LIBRARY_|BACKUP_|DATA_BUSY)/.test(error.message)?error.message:mutation?'故事暂时无法更新，请重试。':'无法读取本地书架，请检查数据目录及数据库版本。';response.end(JSON.stringify({error:message}));}
+   }catch(error){response.statusCode=500;const message=error instanceof Error&&/^(LIBRARY_|BACKUP_|DATA_BUSY)/.test(error.message)?error.message:mutation?"Could not update the story. Try again.":"Could not read the local shelf. Check the data directory and database version.";response.end(JSON.stringify({error:message}));}
   });
  }};
 }

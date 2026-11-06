@@ -1,3 +1,4 @@
+// English workflow expectations preserve source evidence, saved work and recovery contracts.
 // Historical views must distinguish model results from inputs and never infer missing evidence.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -36,7 +37,7 @@ test('structure insertion/deletion numbers refer to the historical drafts, not t
  const event=storyReviewHistory(row({...newReview(),history:[h]})).entries[0];assert.equal(event.outcome,'changed');assert.equal(event.repair.structure.edits[0].newFrom,1);assert.equal(event.repair.structure.edits[1].newFrom,3);assert.deepEqual(event.repair.structure.edits[1].before,[{page:2,...original}]);
 });
 test('first full report is an audit even after manual continuation; prior reports become rechecks',()=>{
- const result=storyReviewHistory(row({...newReview(),reports:[full(3),full(5)]},[call('review:full:3:1',{}),call('review:full:5:1',{})]));assert.equal(result.entries[0].title,'第1次全篇审核');assert.equal(result.entries[1].title,'第2次全篇复核');
+ const result=storyReviewHistory(row({...newReview(),reports:[full(3),full(5)]},[call('review:full:3:1',{}),call('review:full:5:1',{})]));assert.equal(result.entries[0].title,'Full-story 1 review');assert.equal(result.entries[1].title,'Full-story 2 recheck');
 });
 test('reflection/global character changes and no-op attempts retain their actual evidence',()=>{
  const review={...newReview(),overridden:true,history:[{round:1,requested:[0],changes:[],reflection:'新的结语。',previousReflection:'旧的结语。',changed:true},{round:2,requested:[1],changes:[],changed:false},{round:3,requested:[1],changes:[],structure:{before:2,after:2,edits:[],removed:[],sourcePages:[0,1],characters:'Correct recurring character details.',previousCharacters:'Old recurring character details.'}}]};

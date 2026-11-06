@@ -1,3 +1,4 @@
+// English product messages; source evidence and machine identifiers remain stable.
 // Persist versioned discovery documents atomically and share work within this Node process.
 // Each caller may leave independently; settled model work is saved by the worker before it stops.
 // A draining caller that ends a flight waits for its call, so a freed worker slot is truly free.
@@ -34,7 +35,7 @@ export class StoryDiscoveryCache{
  async read<T>(key:string,schema:z.ZodType<T>,valid:(value:T)=>boolean=()=>true):Promise<T|null>{
   let object;
   try{object=await this.store.get(`reader-cache/${discoveryHash(key)}.json`);}
-  catch{throw new ReaderError(503,'故事缓存暂时无法读取，请检查数据目录权限。');}
+  catch{throw new ReaderError(503,'The story cache could not be read. Check data directory permissions.');}
   if(!object)return null;
   try{
    const data=envelope.parse(JSON.parse(new TextDecoder().decode(await object.arrayBuffer())));
@@ -45,7 +46,7 @@ export class StoryDiscoveryCache{
  }
  async write(key:string,value:unknown){
   try{await this.store.put(`reader-cache/${discoveryHash(key)}.json`,new TextEncoder().encode(JSON.stringify({version:1,key,value})),{contentType:'application/json'});}
-  catch{throw new ReaderError(503,'故事缓存暂时无法保存，请检查数据目录权限后重试。');}
+  catch{throw new ReaderError(503,'The story cache could not be saved. Check data directory permissions and retry.');}
  }
  // Every queued mutation executes against the latest file; a shared flight would discard joiners' work.
  async update<T>(key:string,schema:z.ZodType<T>,initial:()=>T,change:(value:T)=>T|Promise<T>):Promise<T>{

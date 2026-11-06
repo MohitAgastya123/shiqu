@@ -1,3 +1,4 @@
+// English product messages; source evidence and machine identifiers remain stable.
 // Resolve ordered, non-overlapping multi-chapter receipts without replacing evidence with summaries.
 import {ReaderError} from '../lib/reader-model.ts';
 import {localSourceSchema,sourceRanges} from '../lib/reader-local-contract.ts';
@@ -5,7 +6,7 @@ import type {LocalSourceReference} from '../lib/reader-local-contract.ts';
 import type {LocalBook,LocalSection} from './local-books.ts';
 import {hasBlockingSourceAnomaly,hasSourceAnomaly} from './local-source-quality.ts';
 import {readingTokens,wholeInputTokens} from './story-token-budget.ts';
-const invalid=()=>new ReaderError(400,'本地出处无法核对，请重新按主题选择故事。');
+const invalid=()=>new ReaderError(400,'The local source could not be verified. Select a story by theme again.');
 export function sourceParts(book:LocalBook,source:LocalSourceReference){
  const parsed=localSourceSchema.safeParse(source);if(!parsed.success||parsed.data.edition!==book.edition)throw invalid();
  let previousSection=-1,previousEnd=-1;

@@ -1,3 +1,4 @@
+// English product text and generation contracts; canonical source evidence remains unchanged.
 // Share story/image contracts across providers; shot direction stays independent of art style and cast identity.
 import {imageSizeDirection} from './reader-image-dimensions.ts';
 import {readerBooks,ReaderError} from './reader-model.ts';
@@ -13,38 +14,38 @@ import {localPlanConstraint} from './reader-local-contract.ts';
 const string=(minLength:number,maxLength:number)=>({type:'string',minLength,maxLength});
 const object=(properties:Record<string,unknown>)=>({type:'object',properties,required:Object.keys(properties),additionalProperties:false});
 export const choicesJson=object({stories:{type:'array',maxItems:5,items:object({title:string(1,100),description:string(1,180),artRecommendation:artRecommendationJson})},note:string(0,300)});
-export const planJson=(length:Selection['length'])=>object({title:string(1,40),summary:string(1,1200),sourceReference:string(1,150),adaptationNote:string(1,600),reflection:string(1,100),characters:string(20,2500),pages:{type:'array',minItems:length==='auto'?readerMinFrames:length,maxItems:length==='auto'?readerMaxFrames:length,items:object({caption:string(8,90),prompt:string(20,1800)})}});
+export const planJson=(length:Selection['length'])=>object({title:string(1,160),summary:string(1,2400),sourceReference:string(1,150),adaptationNote:string(1,600),reflection:string(1,400),characters:string(20,6000),pages:{type:'array',minItems:length==='auto'?readerMinFrames:length,maxItems:length==='auto'?readerMaxFrames:length,items:object({caption:string(8,500),prompt:string(20,4000)})}});
 export function storyDraftJson(length:Selection['length']){
  const full=planJson(length),{reflection:_,...properties}=full.properties;void _;
  return object(properties);
 }
-export const storyDraftMetadataDirection='title 暂用准确简明的故事名，不套选题主题；最终标题将在完整分镜保存后与结语一起定稿。本阶段不生成 reflection，也不在元数据或末幅配文中提前写全篇结语。';
-export const storyDraftDirection='返回完整分镜及其元数据，字段以给定 schema 为准。'+storyDraftMetadataDirection;
+export const storyDraftMetadataDirection="Use a clear provisional English title without forcing a theme. Finalize the title after the complete storyboard is saved, together with the ending. Do not generate reflection in this stage or put a whole-story moral into metadata or the final caption.";
+export const storyDraftDirection="Return the complete storyboard and required metadata using the given JSON schema. Use natural English for every generated text field; preserve only exact source evidence where required."+storyDraftMetadataDirection;
 export const suggestionSystemPrompt=promptSections(
- ['任务','为古典漫画读者推荐互不重复、符合指定书籍和主题的真实故事。maxStories 为本次数量上限，未提供时至多5篇；为1时只寻找一篇，找到即返回。标题与不剧透的一句话简介用简体中文；排除 excludeTitles 中的篇目，不改名重复。只推荐，不生成完整故事。'],
- ['来源与不足处理','只推荐确知属于该书的篇目；不足数量上限时少列并在 note 说明，不为凑数编造。不能确认该书时 stories 为空，note 请读者补充作者或原文链接。URL 来源必须用 URL context 读取页面，只依据成功读取的内容；打不开或内容不足时返回空数组并说明。'],
- ['画风推荐',artRecommendationInstructions],['输入与输出',inputBoundaryDirection]);
+ ['Task','Recommend distinct authentic stories from the specified book that match the requested theme. maxStories is the upper bound; default at most 5. If 1, return immediately after finding one. Write titles and short spoiler-free descriptions in English. Exclude excludeTitles without renaming duplicates. Recommend only; do not write the full adaptation.'],
+ ['Source verification','Recommend only stories verifiably belonging to the book. Return fewer when necessary and explain in English note; never invent to fill a quota. If the book cannot be verified, return no stories and ask for author or source link. A URL requires successful URL-context reading; return an empty result when unavailable or insufficient.'],
+ ['Art recommendation',artRecommendationInstructions],['Input and output',inputBoundaryDirection]);
 export const storyPlanningDirection=promptSections(
- ['读者与选题','面向成年读者，用简体中文改编chosenStory；未选故事时才按theme选题。无已核原文的URL来源须成功读取后采用，不能确认时拒绝编造。'],
- ['原文编排',storySourceDirection],
- ['作品知识与补文',storyKnowledgeDirection],
- ['范围与开场',storyScopeDirection+'\n'+storyOpeningDirection],
- ['叙事与轻重',narrativeMeaningDirection],
- ['事实边界',sourceFidelityDirection],
- ['幅数与制作要求',narrativeDetailInstructions+`exactPageCount为数字时遵守；为auto时按叙事任务决定${readerMinFrames}至${readerMaxFrames}幅，不预设数量区间。仅一幅时用核心瞬间配必要旁白保留因果与结果。productionPrompt优先于默认表达建议，仍服从原文、选定故事、幅数策略、artDirection和schema。`],
- ['默认制作标准',defaultProductionDirection],['输入与输出',inputBoundaryDirection]);
+ ['Audience and selection','Adapt chosenStory for adult readers in natural English. Select by theme only when no story is chosen. Use a URL only after successfully reading and verifying its source. Refuse to invent missing evidence.'],
+ ['Source-led planning',storySourceDirection],
+ ['Evidence and missing text',storyKnowledgeDirection],
+ ['Scope and opening',storyScopeDirection+'\n'+storyOpeningDirection],
+ ['Narrative emphasis',narrativeMeaningDirection],
+ ['Factual boundaries',sourceFidelityDirection],
+ ['Frame count and creative requirements',narrativeDetailInstructions+`Respect a numeric exactPageCount. For auto, choose by narrative tasks within ${readerMinFrames}–${readerMaxFrames} frames without a preset typical range. A single frame must preserve cause and result through one core instant plus necessary caption. productionPrompt overrides expression preferences, but never verified facts, selected story, count policy, artDirection or schema.`],
+ ['Production standards',defaultProductionDirection],['Input and output',inputBoundaryDirection]);
 // Scene execution shares quality standards without instructions to choose a new story scope or count.
-export const storySceneDirection=promptSections(['默认制作标准',defaultProductionDirection],['原文依据',storySourceDirection],['作品知识与补文',storyKnowledgeDirection],['叙事标准',narrativeMeaningDirection],['事实边界',sourceFidelityDirection],['静态画面与衔接',storyboardDirection]);
-export const storyMetadataDirection=storySummaryDirection+'\n'+'summary只作归档，不决定分镜顺序与轻重。sourceReference用书名及chapterContext.title，缺省用verifiedOriginal.title；不伪造引文或网址。adaptationNote说明压缩、改写及视觉补足，明确AI演绎。characters用简体中文记录有据的时代、年龄、外貌、服饰、辨识特征及关键物件；身份稳定，动态状态按剧情阶段描述。不混入画风或构图，也不要求每幅全员全身。';
+export const storySceneDirection=promptSections(['Production standards',defaultProductionDirection],['Source evidence',storySourceDirection],['Evidence and missing text',storyKnowledgeDirection],['Narrative standards',narrativeMeaningDirection],['Factual boundaries',sourceFidelityDirection],['Static scenes and continuity',storyboardDirection]);
+export const storyMetadataDirection="Write a concise complete English summary in 2–3 sentences, normally 50–100 words, retaining cause, key action and actual outcome. summary is archival metadata, not a script. sourceReference uses an English source/book/chapter title; do not fabricate citations or URLs. adaptationNote explains compression, paraphrase and visual additions and discloses AI adaptation. characters describes source-grounded period, ages, appearance, clothes, identifying features and important objects in English. Keep identity stable and describe changing states by story stage. Do not mix art style or framing into the character bible or demand the entire cast in every shot.";
 export const storyPageDirection=promptSections(
- ['配文','caption用现代旁白、对白或两者，目标8至55字、最多3个短句，必要时可到90字硬上限。与本幅瞬间和上下文对应，不为凑字数解释画面。'],
- ['画面指令','prompt默认简体中文，可保留专业英文术语；依次写核心瞬间、动作或反应、接触与空间、必要状态及景别焦点，使每幅可独立生成。只补本幅可见的必要身份与位置线索，不双语复述、堆术语或用泛泛“张口讲述”代替设计。'],
- ['画风','服从artDirection，保持人物年龄、身份与时代；画中不写字，景别不改变画风，不逐幅抄整套风格和禁止项。']);
-export const planSystemPrompt=promptSections(['任务','你是古典短篇连环画编剧与分镜导演，本次生成完整文字分镜。'],['编排标准',storyPlanningDirection],['静态画面与衔接',storyboardDirection],['元数据',storyMetadataDirection],['逐幅要求',storyPageDirection],['本次输出',storyDraftDirection]);
-export function draftInstructions(local=false){return planSystemPrompt+(local?'\n\n## 本地原文\n'+localPlanConstraint:'');}
+ ['Caption','Write caption in natural English narration, dialogue or both. Aim for 10–45 words and at most 3 short sentences, with a hard limit of 500 characters. Match the visible instant and context; do not pad with explanations.'],
+ ['Scene prompt','Write prompt in English: core instant, action or reaction, contact and spatial relationship, necessary visible state, shot scale and focal point. Each frame must be independently drawable. Include only the visible identity and placement clues needed for this shot. Do not repeat bilingually, pile up jargon or replace staging with generic speaking poses.'],
+ ['Art style','Follow artDirection and preserve ages, identity and period. No writing inside images. Framing never changes art style. Do not repeat the complete style specification in every scene.']);
+export const planSystemPrompt=promptSections(['Task','You are a writer and storyboard director adapting classical stories into illustrated books. Generate the complete written storyboard in English.'],['Planning standards',storyPlanningDirection],['Static scenes and continuity',storyboardDirection],['Metadata',storyMetadataDirection],['Per-frame requirements',storyPageDirection],['Required output',storyDraftDirection]);
+export function draftInstructions(local=false){return planSystemPrompt+(local?'\n\n## Local source\n'+localPlanConstraint:'');}
 export function storySource(selection:Selection){
- const book=(selection.bookId==='other'?selection.customBook:readerBooks.find(b=>b.id===selection.bookId)?.title||selection.bookId)?.trim();
- if(!book)throw new ReaderError(400,'请填写有效的书名。');
+ const book=(selection.bookId==='other'?selection.customBook:readerBooks.find(b=>b.id===selection.bookId)?.sourceTitle||selection.bookId)?.trim();
+ if(!book)throw new ReaderError(400,'Enter a valid book title.');
  return {book,isUrl:/^https?:/i.test(book)};
 }
 export function imagePrompt(plan:Plan,page:number,style:ArtStyleId,productionPrompt:string,reference:boolean){return promptSections(

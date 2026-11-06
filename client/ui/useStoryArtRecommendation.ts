@@ -1,3 +1,4 @@
+// English interface: labels, accessibility text, and workflow messages use English.
 'use client';
 // Optional selected-source art work never blocks discovery or changes a reader's manual style.
 // Source identity scopes results; cancellation prevents a stale response reaching another story.
@@ -22,11 +23,11 @@ export function useStoryArtRecommendation(candidate:Candidate|undefined,selectio
    try{
     const response=await fetch('/api/reader/art-recommendation',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(selection),signal:AbortSignal.any([abort.signal,AbortSignal.timeout(65000)])});
     const result=await response.json();
-    if(!response.ok)throw new Error(result.error||'画风推荐暂不可用，可以手动选择。');
+    if(!response.ok)throw new Error(result.error||"Art recommendations are unavailable. You can choose a style manually.");
     const recommendation=artRecommendationSchema.parse(result);
     if(abort.signal.aborted)return;
     cache.current.set(key,recommendation);setState({key,recommendation,busy:false,error:''});
-   }catch(error){if(!abort.signal.aborted)setState({key,busy:false,error:error instanceof Error?error.message:'画风推荐暂不可用，可以手动选择。'});}
+   }catch(error){if(!abort.signal.aborted)setState({key,busy:false,error:error instanceof Error?error.message:"Art recommendations are unavailable. You can choose a style manually."});}
   })();
   return()=>abort.abort();
  },[key,attempt]);

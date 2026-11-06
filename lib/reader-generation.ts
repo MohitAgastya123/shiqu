@@ -1,3 +1,4 @@
+// English product text and generation contracts; canonical source evidence remains unchanged.
 // Resume checkpoints serially, hiding bounded transient retries from the reading flow.
 // Re-read after transport failures because an interrupted request may have saved its result.
 import type {SessionView} from './reader-model.ts';
@@ -30,24 +31,24 @@ export async function runStoryGeneration({sessionId,throughPage,request,retries,
    // Out-of-order images count as progress even while the first missing scene stays unchanged.
    const currentProgress=s.stage+':'+s.ready;
    if(currentProgress!==progress){progress=currentProgress;lastProgress=now();}
-   if(now()-lastProgress>360000)return '这一幅等待较久，请稍后重新打开故事继续。';
+   if(now()-lastProgress>360000)return 'This frame is taking longer. Reopen the story shortly to continue.';
    if(s.state==='running'){
     await sleep(2000);
     if(!isActive())break;
    }
    const retry=s.state==='failed';
    if(retry){
-    if(s.retryStage==='review')return s.error||'分镜审片尚未通过，请手动继续修订。';
-    if(s.retryStage==='redraw')return s.error||'这幅图片需要重新绘制，请手动重试。';
+    if(s.retryStage==='review')return s.error||'Storyboard review has not passed. Continue revision explicitly.';
+    if(s.retryStage==='redraw')return s.error||'This image needs redrawing. Retry explicitly.';
     const key=sessionId+':'+s.stage,attempts=retries.get(key)||0;
-    if(!s.retryAllowed||attempts>=2)return s.error||'这一步暂时没有完成，请再试一次。';
+    if(!s.retryAllowed||attempts>=2)return s.error||'This step did not complete. Try again.';
     retries.set(key,attempts+1);
    }
    session=await request(path+'/advance','POST',{throughPage:end,retry});
    transportRetries=0;
   }catch(error){
    if(!isActive())break;
-   if(transportRetries++>=2)return error instanceof Error?error.message:'生成暂停，请再试一次。';
+   if(transportRetries++>=2)return error instanceof Error?error.message:'Generation paused. Try again.';
    session=undefined;
   }
  }

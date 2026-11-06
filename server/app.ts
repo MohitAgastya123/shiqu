@@ -1,3 +1,4 @@
+// English product messages; source evidence and machine identifiers remain stable.
 // Serve the production API and public assets; saved media uses the API's media routes.
 import path from 'node:path';
 import {readFile,realpath,stat} from 'node:fs/promises';
@@ -58,9 +59,9 @@ export function createApplication(options:{root:string;dataDirectory:string;vari
    const headers=new Headers({'Content-Type':types[path.extname(resolved)]||'application/octet-stream','X-Content-Type-Options':'nosniff','Cache-Control':pathname.startsWith('/assets/')?'public, max-age=31536000, immutable':'no-cache'});
    return new Response(request.method==='HEAD'?null:new Uint8Array(await readFile(resolved)),{headers});
   }catch(error){
-   if(error instanceof URIError)return Response.json({error:'无效路径'},{status:400});
+   if(error instanceof URIError)return Response.json({error:'Invalid path.'},{status:400});
    console.error('request_failed',error instanceof Error?error.name:'Unknown');
-   return Response.json({error:'服务暂时不可用，请稍后重试。'},{status:500});
+   return Response.json({error:'The service is unavailable. Retry later.'},{status:500});
   }
  }};
 }

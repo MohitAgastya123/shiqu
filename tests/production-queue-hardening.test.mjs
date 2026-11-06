@@ -1,3 +1,4 @@
+// Prepared fixtures include saved English sources while preserving canonical Chinese evidence.
 // Pin newest-version dispatch, atomic forks, checkpoint reuse and isolated scheduling costs.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -8,7 +9,7 @@ import {revisionImpact} from '../lib/reader-revision.ts';
 import {nextStep} from '../lib/reader-model.ts';
 import {shelfView} from '../lib/reader-api.ts';
 import {newReview} from '../lib/reader-review.ts';
-const original={title:'庄周梦蝶',text:'庄周梦为胡蝶。',url:'https://example.com',kind:'passage',provider:'fixture',retrievedAt:new Date().toISOString()};
+const original={englishSource:{title:'The Butterfly Dream',text:'Zhuang Zhou dreamed he was a butterfly.'},title:'庄周梦蝶',text:'庄周梦为胡蝶。',url:'https://example.com',kind:'passage',provider:'fixture',retrievedAt:new Date().toISOString()};
 async function seeded(t,plan=makePlan(8)){
  const f=await productionFixture(t);f.app.stopGeneration();await f.app.services.production.close();
  const repo=new ReaderRepository(f.app.services.database),id=crypto.randomUUID();
@@ -56,7 +57,7 @@ for(const action of ['resume','background'])test(`concurrent publication fences 
  const response=await f.request(`sessions/${id}/production-control`,'POST',{action});
  assert.equal(published,true);
  assert.equal(response.status,409);
- assert.match((await response.json()).error,/最新版本|版本已更新/);
+ assert.match((await response.json()).error,/latest.*version|revision has changed/);
  assert.deepEqual(await repo.get(id,owner),before);
  assert.equal(f.control.calls.length,0);
 });

@@ -1,9 +1,10 @@
+// English product messages; source evidence and machine identifiers remain stable.
 // Serve the reader directly on local/LAN addresses while rejecting foreign hosts/origins.
 // Native routes stay excluded; browser-CLI provider editing has a separate socket-level local gate.
 export function desktopAccess(handle:(request:Request)=>Promise<Response>,options:{hosts:string[]}){
  const hosts=new Set(options.hosts);
  const headers={'Cache-Control':'no-store','Referrer-Policy':'no-referrer','X-Content-Type-Options':'nosniff','Content-Type':'application/json; charset=utf-8'};
- function denied(status=403){return new Response(JSON.stringify({error:status===404?'页面不存在。':'请使用本机或局域网地址访问书架。'}),{status,headers});}
+ function denied(status=403){return new Response(JSON.stringify({error:status===404?'Page not found.':'Use the local or LAN address to access the bookshelf.'}),{status,headers});}
  return {async handle(request:Request){
   const url=new URL(request.url);
   if(!hosts.has(url.host))return denied();

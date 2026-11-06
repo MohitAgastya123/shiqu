@@ -1,3 +1,4 @@
+// English interface: labels, accessibility text, and workflow messages use English.
 // Add edge navigation around the scrollable conclusion without intercepting its
 // controls. Scrolls, drags and long presses must not become accidental edge taps.
 // The drag offset is subscribed here, so a swipe re-renders this surface but not Reader or its children.
@@ -37,7 +38,7 @@ export default function StoryEndingSurface({children,onTurn,onDrag,drag:dragOffs
   const direction=edgePageDirection(event.clientX,bounds.left,bounds.width);
   if(direction)onTurn(direction);
  }
- return <section className="yu-ending" ref={surfaceRef} aria-label="故事结束：点击左侧边缘返回最后一幅，右侧边缘返回主页或书架"
+ return <section className="yu-ending" ref={surfaceRef} aria-label="Story ending: tap the left edge for the last illustration or the right edge for the home page or shelf"
   onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={cancel}
   onClick={event=>{if(!control(event.target)&&!suppressClick.current)edge(event);suppressClick.current=true;}}
   onContextMenu={event=>{if(control(event.target)||event.button!==2||pointerType.current==='touch')return;event.preventDefault();cancel();edge(event);}}

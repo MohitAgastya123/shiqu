@@ -1,3 +1,5 @@
+-- English library summaries preserve canonical evidence and require complete saved English source text.
+-- Unicode ranges classify internal source data only; this query never translates or writes it.
 -- Read-only desktop summaries, shared by the native shell and loopback-only Vite preview.
 -- A deleted latest submission still supersedes its history; reading an old version never promotes it.
 -- Match jobs and deletions by owner as well as story; never return prompts, keys, or job payloads.
@@ -7,9 +9,22 @@ WITH selected_sessions AS (
   AND json_type(document,'$.intake.selected.index')='integer' AND json_extract(document,'$.intake.selected.index')>=0
   THEN json_extract(document,'$.intake.batches['||json_extract(document,'$.intake.selected.batch')||'].stories['||json_extract(document,'$.intake.selected.index')||']') END AS selected_candidate
  FROM stories s WHERE json_type(document,'$.reselection') IS NULL
+), source_sessions AS (
+ SELECT s.*, CASE WHEN json_type(document,'$.original')='object' THEN
+  CASE WHEN json_type(document,'$.original.englishSource')='object' THEN
+   json_type(document,'$.original.englishSource.title')='text' AND length(trim(json_extract(document,'$.original.englishSource.title')))>0
+   AND json_type(document,'$.original.englishSource.text')='text' AND length(trim(json_extract(document,'$.original.englishSource.text')))>0
+   AND (json_type(document,'$.original.chapterContext') IS NOT 'object' OR (
+    json_type(document,'$.original.englishSource.chapterTitle')='text' AND length(trim(json_extract(document,'$.original.englishSource.chapterTitle')))>0
+    AND json_type(document,'$.original.englishSource.chapterText')='text' AND length(trim(json_extract(document,'$.original.englishSource.chapterText')))>0))
+   AND (coalesce(json_extract(document,'$.original.englishSource.title'),'') || coalesce(json_extract(document,'$.original.englishSource.text'),'') || coalesce(json_extract(document,'$.original.englishSource.chapterTitle'),'') || coalesce(json_extract(document,'$.original.englishSource.chapterText'),'')) NOT GLOB '*[⺀-⺙⺛-⻳⼀-⿕々〇〡-〩〸-〻㐀-䶿一-鿿豈-舘並-龎𖿢-𖿣𖿰-𖿶𠀀-𪛟𪜀-𫠝𫠠-𬺭𬺰-𮯠𮯰-𮹝丽-𪘀𰀀-𱍊𱍐-𳑹]*'
+  ELSE (coalesce(json_extract(document,'$.original.title'),'') || coalesce(json_extract(document,'$.original.text'),'') || coalesce(json_extract(document,'$.original.chapterContext.title'),'') || coalesce(json_extract(document,'$.original.chapterContext.text'),'')) NOT GLOB '*[⺀-⺙⺛-⻳⼀-⿕々〇〡-〩〸-〻㐀-䶿一-鿿豈-舘並-龎𖿢-𖿣𖿰-𖿶𠀀-𪛟𪜀-𫠝𫠠-𬺭𬺰-𮯠𮯰-𮹝丽-𪘀𰀀-𱍊𱍐-𳑹]*' END
+ ELSE 0 END AS source_ready
+ FROM selected_sessions s
 ), prepared_sessions AS (
  SELECT s.*, CASE WHEN json_extract(document,'$.intake.phase')='choosing' AND json_extract(document,'$.plan') IS NULL
   AND json_extract(selected_candidate,'$.title')=json_extract(selection,'$.storyTitle')
+  AND s.source_ready=1
   AND json_type(document,'$.original.text')='text' AND length(trim(json_extract(document,'$.original.text')))>0
   AND json_type(document,'$.frameRecommendation.count')='integer' AND json_extract(document,'$.frameRecommendation.count') BETWEEN 1 AND 80
   AND json_type(document,'$.frameRecommendation.reason')='text' AND length(trim(json_extract(document,'$.frameRecommendation.reason')))>0
@@ -22,7 +37,7 @@ WITH selected_sessions AS (
     OR (path LIKE '$.continuations[%]' AND key IN ('sectionId','firstUnit','lastUnit'))
    GROUP BY fullkey,type,atom HAVING count(*)!=3
   ) THEN 'confirming' ELSE json_extract(document,'$.intake.phase') END AS intake_phase
- FROM selected_sessions s
+ FROM source_sessions s
 ), job_counts AS (
  SELECT j.session_id, j.owner_id, count(*) AS jobs,
   sum(j.state = 'queued') AS queued, sum(j.state = 'running') AS running,
@@ -35,7 +50,7 @@ WITH selected_sessions AS (
 SELECT json_object('stories', json_group_array(json(summary))) FROM (
  SELECT json_object(
   'id', s.id,
-  'title', coalesce(json_extract(s.selection, '$.displayTitle'), json_extract(s.document, '$.plan.title'), nullif(json_extract(s.selection, '$.storyTitle'), ''), '还在展开的故事'),
+  'title', coalesce(json_extract(s.selection, '$.displayTitle'), json_extract(s.document, '$.plan.title'), nullif(json_extract(s.selection, '$.storyTitle'), ''), 'A story still unfolding'),
   'book', coalesce(b.title, json_extract(s.selection, '$.customBook'), json_extract(s.selection, '$.bookId')),
   'theme', json_extract(s.selection, '$.theme'),
   'artStyle', coalesce(json_extract(s.selection, '$.artStyle'), 'ink-pencil'),
@@ -51,13 +66,14 @@ SELECT json_object('stories', json_group_array(json(summary))) FROM (
    'reviewStopReason', json_extract(s.document,'$.visualReview.stopReason'),
    'reviewOverridden', json_extract(s.document,'$.visualReview.overridden'),
    'planReady', json(CASE WHEN json_type(s.document, '$.plan') = 'object' THEN 'true' ELSE 'false' END),
-   'sourceReady', json(CASE WHEN json_type(s.document, '$.original') = 'object' THEN 'true' ELSE 'false' END),
+   'sourceReady', json(CASE WHEN s.source_ready=1 THEN 'true' ELSE 'false' END),
    'frameCountConfirmed', json(CASE WHEN json_type(s.document, '$.plan') = 'object' OR json_type(s.document, '$.draft') = 'object' OR json_type(s.document, '$.storyboard') = 'object' OR json_extract(s.document, '$.frameCountConfirmed') = 1 OR (json_type(s.selection, '$.narrativeDetail') IS NULL AND json_type(s.selection, '$.length') = 'integer') THEN 'true' ELSE 'false' END),
    'phase', CASE
     WHEN s.intake_phase='discovering' THEN 'discover'
     WHEN s.intake_phase='choosing' THEN 'story-choice'
     WHEN s.intake_phase='confirming' THEN 'production-confirmation'
     WHEN json_type(s.document, '$.storyboard') = 'object' AND json_type(s.document, '$.original') IS NOT 'object' THEN 'source'
+    WHEN json_type(s.document, '$.plan') IS NOT 'object' AND json_type(s.document,'$.original')='object' AND s.source_ready IS NOT 1 THEN 'recommend'
     WHEN json_type(s.document, '$.plan') IS NOT 'object' AND json_type(s.document, '$.draft')='object' THEN CASE WHEN json_type(s.document, '$.original')='object' THEN 'reflection' ELSE 'source' END
     WHEN json_type(s.document, '$.plan') IS NOT 'object' THEN CASE
      WHEN json_type(s.selection, '$.narrativeDetail') IS NOT NULL AND json_type(s.document, '$.frameRecommendation') IS NOT 'object' THEN 'recommend'

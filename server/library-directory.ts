@@ -1,3 +1,4 @@
+// English product messages; source evidence and machine identifiers remain stable.
 // Share desktop paths and read only the saved library setting, never credentials.
 // Broken settings fail rather than silently opening a different empty shelf.
 import path from 'node:path';
@@ -25,7 +26,7 @@ export function savedDesktopLibraryDirectory(options:LibraryLocationOptions={}){
   if(saved.libraryConfigured===false)return undefined;
   if(typeof saved.dataDirectory!=='string'||!paths.isAbsolute(saved.dataDirectory))throw Error('INVALID_LIBRARY_DIRECTORY');
   return paths.normalize(saved.dataDirectory);
- }catch{throw Error('无法读取桌面书库设置；请修复设置，或通过 --data-dir / SHIQU_DATA_DIR 指定书库。');}
+ }catch{throw Error('Desktop library settings could not be read. Repair settings or specify a library with --data-dir / SHIQU_DATA_DIR.');}
  finally{database?.close();}
 }
 export function developmentLibraryDirectory(options:LibraryLocationOptions={}){

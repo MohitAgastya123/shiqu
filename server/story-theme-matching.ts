@@ -1,3 +1,4 @@
+// English product messages; source evidence and machine identifiers remain stable.
 // Reuse original-based judgments independently of extraction, and isolate bad entries without retry storms.
 // Short write locks merge receipts; process-wide slots remain occupied until paid calls really settle.
 import {randomUUID} from 'node:crypto';
@@ -14,6 +15,7 @@ import {StoryDiscoveryCache,discoveryHash} from './story-discovery-cache.ts';
 import type {ReadingObserver} from './story-discovery-cache.ts';
 import {readingTokens} from './story-token-budget.ts';
 import frozen from '../lib/reader-discovery-v1.json' with {type:'json'};
+import {containsChinese} from '../lib/reader-source-types.ts';
 type Story={title:string;source:LocalSourceReference};
 const unknownSchema=z.object({reason:z.enum(['failed','budget']),cycle:z.string(),budget:z.number()});
 const savedSchema=z.object({decisions:z.record(z.string(),themeDecisionSchema),fingerprints:z.record(z.string(),z.string()),unknown:z.record(z.string(),unknownSchema)});
@@ -46,7 +48,7 @@ export async function matchLibraryStories<T extends Story>(provider:ReaderProvid
  const status=await provider.status(),identity={...(status.themeMatching||{model:status.models.text,reasoningEffort:status.taskReasoningEfforts?.suggest||''}),provider:providerName};
  const key=themeDecisionKey(options.bookId?'original-judgments/'+discoveryHash([options.bookId,providerName]):namespace,theme,identity);
  const cycle=observer?.cycleId||randomUUID(),cycleKey='discovery-cycle/'+discoveryHash(cycle);
- if(stories.length&&!provider.matchStories)throw new ReaderError(503,'当前生成服务暂不支持故事主题匹配，请更新服务后重试。');
+ if(stories.length&&!provider.matchStories)throw new ReaderError(503,'This provider does not support story theme matching. Update the service and retry.');
  const entries=stories.map(story=>{const text=original(story);return {story,id:themeStoryId(story),text,fingerprint:discoveryHash(text)};});
  const read=async()=>await cache.read(key,savedSchema)||empty();
  const fits=(input:ThemeStory[])=>readingTokens(themeMatchPrompt,providerName)+readingTokens(JSON.stringify(themeMatchPayload(theme,input)),providerName)+readingTokens(JSON.stringify(themeMatchJson),providerName)<=budget;
@@ -55,7 +57,7 @@ export async function matchLibraryStories<T extends Story>(provider:ReaderProvid
  for(const legacy of options.legacyNamespaces||[]){
   const old=await cache.read(legacyThemeDecisionKey(legacy,theme,{model:identity.model,reasoningEffort:identity.reasoningEffort}),z.object({decisions:z.record(z.string(),themeDecisionSchema)}));
   if(old)await cache.update(key,savedSchema,empty,current=>{
-   for(const entry of entries){const decision=old.decisions[legacyThemeStoryId(entry.story)];if(decision&&decision.id===legacyThemeStoryId(entry.story)&&!current.decisions[entry.id]){current.decisions[entry.id]={...decision,id:entry.id};current.fingerprints[entry.id]=entry.fingerprint;}}
+   for(const entry of entries){const decision=old.decisions[legacyThemeStoryId(entry.story)];if(decision&&!containsChinese(decision.reason)&&decision.id===legacyThemeStoryId(entry.story)&&!current.decisions[entry.id]){current.decisions[entry.id]={...decision,id:entry.id};current.fingerprints[entry.id]=entry.fingerprint;}}
    return current;
   });
  }

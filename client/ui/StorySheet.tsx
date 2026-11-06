@@ -1,3 +1,4 @@
+// English interface: labels, accessibility text, and workflow messages use English.
 // Share native dialog focus and scroll locks across reading, creation and nested editing.
 import {useEffect,useRef} from 'react';
 import {X} from 'lucide-react';
@@ -23,6 +24,6 @@ export default function Sheet({title,onClose,children,busy=false}:{title:string;
    if(prior?.isConnected)prior.focus({preventScroll:true});
   };
  },[]);
- return <dialog className="yu-backdrop" ref={dialogRef} aria-label={title} aria-modal="true" onCancel={e=>{e.preventDefault();if(!busy)onClose();}} onClick={e=>{if(!busy&&e.target===e.currentTarget)onClose();}}><section className="yu-sheet" tabIndex={-1} ref={contentRef} aria-busy={busy}><div className="yu-handle"/><header><h2>{title}</h2><button className="yu-icon" disabled={busy} aria-label="关闭" onClick={onClose}><X size={21}/></button></header>{children}</section></dialog>;
+ return <dialog className="yu-backdrop" ref={dialogRef} aria-label={title} aria-modal="true" onCancel={e=>{e.preventDefault();if(!busy)onClose();}} onClick={e=>{if(!busy&&e.target===e.currentTarget)onClose();}}><section className="yu-sheet" tabIndex={-1} ref={contentRef} aria-busy={busy}><div className="yu-handle"/><header><h2>{title}</h2><button className="yu-icon" disabled={busy} aria-label="Close" onClick={onClose}><X size={21}/></button></header>{children}</section></dialog>;
 }
 

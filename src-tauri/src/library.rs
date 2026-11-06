@@ -1,3 +1,4 @@
+// English native controls and diagnostics; persisted identifiers and source data are unchanged.
 // Read summaries and manage reversible reader tombstones without starting generation or deleting media.
 use rusqlite::{Connection, OpenFlags};
 use serde_json::{json, Value};
@@ -109,7 +110,7 @@ pub fn summary(directory: &Path) -> Result<Value, String> {
         }
         Ok(result)
     };
-    read().map_err(|_| "无法读取本地书架，请检查数据目录及数据库版本。".into())
+    read().map_err(|_| "The local bookshelf could not be read. Check the data directory and database version.".into())
 }
 
 pub fn set_deleted(directory: &Path, id: &str, deleted: bool) -> Result<(), String> {
@@ -141,7 +142,7 @@ pub fn set_deleted(directory: &Path, id: &str, deleted: bool) -> Result<(), Stri
         transaction.commit()?;
         Ok(())
     };
-    update().map_err(|_| "故事暂时无法更新，请重试。".into())
+    update().map_err(|_| "The story could not be updated. Retry.".into())
 }
 
 #[cfg(test)]

@@ -1,3 +1,4 @@
+// English product messages; source evidence and machine identifiers remain stable.
 // Share HTTP lifecycle; CLI owns the desktop-compatible library until generation and DB shutdown finish.
 import {createApplication} from './app.ts';
 import {createHttpServer} from './http.ts';
@@ -61,7 +62,7 @@ export async function startServer({root,variables=process.env,localAccess=false,
  });
  const browserHost=config.host==='0.0.0.0'?'127.0.0.1':config.host==='::'?'::1':config.host;
  const host=browserHost.includes(':')?`[${browserHost}]`:browserHost;
- console.log(`拾趣: http://${host}:${config.port} — data: ${config.dataDirectory}`);
+ console.log(`Shiqu: http://${host}:${config.port} — data: ${config.dataDirectory}`);
  printPhoneAccess(urls);
  recordDiagnostic(config.dataDirectory,'service_started');
  return server;

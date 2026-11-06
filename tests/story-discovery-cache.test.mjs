@@ -1,3 +1,4 @@
+// Verify English runtime projections while retaining canonical Chinese source evidence.
 // Exercise on-demand reading, durable boundaries, cross-chapter evidence, and shared cancellation.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -57,7 +58,7 @@ test('whole book first selects one, then catalogs four and returns four matches 
  const f=fixture(),store=memory(),cache=new StoryDiscoveryCache(store);
  const first=await run(f,cache);assert.equal(first.stories.length,1);assert.equal(f.calls.length,1);assert.equal(f.calls[0].input.scan.maxStories,1);
  assert.equal(f.calls[0].input.purpose,'catalog');assert.equal(f.calls[0].selection.theme,'');assert.equal(f.calls[0].input.text,f.book.input.text);
- assert.match((await run(f,new StoryDiscoveryCache(store))).note,/缓存/);assert.equal(f.calls.length,1);
+ assert.match((await run(f,new StoryDiscoveryCache(store))).note,/were reused/);assert.equal(f.calls.length,1);
  const next=await run(f,cache,first.stories.map(s=>s.title),undefined,first.stories.map(s=>s.source));
  assert.equal(next.stories.length,4);assert.equal(f.calls.length,2);assert.equal(f.calls.at(-1).input.scan.maxStories,32);
  assert.ok(next.stories.every(s=>!first.stories.some(old=>localSourceKey(old.source)===localSourceKey(s.source))));
@@ -75,7 +76,7 @@ test('a partial chapter batch returns immediately, survives restart, and continu
  const first=await run(f,cache,[],undefined,[],limits);
  assert.equal(first.stories.length,1);assert.equal(f.calls.length,1);
  const repeat=await run(f,new StoryDiscoveryCache(store),[],undefined,[],limits);
- assert.deepEqual(repeat.stories,first.stories);assert.match(repeat.note,/缓存/);assert.equal(f.calls.length,1);
+ assert.deepEqual(repeat.stories,first.stories);assert.match(repeat.note,/were reused/);assert.equal(f.calls.length,1);
  const next=await run(f,cache,[],undefined,first.stories.map(story=>story.source),limits);
  assert.equal(next.stories.length,3);assert.equal(f.calls.length,2);
  assert.equal(f.calls[0].input.text,f.calls[1].input.text);
@@ -131,10 +132,10 @@ test('cross-chapter pending survives omission, accumulates evidence, and only a 
 test('a zero-result explicitly complete block advances; an unfinished no-progress response fails without skipping',async()=>{
  const f=fixture(8,4,200),store=memory(),cache=new StoryDiscoveryCache(store);
  f.provider.suggestions=async(s,e,input)=>{f.calls.push(input);return {stories:[],note:'',scan:state(f.calls.length===1)};};
- await assert.rejects(run(f,cache,[],undefined,[],limits),/保留进度/);assert.equal(f.calls.length,2);
+ await assert.rejects(run(f,cache,[],undefined,[],limits),/Progress has been retained/);assert.equal(f.calls.length,2);
  const documents=[...store.values.values()].map(bytes=>JSON.parse(new TextDecoder().decode(bytes)));
  const saved=documents.find(d=>d.value.pendingEvents);assert.equal(saved.value.cursor,1);
- await assert.rejects(run(f,cache,[],undefined,[],limits),/保留进度/);assert.equal(f.calls[1].text,f.calls[2].text);
+ await assert.rejects(run(f,cache,[],undefined,[],limits),/Progress has been retained/);assert.equal(f.calls[1].text,f.calls[2].text);
 });
 test('fake event consumption and merged pending overflow keep the previous cursor and events',async()=>{
  for(const mode of ['consume','overflow']){
@@ -219,8 +220,8 @@ test('a complete cached page does not wait behind another readers model call',as
  release();assert.equal((await next).stories.length,4);
 });
 test('cache write errors and malformed model state do not pretend success',async()=>{
- const f=fixture();await assert.rejects(run(f,new StoryDiscoveryCache({get:async()=>null,put:async()=>{throw Error('disk full');}})),/缓存.*保存/);assert.equal(f.calls.length,0);
- f.provider.suggestions=async()=>({stories:[],note:''});await assert.rejects(run(f,new StoryDiscoveryCache(memory())),/保留进度/);
+ const f=fixture();await assert.rejects(run(f,new StoryDiscoveryCache({get:async()=>null,put:async()=>{throw Error('disk full');}})),/cache could not be saved/);assert.equal(f.calls.length,0);
+ f.provider.suggestions=async()=>({stories:[],note:''});await assert.rejects(run(f,new StoryDiscoveryCache(memory())),/Progress has been retained/);
 });
 test('distinct sources sharing a display title remain available when excluding by source',async()=>{
  const f=fixture(),cache=new StoryDiscoveryCache(memory());f.stories.forEach(story=>{story.title='相同展示名';});
@@ -231,7 +232,7 @@ test('distinct sources sharing a display title remain available when excluding b
 test('invalid and overlapping receipts are removed and cannot advance the current block',async()=>{
  const f=fixture(),store=memory(),cache=new StoryDiscoveryCache(store),seed=await run(f,cache);
  f.provider.suggestions=async()=>({stories:[f.stories[1],{...f.stories[1],title:'换名重复'},{...f.stories[2],source:{...f.stories[2].source,firstUnit:'missing'}}],note:'',scan:state(true)});
- const batch=await run(f,cache,[],undefined,seed.stories.map(story=>story.source));assert.equal(batch.stories.length,1);assert.match(batch.note,/未能完整核对/);
+ const batch=await run(f,cache,[],undefined,seed.stories.map(story=>story.source));assert.equal(batch.stories.length,1);assert.match(batch.note,/could not be fully verified/);
  const docs=[...store.values.values()].map(bytes=>JSON.parse(new TextDecoder().decode(bytes)));assert.equal(docs.find(d=>d.value.pendingEvents).value.cursor,0);
 });
 test('FileMedia restart and authenticated JSON/streaming routes preserve partial batches and per-reader exclusions',async t=>{

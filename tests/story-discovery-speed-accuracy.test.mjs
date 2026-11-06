@@ -1,3 +1,4 @@
+// Verify English runtime projections while retaining canonical Chinese source evidence.
 // Exercise paid-result preservation and bounded discovery with isolated source-valid fake inference.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -83,13 +84,13 @@ test('all 1129 Shishuo units are covered in at most 60 calls; 1072 eligible stor
  assert.deepEqual(result.stories,[]);assert.ok(calls<=60,`${calls} calls`);const saved=await cache.read(discoveryNamespace(book,'codex','mock',undefined,'medium')+'/library',z.any());assert.equal(saved.stories.length,1072);assert.equal(new Set(saved.stories.map(s=>localSourceKey(s.source))).size,1072);assert.equal(saved.exhausted,true);assert.equal(rejected.length,57);assert.equal(rejected.filter(r=>r.reason==='short').length,56);assert.equal(rejected.find(r=>r.reason==='source-anomaly').id,'shishuo-10-026');assert.deepEqual(rejected.map(r=>r.id).sort(),baseline.probe.invalid.map(r=>r.id).sort());
 });
 test('arbitrary old theme receipts migrate from frozen keys without repeating paid judgments',async()=>{
- const f=libraryFixture(),old=previousDiscoveryNamespace(f.book,'codex','mock',undefined,'medium'),theme='fixture之外的任意主题';
+ const f=libraryFixture(),old=previousDiscoveryNamespace(f.book,'codex','mock',undefined,'medium'),theme='fixture之外的任意主题';f.stories.forEach((story,index)=>Object.assign(story,{title:`Complete story ${index+1}`,description:'A verified complete event.'}));
  await f.cache.write(previousReadingPlanKey(f.book,'codex')+'/blocks',{mode:'whole',blocks:[{ranges:[{sectionId:'s1',firstUnit:'u1',lastUnit:'u2'}],tokens:100}]});await f.cache.write(old+'/library',state(f));
- const decisions=Object.fromEntries(f.stories.map(s=>[legacyThemeStoryId(s),{id:legacyThemeStoryId(s),verdict:'yes',reason:'旧原文判断。'}]));await f.cache.write(legacyThemeDecisionKey(old,theme,{model:'mock-match',reasoningEffort:'low'}),{decisions});const before=[...f.store.values.values()].map(bytes=>bytes.slice());
+ const decisions=Object.fromEntries(f.stories.map(s=>[legacyThemeStoryId(s),{id:legacyThemeStoryId(s),verdict:'yes',reason:'The original supports this theme.'}]));await f.cache.write(legacyThemeDecisionKey(old,theme,{model:'mock-match',reasoningEffort:'low'}),{decisions});const before=[...f.store.values.values()].map(bytes=>bytes.slice());
  assert.equal((await f.run(theme)).stories.length,2);assert.equal(f.calls.catalog.length,0);assert.equal(f.calls.matches.length,0);assert.ok(before.every(bytes=>[...f.store.values.values()].some(current=>Buffer.compare(bytes,current)===0)));
 });
 test('invalid extraction ranges never advance even when a model claims block completion',async()=>{
- const f=libraryFixture();f.provider.suggestions=async()=>({stories:[{...f.stories[0],source:{...f.stories[0].source,firstUnit:'unknown'}}],note:'',scan:{blockComplete:true,pendingEvents:[],resolvedEventIds:[]}});await assert.rejects(f.run('原典'),/原文范围/);assert.equal((await read(f)).cursor,0);
+ const f=libraryFixture();f.provider.suggestions=async()=>({stories:[{...f.stories[0],source:{...f.stories[0].source,firstUnit:'unknown'}}],note:'',scan:{blockComplete:true,pendingEvents:[],resolvedEventIds:[]}});await assert.rejects(f.run('原典'),/source range/);assert.equal((await read(f)).cursor,0);
 });
 test('high overlap is diagnostic; a distinct complete event with new evidence remains usable',async()=>{
  const f=many(12),first={...f.stories[0],source:{...f.stories[0].source,lastUnit:'u9'}},second={...f.stories[1],source:{...f.stories[1].source,firstUnit:'u1',lastUnit:'u10'}};await f.cache.write(key(f),{...state(f),stories:[first],cursor:0,readThrough:0,exhausted:false});
@@ -99,7 +100,7 @@ test('high overlap is diagnostic; a distinct complete event with new evidence re
 
 test('v3 migration maps the proven frontier, rereads only its containing new block, and preserves old bytes',async()=>{
  const books=new LocalBooks(process.cwd()),book=await books.book({bookId:'战国策'}),fixture=baseline.books.find(row=>row.bookId===book.id),store=memory(),cache=new StoryDiscoveryCache(store),old=previousDiscoveryNamespace(book,'codex','mock',undefined,'medium'),manifestKey=previousReadingPlanKey(book,'codex')+'/blocks';
- const first=book.sections[0],story={title:'颜率保九鼎',description:'颜率保全九鼎。',source:{edition:book.edition,sectionId:first.id,firstUnit:first.units[0].id,lastUnit:first.units.at(-1).id}};
+ const first=book.sections[0],story={title:'Yan Shuai preserves the Nine Tripods',description:'The minister preserves the royal tripods.',source:{edition:book.edition,sectionId:first.id,firstUnit:first.units[0].id,lastUnit:first.units.at(-1).id}};
  await cache.write(manifestKey,fixture.manifest);await cache.write(old+'/library',{stories:[story],cursor:2,readThrough:2,pendingEvents:[],exhausted:false,rejected:false});const originalBytes=[...store.values.values()].map(bytes=>bytes.slice()),inputs=[];
  const provider={status:async()=>({provider:'codex',models:{text:'mock',image:'none'},taskReasoningEfforts:{suggest:'medium'},themeMatching:{model:'match',reasoningEffort:'low'}}),matchStories:async(_theme,entries)=>({matches:entries.map(s=>({id:s.id,verdict:'yes',reason:'原文依据。'}))}),suggestions:async(_s,_e,input)=>{inputs.push(input.text);return {stories:[],note:'',scan:{blockComplete:true,pendingEvents:[],resolvedEventIds:[]}};}};
  const selection={bookId:book.id,theme:'固定主题'};await discoverLocalStories(provider,books,cache,book,selection,[]);const newKey=discoveryNamespace(book,'codex','mock',undefined,'medium')+'/library';assert.equal((await cache.read(newKey,z.any())).cursor,0);assert.equal(inputs.length,0);
@@ -152,6 +153,6 @@ test('only cycles with reserved isolation credit receive a shared isolation cost
  const first=matching(f,{...observe('has-credit'),onCall:e=>funded.push(e)});await until(()=>started);const second=matching(f,{...observe('no-credit'),onCall:e=>exhausted.push(e)});await new Promise(resolve=>setImmediate(resolve));release();await Promise.all([first,second]);assert.equal(funded.filter(e=>e.isolation).length,4);assert.equal(exhausted.filter(e=>e.isolation).length,0);assert.equal(exhausted.length,1);
 });
 test('valid old neutral records survive a missing manifest without claiming old coverage',async()=>{
- const f=libraryFixture(),old=previousDiscoveryNamespace(f.book,'codex','mock',undefined,'medium'),pending={id:'still-open',title:'未完旁线',source:f.stories[1].source};await f.cache.write(old+'/library',{...state(f),pendingEvents:[pending]});const bytes=[...f.store.values.values()][0].slice();
+ const f=libraryFixture();f.stories.forEach((story,index)=>Object.assign(story,{title:`Complete story ${index+1}`,description:'An independent complete event.'}));const old=previousDiscoveryNamespace(f.book,'codex','mock',undefined,'medium'),pending={id:'still-open',title:'Unfinished side event',source:f.stories[1].source};await f.cache.write(old+'/library',{...state(f),pendingEvents:[pending]});const bytes=[...f.store.values.values()][0].slice();
  const result=await f.run('知恩图报');assert.equal(result.stories[0].title,f.stories[0].title);assert.equal(f.calls.catalog.length,0);const saved=await read(f);assert.equal(saved.cursor,0);assert.equal(saved.exhausted,false);assert.equal(saved.stories.length,2);assert.deepEqual(saved.pendingEvents,[pending]);assert.ok([...f.store.values.values()].some(value=>Buffer.compare(value,bytes)===0));
 });

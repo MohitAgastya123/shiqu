@@ -1,3 +1,4 @@
+// English workflow expectations preserve source evidence, saved work and recovery contracts.
 // Exercise independent naming through REST, SQLite and a generation checkpoint saved after the rename.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -52,7 +53,7 @@ test('invalid, cross-origin and other-owner renames leave stored data intact',as
  const f=await productionFixture(t);f.control.hold=false;
  const id=await f.create();await until(async()=>(await f.read(id)).state==='completed');
  const before=await row(f,id);
- for(const title of ['', '   ', '名'.repeat(41), '第一行\n第二行', 123, null]){
+ for(const title of ['', '   ', 'Name'.repeat(41), '第一行\n第二行', 123, null]){
   assert.equal((await f.request(`sessions/${id}/title`,'POST',{title})).status,400);
  }
  assert.equal((await f.request(`sessions/${id}/title`,'POST',{title:'跨站改名'},{origin:'http://other.example'})).status,403);

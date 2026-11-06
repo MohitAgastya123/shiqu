@@ -1,3 +1,4 @@
+// English product text and generation contracts; canonical source evidence remains unchanged.
 // Validate suggestion batches and keep verified local receipts through browser history.
 import {z} from 'zod';
 import {selectionSchema} from './reader-model.ts';
@@ -18,9 +19,9 @@ export function titleKey(title:string){return title.normalize('NFKC').replace(/[
 export function freshSuggestions(batch:SuggestionBatch,excluded:string[],excludedSources:LocalSourceReference[]=[]):SuggestionBatch{
  const seen=new Set(excludedSources.length?[]:excluded.map(titleKey)),sources=new Set(excludedSources.map(localSourceKey));
  const stories=batch.stories.filter(story=>{const key=titleKey(story.title),source=story.source?localSourceKey(story.source):'';if(seen.has(key)||source&&sources.has(source))return false;if(source)sources.add(source);else seen.add(key);return true;});
- const note=batch.note||(stories.length===0?'暂时没有更多可确认的故事，可以回看前面的批次，或换个主题。':stories.length<5?'本批可确认的新故事不足 5 篇，先列出这些。':'');
+ const note=batch.note||(stories.length===0?'No more verified stories were found. Review earlier batches or try another theme.':stories.length<5?'This batch has fewer than five new verified stories. These are the available results.':'');
  return {stories,note};
 }
 
 // Keep long multi-chapter reading blocks compact in both discovery status surfaces.
-export const readingChapterLabel=(chapters:string[])=>chapters.length>2?`${chapters[0]}至${chapters.at(-1)}（共${chapters.length}章）`:chapters.join('、');
+export const readingChapterLabel=(chapters:string[])=>chapters.length>2?`${chapters[0]} to ${chapters.at(-1)} (${chapters.length} chapters)`:chapters.join(', ');

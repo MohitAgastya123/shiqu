@@ -1,3 +1,4 @@
+// Verify English preparation failures without changing durable image-count coverage.
 // Exercise legacy counts and reader demand through the same durable queue as production.
 // Batch-era assertions follow saved checkpoints rather than synchronous HTTP completion.
 import test from 'node:test';
@@ -90,5 +91,5 @@ test('frame count validation, owner, running lock and concurrent conflicting con
 });
 test('unverifiable originals stop before recommendation, plan or images',async t=>{
  const f=await productionFixture(t,'gemini'),id=await f.create(8,{bookId:'other',customBook:'https://example.com/story',storyTitle:'未知故事',narrativeDetail:'balanced'});
- const failed=await waiting(f,id);assert.match(failed.error,/原文未能核对/);assert.equal(f.control.recommendations.length,0);assert.equal(f.control.plans.length,0);assert.equal(f.control.calls.length,0);
+ const failed=await waiting(f,id);assert.match(failed.error,/source could not be verified/);assert.equal(f.control.recommendations.length,0);assert.equal(f.control.plans.length,0);assert.equal(f.control.calls.length,0);
 });

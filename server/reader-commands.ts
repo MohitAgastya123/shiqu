@@ -1,3 +1,4 @@
+// English product messages; source evidence and machine identifiers remain stable.
 // Persist one authorization per immutable failure; replay observes receipts instead of resetting work.
 import {createHash} from 'node:crypto';
 import {ReaderError} from '../lib/reader-model.ts';
@@ -10,8 +11,8 @@ export type CommandReceipt={request_id:string;owner_id:string;session_id:string;
 export const commandFingerprint=(input:unknown)=>createHash('sha256').update(JSON.stringify(input)).digest('hex');
 export async function commandReceipt(db:Database,ownerId:string,requestId:string,fingerprint?:string){
  const row=await db.prepare('SELECT * FROM reader_commands WHERE owner_id=? AND request_id=?').bind(ownerId,requestId).first<CommandReceipt>();
- if(!row&&await db.prepare('SELECT id FROM stories WHERE id=? AND user_id=?').bind(requestId,ownerId).first())throw new ReaderError(409,'这个操作编号已用于创建或提交故事。');
- if(row&&fingerprint!==undefined&&row.fingerprint!==fingerprint)throw new ReaderError(409,'这个操作编号已用于其他内容，请重新操作。');
+ if(!row&&await db.prepare('SELECT id FROM stories WHERE id=? AND user_id=?').bind(requestId,ownerId).first())throw new ReaderError(409,'This request ID has already been used to create or submit a story.');
+ if(row&&fingerprint!==undefined&&row.fingerprint!==fingerprint)throw new ReaderError(409,'This request ID has already been used for different content. Submit a new request.');
  return row;
 }
 export async function sessionFaults(db:Database,sessionId:string,ownerId:string){
@@ -28,7 +29,7 @@ export async function authorizeRecovery(db:Database,input:{ownerId:string;sessio
  const {ownerId,sessionId,requestId,faultId,jobs,resolutionJob,redraw=false}=input;
  const resolved=input.resolved||false,payload=JSON.stringify({jobs,resolutionJob,redraw,...(input.adopt?{adopt:input.adopt}:{})}),fingerprint=commandFingerprint(['recover',sessionId,faultId,jobs,resolutionJob,redraw,resolved,...(input.adopt?[input.adopt]:[])]);
  const replay=await commandReceipt(db,ownerId,requestId,fingerprint);if(replay)return replay;
- if(!resolved&&(!jobs.length||!jobs.includes(resolutionJob)||new Set(jobs).size!==jobs.length))throw new ReaderError(400,'恢复任务不完整。');
+ if(!resolved&&(!jobs.length||!jobs.includes(resolutionJob)||new Set(jobs).size!==jobs.length))throw new ReaderError(400,'The recovery task is incomplete.');
  const eligible=input.basis?`AND EXISTS(SELECT 1 FROM stories s WHERE s.id=f.session_id AND s.user_id=f.owner_id
   AND s.generation_control='active' AND NOT ${supersededSql('s')}
   AND NOT EXISTS(SELECT 1 FROM library_deletions d WHERE d.story_id=s.id AND d.user_id=s.user_id)
@@ -50,8 +51,8 @@ export async function authorizeRecovery(db:Database,input:{ownerId:string;sessio
  const receipt=await commandReceipt(db,ownerId,requestId,fingerprint);
  if(receipt)return receipt;
  const fault=await db.prepare('SELECT * FROM reader_faults WHERE id=? AND owner_id=? AND session_id=?').bind(faultId,ownerId,sessionId).first<ReaderFault>();
- if(fault?.state==='recovering')throw new ReaderError(409,'这项问题正在处理，请等待已提交的恢复任务。');
- throw new ReaderError(409,'这项问题或输入已更新，请刷新后再操作。');
+ if(fault?.state==='recovering')throw new ReaderError(409,'This issue is being handled. Wait for the submitted recovery task.');
+ throw new ReaderError(409,'This issue or its inputs have changed. Refresh before continuing.');
 }
 
 export async function authorizeControl(db:Database,ownerId:string,sessionId:string,requestId:string,action:ProductionAction,now=Date.now()){
@@ -61,7 +62,7 @@ export async function authorizeControl(db:Database,ownerId:string,sessionId:stri
    AND NOT ${supersededSql('s')} AND NOT EXISTS(SELECT 1 FROM library_deletions d WHERE d.story_id=s.id AND d.user_id=s.user_id)
   ON CONFLICT(owner_id,request_id) DO NOTHING`)
   .bind(requestId,ownerId,sessionId,fingerprint,JSON.stringify({action}),now,now,sessionId,ownerId).run();
- const receipt=await commandReceipt(db,ownerId,requestId,fingerprint);if(!receipt)throw new ReaderError(409,'故事已完成或版本已更新，请刷新后再操作。');return receipt;
+ const receipt=await commandReceipt(db,ownerId,requestId,fingerprint);if(!receipt)throw new ReaderError(409,'The story is complete or its revision has changed. Refresh before continuing.');return receipt;
 }
 
 export async function authorizeOverride(db:Database,ownerId:string,sessionId:string,command:{requestId:string;faultId:string},now=Date.now()){
@@ -78,5 +79,5 @@ export async function authorizeOverride(db:Database,ownerId:string,sessionId:str
    AND NOT EXISTS(SELECT 1 FROM library_deletions d WHERE d.story_id=s.id AND d.user_id=s.user_id)
   ON CONFLICT(owner_id,request_id) DO NOTHING`)
   .bind(command.requestId,ownerId,sessionId,fingerprint,command.faultId,now,now,sessionId,ownerId,command.faultId).run();
- const receipt=await commandReceipt(db,ownerId,command.requestId,fingerprint);if(!receipt)throw new ReaderError(409,'审核问题正在处理或已更新，请刷新后再操作。');return receipt;
+ const receipt=await commandReceipt(db,ownerId,command.requestId,fingerprint);if(!receipt)throw new ReaderError(409,'The review issue is being handled or has changed. Refresh before continuing.');return receipt;
 }

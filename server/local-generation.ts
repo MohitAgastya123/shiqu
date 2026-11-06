@@ -1,3 +1,4 @@
+// English product messages; source evidence and machine identifiers remain stable.
 // Bind whole-book or selected-chapter discovery and verified originals to the existing provider.
 // Verify and persist originals before any paid storyboard request; never fall back remotely.
 // Keep the provider's execution deadlines visible to the production countdown.
@@ -15,6 +16,7 @@ import {measurementBusy,settleMeasurements} from './story-discovery-metrics.ts';
 import {matchingBusy,settleMatching} from './story-theme-matching.ts';
 import {localSourceKey,localSourceSchema,sourceRanges} from '../lib/reader-local-contract.ts';
 import {artRecommendationSchema,selectedArtRecommendationPrompt} from '../lib/reader-art-recommendation.ts';
+import {englishSourceLabel} from './local-book-contents.ts';
 
 export function withLocalBooks(provider:ReaderProvider,books:LocalBooks,media:MediaStore,cache=new StoryDiscoveryCache(media)):ReaderProvider{
  async function persist(source:NonNullable<Awaited<ReturnType<LocalBooks['selected']>>>,id:string){
@@ -23,8 +25,8 @@ export function withLocalBooks(provider:ReaderProvider,books:LocalBooks,media:Me
  }
  async function recommendArt(selection:Selection){
   const original=await books.selected(selection);
-  if(!original?.localSource||!selection.storyTitle)throw new ReaderError(400,'请先选择已核对出处的故事。');
-  if(!provider.recommendArt)throw new ReaderError(503,'画风推荐暂不可用，可以手动选择画风。');
+  if(!original?.localSource||!selection.storyTitle)throw new ReaderError(400,'Select a story with a verified source first.');
+  if(!provider.recommendArt)throw new ReaderError(503,'Art style recommendations are unavailable. Choose an art style manually.');
   const status=await provider.status(),key='selected-story-art/'+discoveryHash([selection.bookId,selection.customBook,original.localSource,selection.storyTitle,selection.theme,status.provider,status.models.text,selectedArtRecommendationPrompt,...(status.taskReasoningEfforts?[status.taskReasoningEfforts.art]:[])]);
   return cache.shared(key,undefined,async()=>{
    const saved=await cache.read(key,artRecommendationSchema);if(saved)return saved;
@@ -42,27 +44,28 @@ export function withLocalBooks(provider:ReaderProvider,books:LocalBooks,media:Me
    reading?.signal.throwIfAborted();
    const book=await books.book(selection);
    reading?.signal.throwIfAborted();
-   if(!book){if(selection.discoverySources||selection.discovery?.mode==='title')throw new ReaderError(400,'章节或标题提取只支持本地书库。');return provider.suggestions(selection,excluded,undefined,reading,excludedSources);}
+   if(!book){if(selection.discoverySources||selection.discovery?.mode==='title')throw new ReaderError(400,'Chapter and title discovery are supported only for built-in books.');return provider.suggestions(selection,excluded,undefined,reading,excludedSources);}
    const scope=selection.discoverySources?selectedChapterScope(books,book,selection.discoverySources):null;
    const result=await discoverLocalStories(provider,books,cache,scope?.book||book,scope?{...selection,discoverySources:scope.discoverySources}:selection,excluded,reading,excludedSources);
    // A single-story scope has sliced units; display paragraph positions from the full original.
-   return scope?{...result,stories:result.stories.map(story=>({...story,sourceLabel:books.resolve(book,story.source!).title.slice(0,150)}))}:result;
+   return scope?{...result,stories:result.stories.map(story=>({...story,sourceLabel:englishSourceLabel(book,story.source!)}))}:result;
   },
   recommendArt,
   generator(){
    const generator=provider.generator();
    function verifyOriginal(selection:Selection,original:OriginalSource|undefined){
-    if(!original?.localSource||!selection.source||localSourceKey(original.localSource)!==localSourceKey(selection.source))throw new ReaderError(400,'原文尚未在本地核对，请重新选择故事。');
-    if(hasStoredSourceAnomaly(original)||hasSourceAnomaly(original.title))throw new ReaderError(400,'已存原文含未识别字形或缺文标记，请重新选择完整、可读的故事出处。原文记录已保留。');
+    if(!original?.localSource||!selection.source||localSourceKey(original.localSource)!==localSourceKey(selection.source))throw new ReaderError(400,'The original text has not been verified locally. Select the story again.');
+    if(hasStoredSourceAnomaly(original)||hasSourceAnomaly(original.title))throw new ReaderError(400,'The saved original contains unrecognized characters or missing text. Select a complete, readable source. The original record has been retained.');
     if(original.chapterContext){
      const {title,text,source}=original.chapterContext,parsed=localSourceSchema.safeParse(source);
      const anchors=sourceRanges(original.localSource),sections=new Set(anchors.map(range=>range.sectionId));
-     if(typeof title!=='string'||!title||hasSourceAnomaly(title)||typeof text!=='string'||!text.isWellFormed()||!parsed.success||parsed.data.edition!==original.localSource.edition)throw new ReaderError(400,'已存章节上下文无法核对，请重新选择故事。原文记录已保留。');
+     if(typeof title!=='string'||!title||hasSourceAnomaly(title)||typeof text!=='string'||!text.isWellFormed()||!parsed.success||parsed.data.edition!==original.localSource.edition)throw new ReaderError(400,'The saved chapter context could not be verified. Select the story again. The original record has been retained.');
      const ranges=sourceRanges(parsed.data);
-     if(ranges.length!==sections.size||new Set(ranges.map(range=>range.sectionId)).size!==sections.size||ranges.some(range=>!sections.has(range.sectionId))||[...ranges,...anchors].some(range=>![range.firstUnit,range.lastUnit].every(id=>text.includes(`[${id}]\n`))))throw new ReaderError(400,'已存章节上下文与故事定位不一致，请重新选择故事。原文记录已保留。');
+     if(ranges.length!==sections.size||new Set(ranges.map(range=>range.sectionId)).size!==sections.size||ranges.some(range=>!sections.has(range.sectionId))||[...ranges,...anchors].some(range=>![range.firstUnit,range.lastUnit].every(id=>text.includes(`[${id}]\n`))))throw new ReaderError(400,'The saved chapter context does not match the selected source. Select the story again. The original record has been retained.');
     }
    }
    return {...generator,
+    validateOriginal(selection,original){if(localBookId(selection))verifyOriginal(selection,original);},
     ...(provider.recommendArt?{recommendArt}:{}),
     async reflection(selection,draft,original,revision){
      if(localBookId(selection))verifyOriginal(selection,original);
@@ -99,14 +102,14 @@ export function withLocalBooks(provider:ReaderProvider,books:LocalBooks,media:Me
     }} satisfies Pick<typeof generator,'planBatch'>:{}),
     async prepareOriginal(selection,id){
      if(!localBookId(selection)){
-      if(selection.source)throw new ReaderError(400,'出处与所选书籍不一致，请重新选择故事。');
+      if(selection.source)throw new ReaderError(400,'The source does not match the selected book. Select the story again.');
       return generator.prepareOriginal?.(selection,id)||null;
      }
      const original=await books.storyOriginal(selection);return persist(original!,id);
     },
     async recommend(selection,id,original,prepareRequirements=false){
      if(localBookId(selection))verifyOriginal(selection,original);
-     if(!generator.recommend)throw new ReaderError(503,'生成服务暂不支持画幅建议，请更新服务后重试。');
+     if(!generator.recommend)throw new ReaderError(503,'This provider does not support frame recommendations. Update the service and retry.');
      return generator.recommend(selection,id,original,prepareRequirements);
     },
     async plan(selection,id,original){

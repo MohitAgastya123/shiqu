@@ -1,3 +1,4 @@
+// English product messages; source evidence and machine identifiers remain stable.
 // Run Vite and the watched REST server with shared saved settings; local owns its checkout shelf.
 // Provider credentials are resolved only by the backend, never loaded from project .env into Vite.
 import {createServer} from 'vite';
@@ -22,6 +23,6 @@ try{
  backend=spawn(process.execPath,['--watch','dist/dev/server.js'],{stdio:'inherit',env:{...process.env,PORT:String(apiPort),SHIQU_BIND_IP:'127.0.0.1',SHIQU_DEV_FRONTEND_PORT:String(port),SHIQU_LOCAL_SETTINGS_PROXY_TOKEN:settingsProxyToken}});
  backend.on('exit',code=>{if(!stopping)void stop(code||1);});
  frontend.printUrls();
- console.log(`拾趣开发版：http://127.0.0.1:${port}`);
+ console.log(`Shiqu development: http://127.0.0.1:${port}`);
  printPhoneAccess(phoneUrls('0.0.0.0',port));
 }catch(error){await stop(1);throw error;}

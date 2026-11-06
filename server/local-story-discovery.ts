@@ -1,3 +1,4 @@
+// English product messages; source evidence and machine identifiers remain stable.
 // Persist theme-neutral stories before matching; never let a reader's theme or exclusions shape extraction.
 // Expand only until new stories exist, carrying verified unfinished events across blocks and cancellation.
 // Binary theme receipts read originals; old catalog ranges resume without generating summaries.
@@ -21,6 +22,8 @@ import type {ReadingLimits,ReadingBlock} from './story-reading-inputs.ts';
 import {requestTokens} from './story-token-budget.ts';
 import {sourceUnitIds,sourcesOverlap,sourceCovers,mergeSources} from './local-source-ranges.ts';
 import {matchLibraryStories,hasUnknownJudgments} from './story-theme-matching.ts';
+import {englishSourceLabel} from './local-book-contents.ts';
+import {containsChinese} from '../lib/reader-source-types.ts';
 
 const storySchema=suggestionBatchSchema.shape.stories.element.omit({storyBrief:true,matchReason:true}).extend({source:localSourceSchema,continuedFrom:z.array(localSourceSchema).min(1).max(16).optional()});
 type Story=z.infer<typeof storySchema>;
@@ -30,13 +33,13 @@ const stateSchema=z.object({stories:z.array(storySchema).max(50000),cursor:z.num
 const stateEnvelope=stateSchema.extend({stories:z.array(z.unknown()).max(50000),pendingEvents:z.array(z.unknown()).max(16)});
 type State=z.infer<typeof stateSchema>;
 type Rejection=z.infer<typeof rejectionSchema>;
-const failed=()=>new ReaderError(502,'本段选题未能完整核对，已保留进度，请重试或换个主题。');
+const failed=()=>new ReaderError(502,'Story discovery could not be fully verified. Progress has been retained. Retry or choose another theme.');
 const rejectionMessage=(reason:Rejection)=>({
- duplicate:'本次提取只返回了已保存的故事，已保留进度，请重试查找。',
- 'no-new-evidence':'本次提取的交叉范围没有新的故事证据，已保留进度，请重试查找。',
- 'invalid-source':'本次提取引用的原文范围无法核对，已保留进度，请重试查找。',
- 'no-progress':'本次提取未给出新故事，也未确认本段已读完，已保留进度，请重试查找。',
- 'pending-resolution':'本次跨章事件的收束记录与原文覆盖不一致，已保留进度，请重试查找。',
+ duplicate:'Discovery returned only saved stories. Progress has been retained. Retry the search.',
+ 'no-new-evidence':'The overlapping source range contains no new story evidence. Progress has been retained. Retry the search.',
+ 'invalid-source':'The source range cited by discovery could not be verified. Progress has been retained. Retry the search.',
+ 'no-progress':'Discovery returned no new story and did not confirm that reading was complete. Progress has been retained. Retry the search.',
+ 'pending-resolution':'The cross-chapter event resolution does not match the source coverage. Progress has been retained. Retry the search.',
 }[reason.code]);
 function rejectedStory(code:Rejection['code'],raw:unknown):Rejection{
  const value=raw as {title?:unknown;source?:unknown},source=localSourceSchema.safeParse(value?.source);
@@ -122,17 +125,17 @@ export async function discoverLocalStories(provider:ReaderProvider,books:LocalBo
   const block=plan.blocks[cursor],visible=new Set(block.visible);
   const context=current.pendingEvents.map(event=>{
    const ids=sourceUnitIds(book,event.source);for(const id of ids)visible.add(id);
-   return '未完事件 '+event.id+'\n'+books.resolve(book,event.source).title+'\n'+ids.map(id=>'['+id+']\n'+unitText.get(id)).join('\n\n');
+   return 'Unresolved event '+event.id+'\n'+books.resolve(book,event.source).title+'\n'+ids.map(id=>'['+id+']\n'+unitText.get(id)).join('\n\n');
   });
   let relevant=current.stories.filter(story=>sourceUnitIds(book,story.source).some(id=>visible.has(id)));
   if(chapterStories)for(const story of relevant){
    // A main story may begin in an earlier block. Its original evidence remains available for episodes.
    const ids=sourceUnitIds(book,story.source).filter(id=>!visible.has(id));
-   if(ids.length){for(const id of ids)visible.add(id);context.push('已选故事 '+story.title+'\n'+books.resolve(book,story.source).title+'\n'+ids.map(id=>'['+id+']\n'+unitText.get(id)).join('\n\n'));}
+   if(ids.length){for(const id of ids)visible.add(id);context.push('Selected story '+story.title+'\n'+books.resolve(book,story.source).title+'\n'+ids.map(id=>'['+id+']\n'+unitText.get(id)).join('\n\n'));}
   }
   if(chapterStories)relevant=current.stories.filter(story=>sourceUnitIds(book,story.source).some(id=>visible.has(id)));
   const completed=current.stories.filter(story=>current.pendingEvents.some(event=>sourceCovers(book,story.source,event.source)));
-  if(completed.length)context.push('已保存完整故事，可在重新确认对应旧事件及全部证据后通过resolvedEventIds收束，不重复输出故事：'+JSON.stringify(completed.map(story=>({title:story.title,source:story.source}))));
+  if(completed.length)context.push('Complete stories have already been saved. After verifying the corresponding event and all evidence, resolve them through resolvedEventIds without returning duplicate stories: '+JSON.stringify(completed.map(story=>({title:story.title,source:story.source}))));
   const chapterStoryLevel=chapterStories?(relevant.length?'episodes':'main'):undefined;
   const input:WholeBookInput={title:book.title,edition:book.edition,text:block.text,purpose:'catalog',scan:{maxStories:targetTitle||chapterStoryLevel==='main'?1:maxStories,excludedSources:relevant.map(story=>story.source),pendingEvents:current.pendingEvents,contextText:context.join('\n\n'),...(chapterStoryLevel?{chapterStoryLevel}:{}),...(targetTitle?{targetStoryTitle:targetTitle}:{})}};
   return {input,titles:relevant.map(story=>story.title),visible};
@@ -155,6 +158,9 @@ export async function discoverLocalStories(provider:ReaderProvider,books:LocalBo
   const oldBlocks=manifest?hydrateReadingPlan(book,manifest):[];
   for(const oldKey of [oldNamespace,legacyNamespace]){
    const previous=await cache.read(oldKey+'/library',stateEnvelope,value=>!manifest||validFor(value,oldBlocks.length));if(!previous)continue;
+   // English discovery starts a new scan when old display prose cannot be reused.
+   // Do not alter the old cache or the verified original evidence.
+   if([...previous.stories,...previous.pendingEvents].some(value=>{const item=value as {title?:unknown;description?:unknown;matchReason?:unknown};return containsChinese([item.title,item.description,item.matchReason].filter(value=>typeof value==='string').join(' '));}))continue;
    const completed=new Set(oldBlocks.slice(0,manifest?previous.cursor:0).flatMap(block=>[...block.visible]));
    let cursor=0;while(cursor<plan.blocks.length&&[...plan.blocks[cursor].visible].every(id=>completed.has(id)))cursor++;
    await cache.write(key,{...restore(previous),cursor,readThrough:cursor,exhausted:cursor===plan.blocks.length});break;
@@ -165,9 +171,9 @@ export async function discoverLocalStories(provider:ReaderProvider,books:LocalBo
  const response=async(state:State,stories:Story[],hit:boolean):Promise<SuggestionBatch>=>{
   const unknown=!targetTitle&&await hasUnknownJudgments(provider,cache,book.id,theme,state.stories,status.provider);
   await measurement.finish(stories.length?'matched':unknown?'incomplete':'none');
-  const note=(targetTitle?(stories.length?'已核对指定故事的完整原文，主题保留为制作时的叙述重点。':state.exhausted?(state.stories.length?'指定故事已列出，请选择已找到的结果。':`未能在当前原文范围核对“${targetTitle}”的完整经过，请补选相关章节或核对标题；不会以局部故事替代。`):'正在按标题核对原文。'):hit?'已复用本地故事库及主题判断缓存。':chapterStories?'已按先总故事、后小故事的顺序收录，再匹配主题。':'已逐篇收录原文故事并匹配主题。')+(state.rejected?'部分返回出处未能完整核对，已保留当前进度，可继续重试。':'')+(!targetTitle&&!stories.length&&state.exhausted?(unknown?'原文已读完，但有未能判断的故事，主题检查尚不完整。':'已检查完所给原文，暂时没有更多符合主题的故事。'):'')+(!targetTitle&&state.exhausted&&state.pendingEvents.length?'部分跨章线索尚未确认完整，未作为故事推荐。':'');
+  const note=(targetTitle?(stories.length?'The complete source for the requested story has been verified. The theme remains a narrative focus for production.':state.exhausted?(state.stories.length?'The requested story is listed. Select one of the results.':`The complete events of “${targetTitle}” could not be verified in this source range. Add related chapters or check the title. A partial story will not be substituted.`):'Checking original text for the requested title.'):hit?'Saved local stories and theme match results were reused.':chapterStories?'Stories were indexed from main events to smaller events, then matched to the theme.':'Stories were indexed from the original text and matched to the theme.')+(state.rejected?'Some returned sources could not be fully verified. Progress has been retained; you can retry.':'')+(!targetTitle&&!stories.length&&state.exhausted?(unknown?'Reading is complete, but some stories could not be assessed. Theme matching is incomplete.':'The supplied source has been checked. No more matching stories are available.'):'')+(!targetTitle&&state.exhausted&&state.pendingEvents.length?'Some cross-chapter events remain incomplete and were not recommended as stories.':'');
   // Discovery returns ranges and a short match reason; preparation creates the synopsis after selection.
-  return suggestionBatchSchema.parse({stories:stories.slice(0,batchLimit),note:note.slice(0,300)});
+  return suggestionBatchSchema.parse({stories:stories.slice(0,batchLimit).map(story=>({...story,sourceLabel:englishSourceLabel(book,story.source)})),note:note.slice(0,300)});
  };
  const extraction:Selection={bookId:selection.bookId,...(selection.bookId==='other'?{customBook:book.title}:{}),theme:'',artStyle:'ink-pencil',productionPrompt:'',length:'auto',voice:false};
  let hit=true;
@@ -175,7 +181,7 @@ export async function discoverLocalStories(provider:ReaderProvider,books:LocalBo
   observer?.signal.throwIfAborted();
   const saved=await read(),candidates=visibleStories(saved.stories);
   if(candidates.length)progress(saved,'selecting');
-  const matched=targetTitle?candidates.map(story=>({...story,matchReason:'已依据所选原文核对指定故事，主题仅用于讲述重点。'})):await matchLibraryStories(provider,cache,namespace,theme,candidates,story=>books.resolve(book,story.source).text,limits.whole,status.provider,observer,{bookId:book.id,legacyNamespaces:[oldNamespace],retryUnknown:saved.exhausted,context:observer});
+  const matched=targetTitle?candidates.map(story=>({...story,matchReason:'The requested story was verified against the selected source. The theme guides narrative emphasis only.'})):await matchLibraryStories(provider,cache,namespace,theme,candidates,story=>books.resolve(book,story.source).text,limits.whole,status.provider,observer,{bookId:book.id,legacyNamespaces:[oldNamespace],retryUnknown:saved.exhausted,context:observer});
   if(matched.length||saved.exhausted)return response(saved,matched,hit);
   const baseline=saved.stories.length;
   await cache.shared(key,observer,async reading=>{
@@ -184,7 +190,7 @@ export async function discoverLocalStories(provider:ReaderProvider,books:LocalBo
    while(current.stories.length<=baseline&&!current.exhausted){
     reading.signal.throwIfAborted();
     const {input,titles,visible}=scanRequest(current,current.cursor,current.stories.length?catalogStoryLimit:1);
-    if(requestTokens(input,'',titles,status.provider)>limits.whole)throw new ReaderError(502,'跨章原文或已入库记录超过本次输入预算，故事库和进度已保留，请缩小章节范围。');
+    if(requestTokens(input,'',titles,status.provider)>limits.whole)throw new ReaderError(502,'The cross-chapter text or saved records exceed the input budget. Stories and progress have been retained. Select fewer chapters.');
     const result=await provider.suggestions(extraction,titles,input,{...reading,maxStories:undefined});
     progress(current,'checking',reading);
     if(result.stories.length>input.scan!.maxStories)throw failed();
@@ -200,7 +206,7 @@ export async function discoverLocalStories(provider:ReaderProvider,books:LocalBo
       for(const other of known){if(!crossing(other.source,story.source))continue;const otherUnits=sourceUnitIds(book,other.source),set=new Set(otherUnits),ratio=storyUnits.filter(id=>set.has(id)).length/Math.min(storyUnits.length,otherUnits.length);if(ratio>.8&&overlapDiagnostics.length<32)overlapDiagnostics.push({source:story.source,other:other.source,ratio});}
       const units=storyUnits,fresh=units.some(id=>!covered.has(id)),nested=known.some(other=>sourceCovers(book,other.source,story.source));
       if(known.some(other=>crossing(other.source,story.source))&&!fresh&&!nested&&!continuedFrom.length){rejections.push(rejectedStory('no-new-evidence',raw));continue;}
-      accepted.push({...story,sourceLabel:books.resolve(book,story.source).title.slice(0,150)});for(const id of units)covered.add(id);
+      accepted.push({...story,sourceLabel:englishSourceLabel(book,story.source)});for(const id of units)covered.add(id);
      }catch{rejections.push(rejectedStory('invalid-source',raw));}
     }
     let pending:PendingEvent[];

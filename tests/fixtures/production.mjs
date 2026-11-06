@@ -1,4 +1,4 @@
-// Controlled real provider adapters, SQLite and files; never send source or paid requests.
+// Controlled real provider adapters, including English source translation, SQLite and files; no paid requests.
 import assert from 'node:assert/strict';
 import {mkdtemp,mkdir,cp,rm} from 'node:fs/promises';
 import os from 'node:os';
@@ -29,8 +29,8 @@ export async function productionFixture(t,provider='codex',variables={},storage=
   try{if(control.hold)await gate.promise;return call.bytes;}finally{call.done=true;control.active--;}
  }
  async function planned(prompt,schema){
-  const payload=JSON.parse(prompt);if(schema.properties.artStyle)return {artStyle:'ink-pencil',reason:'与本篇人物动作及叙事相符。'};
-  if(schema.properties.count){control.recommendations.push(payload);return {count:7,reason:'保留完整因果和关键转折。',...(schema.properties.requirements?{requirements:makeRequirements(payload.chosenStory||'所选故事')}:{ }),...(schema.properties.storySummary?{storySummary:payload.storyBrief.summary==='尚未准备完整摘要，请依据已核原文生成。'?makePlan(1).summary:payload.storyBrief.summary,storyMatchReason:payload.storyBrief.matchReason,...await control.beforeText?.('recommend',payload,schema)}:{})};}
+  const payload=JSON.parse(prompt);if(schema.properties.text&&schema.properties.title){return {title:'The selected source passage',text:'In this controlled English translation, the characters act and respond, and the story reaches its original outcome.'};}if(schema.properties.artStyle)return {artStyle:'ink-pencil',reason:'与本篇人物动作及叙事相符。'};
+  if(schema.properties.count){control.recommendations.push(payload);return {count:7,reason:'保留完整因果和关键转折。',...(schema.properties.requirements?{requirements:makeRequirements(payload.chosenStory||'所选故事')}:{ }),...(schema.properties.storySummary?{storySummary:['尚未准备完整摘要，请依据已核原文生成。','A complete summary has not been prepared. Write it from the verified source.'].includes(payload.storyBrief.summary)?makePlan(1).summary:payload.storyBrief.summary,storyMatchReason:payload.storyBrief.matchReason,...await control.beforeText?.('recommend',payload,schema)}:{})};}
   if(schema.properties.requirements){control.frameReviews.push(payload);return await control.beforeText?.('frames',payload,schema)??{frameCountReview:{decision:'keep',proposedCount:payload.plan.pages.length,reason:'受控任务已有空间。'},requirements:[]};}
   if(schema.properties.issues){control.reviews.push(payload);return {coverage:[{quote:payload.verifiedOriginal.text.slice(0,30),task:'受控原文与分镜核对',pages:[1],assessment:'adequate',reason:'受控回执，不代表真实语义审核。',issuePage:0}],titleReview:{title:payload.plan.title,reason:'标题准确对应当前故事。'},...(payload.reflectionCandidates?{reflectionChoice:{index:1,reason:'保留原文支持的认识，表达简洁。'}}:{}),...await control.beforeText?.('review',payload,schema)??{issues:[],...(payload.acceptanceCriteria?.length?{acceptanceResults:payload.acceptanceCriteria.map((_,index)=>({criterion:index+1,status:'passed',pages:[1],evidence:'受控分镜已包含要求中的关键行动与结果。'}))}:{})}};}
   if(payload.draft){

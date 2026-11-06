@@ -1,3 +1,4 @@
+// English product messages; source evidence and machine identifiers remain stable.
 // Keep local-only provider edits in the shared settings store; startup metadata never runs login probes.
 // Trust socket metadata and exact loopback hosts, never forwarding headers. Saved keys never leave here.
 import {z} from 'zod';
@@ -36,32 +37,32 @@ export function browserProviderSettings(options:{variables:Variables;overrides:V
  return async(request:Request,peer:HttpPeer)=>{
   const url=new URL(request.url),origin=request.headers.get('origin');
   const proxyVerified=options.proxyToken===undefined||!!options.proxyToken&&request.headers.get(providerSettingsProofHeader)===options.proxyToken;
-  if(!proxyVerified||!loopbackAddress(peer.remoteAddress)||!hosts.has(url.host)||request.headers.get('sec-fetch-site')==='cross-site'||origin&&origin!==url.origin||request.method!=='GET'&&origin!==url.origin)return json({error:'生成服务设置仅可在本机同源页面中访问。'},403);
-  if(!['GET','POST'].includes(request.method))return json({error:'不支持的设置操作。'},405);
+  if(!proxyVerified||!loopbackAddress(peer.remoteAddress)||!hosts.has(url.host)||request.headers.get('sec-fetch-site')==='cross-site'||origin&&origin!==url.origin||request.method!=='GET'&&origin!==url.origin)return json({error:'Provider settings are available only on a same-origin page on this computer.'},403);
+  if(!['GET','POST'].includes(request.method))return json({error:'Unsupported settings operation.'},405);
   let store:SystemSettingsStore|undefined;
   try{
    store=new SystemSettingsStore(locations.settings,locations.library);
    if(request.method==='POST'){
-    if(request.headers.get('content-type')?.split(';')[0].trim()!=='application/json')return json({error:'请使用 JSON 保存设置。'},415);
-    const body=await request.text();if(body.length>16384)return json({error:'设置内容过长。'},413);
+    if(request.headers.get('content-type')?.split(';')[0].trim()!=='application/json')return json({error:'Use JSON to save settings.'},415);
+    const body=await request.text();if(body.length>16384)return json({error:'The settings payload is too large.'},413);
     const input=providerSettingsSaveSchema.parse(JSON.parse(body));
-    if(input.expectedRevision!==store.revision())return json({error:'设置已由另一入口修改，请重新读取后保存。'},409);
+    if(input.expectedRevision!==store.revision())return json({error:'Settings were changed elsewhere. Reload them before saving.'},409);
     const current=store.settings(),merged=systemSettingsSchema.parse({...current,...input.settings,taskReasoningEfforts:{...current.taskReasoningEfforts,...input.settings.taskReasoningEfforts},providerConfigured:true});
     const provider=merged.provider,api=provider==='gemini'||provider==='openai';
-    if(!api&&(input.keyAction!=='keep'||input.key))return json({error:'当前提供方不使用 API 密钥。'},400);
-    if(input.keyAction!=='replace'&&input.key)return json({error:'请选择替换密钥，或清空输入以保留现有密钥。'},400);
+    if(!api&&(input.keyAction!=='keep'||input.key))return json({error:'The current provider does not use an API key.'},400);
+    if(input.keyAction!=='replace'&&input.key)return json({error:'Choose Replace key, or clear the input to keep the existing key.'},400);
     const key=api&&input.keyAction!=='keep'?{provider,value:input.keyAction==='remove'?null:validApiKey(input.key)}:undefined;
-    if(api&&input.keyAction==='keep'&&!store.key(provider))return json({error:'请先为所选服务填写 API 密钥，或选择只读模式。'},400);
+    if(api&&input.keyAction==='keep'&&!store.key(provider))return json({error:'Enter an API key for the selected provider, or choose read-only mode.'},400);
     store.save({...providerSettingsSchema.strip().parse(merged),providerConfigured:true},key,input.expectedRevision);
    }
    const snapshot=store.snapshot(),effective=effectiveProviderVariables(store,options.overrides);
    const view:ProviderSettingsView={settings:providerSettingsSchema.strip().parse(snapshot.settings),revision:snapshot.revision,keyPresent:snapshot.keyPresent,runtime,overrides,restartRequired:signature(effective)!==runtimeSignature,platform:process.platform};
    return json(view);
   }catch(error){
-   if(error instanceof z.ZodError||error instanceof SyntaxError)return json({error:'请检查提供方、模型名称、推理档位和保存内容。'},400);
-   if(error instanceof Error&&error.message.startsWith('设置已由另一入口'))return json({error:error.message},409);
-   if(error instanceof Error&&error.message.startsWith('API 密钥'))return json({error:'API 密钥必须为非空单行且不超过 4096 字节。'},400);
-   return json({error:'暂时无法读取或保存共享生成设置，请检查本机配置后重新读取。'},503);
+   if(error instanceof z.ZodError||error instanceof SyntaxError)return json({error:'Check the provider, model names, reasoning effort, and settings payload.'},400);
+   if(error instanceof Error&&error.message.startsWith('Settings were changed elsewhere'))return json({error:error.message},409);
+   if(error instanceof Error&&/^(?:The )?API key/.test(error.message))return json({error:'The API key must be a nonempty single line of at most 4096 bytes.'},400);
+   return json({error:'Shared provider settings could not be read or saved. Check the local configuration and reload.'},503);
   }finally{store?.close();}
  };
 }

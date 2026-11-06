@@ -1,3 +1,4 @@
+// English product messages; source evidence and machine identifiers remain stable.
 // Draft discovery stays off the shelf; one current-family CAS promotes only an explicit new choice.
 // Existing rows are the durable version receipts, so replay never reapplies inherited control.
 import {requirementsForReselection} from '../lib/reader-requirements.ts';
@@ -15,10 +16,10 @@ export async function openReselection(repo:ReaderRepository,parentId:string,owne
  const existing=await repo.db.prepare('SELECT * FROM stories WHERE id=?').bind(requestId).first<SessionRow>();
  if(existing){
   const doc=JSON.parse(existing.document) as Document;
-  if(existing.user_id!==ownerId||(doc.reselection?.parentId!==parentId&&!(doc.revision?.kind==='selection'&&doc.revision.parentId===parentId)))throw new ReaderError(409,'这个操作编号已用于其他内容。');
+  if(existing.user_id!==ownerId||(doc.reselection?.parentId!==parentId&&!(doc.revision?.kind==='selection'&&doc.revision.parentId===parentId)))throw new ReaderError(409,'This request ID has already been used for different content.');
   return repo.get(requestId,ownerId);
  }
- if(await commandReceipt(repo.db,ownerId,requestId))throw new ReaderError(409,'这个操作编号已用于其他内容。');
+ if(await commandReceipt(repo.db,ownerId,requestId))throw new ReaderError(409,'This request ID has already been used for different content.');
  const row=await repo.get(parentId,ownerId),{epoch,rootId}=await revisionBasis(repo,row,true);
  const reset=requirementsForReselection(selectionSchema.parse(JSON.parse(row.selection)),(JSON.parse(row.document) as Document).setupRequirements),selection=reset.selection;
  const {displayTitle:_,storyTitle:__,source:___,...settings}=selection;void _;void __;void ___;
@@ -28,17 +29,17 @@ export async function openReselection(repo:ReaderRepository,parentId:string,owne
 export async function commitReselection(repo:ReaderRepository,parentId:string,draftId:string,ownerId:string,choice:ReplacementChoice,attempt=0):Promise<SessionRow>{
  const fingerprint=commandFingerprint(['replace',parentId,draftId,choice]);
  const receipt=await commandReceipt(repo.db,ownerId,choice.requestId,fingerprint);
- if(receipt){if(receipt.session_id!==parentId)throw new ReaderError(409,'操作编号冲突。');if(receipt.action==='replace'&&receipt.result_id)return repo.get(receipt.result_id,ownerId);if(receipt.action==='same-selection')return repo.current(parentId,ownerId);throw new ReaderError(409,'操作编号冲突。');}
+ if(receipt){if(receipt.session_id!==parentId)throw new ReaderError(409,'Request ID conflict.');if(receipt.action==='replace'&&receipt.result_id)return repo.get(receipt.result_id,ownerId);if(receipt.action==='same-selection')return repo.current(parentId,ownerId);throw new ReaderError(409,'Request ID conflict.');}
  const row=await repo.get(draftId,ownerId),doc=JSON.parse(row.document) as Document;
  if(doc.revision?.kind==='selection'){
-  if(doc.revision.parentId!==parentId||doc.revision.selectionRequest!==choice.requestId||doc.revision.requestHash!==fingerprint)throw new ReaderError(409,'这次替换已提交或操作编号冲突，请刷新当前版本。');
+  if(doc.revision.parentId!==parentId||doc.revision.selectionRequest!==choice.requestId||doc.revision.requestHash!==fingerprint)throw new ReaderError(409,'This replacement was already submitted or its request ID conflicts. Refresh the current revision.');
   return row;
  }
  const draft=doc.reselection;
- if(!draft||draft.parentId!==parentId||!doc.intake)throw new ReaderError(409,'这不是当前故事的重选草稿。');
+ if(!draft||draft.parentId!==parentId||!doc.intake)throw new ReaderError(409,'This is not a replacement draft for the current story.');
  const parent=await repo.get(parentId,ownerId),basis=await revisionBasis(repo,parent,true);
- if(basis.epoch!==draft.epoch||replacementToken(parent.selection,basis.epoch)!==draft.baseToken)throw new ReaderError(409,'当前选题或制作设置已更新，请保留草稿并重新核对。');
- const candidate=doc.intake.batches[choice.batch]?.stories[choice.index];if(!candidate)throw new ReaderError(400,'请选择已保存的候选故事。');
+ if(basis.epoch!==draft.epoch||replacementToken(parent.selection,basis.epoch)!==draft.baseToken)throw new ReaderError(409,'The story selection or production settings have changed. Keep the draft and check again.');
+ const candidate=doc.intake.batches[choice.batch]?.stories[choice.index];if(!candidate)throw new ReaderError(400,'Select a saved story candidate.');
  const previous=selectionSchema.parse(JSON.parse(parent.selection));
  const same=!!candidate.source&&!!previous.source&&localSourceKey(candidate.source)===localSourceKey(previous.source);
  if(same){await recordNoop(repo.db,ownerId,parentId,choice.requestId,'same-selection',fingerprint);await repo.remove(draftId,ownerId);return repo.current(parentId,ownerId);}
@@ -77,17 +78,17 @@ export async function commitReselection(repo:ReaderRepository,parentId:string,dr
  if(!changed.meta.changes){
   const current=await repo.get(draftId,ownerId),saved=JSON.parse(current.document) as Document;
   if(saved.revision?.kind==='selection'||saved.reselection?.baseToken===draft.baseToken&&attempt<3)return commitReselection(repo,parentId,draftId,ownerId,choice,attempt+1);
-  throw new ReaderError(409,'当前版本或草稿已更新，请重新核对。');
+  throw new ReaderError(409,'The current revision or draft has changed. Check again.');
  }
  return repo.get(draftId,ownerId);
 }
 
 export async function cancelReselection(repo:ReaderRepository,parentId:string,draftId:string,ownerId:string){
  const row=await repo.db.prepare('SELECT document FROM stories WHERE id=? AND user_id=?').bind(draftId,ownerId).first<{document:string}>();
- if(!row)throw new ReaderError(404,'选题草稿不存在。');
+ if(!row)throw new ReaderError(404,'The story selection draft does not exist.');
  const doc=JSON.parse(row.document) as Document;
  if(doc.reselection?.parentId===parentId)await repo.remove(draftId,ownerId);
- else if(!(doc.revision?.kind==='selection'&&doc.revision.parentId===parentId))throw new ReaderError(409,'草稿不属于这篇故事。');
+ else if(!(doc.revision?.kind==='selection'&&doc.revision.parentId===parentId))throw new ReaderError(409,'This draft does not belong to this story.');
  // A lost commit response cannot make cancelling the old window delete the submitted version.
  return repo.current(parentId,ownerId);
 }

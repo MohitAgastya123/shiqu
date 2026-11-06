@@ -1,3 +1,4 @@
+// English product expectations; historical source fixtures remain explicit test data.
 // Verify saved defaults, creation snapshots and per-work overrides using isolated SQLite and controlled providers.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -12,7 +13,7 @@ import {ReaderRepository} from '../lib/reader-repository.ts';
 import {emptyPublication,withPublicationDefaults,storyExportKey} from '../lib/story-publication.ts';
 import {makeStory} from './fixtures/story.mjs';
 
-const defaults={author:'默认制作人',workUrl:'https://example.org/works',contact:'公开联系',sourceNote:'请核对本篇来源许可。',reuse:'转载时请保留制作署名。',watermarkFontSize:32};
+const defaults={author:'默认制作人',workUrl:'https://example.org/works',contact:'公开联系',sourceNote:'请核对本篇来源许可。',reuse:'转载时请保留Creator credit。',watermarkFontSize:32};
 const save=(f,publication=defaults,expected=null)=>f.json('publication-defaults','POST',{publication,expected});
 const fixture=t=>productionFixture(t,'codex',{SHIQU_AI_PROVIDER:'readonly'});
 

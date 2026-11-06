@@ -1,3 +1,4 @@
+// English product expectations; historical source fixtures remain explicit test data.
 // Exercise publication persistence through REST, real SQLite, concurrent workers and revision forks.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -60,6 +61,6 @@ test('export identity changes with content/metadata and missing credits never im
  const story=makeStory(1),key=storyExportKey(story);
  assert.notEqual(storyExportKey({...story,publication}),key);
  assert.notEqual(storyExportKey({...story,pages:[{...story.pages[0],caption:'改过旁白'}]}),key);
- assert.match(publicationCredit(story),/制作：未署名/);
+ assert.match(publicationCredit(story),/Created by: Uncredited/);
  assert.equal(publicationSchema.parse(emptyPublication).author,'');
 });

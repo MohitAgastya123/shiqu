@@ -1,3 +1,4 @@
+// Source preparation has separate text jobs; interruption probes target the intended script checkpoint.
 // Verify that stops, scheduling errors, unreadable stories and clock jumps stay contained,
 // and that automatic recovery of paid work is bounded. Controlled providers only.
 import test from 'node:test';
@@ -108,7 +109,7 @@ test('a deterministic 4xx in script work during a stop stays failed without repl
  f.app.stopGeneration();kill(new ReaderError(400,'原文尚未在本地核对，请重新选择故事。'));
  await until(async()=>(await jobs(f,id)).some(job=>job.state==='failed'));
  await f.restart();await production(f).tick();await production(f).queue.settle();await production(f).tick();
- const job=(await jobs(f,id)).find(job=>job.pool==='text');
+ const job=(await jobs(f,id)).find(job=>job.pool==='text'&&job.state==='failed');
  assert.equal(job.state,'failed');assert.equal(job.interrupted,0);assert.equal(job.attempts,1);assert.equal(started(),1,'Only an explicit retry may run it again');
  const saved=await f.read(id);assert.equal(saved.state,'failed');assert.match(saved.error,/尚未在本地核对/);
 });
@@ -245,9 +246,9 @@ test('a failed failure write does not stop the queue or report a provider failur
 test('a failed checkpoint save during script work is not a provider failure and recovers',async t=>{
  const logs=t.mock.method(console,'error',()=>{});
  const f=await productionFixture(t),p=production(f);f.control.hold=false;
- failWrites(p.repository,"state=CASE WHEN ? THEN 'failed'",1,'db');
+ let injected=false;f.control.beforeText=async kind=>{if(kind==='plan'&&!injected){injected=true;failWrites(p.repository,"state=CASE WHEN ? THEN 'failed'",1,'db');}};
  const id=await f.create(3);await until(()=>logs.mock.calls.some(call=>call.arguments[0]==='production_job_unsaved'));
- const job=(await jobs(f,id)).find(job=>job.pool==='text');
+ const job=(await jobs(f,id)).find(job=>job.pool==='text'&&job.state==='running');
  assert.equal(job.state,'running');assert.equal(job.error,null);
  const saved=await f.read(id);assert.notEqual(saved.state,'failed');assert.equal(saved.error,null);
  await database(f).prepare('UPDATE production_jobs SET lease_until=1 WHERE id=?').bind(job.id).run();

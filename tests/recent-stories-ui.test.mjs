@@ -19,17 +19,17 @@ test('loading hides both cached story cards and the first-use empty state',()=>{
  for(const rows of [items,[]]){
   const html=render(true,rows);
   assert.match(html,/role="status" aria-busy="true"/);
-  assert.match(html,/正在打开故事…/);
-  assert.doesNotMatch(html,/继续阅读|把下一篇故事留在这里|<img/);
+  assert.match(html,/Opening story…/);
+  assert.doesNotMatch(html,/Continue reading|Make room for your next story|<img/);
  }
 });
 
 test('settled history shows the resume card or the first-use empty state',()=>{
  const html=render(false);
  assert.match(html,new RegExp(story.title));
- assert.match(html,/继续阅读 · 3/);
- assert.doesNotMatch(html,/正在打开故事…/);
+ assert.match(html,/Continue reading · 3/);
+ assert.doesNotMatch(html,/Opening story…/);
  const empty=render(false,[]);
- assert.match(empty,/把下一篇故事留在这里/);
- assert.doesNotMatch(empty,/正在打开故事…/);
+ assert.match(empty,/Make room for your next story/);
+ assert.doesNotMatch(empty,/Opening story…/);
 });

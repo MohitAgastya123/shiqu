@@ -1,3 +1,4 @@
+// English UI expectations keep source fixtures and permission boundaries intact.
 // Verify owner/book uniqueness, immutable local snapshots and actual first-frame provider attachments.
 import test from 'node:test';import assert from 'node:assert/strict';
 import {readFile,rm} from 'node:fs/promises';import path from 'node:path';
@@ -50,7 +51,7 @@ test('snapshots stay immutable, normalize known custom book names, and fail befo
  const refs=new BookImageReferences(f.app.services.database,f.app.services.media,owner),url=await refs.resolve(b.id,'');
  assert.deepEqual((await f.app.services.media.get('reader/'+b.id+'/'+url.split('/'+b.id+'/')[1])).body,png);
  const row=await f.app.services.database.prepare('SELECT asset_key FROM book_image_references').first();await rm(path.join(f.dataDirectory,'media',row.asset_key));
- let calls=0;const generator=withBookReference({image:async()=>{calls++;}},refs);await assert.rejects(generator.image(makePlan(2),0,b.id,''),/参考图不可用/);assert.equal(calls,0);
+ let calls=0;const generator=withBookReference({image:async()=>{calls++;}},refs);await assert.rejects(generator.image(makePlan(2),0,b.id,''),/reference image is unavailable/);assert.equal(calls,0);
  await unstar(f,a.id,selected);assert.equal(await refs.resolve(b.id,'saved-first'),'saved-first');
 });
 
@@ -69,7 +70,7 @@ for(const provider of ['codex','gemini','openai'])test(`${provider}: first and l
 test('star control renders distinct accessible states',async()=>{
  const compiled=await transform(await readFile('client/ui/BookReferenceStar.tsx','utf8'),{loader:'tsx',format:'cjs',jsx:'automatic'}),m={exports:{}};new Function('require','module','exports',compiled.code)(createRequire(import.meta.url),m,m.exports);
  const render=props=>renderToStaticMarkup(createElement(m.exports.default,{selected:false,disabled:false,busy:false,onClick:()=>{},...props}));
- assert.match(render({}),/每本书仅一幅/);assert.match(render({selected:true}),/aria-pressed="true"/);assert.match(render({busy:true}),/disabled=""/);assert.match(render({disabled:true}),/disabled=""/);
+ assert.match(render({}),/one per book/);assert.match(render({selected:true}),/aria-pressed="true"/);assert.match(render({busy:true}),/disabled=""/);assert.match(render({disabled:true}),/disabled=""/);
  const reader=await readFile('client/ui/Reader.tsx','utf8');assert.match(reader,/!ended&&<BookReferenceStar/);
 });
 
@@ -92,7 +93,7 @@ test('page changes ignore late reads/saves and keep the write lock until authori
  requests[2].resolve({reference:null});await saving;await flush();assert.match(requests[4].url,/library\/C\/reference/);assert.equal(messages.length,0);
  requests[4].resolve({reference:{storyId:'C',page:0,token:'C-token'}});await flush();assert.equal(result.selected,true);
  const failing=result.toggle();requests[5].reject(Error('保存失败'));await failing;await flush();assert.equal(messages.at(-1),'保存失败');requests[6].resolve({reference:{storyId:'C',page:0,token:'C-token'}});await flush();assert.equal(result.selected,true);assert.equal(result.busy,false);
- const staleCancel=result.toggle();requests[7].resolve({reference:{storyId:'other',page:0,token:'new-token'}});await staleCancel;await flush();requests[8].resolve({reference:{storyId:'other',page:0,token:'new-token'}});await flush();assert.equal(result.selected,false);assert.equal(messages.at(-1),'本书参考图已更换，已同步最新星标。');
+ const staleCancel=result.toggle();requests[7].resolve({reference:{storyId:'other',page:0,token:'new-token'}});await staleCancel;await flush();requests[8].resolve({reference:{storyId:'other',page:0,token:'new-token'}});await flush();assert.equal(result.selected,false);assert.equal(messages.at(-1),'The book reference image changed. The latest selection is synced.');
  props=[undefined,0,undefined,props[3]];render();assert.equal(result.selected,false);assert.equal(result.disabled,true);
  alive=false;for(const hook of hooks)hook.cleanup?.();
 });

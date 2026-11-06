@@ -1,3 +1,4 @@
+// English prompt and provider error expectations preserve source evidence and request behavior.
 // Exercise OpenAI wire contracts, complete shared story stages, reference images and safe failures using fake transport only.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -28,7 +29,7 @@ test('OpenAI covers suggestions, artwork advice, counts, drafts, outlines, batch
  const f=await fixture(t,(_url,options)=>{
   const body=JSON.parse(options.body),schema=body.text.format.schema,payload=JSON.parse(body.input[0].content),plan=makePlan(payload.exactPageCount||8);
   assert.equal(body.store,false);assert.equal(body.text.format.type,'json_schema');assert.equal(body.text.format.strict,true);assert.equal(schema.additionalProperties,false);assert.ok(body.reasoning.effort);assert.ok(options.signal instanceof AbortSignal);
-  if(payload.verifiedOriginal&&!schema.properties.artStyle){assert.deepEqual(payload.editorialContext,{mode:'theme',theme:selection.theme});assert.equal(payload.theme,undefined);assert.equal(payload.productionPrompt,selection.productionPrompt);assert.deepEqual(payload.verifiedOriginal.chapterContext,contextualOriginal.chapterContext);assert.match(body.instructions,/片段首末不是硬边界/);assert.match(body.instructions,/不能单独证明后续必须纳入/);assert.match(body.instructions,/回应谁刚才的哪句或哪个动作/);assert.doesNotMatch(body.instructions,/同一次会面、连续对话或未完行动的后续应纳入/);}
+  if(payload.verifiedOriginal&&!schema.properties.artStyle){assert.deepEqual(payload.editorialContext,{mode:'theme',theme:selection.theme});assert.equal(payload.theme,undefined);assert.equal(payload.productionPrompt,selection.productionPrompt);assert.deepEqual(payload.verifiedOriginal.chapterContext,contextualOriginal.chapterContext);assert.match(body.instructions,/passage endpoints are not hard story boundaries/);assert.match(body.instructions,/alone does not force every later topic/);assert.match(body.instructions,/whom a changed topic or new speaker is responding to/);assert.doesNotMatch(body.instructions,/同一次会面、连续对话或未完行动的后续应纳入/);}
   if(schema.properties.stories)assert.equal(payload.theme,selection.theme);
   if(schema.properties.stories)return completed({stories:[{title:'庄周梦蝶',description:'梦与醒的边界。',artRecommendation:art,...(payload.localBook?{source:{sectionId:'chapter',firstUnit:'unit',lastUnit:'unit',continuations:[]}}:{})}],note:'',...(schema.properties.scan?{scan:{blockComplete:true,pendingEvents:[],resolvedEventIds:[]}}:{})});
   if(schema.properties.artStyle)return completed(art);
@@ -84,7 +85,7 @@ test('API errors never expose response bodies, credentials or prompts',async t=>
   }
   for(const failure of [Error('private network text test-only-key'),new DOMException('private timeout text test-only-key','TimeoutError')]){
    const f=await fixture(t,()=>{throw failure;});
-   await assert.rejects(f.provider.suggestions(selection,[]),error=>{const safe=safeOpenAIError(error);assert.ok(!safe.includes('test-only-key'));if(error.name==='TimeoutError')assert.match(safe,/超时/);return true;});
+   await assert.rejects(f.provider.suggestions(selection,[]),error=>{const safe=safeOpenAIError(error);assert.ok(!safe.includes('test-only-key'));if(error.name==='TimeoutError')assert.match(safe,/timed out/);return true;});
    assert.equal(f.calls.length,1);
   }
   assert.ok(!output.join('\n').includes('test-only-key'));assert.ok(!output.join('\n').includes('private provider'));

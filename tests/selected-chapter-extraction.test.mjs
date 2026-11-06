@@ -1,3 +1,4 @@
+// Verify English runtime projections while retaining canonical Chinese source evidence.
 // Verify canonical scan scopes, real wrapped discovery and paid confirmation gates with controlled generation.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -66,7 +67,7 @@ test('a story may span selected neighboring chapters and prepares their original
  const created=await f.create();await until(async()=>(await f.read(created.id)).intake.phase==='choosing');const saved=await f.read(created.id);
  await f.json(`sessions/${created.id}/setup`,'POST',{requestId:crypto.randomUUID(),generation:saved.intake.generation,action:'choose',batch:0,index:0});
  await until(async()=>(await f.read(created.id)).intake.phase==='confirming');
- const original=(await f.json(`sessions/${created.id}/source`)).source;assert.equal(original.localParts.length,2);assert.deepEqual(original.localSource,source);assert.equal(f.control.plans.length,0);assert.equal(f.control.calls.length,0);
+ const original=(await f.json(`sessions/${created.id}/source`)).source;assert.equal(original.localParts,undefined);const raw=JSON.parse((await f.app.services.database.prepare('SELECT document FROM stories WHERE id=?').bind(created.id).first()).document).original;assert.equal(raw.localParts.length,2);assert.match(original.text,/controlled English translation/);assert.deepEqual(original.localSource,source);assert.equal(f.control.plans.length,0);assert.equal(f.control.calls.length,0);
 });
 
 test('an explicit all-chapter scope has a distinct cache from whole-book discovery',async()=>{
@@ -85,5 +86,5 @@ test('a fresh task and fresh discovery wrapper reuse persisted stories for the s
  const f=await prepared(t),first=await f.create();await until(async()=>(await f.read(first.id)).intake.phase==='choosing');const calls=f.inputs.length,stories=(await f.read(first.id)).intake.batches[0].stories;
  f.options.generation=withLocalBooks(f.generation,books,f.media);await f.restart();f.app.services.localBooks=books;
  const second=await f.create([...f.sources].reverse());await until(async()=>(await f.read(second.id)).intake.phase==='choosing');
- assert.notEqual(first.id,second.id);assert.equal(f.inputs.length,calls);assert.deepEqual((await f.read(second.id)).intake.batches[0].stories,stories);assert.match((await f.read(second.id)).intake.batches[0].note,/缓存/);assert.equal(f.control.recommendations.length,0);
+ assert.notEqual(first.id,second.id);assert.equal(f.inputs.length,calls);assert.deepEqual((await f.read(second.id)).intake.batches[0].stories,stories);assert.match((await f.read(second.id)).intake.batches[0].note,/were reused/);assert.equal(f.control.recommendations.length,0);
 });

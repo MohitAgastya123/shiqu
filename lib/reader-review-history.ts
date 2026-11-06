@@ -1,3 +1,4 @@
+// English product text and generation contracts; canonical source evidence remains unchanged.
 // Project saved production checkpoints into read-only history. Missing historical evidence stays missing;
 // only a unique call from this version can establish ordering or restore an earlier frame.
 import type {Document,Plan,SessionRow} from './reader-model.ts';
@@ -46,14 +47,14 @@ export function storyReviewHistory(row:SessionRow):StoryReviewHistory{
  const entries:ReviewHistoryEntry[]=[];
  for(const [index,report] of (review?.frameCountReports||[]).entries()){
   const call=locate(report,call=>call.parts?.kind==='review'&&call.parts.phase==='frames'&&call.parts.count===index);
-  entries.push({...common('count:'+index,'count',`第${index+1}次数量${index?'复核':'审核'}`,report,call),outcome:report.frameCountReview.decision==='keep'?'passed':'needs-change',issues:report.issues,countReview:report.frameCountReview,requirements:report.requirements});
+  entries.push({...common('count:'+index,'count',`Frame-count ${index+1} ${index?'recheck':'review'}`,report,call),outcome:report.frameCountReview.decision==='keep'?'passed':'needs-change',issues:report.issues,countReview:report.frameCountReview,requirements:report.requirements});
  }
  for(const [index,report] of (review?.reports||[]).entries()){
   const call=locate(report,call=>call.parts?.kind==='review'&&call.parts.phase==='full'&&call.parts.round===report.round);
   const fromInput=call?.input?.acceptanceCriteria,criteria=Array.isArray(fromInput)&&fromInput.every(x=>typeof x==='string')?fromInput as string[]:typeof selection.acceptancePrompt==='string'?selection.acceptancePrompt.split(/\r?\n/).map(x=>x.trim()).filter(Boolean):[];
   const outcome=report.acceptanceResults?.some(x=>x.status==='unknown')?'unknown':report.issues.length||report.acceptanceResults?.some(x=>x.status==='failed')?'needs-change':'passed';
   const chosen=report.reflectionChoice;
-  entries.push({...common('review:'+index,'review',`第${index+1}次全篇${index?'复核':'审核'}`,report,call),outcome,issues:report.issues,coverage:report.coverage,
+  entries.push({...common('review:'+index,'review',`Full-story ${index+1} ${index?'recheck':'review'}`,report,call),outcome,issues:report.issues,coverage:report.coverage,
    ...(report.acceptanceResults?{acceptance:report.acceptanceResults.map(result=>({...result,text:criteria[result.criterion-1]??null}))}:{}),
    ...(report.titleReview?{titleChange:{before:typeof report.titleReview.previousTitle==='string'?report.titleReview.previousTitle:null,after:report.titleReview.title,reason:report.titleReview.reason}}:{}),
    ...(chosen?{reflectionChoice:{text:Array.isArray(chosen.candidates)&&typeof chosen.candidates[chosen.index-1]==='string'?chosen.candidates[chosen.index-1]:null,reason:chosen.reason}}:{})});
@@ -88,10 +89,10 @@ export function storyReviewHistory(row:SessionRow):StoryReviewHistory{
    if(structure.characters)repair.characters={before:structure.previousCharacters??null,after:structure.characters};
   }
   const changed=repairChanged(record,repair);
-  entries.push({...common('repair:'+index,'repair',`第${index+1}批修订`,record,call),outcome:changed===null?'unknown':changed?'changed':'unchanged',issues:[],repair});
+  entries.push({...common('repair:'+index,'repair',`Repair batch ${index+1}`,record,call),outcome:changed===null?'unknown':changed?'changed':'unchanged',issues:[],repair});
  }
  entries.sort((a,b)=>(a.position??Infinity)-(b.position??Infinity));
- return {id:row.id,title:typeof selection.displayTitle==='string'?selection.displayTitle:doc.plan?.title||'故事',revision:doc.revision?.number||1,parentId:doc.revision?.parentId||null,status:review?.status||null,phase:review?.phase||null,stopReason:review?.stopReason||null,overridden:!!review?.overridden,error:row.error,entries};
+ return {id:row.id,title:typeof selection.displayTitle==='string'?selection.displayTitle:doc.plan?.title||'Story',revision:doc.revision?.number||1,parentId:doc.revision?.parentId||null,status:review?.status||null,phase:review?.phase||null,stopReason:review?.stopReason||null,overridden:!!review?.overridden,error:row.error,entries};
 }
 function repairChanged(record:ReviewRepairRecord,repair:NonNullable<ReviewHistoryEntry['repair']>):boolean|null{
  if(record.changed!==undefined)return record.changed;

@@ -1,3 +1,4 @@
+// Verify English runtime projections while retaining canonical Chinese source evidence.
 // Exercise inferred title/automatic intent in production discovery, exact scopes and durable intake.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -11,6 +12,7 @@ import {libraryFixture,memory} from './fixtures/story-library.mjs';
 import {productionFixture,until,selection} from './fixtures/production.mjs';
 
 const library=new LocalBooks(process.cwd());
+async function pearEntry(contents){const book=await library.book({bookId:'liaozhai'});const unit=book.sections.flatMap(section=>section.units).find(unit=>unit.text==='種梨');return contents.entries.find(entry=>entry.id===unit.id);}
 const scan=(pendingEvents=[])=>({blockComplete:true,pendingEvents,resolvedEventIds:[]});
 for(const name of ['codex','gemini'])test(`${name}: title queries keep full scope, ignore theme filtering and never fall back to episodes`,async()=>{
  const selected=selectionSchema.parse({bookId:'水浒传',theme:'欲望与代价',discovery:{mode:'title',title:'宋公明三败高俅'}}),book=await library.book(selected),sections=book.sections.slice(77,80);
@@ -21,7 +23,7 @@ for(const name of ['codex','gemini'])test(`${name}: title queries keep full scop
   if(payload.stories){assert.equal(payload.theme,'原典故事');return JSON.stringify({matches:payload.stories.map(story=>({id:story.id,verdict:'yes',reason:'原文支持完整事件。'}))});}
   const input=payload.localBook;calls.push(input);assert.equal(input.scan.chapterStoryLevel,undefined);
   const target=input.scan.targetStoryTitle;
-  if(target)assert.match(job.instructions,/不能只取第一次胜负/);
+  if(target)assert.match(job.instructions,/complete cause, stages and natural outcome/);
   let source=refs[0],title='宋公明一败高俅';
   if(target==='不存在的故事')return JSON.stringify({stories:[],note:'原文没有这个故事。',scan:scan()});
   if(target==='宋公明三败高俅'){
@@ -42,9 +44,9 @@ for(const name of ['codex','gemini'])test(`${name}: title queries keep full scop
  assert.equal((await wrapped.suggestions({...selected,theme:'爱情与错过'},[])).stories[0].title,first.stories[0].title);assert.equal(calls.length,1);
  assert.equal((await wrapped.suggestions(selected,[first.stories[0].title],undefined,undefined,[full])).stories.length,0);assert.equal(calls.length,1);
  const missing=await wrapped.suggestions({...selected,discoverySources:refs.slice(0,1)},[]);
- assert.equal(missing.stories.length,0);assert.match(missing.note,/补选/);
+ assert.equal(missing.stories.length,0);assert.match(missing.note,/Add related chapters/);
  const absent=await wrapped.suggestions({...selected,discovery:{mode:'title',title:'不存在的故事'}},[]);
- assert.equal(absent.stories.length,0);assert.match(absent.note,/核对标题/);
+ assert.equal(absent.stories.length,0);assert.match(absent.note,/check the title/);
  const one=await wrapped.suggestions({...selected,discovery:{mode:'title',title:'宋公明一败高俅'}},[]);
  assert.equal(one.stories[0].title,'宋公明一败高俅');
  const automatic=await wrapped.suggestions({...selected,discovery:{mode:'auto'},theme:'原典故事'},[]);
@@ -75,7 +77,7 @@ test('verified title results and their cached replay never depend on an availabl
 
 test('title plus a catalog story scopes inference to its exact passage and rejects mixed or forged excerpts',async()=>{
  const selected=selectionSchema.parse({...selection,bookId:'liaozhai',discovery:{mode:'title',title:'种梨'}}),book=await library.book(selected);
- const contents=await bookContents(library,selected),entry=contents.entries.find(entry=>entry.title==='種梨');
+ const contents=await bookContents(library,selected),entry=await pearEntry(contents);
  const scoped=selectedChapterScope(library,book,[entry.source]);
  assert.ok(scoped.book.input.text.includes('種梨'));assert.ok(!scoped.book.input.text.includes('勞山道士'));
  assert.equal(localSourceKey(scoped.discoverySources[0]),localSourceKey(entry.source));
@@ -87,12 +89,12 @@ test('title plus a catalog story scopes inference to its exact passage and rejec
  const provider={status:async()=>({configured:true,provider:'codex',models:{text:'mock',image:'mock'}}),generator:()=>({}),safeError:()=>'',matchStories:async(_theme,stories)=>({matches:stories.map(story=>({id:story.id,verdict:'yes',reason:'原文支持指定故事。'}))}),suggestions:async(_selection,_excluded,input)=>{calls++;assert.ok(!input.text.includes('勞山道士'));assert.equal(input.scan.targetStoryTitle,'种梨');return {stories:[{title:'种梨',description:'道士与卖梨人相遇。',source:entry.source}],note:'',scan:scan()};}};
  const result=await withLocalBooks(provider,library,memory()).suggestions({...selected,discoverySources:[entry.source]},[]);
  assert.equal(result.stories[0].title,'种梨');assert.equal(calls,1);
- assert.equal(result.stories[0].sourceLabel,library.resolve(book,entry.source).title.slice(0,150));
+ assert.equal(result.stories[0].sourceLabel,'Strange Tales from a Chinese Studio · Chapter 1');
 });
 
 test('title intent, scope and theme survive creation, replay, restart and choosing in the production API',async t=>{
  const f=await productionFixture(t),s=selectionSchema.parse({...selection,bookId:'liaozhai',storyTitle:undefined,theme:'欲望与代价',discovery:{mode:'title',title:'种梨'}});
- const entry=(await bookContents(library,s)).entries.find(entry=>entry.title==='種梨');s.discoverySources=[entry.source];
+ const entry=await pearEntry(await bookContents(library,s));s.discoverySources=[entry.source];
  f.generation.matchStories=async(_theme,stories)=>({matches:stories.map(story=>({id:story.id,verdict:'yes',reason:'完整原文依据。'}))});
  f.generation.suggestions=async()=>({stories:[{title:'种梨',description:'人物围绕梨树发生交往。',source:entry.source}],note:'',scan:scan()});
  f.options.generation=withLocalBooks(f.generation,library,f.media);await f.restart();f.app.services.localBooks=library;

@@ -1,3 +1,4 @@
+// Verify English product projections while preserving original glyph and source identity checks.
 // Prove the two evidenced insertions, stable derived receipts and unchanged historical checkpoints.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -39,7 +40,7 @@ test('corrected and historical matching originals pass the production gate, mism
  await generator.plan(chosen,'check',original);
  const historical={...source,edition:shishuoOriginalEdition};
  await generator.plan({...chosen,source:historical},'check',{...original,localSource:historical,text:original.text.replaceAll('齏','')});
- await assert.rejects(generator.plan(chosen,'check',{...original,localSource:historical}),/原文尚未在本地核对/);
- await assert.rejects(generator.plan({...chosen,source:undefined},'check',original),/原文尚未在本地核对/);
+ await assert.rejects(generator.plan(chosen,'check',{...original,localSource:historical}),/original text has not been verified locally/);
+ await assert.rejects(generator.plan({...chosen,source:undefined},'check',original),/original text has not been verified locally/);
  assert.equal(calls,2);
 });

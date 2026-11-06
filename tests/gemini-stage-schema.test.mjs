@@ -1,3 +1,4 @@
+// English production expectations; original evidence and historical hashes remain unchanged.
 // Verify every production Gemini request path and its local output guards without paid calls.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -69,7 +70,7 @@ for(const [message,code] of [
   });
   const all=stages(provider);
   for(const [name,call] of all)await assert.rejects(call,error=>{
-   assert.equal(error.message,code,name);assert.equal(error.status,400);assert.match(provider.safeError(error),/已保留前面的内容/);return true;
+   assert.equal(error.message,code,name);assert.equal(error.status,400);assert.match(provider.safeError(error),/Progress is saved/);return true;
   });
   assert.equal(calls,all.length);assert.doesNotMatch(JSON.stringify(logs),/sk-private|Users|敏感|unsupportedField/);
   const rejected=logs.filter(log=>log[0]==='gemini_request_rejected').map(log=>JSON.parse(log[1]));

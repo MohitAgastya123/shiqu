@@ -1,3 +1,4 @@
+// Smoke-check the English CLI startup banner and shared production runtime.
 // Install the real release outside the checkout and exercise its HTTP, assets, persistence, and exit behavior.
 import assert from 'node:assert/strict';
 import {spawn, spawnSync} from 'node:child_process';
@@ -65,7 +66,7 @@ async function start(bin, parameters, env = {}) {
   const running = child;
   await new Promise((resolve, reject)=>{
     const timer = setTimeout(()=>reject(Error('Installed CLI did not start: ' + logs)), 15000);
-    const ready = data=>{logs += data; if (/拾趣: http:\/\//.test(logs)) { clearTimeout(timer); resolve(); }};
+    const ready = data=>{logs += data; if (/Shiqu: http:\/\//.test(logs)) { clearTimeout(timer); resolve(); }};
     running.stdout.on('data', ready); running.stderr.on('data', data=>{logs += data;});
     running.once('error', error=>{clearTimeout(timer); reject(error);});
     running.once('exit', code=>{clearTimeout(timer); reject(Error(`Installed CLI exited (${code}): ${logs}`));});
@@ -187,7 +188,7 @@ try {
   assert.ok(logs.includes(path.join(cwd,'env library'))); assert.equal((await request(origin)).status, 200); await stop();
   await rm(path.join(cwd,'env library'), {recursive:true, force:true});
   await start(bin, ['--port',String(port),'--host','0.0.0.0','--data-dir','../saved library']);
-  assert.ok(logs.includes('拾趣: ' + origin), 'Wildcard binds must print an allowed loopback URL.');
+  assert.ok(logs.includes('Shiqu: ' + origin), 'Wildcard binds must print an allowed loopback URL.');
   assert.equal((await request(origin)).status, 200); await stop();
   // Fresh non-interactive use must ask for an explicit directory, not silently create a shelf.
   const fresh = command(bin, ['--port',String(port)]);

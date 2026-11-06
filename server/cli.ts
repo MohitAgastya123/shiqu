@@ -1,3 +1,4 @@
+// English product messages; source evidence and machine identifiers remain stable.
 // Start the installed browser app with explicit assets, opt-in env loading, and persistent user data.
 import {inspectLibrary} from './library-schema.ts';
 import path from 'node:path';
@@ -12,7 +13,7 @@ import {routeHeadless} from './headless-cli.ts';
 
 const help = `Usage: shiqu [options]
 
-Start 拾趣 and open the printed URL in your browser. Requires Node 24.
+Start Shiqu and open the printed URL in your browser. Requires Node 24.
 
 No subcommand starts the browser service. For serverless agent commands and JSON input examples:
   shiqu help --json
@@ -56,9 +57,9 @@ export async function runCli(root:string, args = process.argv.slice(2)) {
     try{
       if(options.resetProviders){
         store.resetProviders();
-        if(!process.stdin.isTTY||!process.stdout.isTTY){console.log('已重置服务配置；运行 --configure 重新设置。');return;}
+        if(!process.stdin.isTTY||!process.stdout.isTTY){console.log('Provider settings were reset. Run --configure to set them up again.');return;}
       }
-      await configureProvider(store);console.log('服务配置已保存。');return;
+      await configureProvider(store);console.log('Provider settings saved.');return;
     }finally{store.close();}
   }
   const library=await cliConfiguration(options);

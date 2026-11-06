@@ -1,3 +1,4 @@
+// English production expectations; original evidence and historical hashes remain unchanged.
 // Verify exact Gemini source-reference citations, fail-closed decoding, and unchanged Codex contracts.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -23,7 +24,7 @@ test('Gemini full reviews cite exact saved excerpts and retain canonical validat
   wire=body.generationConfig.responseFormat.text.schema;
   assert.equal(wire.properties.coverage.items.properties.quote,undefined);
   assert.equal(wire.properties.coverage.items.properties.quoteId.type,'integer');
-  assert.match(body.systemInstruction.parts[0].text,/仅返回该整数/);
+  assert.match(body.systemInstruction.parts[0].text,/Return only that integer/);
   assert.equal(payload.verifiedOriginal.text,original.text);
  }).review(selection,plan,original);
  assert.equal(result.value.coverage[0].quote,'乙沉默未接，');
@@ -52,7 +53,7 @@ test('source excerpts cover long Unicode text and chapter-only evidence without 
 });
 test('Codex retains its prompts, canonical quote schemas, local validation and repair limits',async()=>{
  const seen=[],runner={status:async()=>({configured:true}),run:async job=>{
-  seen.push(job);const payload=JSON.parse(job.prompt);assert.equal(payload.reviewQuoteSources,undefined);assert.doesNotMatch(job.instructions,/本次原文引用格式/);
+  seen.push(job);const payload=JSON.parse(job.prompt);assert.equal(payload.reviewQuoteSources,undefined);assert.doesNotMatch(job.instructions,/For this call use quoteId/);
   const value=job.schema.properties.edits?{characters:null,edits:[{from:2,to:2,pages:[plan.pages[0]]}]}:job.schema.properties.requirements?{frameCountReview:{decision:'keep',proposedCount:12,reason:'已有空间。'},requirements:[]}:{...report(1),coverage:[{...coverage,quote:'乙沉默未接'}]};
   return {text:JSON.stringify(value),model:'controlled',requestId:'fixture',usage:null,image:null};
  }};

@@ -41,7 +41,7 @@ test('themes share source-faithful production defaults while reader-written requ
  assert.equal(promptAfterThemeChange(original,'给我一个反转','爱情与错过'),defaultProductionPrompt('爱情与错过'));
  assert.equal(promptAfterThemeChange('旁白更克制，结尾不要提问。','给我一个反转','爱情与错过'),'旁白更克制，结尾不要提问。');
  assert.doesNotMatch(original,/成年人重新开始|开头制造一个可信的预期/);
- const shared=defaultProductionDirection.slice('按原文自身的事件、人物与因果展开，不额外套入主题或要求反转。'.length);
+ const shared='完整讲清原文主事件的起因、关键行动与结果，首幅自然介绍人物与处境。按事件顺序展开，保留关键对白、反应和停顿；每幅一个静态可见瞬间，相邻幅各有任务。配文自然明白，画面动作与关系可读。结语在独立结束页提炼一层有据的认识，不复述情节、不虚构动机或扩大因果。';
  const old='开头制造一个可信的预期，中段埋下细节，结尾用有因果依据的反转改变读者对人物的判断，不靠突然出现的新信息。'+shared;
  assert.equal(normalizeProductionPrompt(old,'给我一个反转'),original);
  assert.equal(promptAfterThemeChange(old,'给我一个反转','爱情与错过'),original);
@@ -62,12 +62,12 @@ test('batch history isolates book, custom source and theme without splitting on 
 });
 test('PDF refuses incomplete stories and wraps Chinese, newlines and long links without losing content',()=>{
  const story=makeStory();assert.doesNotThrow(()=>assertPdfReady(story));
- assert.throws(()=>assertPdfReady({...story,pages:[{...story.pages[0],image:''}]}),/全部|所有/);
+ assert.throws(()=>assertPdfReady({...story,pages:[{...story.pages[0],image:''}]}),/Complete every image/);
  const text='他有一车梨，道士只想讨一个。';const lines=wrapPdfText(text,6,s=>Array.from(s).length);
  assert.equal(lines.join(''),text);assert.ok(lines.every(line=>Array.from(line).length<=6));assert.ok(lines.every(line=>!/[，。]/.test(line[0])));
  assert.deepEqual(wrapPdfText('前一行\n后一行',10,s=>s.length),['前一行','后一行']);
  const long='https://example.com/'+('path'.repeat(100));assert.equal(wrapPdfText(long,30,s=>s.length).join(''),long);
- assert.equal(pdfFilename('故事/名字?'),'故事名字-拾趣.pdf');
+ assert.equal(pdfFilename('故事/名字?'),'故事名字-Shiqu.pdf');
 });
 
 

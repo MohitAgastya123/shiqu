@@ -1,3 +1,4 @@
+// English product messages; source evidence and machine identifiers remain stable.
 // Own the shared private settings database, compatible with the native v2 store.
 // Transactions migrate old rows and patch the latest settings; no raw key reaches public views or errors.
 import {DatabaseSync} from 'node:sqlite';
@@ -5,7 +6,7 @@ import {existsSync,mkdirSync,lstatSync,openSync,closeSync,chmodSync,constants,re
 import path from 'node:path';
 import {defaultSystemSettings,systemSettingsSchema,validApiKey,resetProviderSettings} from '../lib/system-settings.ts';
 import type {SystemSettings,ProviderName} from '../lib/system-settings.ts';
-const failure='无法读取或保存共享设置数据库；请检查权限或使用兼容版本，不会自动重建已有配置。';
+const failure='The shared settings database could not be read or saved. Check permissions or use a compatible version. Existing settings will not be recreated automatically.';
 export class SystemSettingsStore{
  private db:DatabaseSync;
  constructor(filename:string,library:string){
@@ -42,7 +43,7 @@ export class SystemSettingsStore{
  private validate(value:unknown){
   const settings=systemSettingsSchema.parse(value);
   if(!path.isAbsolute(settings.dataDirectory)||settings.cloudflaredPath&&!path.isAbsolute(settings.cloudflaredPath))throw Error();
-  if(process.platform==='win32'&&settings.provider==='codex')throw Error('Codex 不支持原生 Windows，请选择 OpenAI API、Gemini 或只读。');
+  if(process.platform==='win32'&&settings.provider==='codex')throw Error('Codex does not support native Windows. Choose OpenAI API, Gemini, or read-only mode.');
   const {lanEnabled:_,...saved}=settings;void _;return saved;
  }
  settings():SystemSettings{
@@ -70,7 +71,7 @@ export class SystemSettingsStore{
    }
    this.db.prepare('UPDATE desktop_settings SET value=?,revision=revision+1 WHERE id=1').run(JSON.stringify(settings));
    this.db.exec('COMMIT');return settings;
-  }catch(error){this.db.exec('ROLLBACK');throw Error((error as Error).message==='SETTINGS_CHANGED'?'设置已由另一入口修改，请重新读取后保存。':failure);}
+  }catch(error){this.db.exec('ROLLBACK');throw Error((error as Error).message==='SETTINGS_CHANGED'?'Settings were changed elsewhere. Reload them before saving.':failure);}
  }
  resetProviders(){
   this.db.exec('BEGIN IMMEDIATE');

@@ -1,3 +1,4 @@
+// English interface: labels, accessibility text, and workflow messages use English.
 // Edit owner defaults and independent story snapshots; render public notices as untrusted text.
 import {useEffect,useRef,useState} from 'react';
 import type {Story} from '@/lib/content';
@@ -9,7 +10,7 @@ import './story-publication.css';
 
 export function StoryPublicationDetails({story}:{story:Story}){
  const p=story.publication;
- return <section className="yu-publication" aria-label="署名与转载"><h3>署名与转载</h3><p>制作：{p?.author||'未署名'}</p><p>{aiDisclosure(story)}</p>{p?.workUrl&&<p>作品链接：{p.workUrl}</p>}{p?.contact&&<p>联系：{p.contact}</p>}{p?.sourceNote&&<p>来源与许可：{p.sourceNote}</p>}<p>转载与再使用：{p?.reuse||'未另行提供授权；请先核对来源许可，必要时联系相应权利人。'}</p><small>{rightsBoundary}</small></section>;
+ return <section className="yu-publication" aria-label="Credits and reuse"><h3>Credits and reuse</h3><p>Created by: {p?.author||"Uncredited"}</p><p>{aiDisclosure(story)}</p>{p?.workUrl&&<p>Work link: {p.workUrl}</p>}{p?.contact&&<p>Contact: {p.contact}</p>}{p?.sourceNote&&<p>Source and license: {p.sourceNote}</p>}<p>Reuse and redistribution: {p?.reuse||"No additional permission granted. Check the source license and contact the rights holder if needed."}</p><small>{rightsBoundary}</small></section>;
 }
 
 export function StoryPublicationSummary({story,onEdit,disabled=false}:{story:Story;onEdit?:()=>void;disabled?:boolean}){
@@ -31,18 +32,18 @@ export function StoryPublicationSummary({story,onEdit,disabled=false}:{story:Sto
  },[story.id,needsDefaults,retry]);
  const loading=needsDefaults&&(current.storyId!==story.id||current.loading),error=needsDefaults&&current.storyId===story.id&&current.error;
  const publication=withPublicationDefaults(story,current.publication).publication;
- const author=loading?'正在读取署名…':error?'暂时无法读取':hasPublicationAuthor(publication)?publication!.author:'未署名';
- return <div className="yu-publication-summary" aria-busy={loading}><p aria-live="polite">制作：{author}</p>{error&&<button type="button" className="yu-revision-open" onClick={()=>setRetry(value=>value+1)}>重新读取署名</button>}{onEdit&&<button type="button" className="yu-revision-open" disabled={disabled} onClick={onEdit}>编辑署名与转载说明</button>}</div>;
+ const author=loading?"Loading credits…":error?"Could not load":hasPublicationAuthor(publication)?publication!.author:"Uncredited";
+ return <div className="yu-publication-summary" aria-busy={loading}><p aria-live="polite">Created by: {author}</p>{error&&<button type="button" className="yu-revision-open" onClick={()=>setRetry(value=>value+1)}>Reload credits</button>}{onEdit&&<button type="button" className="yu-revision-open" disabled={disabled} onClick={onEdit}>Edit credits and reuse information</button>}</div>;
 }
 
 export function StoryPublicationDefaults({onClose,onSaved}:{onClose:()=>void;onSaved:()=>void}){
  const [loaded,setLoaded]=useState(false),[publication,setPublication]=useState<StoryPublication|null>(null),[error,setError]=useState(''),[retry,setRetry]=useState(0);
  useEffect(()=>{
   let live=true;setError('');
-  request('reader/publication-defaults').then(result=>{if(live){setPublication(result.publication);setLoaded(true);}}).catch(error=>{if(live)setError(error instanceof Error?error.message:'默认说明暂时无法读取，请重试。');});
+  request('reader/publication-defaults').then(result=>{if(live){setPublication(result.publication);setLoaded(true);}}).catch(error=>{if(live)setError(error instanceof Error?error.message:"Could not load default credits. Try again.");});
   return()=>{live=false;};
  },[retry]);
- if(!loaded)return <Sheet title="默认署名与转载说明" onClose={onClose}>{error?<div className="yu-batch-error" role="alert">{error}<button type="button" className="yu-revision-open" onClick={()=>setRetry(value=>value+1)}>重新加载</button></div>:<p role="status">正在读取默认说明…</p>}</Sheet>;
+ if(!loaded)return <Sheet title="Default credits and reuse" onClose={onClose}>{error?<div className="yu-batch-error" role="alert">{error}<button type="button" className="yu-revision-open" onClick={()=>setRetry(value=>value+1)}>Reload</button></div>:<p role="status">Loading defaults…</p>}</Sheet>;
  return <StoryPublicationEditor publication={publication} onClose={onClose} onSave={async(value,expected)=>{await request('reader/publication-defaults','POST',{publication:value,expected});onSaved();}}/>;
 }
 
@@ -53,7 +54,7 @@ export default function StoryPublicationEditor({story,publication=null,onSave,on
  async function save(){
   if(lock.current||!parsed.success||!changed)return;
   lock.current=true;setBusy(true);setError('');
-  try{await onSave(parsed.data,initial);onClose();}catch(e){setError(e instanceof Error?e.message:'署名说明暂未保存，请重试。');}finally{lock.current=false;setBusy(false);}
+  try{await onSave(parsed.data,initial);onClose();}catch(e){setError(e instanceof Error?e.message:"Credits were not saved. Try again.");}finally{lock.current=false;setBusy(false);}
  }
  async function restoreDefaults(){
   if(!story||lock.current)return;
@@ -61,27 +62,27 @@ export default function StoryPublicationEditor({story,publication=null,onSave,on
   try{
    const result=await request('reader/publication-defaults');
    setDraft(publicationSchema.parse(result.publication??emptyPublication));
-   setRestoreNote(result.publication?'已载入「我的」中的当前默认说明，保存后应用于本篇。':'「我的」尚未设置默认说明，已载入空白说明，保存后应用于本篇。');
-  }catch(e){setError(e instanceof Error?e.message:'默认说明暂时无法读取，请重试。');}
+   setRestoreNote(result.publication?"Loaded the current defaults from My space. Save to apply them to this story.":"No defaults are set in My space. Blank information loaded; save to apply it to this story.");
+  }catch(e){setError(e instanceof Error?e.message:"Could not load default credits. Try again.");}
   finally{lock.current=false;setBusy(false);setRestoring(false);}
  }
  function field(key:Exclude<keyof StoryPublication,'watermarkFontSize'>,label:string,maxLength:number,placeholder:string,multiline=false){
   const props={value:draft[key],maxLength,placeholder,disabled:busy,onChange:(event:React.ChangeEvent<HTMLInputElement|HTMLTextAreaElement>)=>{setDraft(old=>({...old,[key]:event.target.value}));setError('');}};
   return <label className="yu-custom-input">{label}{multiline?<textarea rows={3} {...props}/>:<input {...props}/>}</label>;
  }
- return <Sheet title={story?'署名与转载':'默认署名与转载说明'} onClose={onClose} busy={busy}><form className="yu-publication-editor" onSubmit={event=>{event.preventDefault();void save();}}>
-  {story&&<div className="yu-publication-heading"><p className="yu-publication-work">{story.title}</p><button type="button" className="yu-revision-open" disabled={busy} onClick={()=>void restoreDefaults()}>{restoring?'正在读取默认…':'恢复默认说明'}</button></div>}
+ return <Sheet title={story?"Credits and reuse":"Default credits and reuse"} onClose={onClose} busy={busy}><form className="yu-publication-editor" onSubmit={event=>{event.preventDefault();void save();}}>
+  {story&&<div className="yu-publication-heading"><p className="yu-publication-work">{story.title}</p><button type="button" className="yu-revision-open" disabled={busy} onClick={()=>void restoreDefaults()}>{restoring?"Loading defaults…":"Restore defaults"}</button></div>}
   {restoreNote&&<p className="yu-count-help" role="status">{restoreNote}</p>}
-  <p className="yu-count-help">{story?'仅修改这篇作品。导出时已填写的内容优先，留空项实时沿用「我的」默认说明。':'新故事会保存这份默认说明。导出时，单篇未填写的项目也会实时沿用这里的内容；单篇已填写的内容优先。'}</p>
-  <p className="yu-count-help">这些信息会随作品和下载文件公开。填写用于公开展示的署名与联系方式。</p>
-  {field('author','制作署名',80,'你的姓名、笔名或团队名，如：山间读书人')}
-  <label className="yu-watermark-size"><span>WebP 签名水印字号<output>{draft.watermarkFontSize??watermarkFontSize.default} px</output></span><input type="range" aria-label="WebP 签名水印字号" min={watermarkFontSize.min} max={watermarkFontSize.max} step={1} value={draft.watermarkFontSize??watermarkFontSize.default} disabled={busy} onChange={event=>{setDraft(old=>({...old,watermarkFontSize:Number(event.target.value)}));setError('');}}/><small>按原图像素计算，{watermarkFontSize.min}–{watermarkFontSize.max} px，默认 {watermarkFontSize.default} px。仅影响 ZIP 内的 WebP 图片。</small></label>
-  {field('workUrl','公开作品链接',1000,'作品页或个人主页，如：https://example.com')}
-  {field('contact','公开联系方式',200,'供读者联系的邮箱或公开账号（选填）')}
-  {field('sourceNote','来源版本与许可说明',1200,'填写原文出处、所用版本和许可；如使用他人译文，也请注明来源。',true)}
-  {field('reuse','转载与再使用条件',1200,'例如：转载时请注明制作人并附作品链接；其他使用请先联系。',true)}
-  <p className="yu-count-help">原作出处和 AI 生成说明会自动保留。这里只声明你有权决定的部分；公版材料和已有许可按各自规则使用。{story?'保存不会重新生成故事。':'作品链接、来源版本与许可因篇而异时，请在单篇中修改。'}</p>
+  <p className="yu-count-help">{story?"Changes only this story. Filled fields take priority; blank fields use the current My space defaults when exporting.":"New stories save these defaults. Blank story fields also use the current defaults during export. Filled story fields take priority."}</p>
+  <p className="yu-count-help">This information is public in your work and downloads. Use a public creator name and contact details.</p>
+  {field('author',"Creator credit",80,"Your name, pen name, or team name")}
+  <label className="yu-watermark-size"><span>WebP credit watermark size<output>{draft.watermarkFontSize??watermarkFontSize.default} px</output></span><input type="range" aria-label="WebP credit watermark size" min={watermarkFontSize.min} max={watermarkFontSize.max} step={1} value={draft.watermarkFontSize??watermarkFontSize.default} disabled={busy} onChange={event=>{setDraft(old=>({...old,watermarkFontSize:Number(event.target.value)}));setError('');}}/><small>In original image pixels, {watermarkFontSize.min}–{watermarkFontSize.max}  px; default {watermarkFontSize.default}  px. Applies only to WebP images in ZIP archives.</small></label>
+  {field('workUrl',"Public work link",1000,"Work page or personal website, e.g. https://example.com")}
+  {field('contact',"Public contact",200,"Public email or account (optional)")}
+  {field('sourceNote',"Source edition and license",1200,"Specify the source, edition, and license. Credit any translations you use.",true)}
+  {field('reuse',"Reuse and redistribution terms",1200,"Example: Credit the creator and link to the work when sharing. Contact me for other uses.",true)}
+  <p className="yu-count-help">Original attribution and AI disclosures are kept automatically. State only permissions you can grant; public domain material and existing licenses keep their own terms.{story?"Saving does not regenerate the story.":"Edit individual stories when links, source editions, or licenses differ."}</p>
   {(!parsed.success||error)&&<p role="alert">{error||parsed.error?.issues[0].message}</p>}
-  <div className="yu-revision-buttons"><button className="yu-primary" type="submit" disabled={busy||!parsed.success||!changed}>{restoring?'正在读取默认…':busy?'正在保存…':story?'保存本篇说明':'保存默认说明'}</button><button type="button" disabled={busy} onClick={onClose}>取消</button></div>
+  <div className="yu-revision-buttons"><button className="yu-primary" type="submit" disabled={busy||!parsed.success||!changed}>{restoring?"Loading defaults…":busy?"Saving…":story?"Save story credits":"Save defaults"}</button><button type="button" disabled={busy} onClick={onClose}>Cancel</button></div>
  </form></Sheet>;
 }

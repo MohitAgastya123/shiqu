@@ -74,9 +74,9 @@ test('search fallback requires the same book and a matching chapter heading',asy
 test('unavailable or mismatched source stays explicit and never becomes invented original text',async()=>{
  const selected={...selection,bookId:'zhuangzi'},p={sourceReference:'《庄子·齐物论》',pages:[]};
  const wrong=await lookupOriginal(selected,p,async(url)=>json(new URL(url).searchParams.get('action')==='parse'?{parse:{title:'三国演义/齐物论',text:'<p>这是一段错误的书籍内容，绝对不能作为所选书籍的原文展示给读者。</p>'}}:{query:{search:[]}}));
- assert.equal(wrong.source,null);assert.match(wrong.message,/暂未找到/);
+ assert.equal(wrong.source,null);assert.match(wrong.message,/No original chapter/);
  let count=0;const limited=await lookupOriginal(selected,p,async()=>{count++;return new Response('',{status:429});});
- assert.equal(count,1);assert.equal(limited.source,null);assert.match(limited.message,/无法连接/);
+ assert.equal(count,1);assert.equal(limited.source,null);assert.match(limited.message,/cannot be reached/);
  assert.deepEqual(limited.failure,{code:'SOURCE_HTTP_ERROR',status:429});
 });
 test('source failures distinguish network, timeout and invalid response without exposing upstream details',async()=>{

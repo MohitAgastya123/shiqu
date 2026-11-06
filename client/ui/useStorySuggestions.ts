@@ -1,3 +1,4 @@
+// English interface: labels, accessibility text, and workflow messages use English.
 'use client';
 // Preserve multi-chapter source receipts and each browser session's own discovery history.
 // Cancel obsolete discovery and keep progress scoped to the active book and theme.
@@ -24,8 +25,8 @@ export function useStorySuggestions(selection:Selection,theme:string){
  useEffect(()=>{if(!finding)return;const started=Date.now();setElapsed(0);const timer=setInterval(()=>setElapsed(Math.floor((Date.now()-started)/1000)),1000);return()=>clearInterval(timer);},[finding]);
  async function find(){
   if(pending.current||!ready)return false;
-  if(batches.length>=maxSuggestionBatches){setError('这组书籍和主题已保存 40 批，可回看选择，或换个主题继续探索。');return false;}
-  if(!theme.trim()||(selection.bookId==='other'&&!selection.customBook?.trim())){setError('请填写书名或 URL，以及想看的主题。');return false;}
+  if(batches.length>=maxSuggestionBatches){setError("This book and theme already have 40 saved batches. Review previous results or try another theme.");return false;}
+  if(!theme.trim()||(selection.bookId==='other'&&!selection.customBook?.trim())){setError("Enter a book title or URL and a theme to explore.");return false;}
   const operation=new AbortController();pending.current=operation;setFinding(true);setProgress(null);setError('');
   try{
    const excludeTitles=batches.flatMap(batch=>batch.stories.map(story=>story.title));
@@ -36,7 +37,7 @@ export function useStorySuggestions(selection:Selection,theme:string){
    if(!next.stories.length&&batches.length){if(activeKey.current===key)setError(next.note);return false;}
    setHistory(old=>{const previous=old[key]?.batches||[];return {...old,[key]:{batches:[...previous,next],index:previous.length}};});
    return activeKey.current===key;
-  }catch(e){if(!operation.signal.aborted&&activeKey.current===key)setError(e instanceof Error?e.message:'选题暂时不可用，前面的批次已保留。');return false;}
+  }catch(e){if(!operation.signal.aborted&&activeKey.current===key)setError(e instanceof Error?e.message:"Story discovery is unavailable. Previous batches are kept.");return false;}
   finally{if(pending.current===operation){pending.current=null;setFinding(false);setProgress(null);}}
  }
  function goTo(next:number){if(next<0||next>=batches.length)return;setHistory(old=>({...old,[key]:{...old[key],index:next}}));setError('');}

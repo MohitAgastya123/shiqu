@@ -16,7 +16,7 @@ function props(session=failed,extra={}){
 }
 function retryButton(node){
  if(!node||typeof node!=='object')return;
- if(node.type==='button'&&node.props.children==='重试生成')return node;
+ if(node.type==='button'&&node.props.children==="Retry generation")return node;
  for(const child of [node.props?.children].flat(Infinity)){
   const found=retryButton(child);if(found)return found;
  }
@@ -25,9 +25,9 @@ function retryButton(node){
 test('failed compact, full-width and pending cards show one retry action instead of pause',()=>{
  for(const options of [props(),props(failed,{grouping:'book'}),props({...failed,story:null,ready:0})]){
   const html=renderToStaticMarkup(createElement(Shelf,options));
-  assert.match(html,/生成失败/);
-  assert.equal((html.match(/重试生成/g)||[]).length,1);
-  assert.doesNotMatch(html,/暂停生成|恢复生成/);
+  assert.match(html,/Failed/);
+  assert.equal((html.match(/Retry generation/g)||[]).length,1);
+  assert.doesNotMatch(html,/Pause generation|Resume generation/);
  }
 });
 
@@ -43,17 +43,17 @@ test('retry dispatches the existing session and is disabled during conflicting s
 test('manual pause and stop retain resume; running cards retain pause; completed cards have neither',()=>{
  for(const generationControl of ['paused','stopped']){
   const html=renderToStaticMarkup(createElement(Shelf,props({...failed,generationControl})));
-  assert.match(html,/恢复生成/);assert.doesNotMatch(html,/重试生成|暂停生成/);
+  assert.match(html,/Resume generation/);assert.doesNotMatch(html,/Retry generation|Pause generation/);
  }
  const running=renderToStaticMarkup(createElement(Shelf,props({...failed,state:'running',productionState:'running',error:null})));
- assert.match(running,/暂停生成/);assert.doesNotMatch(running,/重试生成/);
+ assert.match(running,/Pause generation/);assert.doesNotMatch(running,/Retry generation/);
  const completed=renderToStaticMarkup(createElement(Shelf,props({...failed,state:'completed',error:null,retryAllowed:false})));
- assert.doesNotMatch(completed,/重试生成|暂停生成|恢复生成/);
+ assert.doesNotMatch(completed,/Retry generation|Pause generation|Resume generation/);
 });
 
 test('a failure with no retryable step does not offer pause or dispatch recovery',()=>{
  const html=renderToStaticMarkup(createElement(Shelf,props({...failed,retryAllowed:false})));
- assert.match(html,/生成失败/);assert.doesNotMatch(html,/重试生成|暂停生成/);
+ assert.match(html,/Failed/);assert.doesNotMatch(html,/Retry generation|Pause generation/);
 });
 
 
@@ -68,9 +68,9 @@ test('cover overlay actions are independent while the cover and title keep readi
    for(const child of [node.props?.children].flat(Infinity)){const found=button(child,label);if(found)return found;}
   }
   assert.equal(button(tree,'《'+story.title+'》的故事设置'),undefined);
-  button(tree,'收藏《'+story.title+'》').props.onClick();button(tree,'删除《'+story.title+'》').props.onClick();
+  button(tree,'Favorite “'+story.title+'”').props.onClick();button(tree,"Delete “"+story.title+'”').props.onClick();
   assert.deepEqual(favorites,[[story.id,true]]);assert.deepEqual(deleted,[[story.id,story.title]]);assert.deepEqual(opened,[]);
-  button(tree,'打开《'+story.title+'》').props.onClick();button(tree,'阅读《'+story.title+'》').props.onClick();button(tree,'继续阅读《'+story.title+'》').props.onClick();
+  button(tree,"Open “"+story.title+'”').props.onClick();button(tree,"Read “"+story.title+'”').props.onClick();button(tree,"Continue reading “"+story.title+'”').props.onClick();
   assert.deepEqual(opened,[story,story,story]);
  }
 });

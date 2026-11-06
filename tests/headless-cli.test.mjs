@@ -1,3 +1,4 @@
+// Verify English runtime messages while preserving source/content fixtures.
 // Run the real command dispatcher with production API/queue/SQLite and controlled adapters, without HTTP or DOM.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -39,7 +40,7 @@ for(const status of ['pending','repair'])test(`explicit draft copy preserves ${s
  const sourceId=created.session.id,id=crypto.randomUUID(),args=['stories','copy',sourceId,'--from-data-dir',source.f.dataDirectory,'--request-id',id];
  assert.equal((await source.call(['run',sourceId,'--until','reviewed','--timeout','10'])).reason,'blocked');
  const sourceDb=source.inspect(),before=sourceDb.prepare('SELECT * FROM stories WHERE id=?').get(sourceId),saved=JSON.parse(before.document);sourceDb.close();
- assert.equal(saved.visualReview.status,status);await assert.rejects(target.call(args),/只能复制/);
+ assert.equal(saved.visualReview.status,status);await assert.rejects(target.call(args),/Only/);
  const copied=await target.call([...args,'--draft']);assert.equal(copied.session.generationControl,'paused');assert.equal(copied.session.generationProgress.reviewStatus,status);assert.equal(copied.session.generationProgress.reviewOverridden,false);assert.equal(copied.session.ready,0);assert.equal(copied.session.story.pages.length,3);assert.deepEqual(copied.session.faults||[],[]);
  const db=target.inspect(),doc=JSON.parse(db.prepare('SELECT document FROM stories WHERE id=?').get(id).document);assert.equal(db.prepare('SELECT count(*) AS n FROM production_jobs WHERE session_id=?').get(id).n,0);db.close();
  assert.deepEqual(doc.plan,saved.plan);assert.deepEqual(doc.original,saved.original);assert.deepEqual(doc.visualReview,saved.visualReview);assert.deepEqual(doc.storyboard,saved.storyboard);assert.deepEqual(doc.usage,saved.usage.map(call=>({...call,originId:call.originId||sourceId})));assert.equal(doc.copiedFrom.draft,true);assert.deepEqual(doc.images,[]);assert.equal(doc.revision,undefined);
@@ -47,7 +48,7 @@ for(const status of ['pending','repair'])test(`explicit draft copy preserves ${s
  assert.equal((await target.call(args,{draft:true})).session.id,id);assert.equal((await target.call(['stories','list'])).length,1);
  await assert.rejects(target.call([...args,'--draft'],{draft:false}),error=>error.code==='INVALID_INPUT');
  await assert.rejects(target.call([...args,'--draft','--copy-images']),error=>error.code==='COPY_FAILED');
- await assert.rejects(target.call(['stories','copy-images',id,'--from-data-dir',source.f.dataDirectory],{sourceId}),/只能复制/);
+ await assert.rejects(target.call(['stories','copy-images',id,'--from-data-dir',source.f.dataDirectory],{sourceId}),/Only/);
  assert.equal((await target.call(['run',id,'--until','reviewed','--timeout','10'])).reason,'paused');assert.equal(target.f.control.calls.length,0);assert.equal(target.f.control.reviews.length,0);assert.equal(target.f.control.plans.length,0);
  const afterDb=source.inspect();assert.deepEqual(afterDb.prepare('SELECT * FROM stories WHERE id=?').get(sourceId),before);afterDb.close();
 });
@@ -64,8 +65,8 @@ test('draft copies reject images and invalid checkpoints and retain explicit mod
   }
  }finally{db.prepare('UPDATE stories SET state=?,document=? WHERE id=?').run(row.state,row.document,sourceId);db.close();}
  await assert.rejects(target.call([...args,'--draft','--copy-images']),error=>error.code==='COPY_FAILED');
- await target.call([...args,'--draft']);await assert.rejects(target.call(args),/此创建编号/);
- await assert.rejects(target.call(['stories','copy-images',id,'--from-data-dir',source.f.dataDirectory],{sourceId}),/草稿副本/);
+ await target.call([...args,'--draft']);await assert.rejects(target.call(args),/creation ID/);
+ await assert.rejects(target.call(['stories','copy-images',id,'--from-data-dir',source.f.dataDirectory],{sourceId}),/draft copy/);
  assert.equal(target.f.control.calls.length,0);assert.equal(target.f.control.reviews.length,0);
 });
 
@@ -73,7 +74,7 @@ test('copy preserves a passed storyboard and evidence; only images run in the de
  const source=await fixture(t),target=await fixture(t);
  const created=await source.call(['stories','create','--no-intake'],{...selection,length:3,source:source.library.stories[0].source,storyTitle:source.library.stories[0].title});
  const sourceId=created.session.id,id=crypto.randomUUID(),args=['stories','copy',sourceId,'--from-data-dir',source.f.dataDirectory,'--request-id',id];
- await assert.rejects(target.call(args),/只能复制/);
+ await assert.rejects(target.call(args),/Only/);
  assert.equal((await source.call(['run',sourceId,'--until','reviewed','--timeout','10'])).reason,'reviewed');
  const sourceDb=source.inspect(),saved=JSON.parse(sourceDb.prepare('SELECT document FROM stories WHERE id=?').get(sourceId).document);sourceDb.close();
  const copyInput={artStyle:'clay'};
@@ -81,7 +82,7 @@ test('copy preserves a passed storyboard and evidence; only images run in the de
  assert.equal(copied.session.selection.artStyle,'clay');
  assert.equal(copied.session.generationProgress.reviewStatus,'passed');assert.equal(copied.session.generationProgress.reviewOverridden,false);
  assert.equal((await target.call(args,copyInput)).session.id,id);
- await assert.rejects(target.call(args,{artStyle:'watercolor'}),/此创建编号/);
+ await assert.rejects(target.call(args,{artStyle:'watercolor'}),/creation ID/);
  let db=target.inspect(),doc=JSON.parse(db.prepare('SELECT document FROM stories WHERE id=?').get(id).document);db.close();
  assert.deepEqual(doc.plan,saved.plan);assert.deepEqual(doc.original,saved.original);assert.deepEqual(doc.visualReview,saved.visualReview);
  assert.equal(doc.revision,undefined);assert.equal(doc.copiedFrom.storyId,sourceId);assert.ok(doc.usage.every(call=>call.originId===sourceId));
@@ -89,9 +90,9 @@ test('copy preserves a passed storyboard and evidence; only images run in the de
  await target.call(['stories','resume',id]);assert.equal((await target.call(['run',id,'--timeout','10'])).reason,'completed');
  assert.equal(target.f.control.calls.length,3);assert.equal(target.f.control.plans.length,0);assert.equal(target.f.control.reviews.length,0);assert.equal(target.f.control.frameReviews.length,0);assert.equal(target.f.control.recommendations.length,0);
  db=target.inspect();doc=JSON.parse(db.prepare('SELECT document FROM stories WHERE id=?').get(id).document);db.close();assert.deepEqual(doc.plan,saved.plan);assert.deepEqual(doc.visualReview,saved.visualReview);
- await assert.rejects(target.call(['stories','copy',id,'--from-data-dir',target.f.dataDirectory]),/另一个/);
+ await assert.rejects(target.call(['stories','copy',id,'--from-data-dir',target.f.dataDirectory]),/different/);
  await source.call(['stories','rename',sourceId,'--title','另一个来源版本']);
- await assert.rejects(target.call(args),/此创建编号/);
+ await assert.rejects(target.call(args),/creation ID/);
  const sourceAgain=await source.call(['stories','get',sourceId]);assert.equal(sourceAgain.ready,0);
 });
 async function copySource(t){
@@ -129,8 +130,8 @@ test('copy defaults to text only and accepts explicit image choices without reus
  assert.equal((await target.call(next(['--copy-images']))).session.ready,3);
  assert.equal((await target.call(next([]),{copyImages:true})).session.ready,3);
  const changed=await target.call(next([]),{artStyle:'clay'});assert.equal(changed.session.ready,0);
- await assert.rejects(target.call(next(['--copy-images']),{artStyle:'clay'}),/更改画风/);
- await assert.rejects(target.call(['stories','copy-images',changed.session.id,'--from-data-dir',source.f.dataDirectory],{sourceId}),/更改画风/);
+ await assert.rejects(target.call(next(['--copy-images']),{artStyle:'clay'}),/changing art style/);
+ await assert.rejects(target.call(['stories','copy-images',changed.session.id,'--from-data-dir',source.f.dataDirectory],{sourceId}),/changing art style/);
  await assert.rejects(target.call(next(['--copy-images']),{copyImages:false}),error=>error.code==='INVALID_INPUT');
  await assert.rejects(target.call(next([]),{copyImages:'yes'}),error=>error.code==='INVALID_INPUT');
  await assert.rejects(target.call(['stories','copy-images',crypto.randomUUID(),'--from-data-dir',source.f.dataDirectory],{sourceId}),error=>error.code==='NOT_FOUND');
@@ -143,7 +144,7 @@ for(const failure of ['missing','corrupt'])test(`${failure} copy image keeps sav
  const imageArgs=['stories','copy-images',id,'--from-data-dir',source.f.dataDirectory],input={sourceId};
  const key=saved.story.pages[1].image.replace('/api/reader/media/','reader/'),filename=path.join(source.f.dataDirectory,'media',key),bytes=await readFile(filename);
  if(failure==='missing')await rm(filename);else await writeFile(filename,'corrupt image');
- await assert.rejects(target.call(imageArgs,input),error=>error.code==='COPY_FAILED'&&error.details.storyId===id&&/文本及审核记录已保留/.test(error.message));
+ await assert.rejects(target.call(imageArgs,input),error=>error.code==='COPY_FAILED'&&error.details.storyId===id&&/Text and review records have been retained/.test(error.message));
  const text=await target.call(['stories','get',id]);assert.equal(text.ready,0);assert.equal(text.generationProgress.reviewStatus,'passed');assert.equal(text.story.pages.length,3);
  await writeFile(filename,bytes);
  const copied=await target.call(imageArgs,input);assert.equal(copied.session.id,id);assert.equal(copied.session.ready,3);

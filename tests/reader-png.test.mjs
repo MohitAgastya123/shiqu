@@ -1,3 +1,4 @@
+// English product expectations; historical source fixtures remain explicit test data.
 // Verify contact-sheet completeness and text bounds across supported story sizes.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -7,9 +8,9 @@ import {assertPngReady,layoutStoryPng,pngFilename} from '../lib/reader-png.ts';
 const measure=(text,size)=>Array.from(text).length*size;
 test('PNG export requires every image and produces a safe PNG filename',()=>{
  const story=makeStory();
- assert.throws(()=>assertPngReady({...story,pages:[]}),/所有画面/);
- assert.throws(()=>assertPngReady({...story,pages:story.pages.map((p,i)=>i===4?{...p,image:''}:p)}),/所有画面/);
- assert.equal(pngFilename('故事/名字?'),'故事名字-拾趣-一页.png');
+ assert.throws(()=>assertPngReady({...story,pages:[]}),/Complete every image/);
+ assert.throws(()=>assertPngReady({...story,pages:story.pages.map((p,i)=>i===4?{...p,image:''}:p)}),/Complete every image/);
+ assert.equal(pngFilename('故事/名字?'),'故事名字-Shiqu-overview.png');
 });
 
 test('contact sheets retain all frames in reading order for 4, 8, 10, 12, 16 and 30 pages',()=>{
@@ -40,5 +41,14 @@ test('long titles, narration and reflections expand the layout without overlappi
  assert.ok(layout.title.every(line=>measure(line,52)<=layout.width-72));
  assert.ok(layout.reflection.every(line=>measure(line,36)<=layout.width-72));
  assert.equal(layout.cells[0].caption.join(''),story.pages[0].caption);
- assert.equal(layout.reflection.join(''),'余味：'+story.reflection);
+ assert.equal(layout.reflection.join(''),'A final thought:'+story.reflection);
+});
+
+test('English captions wrap between words and generated exports require the saved English source',async()=>{
+ const {wrapPdfText}=await import('../lib/reader-pdf.ts');
+ const text='The philosopher wakes beside a tree and wonders whether his dream has truly ended.';
+ const lines=wrapPdfText(text,28,value=>value.length);
+ assert.ok(lines.length>1);assert.ok(lines.every(line=>line.length<=28));
+ assert.equal(lines.join(' '),text);
+ assert.throws(()=>assertPngReady({...makeStory(1),generated:true,sourceText:''}),/saved English source/);
 });

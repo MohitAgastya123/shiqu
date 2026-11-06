@@ -1,3 +1,4 @@
+// English product messages; source evidence and machine identifiers remain stable.
 // Advertise LAN browser URLs while respecting explicit interface and loopback binds.
 import {networkInterfaces} from 'node:os';
 import qrcode from 'qrcode-terminal';
@@ -12,7 +13,7 @@ export function phoneUrls(host:string,port:number,interfaces=networkInterfaces()
 
 export function printPhoneAccess(urls:string[],log:(message:string)=>void=console.log){
  if(!urls.length)return;
- log('\nScan to open 拾趣 on your phone (use the same Wi-Fi):');
+ log('\nScan to open Shiqu on your phone (use the same Wi-Fi):');
  for(const url of new Set(urls)){
   log(url);
   qrcode.generate(url,{small:true},code=>log(code));

@@ -1,3 +1,4 @@
+// English workflow expectations preserve source evidence, saved work and recovery contracts.
 // Verify binary matching receipts and source-only production and synopsis-assisted review across all provider request boundaries.
 import test from 'node:test';
 import {storyOpeningDirection,storyReviewDirection,storyboardDirection,narrativeMeaningDirection} from '../lib/reader-prompts.ts';
@@ -61,7 +62,7 @@ for(const provider of ['codex','gemini','openai'])test(`${provider}: brief verif
   const selection={bookId:'zhuangzi',storyTitle:'勇士护民',theme,length:2,artStyle:'ink-pencil',productionPrompt:'保留明确行动。',narrativeDetail:'balanced',voice:false},context=theme==='勇气与成长'?{mode:'theme',theme}:{mode:'source'};
   const pending={...original,storyBrief:{summary:'勇士准备迎战猛虎。',matchReason:'勇士因复仇杀死了老虎。',verified:false}};
   const checked=(await g.recommend(selection,'id',pending)).value,advice=calls.at(-1);
-  assert.match(advice.instructions,/2–3句/);assert.match(advice.instructions,/80–150字/);assert.ok(advice.schema.required.includes('storySummary'));assert.ok(advice.schema.required.includes('storyMatchReason'));assert.equal(advice.payload.storyBrief.summary,pending.storyBrief.summary);assert.equal(advice.payload.verifiedOriginal.text,original.text);assert.equal(advice.payload.verifiedOriginal.storyBrief,undefined);if(provider!=='codex')assert.equal(advice.limit,4096);
+  assert.match(advice.instructions,/2–3 sentences/);assert.match(advice.instructions,/50–100 words/);assert.ok(advice.schema.required.includes('storySummary'));assert.ok(advice.schema.required.includes('storyMatchReason'));assert.equal(advice.payload.storyBrief.summary,pending.storyBrief.summary);assert.equal(advice.payload.verifiedOriginal.text,original.text);assert.equal(advice.payload.verifiedOriginal.storyBrief,undefined);if(provider!=='codex')assert.equal(advice.limit,4096);
   const ready={...original,storyBrief:{summary:checked.storySummary,matchReason:checked.storyMatchReason,verified:true}};
   const before=calls.length;await assert.rejects(g.plan(selection,'id',pending),/STORY_BRIEF_UNVERIFIED/);assert.equal(calls.length,before);
   const start=calls.length;const draft=(await g.plan(selection,'id',ready)).value;
@@ -85,7 +86,7 @@ for(const provider of ['codex','gemini','openai'])test(`${provider}: brief verif
     for(const key of ['outline','draft','plan'])if(call.payload[key]){const {summary:_,...expected}=snapshot[key];void _;assert.deepEqual(call.payload[key],expected);}
     assert.doesNotMatch(call.instructions,/先参照摘要|摘要负责叙事主线/);
    }
-   if(call.schema.properties.summary)assert.match(call.instructions,/2–3句/);
+   if(call.schema.properties.summary)assert.match(call.instructions,/2–3 sentences/);
    if(!call.payload.draft){
     assert.ok(plain(call.instructions).includes(plain(storyOpeningDirection)));
     assert.ok(plain(call.instructions).includes(plain(narrativeMeaningDirection)));

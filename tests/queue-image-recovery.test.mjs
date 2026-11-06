@@ -1,3 +1,4 @@
+// English recovery messages retain explicit redraw authorization and image reuse.
 // Verify that a lost image file is redrawn only on explicit retry, and that an open story's
 // first image, current page and read-ahead are drawn first. Controlled providers only.
 import test from 'node:test';
@@ -50,7 +51,7 @@ for(const [name,outcome] of Object.entries(unreadable))test(`a ${name} file at p
  if(name==='missing')await database(f).prepare("UPDATE production_jobs SET error=? WHERE session_id=? AND state='failed'").bind('这幅图片的文件已丢失或损坏。重试会重新绘制这一幅，可能再次消耗额度。',id).run();
  const saved=await f.read(id);
  assert.equal('retryMayCharge' in saved,false);assert.doesNotMatch(saved.error,/额度|计费/);
- assert.match(saved.error,/重新绘制/);assert.equal(saved.retryStage,'redraw');
+ assert.match(saved.error,/redraws/);assert.equal(saved.retryStage,'redraw');
  await settled(f);await f.demand(id,crypto.randomUUID(),0,false);await settled(f);
  assert.equal(f.control.calls.length,1,'Polling, ticks and a non-retry request never redraw');
  assert.equal((await f.read(id)).state,'failed');
@@ -68,7 +69,7 @@ for(const damage of ['missing','corrupt'])test(`a ${damage} first image fails th
  f.control.calls[1].resolve();await failed(f,id);
  const saved=await f.read(id);
  assert.equal(f.control.calls.length,2,'The later page fails before any provider call');
- assert.match(saved.error,/重新绘制/);assert.equal(saved.retryStage,'redraw');
+ assert.match(saved.error,/redraws/);assert.equal(saved.retryStage,'redraw');
  f.control.hold=false;await retry(f,id);await completed(f,id);
  assert.deepEqual([0,1,2,3].map(page=>pageCalls(f,page)),[2,1,1,1],'Only the first image is redrawn');
  const after=await document(f,id);
@@ -126,7 +127,7 @@ test('mixed lost and transient failures prioritize the redraw action',async t=>{
  for(const call of f.control.calls.slice(1))call.resolve();await failed(f,id);
  await until(async()=>(await jobs(f,id)).filter(job=>job.state==='failed').length>=2);
  const saved=await f.read(id);
- assert.match(saved.error,/重新绘制/);assert.equal(saved.retryStage,'redraw');
+ assert.match(saved.error,/redraws/);assert.equal(saved.retryStage,'redraw');
 });
 
 test('an open story draws its first image, current page and read-ahead ahead of other work',async t=>{

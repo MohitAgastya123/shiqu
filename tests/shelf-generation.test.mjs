@@ -1,3 +1,4 @@
+// English product expectations; historical source fixtures remain explicit test data.
 // Shelf observations must explain live work without starting or renewing generation.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -8,27 +9,27 @@ import {productionFixture,until,turn} from './fixtures/production.mjs';
 const base={state:'idle',error:null,awaitingFrameCount:false,stage:'正在编排故事'};
 test('shelf actions distinguish execution, queueing, user decisions, failure and pause',()=>{
  const cases=[
-  [{productionState:'running'},'正在编排故事','查看进度'],
-  [{productionState:'queued',state:'running'},'等待生成','查看进度'],
-  [{generationMode:'background',generationControl:'active'},'等待生成','查看进度'],
-  [{generationMode:'background',awaitingFrameCount:true},'等待选择画幅数','选择画幅数'],
-  [{productionState:'paused',state:'running'},'生成已暂停','查看详情'],
-  [{awaitingFrameCount:true,productionState:'paused'},'等待选择画幅数','选择画幅数'],
-  [{state:'failed',error:'服务暂时不可用'},'生成失败','查看详情'],
-  [{state:'running'},'正在编排故事','查看进度'],
-  [{state:'failed',productionState:'running',error:'编排超时'},'生成失败','查看详情'],
-  [{state:'completed'},'故事已完整展开','开始阅读'],
-  [{},'生成已暂停','查看详情'],
-  [{generationControl:'paused',productionState:'running'},'生成已暂停','查看详情'],
-  [{generationControl:'stopped',state:'failed'},'生成已暂停','查看详情'],
+  [{productionState:'running'},'正在编排故事','View progress'],
+  [{productionState:'queued',state:'running'},'Queued','View progress'],
+  [{generationMode:'background',generationControl:'active'},'Queued','View progress'],
+  [{generationMode:'background',awaitingFrameCount:true},'Waiting for frame count','Choose frame count'],
+  [{productionState:'paused',state:'running'},'Paused','View details'],
+  [{awaitingFrameCount:true,productionState:'paused'},'Waiting for frame count','Choose frame count'],
+  [{state:'failed',error:'服务暂时不可用'},'Failed','View details'],
+  [{state:'running'},'正在编排故事','View progress'],
+  [{state:'failed',productionState:'running',error:'编排超时'},'Failed','View details'],
+  [{state:'completed'},'Story complete','Read story'],
+  [{},'Paused','View details'],
+  [{generationControl:'paused',productionState:'running'},'Paused','View details'],
+  [{generationControl:'stopped',state:'failed'},'Paused','View details'],
  ];
  for(const [fields,message,action] of cases){
   const status=shelfGenerationStatus({...base,...fields});
   assert.equal(status.message,message);assert.equal(status.action,action);
  }
  assert.equal(shelfGenerationStatus({...base,state:'failed',error:'服务暂时不可用'}).detail,'服务暂时不可用');
- assert.equal(shelfGenerationStatus({...base,state:'completed'}).group,'已完成');
- assert.equal(shelfGenerationStatus({...base,state:'idle',ready:4,story:{pages:Array(8).fill({})}}).group,'生成已暂停');
+ assert.equal(shelfGenerationStatus({...base,state:'completed'}).group,'Complete');
+ assert.equal(shelfGenerationStatus({...base,state:'idle',ready:4,story:{pages:Array(8).fill({})}}).group,'Paused');
 });
 
 test('shelf refresh reports running and queued work without dispatch or viewer renewal',async t=>{
@@ -67,8 +68,8 @@ test('shelf refresh exposes choice and failure states without retrying',async t=
  await f.demand(failed);await until(async()=>(await f.read(failed)).state==='failed');
  const jobs=await f.app.services.production.queue.jobs(failed,'docker-local-owner');
  const rows=await f.json('sessions');
- assert.equal(shelfGenerationStatus(rows.find(s=>s.id===choice)).action,'选择画幅数');
- assert.equal(shelfGenerationStatus(rows.find(s=>s.id===failed)).action,'查看详情');
+ assert.equal(shelfGenerationStatus(rows.find(s=>s.id===choice)).action,'Choose frame count');
+ assert.equal(shelfGenerationStatus(rows.find(s=>s.id===failed)).action,'View details');
  assert.deepEqual(await f.app.services.production.queue.jobs(failed,'docker-local-owner'),jobs);
  assert.equal(f.control.calls.length,0);
 });

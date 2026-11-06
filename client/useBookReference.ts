@@ -1,3 +1,4 @@
+// English interface: labels, accessibility text, and workflow messages use English.
 // Share one operation lock across page/story changes; stale reads and saves cannot light a new page.
 import {useEffect,useRef,useState} from 'react';
 import {request} from '@/lib/reader-request';
@@ -10,7 +11,7 @@ export function useBookReference(storyId:string|undefined,page:number,image:stri
  useEffect(()=>{
   const serial=++sequence.current;setLoading(true);setReference(null);
   if(!storyId)return;
-  void request('reader/library/'+encodeURIComponent(storyId)+'/reference').then(result=>{if(serial===sequence.current){setReference(result.reference);setLoading(false);}},()=>{if(serial===sequence.current){setLoading(true);notify('参考图状态暂时无法读取，翻页或重新打开可重试。');}});
+  void request('reader/library/'+encodeURIComponent(storyId)+'/reference').then(result=>{if(serial===sequence.current){setReference(result.reference);setLoading(false);}},()=>{if(serial===sequence.current){setLoading(true);notify("Could not load reference image status. Turn the page or reopen to retry.");}});
   return()=>{sequence.current++;};
  },[storyId,page,refresh]); // notify is a render-local toast callback; it does not define identity.
  async function toggle(){
@@ -19,8 +20,8 @@ export function useBookReference(storyId:string|undefined,page:number,image:stri
   const selected=!!reference&&reference.storyId===storyId&&reference.page===page;
   try{
    const result=await request('reader/library/'+encodeURIComponent(storyId)+'/reference','POST',{page,starred:!selected,...(selected&&reference?{token:reference.token}:{})});
-   if(mounted.current&&latest.current.storyId===storyId&&latest.current.page===page){setReference(result.reference);notify(selected?(result.reference?'本书参考图已更换，已同步最新星标。':'已取消本书参考图。'):'已设为本书参考图，同书后续生图会使用；每本书仅一幅。');}
-  }catch(error){if(mounted.current)notify(error instanceof Error?error.message:'参考图暂未保存，请重试。');}
+   if(mounted.current&&latest.current.storyId===storyId&&latest.current.page===page){setReference(result.reference);notify(selected?(result.reference?"The book reference image changed. The latest selection is synced.":"Book reference image removed."):"Book reference image set. Future images for this book will use it. One reference per book.");}
+  }catch(error){if(mounted.current)notify(error instanceof Error?error.message:"Reference image was not saved. Try again.");}
   finally{locked.current=false;if(mounted.current){setBusy(false);setRefresh(value=>value+1);}}
  }
  return {selected:!!reference&&reference.storyId===storyId&&reference.page===page,disabled:!image||loading,busy,toggle};

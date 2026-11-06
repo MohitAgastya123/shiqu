@@ -1,3 +1,4 @@
+// English product messages; source evidence and machine identifiers remain stable.
 // Adapt bounded Node HTTP requests to Fetch handlers, retaining multipart and binary media.
 import {createServer} from 'node:http';
 import type {IncomingMessage,ServerResponse} from 'node:http';
@@ -38,7 +39,7 @@ export function createHttpServer(handle:(request:Request,peer:HttpPeer)=>Promise
    if(res.headersSent){res.destroy();return;}
    const status=(error as {status?:number}).status===413?413:400;
    res.writeHead(status,{'Content-Type':'application/json'});
-   res.end(JSON.stringify({error:status===413?'请求过大':'请求格式不正确'}));
+   res.end(JSON.stringify({error:status===413?'The request is too large.':'The request format is invalid.'}));
   }
  });
 }

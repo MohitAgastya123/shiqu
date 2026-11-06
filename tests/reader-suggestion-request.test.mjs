@@ -35,8 +35,8 @@ test('fragmented UTF-8 progress reaches the caller before the final batch',async
 
 test('offline API, interrupted streams and provider failures reject instead of returning partial success',async()=>{
  const signal=new AbortController().signal;
- await assert.rejects(requestSuggestions(selection,signal,()=>{},async()=>new Response('',{status:502})),/选题服务暂时不可用/);
- await assert.rejects(requestSuggestions(selection,signal,()=>{},async()=>response(new ReadableStream({start(c){c.enqueue(encode({type:'progress',progress:{completed:1,total:6,completedChars:1500,totalChars:12000,stage:'reading'}}));c.close();}}))),/连接已中断/);
+ await assert.rejects(requestSuggestions(selection,signal,()=>{},async()=>new Response('',{status:502})),/Story discovery is unavailable/);
+ await assert.rejects(requestSuggestions(selection,signal,()=>{},async()=>response(new ReadableStream({start(c){c.enqueue(encode({type:'progress',progress:{completed:1,total:6,completedChars:1500,totalChars:12000,stage:'reading'}}));c.close();}}))),/Story discovery disconnected/);
  await assert.rejects(requestSuggestions(selection,signal,()=>{},async()=>response(new ReadableStream({start(c){c.enqueue(encode({type:'error',error:'请稍后重试'}));c.close();}}))),/请稍后重试/);
 });
 
@@ -45,7 +45,7 @@ test('both a stalled connection and a stalled body time out; explicit cancellati
   if(!body)return new Promise((resolve,reject)=>init.signal.addEventListener('abort',()=>reject(init.signal.reason),{once:true}));
   return response(new ReadableStream({start(c){init.signal.addEventListener('abort',()=>c.error(init.signal.reason),{once:true});}}));
  };
- for(const body of [false,true])await assert.rejects(requestSuggestions(selection,new AbortController().signal,()=>{},hang(body),10),/通读等待超时/);
+ for(const body of [false,true])await assert.rejects(requestSuggestions(selection,new AbortController().signal,()=>{},hang(body),10),/Source reading timed out/);
  const abort=new AbortController(),pending=requestSuggestions(selection,abort.signal,()=>{},hang(true));
  abort.abort();await assert.rejects(pending,e=>e.name==='AbortError');
 });

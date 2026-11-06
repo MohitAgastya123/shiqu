@@ -1,3 +1,4 @@
+// English product messages; source evidence and machine identifiers remain stable.
 // Resolve CLI inputs without loading unrelated env files or changing the caller directory.
 // --config avoids Node's own --env-file option being consumed before the executable can validate it.
 import {inspectLibrary} from './library-schema.ts';
@@ -30,17 +31,17 @@ export function parseCliOptions(args:string[]):CliOptions {
   }
   if(options.configure&&options.resetProviders)throw Error('Use --configure or --reset-providers separately.');
   const maintenance=[options.backup,options.restore,options.verifyBackup,options.diagnostics].filter(Boolean);
-  if(maintenance.length>1||maintenance.length&&(options.configure||options.resetProviders||options.envFile||options.port||options.host))throw Error('维护命令不能组合，也不能与服务配置或启动选项混用。');
+  if(maintenance.length>1||maintenance.length&&(options.configure||options.resetProviders||options.envFile||options.port||options.host))throw Error('Maintenance commands cannot be combined with each other, provider configuration, or startup options.');
   return options;
 }
 
 export async function askLibraryDirectory(suggestion:string){
-  if(!process.stdin.isTTY||!process.stdout.isTTY)throw Error('未找到已保存的书库目录；请在交互终端启动，或使用 --data-dir <目录> / SHIQU_DATA_DIR 指定书库。');
+  if(!process.stdin.isTTY||!process.stdout.isTTY)throw Error('No saved library directory was found. Start in an interactive terminal or specify --data-dir <directory> / SHIQU_DATA_DIR.');
   const terminal=createInterface({input:process.stdin,output:process.stdout}),abort=new AbortController();
   terminal.once('SIGINT',()=>abort.abort());
   terminal.once('close',()=>abort.abort());
-  try{return await terminal.question(`未找到已保存的书库。请输入要使用或创建的目录（回车使用 ${suggestion}）：`,{signal:abort.signal});}
-  catch{throw Error('已取消选择书库。');}
+  try{return await terminal.question(`No saved library was found. Enter a directory to use or create (Enter for ${suggestion}): `,{signal:abort.signal});}
+  catch{throw Error('Library selection canceled.');}
   finally{terminal.close();}
 }
 
@@ -58,7 +59,7 @@ export async function cliConfiguration(options:CliOptions,context:CliContext={})
       inspectLibrary(directory);
       const store=new SystemSettingsStore(locations.settings,locations.library);
       try{store.save({dataDirectory:directory,libraryConfigured:true});}finally{store.close();}
-    }catch{throw Error('无法读取 CLI 书库设置；请修复 cli-library.json，或使用 --data-dir 指定书库。');}
+    }catch{throw Error('CLI library settings could not be read. Repair cli-library.json or specify --data-dir.');}
   }
   if(!directory&&existsSync(paths.join(locations.library,'shiqu.sqlite')))directory=locations.library;
   if(!directory){

@@ -1,3 +1,4 @@
+// Verify English product projections while preserving original glyph and source identity checks.
 // Verify neutral discovery, durable independent verdicts, strict matching receipts and shared cancellation.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -10,6 +11,7 @@ import {themeMatchPrompt,themeMatchJson,themeMatchPayload} from '../lib/reader-t
 import {readingTokens} from '../server/story-token-budget.ts';
 import {previousReadingPlanKey} from '../server/story-discovery-legacy.ts';
 import {until} from './fixtures/production.mjs';
+const englishCatalog=f=>{f.stories.forEach((story,index)=>Object.assign(story,{title:index?'The brave protector':'The grateful turtle',description:'A complete event from the verified source.',summary:'The characters act and the event reaches its recorded result.'}));return f;};
 const seedManifest=async f=>f.cache.write(previousReadingPlanKey(f.book,'codex')+'/blocks',{mode:'whole',blocks:[{ranges:f.book.sections.map(s=>({sectionId:s.id,firstUnit:s.units[0].id,lastUnit:s.units.at(-1).id})),tokens:100}]});
 const observer=controller=>({signal:controller.signal,maxStories:1,drain:true,onProgress:()=>{}});
 const documents=f=>[...f.store.values.values()].map(bytes=>JSON.parse(new TextDecoder().decode(bytes)));
@@ -45,7 +47,7 @@ test('every matching request reads the exact original on its first and only pass
 
 test('obsolete review remains unknown, permits later originals, and can be retried manually after exhaustion',async()=>{
  const f=libraryFixture();f.control.decide=()=> 'review';const result=await f.run('不确定');
- assert.deepEqual(result.stories,[]);assert.match(result.note,/未能判断/);assert.equal(library(f).stories.length,2);
+ assert.deepEqual(result.stories,[]);assert.match(result.note,/could not be assessed/);assert.equal(library(f).stories.length,2);
  const judgments=documents(f).filter(doc=>doc.value.decisions);assert.ok(judgments.every(doc=>Object.keys(doc.value.decisions).length===0));
  const before=f.calls.matches.length;f.control.decide=(_theme,story)=>{assert.ok(story.text);return 'yes';};
  assert.equal((await f.run('不确定')).stories[0].title,'乌龟报恩');assert.ok(f.calls.matches.length>before);assert.equal(f.calls.catalog.length,2);
@@ -63,7 +65,7 @@ for(const kind of ['unknown','duplicate','missing'])test(`invalid ${kind} matchi
  const f=libraryFixture();await f.run('收录');await f.run('收录',[f.stories[0].source]);
  f.provider.matchStories=async(_theme,stories)=>({matches:kind==='unknown'?stories.map(story=>({id:'b'.repeat(64),verdict:'yes',reason:'符合'})):kind==='duplicate'?stories.flatMap(story=>[{id:story.id,verdict:'yes',reason:'符合'},{id:story.id,verdict:'no',reason:'冲突'}]):[{id:stories[0].id,verdict:'yes',reason:'符合'}]});
  const result=await f.run('坏结果');assert.equal(library(f).stories.length,2);
- if(kind==='missing')assert.equal(result.stories.length,1);else {assert.deepEqual(result.stories,[]);assert.match(result.note,/未能判断/);}
+ if(kind==='missing')assert.equal(result.stories.length,1);else {assert.deepEqual(result.stories,[]);assert.match(result.note,/could not be assessed/);}
 });
 
 test('catalog and candidates contain no synopsis or production brief',async()=>{
@@ -151,9 +153,9 @@ test('a changed extraction model or effort starts an isolated library while them
 });
 
 test('old summary catalog resumes ranges and coverage without extraction or old theme verdicts',async()=>{
- const f=libraryFixture(),old=legacySummaryDiscoveryNamespace(f.book,'codex','mock',undefined,'medium');
+ const f=englishCatalog(libraryFixture()),old=legacySummaryDiscoveryNamespace(f.book,'codex','mock',undefined,'medium');
  const state={stories:f.stories,cursor:1,readThrough:1,pendingEvents:[],exhausted:true,rejected:false};await seedManifest(f);await f.cache.write(old+'/library',state);
- const result=await f.run('勇气');assert.equal(result.stories[0].title,'勇士护民');assert.equal(f.calls.catalog.length,0);assert.equal(f.calls.matches.length,1);assert.equal(f.calls.matches[0].stories.length,2);
+ const result=await f.run('勇气');assert.equal(result.stories[0].title,'The brave protector');assert.equal(f.calls.catalog.length,0);assert.equal(f.calls.matches.length,1);assert.equal(f.calls.matches[0].stories.length,2);
  assert.equal(library(f).cursor,1);assert.equal(library(f).exhausted,true);assert.ok(library(f).stories.every(story=>!('summary' in story)));
  const oldDocument=documents(f).find(doc=>doc.key===old+'/library');assert.deepEqual(oldDocument.value,state);
 });
@@ -173,7 +175,7 @@ test('six originals are matched in bounded batches with reordered IDs and durabl
 });
 
 test('legacy pending ranges lose synopsis metadata and a failed upgrade write remains retryable',async()=>{
- const f=libraryFixture(),key=legacySummaryDiscoveryNamespace(f.book,'codex','mock',undefined,'medium')+'/library';
+ const f=englishCatalog(libraryFixture()),key=legacySummaryDiscoveryNamespace(f.book,'codex','mock',undefined,'medium')+'/library';
  const old={stories:[f.stories[0]],cursor:0,readThrough:0,pendingEvents:[{id:'pending',title:f.stories[1].title,summary:'尚未完结的旧摘要',source:f.stories[1].source}],exhausted:false,rejected:false};
  await seedManifest(f);await f.cache.write(key,old);const write=f.cache.write.bind(f.cache);let fail=true;
  f.cache.write=async(next,value)=>{if(next.endsWith('/library')&&next!==key&&fail)throw Error('controlled upgrade write');return write(next,value);};

@@ -1,3 +1,4 @@
+// English interface: labels, accessibility text, and workflow messages use English.
 'use client';
 // Separate status inspection from viewer demand and publish saved artwork as it arrives.
 // An open story reports its page so that page is drawn first; that never starts or retries work.
@@ -51,13 +52,13 @@ export function useStoryGeneration(page:number,callbacks:Callbacks,watchShelf=fa
  }
  function recoveryFor(s:SessionView,faultId?:string){
   const fault=s.faults?.find(f=>f.retryAllowed&&(!faultId||f.id===faultId));
-  if(!fault)throw Error(s.error||'这项问题已更新，请刷新后再操作。');
+  if(!fault)throw Error(s.error||"This issue has changed. Refresh before taking action.");
   let command=recoveries.current.get(fault.id);if(!command){command={requestId:randomId(),faultId:fault.id};recoveries.current.set(fault.id,command);}
   recoveryCommand.current=command;return command;
  }
  function adopt(s:SessionView,readOnly=false,initialPage?:number){
   id.current=s.id;passive.current=readOnly;generationMode.current=readOnly||observeOnlyGeneration(s)?'observe':'generate';retryRequested.current=false;
-  setActive(s);collect(s,true);setBusy(false);setError(s.state==='failed'?s.error||'生成失败，请选择对应问题恢复。':'');
+  setActive(s);collect(s,true);setBusy(false);setError(s.state==='failed'?s.error||"Generation failed. Select the matching issue to recover.":'');
   try{history.replaceState(null,'','/read?id='+s.id);}catch{}
   cb.current.onProgress([{storyId:s.id,page:s.page,saved:s.saved?1:0,updatedAt:s.lastReadAt||s.createdAt}]);
   if(s.story?.pages[0]?.image)cb.current.onStory(s.story,initialPage,s.saved);setWake(v=>v+1);
@@ -67,14 +68,14 @@ export function useStoryGeneration(page:number,callbacks:Callbacks,watchShelf=fa
   const s:SessionView=await request('reader/sessions/'+sessionId);if(id.current!==sessionId||removed.current.has(sessionId))return;
   if(retry)recoveryFor(s,faultId);
   generationMode.current=retry||!observeOnlyGeneration(s)?'generate':'observe';retryRequested.current=retry;
-  setBusy(retry);setError(!retry&&s.state==='failed'?s.error||'生成失败，请选择对应问题恢复。':'');setActive(s);collect(s,submitted);
+  setBusy(retry);setError(!retry&&s.state==='failed'?s.error||"Generation failed. Select the matching issue to recover.":'');setActive(s);collect(s,submitted);
   history.replaceState(null,'','/read?id='+s.id);cb.current.onProgress([{storyId:s.id,page:s.page,saved:s.saved?1:0,updatedAt:s.lastReadAt||s.createdAt}]);
   if(s.story?.pages[0]?.image)cb.current.onStory(s.story,initialPage??s.page,s.saved);setWake(v=>v+1);
  }
  async function checkImage(sessionId:string,page:number,image:string){
   const key=JSON.stringify([sessionId,page,image]),existing=imageChecks.current.get(key);if(existing)return existing;
   const operation=request(`reader/sessions/${sessionId}/image-health`,'POST',{page,image}).then((s:SessionView)=>{
-   collect(s);if(id.current===sessionId){generationMode.current='observe';setActive(s);setError(s.state==='failed'?s.error||'图片需要处理。':'');if(s.story)cb.current.onStory(s.story);setWake(v=>v+1);}return s;
+   collect(s);if(id.current===sessionId){generationMode.current='observe';setActive(s);setError(s.state==='failed'?s.error||"The image needs attention.":'');if(s.story)cb.current.onStory(s.story);setWake(v=>v+1);}return s;
   }).finally(()=>imageChecks.current.delete(key));
   imageChecks.current.set(key,operation);return operation;
  }
@@ -130,7 +131,7 @@ export function useStoryGeneration(page:number,callbacks:Callbacks,watchShelf=fa
    }
    if(id.current!==sessionId||removed.current.has(sessionId))return;
    generationMode.current=observeOnlyGeneration(s)?'observe':'generate';retryRequested.current=false;setActive(s);collect(s);retries.current=new Map();setWake(v=>v+1);
-  }catch(error){if(id.current===sessionId)setError(error instanceof Error?error.message:'画幅数暂未保存，请再试一次。');}
+  }catch(error){if(id.current===sessionId)setError(error instanceof Error?error.message:"Page count was not saved. Try again.");}
   finally{if(id.current===sessionId)setBusy(false);}
  }
  async function control(sessionId:string,action:ProductionAction){
@@ -142,22 +143,22 @@ export function useStoryGeneration(page:number,callbacks:Callbacks,watchShelf=fa
    collect(s);
    if(id.current===sessionId){
     generationMode.current=observeOnlyGeneration(s)?'observe':'generate';
-    retryRequested.current=false;setActive(s);setError(s.state==='failed'?s.error||'生成失败，请重试继续。':'');setWake(v=>v+1);
+    retryRequested.current=false;setActive(s);setError(s.state==='failed'?s.error||"Generation failed. Retry to continue.":'');setWake(v=>v+1);
    }
-  }catch(error){if((error as {status?:number}).status!==undefined)controlRequest.current=null;setControlError(error instanceof Error?error.message:'生成方式暂未保存，请重试。');}
+  }catch(error){if((error as {status?:number}).status!==undefined)controlRequest.current=null;setControlError(error instanceof Error?error.message:"Generation mode was not saved. Try again.");}
   finally{controlLock.current=false;setControlBusy('');}
  }
  async function drawAnyway(sessionId:string){
   if(controlLock.current)return;controlLock.current=true;setControlBusy(sessionId);setControlError('');
   try{
    const current:SessionView=active?.id===sessionId?active:await request('reader/sessions/'+sessionId);
-   const fault=current.faults?.find(f=>f.stage==='review'&&f.state==='pending');if(!fault&&!overrideRequest.current?.signature.startsWith(JSON.stringify([sessionId]).slice(0,-1)+','))throw Error('审核问题已更新，请刷新后再处理。');
+   const fault=current.faults?.find(f=>f.stage==='review'&&f.state==='pending');if(!fault&&!overrideRequest.current?.signature.startsWith(JSON.stringify([sessionId]).slice(0,-1)+','))throw Error("Review issues have changed. Refresh before continuing.");
    if(fault){const signature=JSON.stringify([sessionId,fault.id]);if(overrideRequest.current?.signature!==signature)overrideRequest.current={signature,body:{requestId:randomId(),faultId:fault.id}};}
    const s:SessionView=await request(`reader/sessions/${sessionId}/review-override`,'POST',overrideRequest.current!.body);
    overrideRequest.current=null;passive.current=false;
    collect(s);
-   if(id.current===sessionId){setActive(s);setError(s.state==='failed'?s.error||'生成失败，请重试继续。':'');setWake(v=>v+1);}
-  }catch(error){setControlError(error instanceof Error?error.message:'操作暂未保存，请重试。');}
+   if(id.current===sessionId){setActive(s);setError(s.state==='failed'?s.error||"Generation failed. Retry to continue.":'');setWake(v=>v+1);}
+  }catch(error){setControlError(error instanceof Error?error.message:"The action was not saved. Try again.");}
   finally{controlLock.current=false;setControlBusy('');}
  }
  function leave(){id.current='';setActive(null);setBusy(false);setError('');}
@@ -176,7 +177,7 @@ export function useStoryGeneration(page:number,callbacks:Callbacks,watchShelf=fa
     cb.current.onProgress(visible.map(s=>({storyId:s.id,page:s.page,saved:s.saved?1:0,updatedAt:s.lastReadAt||s.createdAt})));
    }
    return visible;
-  }catch(error){if(live.current&&isCurrent()&&read===libraryRead.current)setLibraryError('书架刷新失败，请重试。');throw error;}
+  }catch(error){if(live.current&&isCurrent()&&read===libraryRead.current)setLibraryError("Could not refresh the shelf. Try again.");throw error;}
   finally{if(!background&&--refreshingReads.current===0&&live.current)setLibraryRefreshing(false);}
  }
  const refresh=useRef(refreshLibrary);refresh.current=refreshLibrary;
@@ -198,7 +199,7 @@ export function useStoryGeneration(page:number,callbacks:Callbacks,watchShelf=fa
   try{
    const next:SessionView=await request(`reader/sessions/${s.id}/recover`,'POST',command);
    collect(next);if(id.current===s.id){passive.current=false;generationMode.current=next.generationMode==='reader'&&next.generationControl==='active'?'generate':'observe';setActive(next);setWake(v=>v+1);}
-  }catch(e){if(id.current===s.id)setError(e instanceof Error?e.message:'恢复暂未受理，请重试。');}
+  }catch(e){if(id.current===s.id)setError(e instanceof Error?e.message:"Recovery was not accepted. Try again.");}
   finally{recovering.current.delete(command.faultId);}
  }
  async function retryStep(faultId?:string){if(!active?.retryAllowed)return;await recoverFault(active,faultId);}
@@ -215,7 +216,7 @@ export function useStoryGeneration(page:number,callbacks:Callbacks,watchShelf=fa
    const onSession=(s:SessionView)=>{
     const generating=s.productionState?s.productionState==='running'||s.productionState==='queued':s.state==='running';
     if(s.generationMode==='background'||s.generationControl&&s.generationControl!=='active'){if(!inspecting){generationMode.current='observe';setWake(v=>v+1);}}
-    collect(s);setActive(old=>keepSnapshot(old,s));setBusy(!inspecting&&(generating||s.state==='failed'));setError(s.state==='failed'?(s.error||'生成失败，请重试继续。'):'');
+    collect(s);setActive(old=>keepSnapshot(old,s));setBusy(!inspecting&&(generating||s.state==='failed'));setError(s.state==='failed'?(s.error||"Generation failed. Retry to continue."):'');
     if(s.story?.pages[0]?.image){
      cb.current.onStory(s.story);
      if(inspecting&&!passive.current&&!observeOnlyGeneration(s)){generationMode.current='generate';setWake(v=>v+1);}

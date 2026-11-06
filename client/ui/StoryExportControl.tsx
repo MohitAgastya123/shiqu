@@ -1,3 +1,4 @@
+// English interface: labels, accessibility text, and workflow messages use English.
 // Recheck live defaults for every output attempt before unsigned consent or cached-file reuse.
 import {useEffect,useRef,useState} from 'react';
 import type {ReactNode} from 'react';
@@ -21,12 +22,12 @@ export default function StoryExportControl({story,format,disabled,busy,className
    const output=withPublicationDefaults(story,defaults);
    if(!allowUnsigned&&!hasPublicationAuthor(output.publication)){setConfirming(output);return;}
    setConfirming(null);await onExport(output);
-  }catch(error){if(live.current)setError(error instanceof Error?error.message:'署名说明暂时无法核对，请重试。');}
+  }catch(error){if(live.current)setError(error instanceof Error?error.message:"Could not verify the credits. Try again.");}
   finally{lock.current=false;if(live.current)setChecking(false);}
  }
- return <><button type="button" className={className} aria-busy={busy||checking} disabled={disabled||checking} onClick={()=>void start()}>{checking&&!busy?'正在核对署名…':children}</button>{error&&!confirming&&<p className="yu-export-credit-error" role="alert">{error}</p>}{confirming&&<Sheet title="作品还未署名" busy={checking} onClose={()=>setConfirming(null)}><div className="yu-export-confirmation"><p className="yu-publication-work">{confirming.title}</p><p>本次导出未设置制作署名，{format.toUpperCase()} 文件将显示「制作：未署名」。可以先填写署名，也可以确认继续。</p>{error&&<p role="alert">{error}</p>}<div className="yu-export-confirmation-actions">
-  {onEdit&&<button type="button" className="yu-primary" disabled={disabled||checking} onClick={()=>{setConfirming(null);onEdit();}}>先填写署名</button>}
-  <button type="button" className="yu-export-unsigned" disabled={disabled||checking} onClick={()=>void start(true)}>{checking?'正在核对署名…':'仍以未署名导出 '+format.toUpperCase()}</button>
-  <button type="button" className="yu-revision-open" disabled={checking} onClick={()=>setConfirming(null)}>取消</button>
+ return <><button type="button" className={className} aria-busy={busy||checking} disabled={disabled||checking} onClick={()=>void start()}>{checking&&!busy?"Checking credits…":children}</button>{error&&!confirming&&<p className="yu-export-credit-error" role="alert">{error}</p>}{confirming&&<Sheet title="No creator credit set" busy={checking} onClose={()=>setConfirming(null)}><div className="yu-export-confirmation"><p className="yu-publication-work">{confirming.title}</p><p>No creator credit is set for this export. {format.toUpperCase()}  will show “Created by: Uncredited”. Add a credit first or continue.</p>{error&&<p role="alert">{error}</p>}<div className="yu-export-confirmation-actions">
+  {onEdit&&<button type="button" className="yu-primary" disabled={disabled||checking} onClick={()=>{setConfirming(null);onEdit();}}>Add creator credit</button>}
+  <button type="button" className="yu-export-unsigned" disabled={disabled||checking} onClick={()=>void start(true)}>{checking?"Checking credits…":"Export without credit "+format.toUpperCase()}</button>
+  <button type="button" className="yu-revision-open" disabled={checking} onClick={()=>setConfirming(null)}>Cancel</button>
  </div></div></Sheet>}</>;
 }

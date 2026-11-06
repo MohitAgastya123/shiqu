@@ -1,7 +1,10 @@
 // Advance local story generation under one session lock, retaining every paid result it can save.
-// A failed save is rethrown for recovery rather than recorded as a provider failure.
+// A failed save is rethrown for recovery; bounded English source translations are durable preparation steps.
+// Translation keeps model usage but omits raw-language prompt input from public prompt history.
 import {blockedIssues,nextStep,reviewPhase,planSchema,reflectionCandidatesSchema,storyPresentationSchema,storyDraftSchema,storyboardOutlineSchema,storyboardBatchSchema,selectionSchema,view,ReaderError,productionComplete,readerBooks} from './reader-model.ts';
 import type {Document,Plan,StoryDraft,ReflectionCandidates,StoryPresentation,Selection,SessionRow,Storyboard,StoryboardOutline} from './reader-model.ts';
+import {sourceTranslationReady} from './reader-source-types.ts';
+import {translateSourceCheckpoint} from './reader-source-english.ts';
 import {persistenceError} from './reader-repository.ts';
 import type {ReaderRepository} from './reader-repository.ts';
 import type {ArtStyleId} from './reader-styles.ts';
@@ -23,7 +26,7 @@ import type {EditorialCoverage} from './reader-editorial.ts';
 import type {ReviewIssue,ReviewReport,RepairedPage,FrameCountReport,FrameCountContext} from './reader-review.ts';
 import type {PromptRecord} from './reader-prompt-records.ts';
 export type Generated<T>={promptRecord?:PromptRecord;value:T;model:string;requestId:string|null;usage:unknown;reasoningEffort?:string};
-export interface StoryGenerator{recommendArt?(selection:Selection,original:OriginalSource):Promise<ArtRecommendation>;prepareOriginal?(selection:Selection,id:string):Promise<OriginalSource|null>;recommend?(selection:Selection,id:string,original:OriginalSource,prepareRequirements?:boolean):Promise<Generated<FrameRecommendation>>;outline?(selection:Selection,id:string,original?:OriginalSource):Promise<Generated<StoryboardOutline>>;planBatch?(selection:Selection,id:string,storyboard:Storyboard,original:OriginalSource):Promise<Generated<Plan['pages']>>;reviewFrameCount?(selection:Selection,plan:Plan,original:OriginalSource):Promise<Generated<FrameCountReport>>;review?(selection:Selection,plan:Plan,original:OriginalSource,outline?:StoryboardOutline,candidates?:ReflectionCandidates):Promise<Generated<ReviewReport>>;restructure?(selection:Selection,plan:Plan,original:OriginalSource,issues:ReviewIssue[],coverage?:EditorialCoverage[],frameCountContext?:FrameCountContext):Promise<Generated<StructuralEdits>>;repair?(selection:Selection,plan:Plan,original:OriginalSource,issues:ReviewIssue[],outline?:StoryboardOutline):Promise<Generated<RepairedPage[]>>;reflectionCandidates(selection:Selection,draft:StoryDraft,original:OriginalSource):Promise<Generated<StoryPresentation>>;reflection(selection:Selection,draft:StoryDraft,original:OriginalSource,revision?:{reflection:string;issues:ReviewIssue[]}):Promise<Generated<string>>;plan(selection:Selection,id:string,original?:OriginalSource):Promise<Generated<StoryDraft>>;original(selection:Selection,plan:SourceHint,id:string):Promise<SourceResult>;image(plan:Plan,page:number,id:string,reference:string,style?:ArtStyleId,productionPrompt?:string,artifactId?:string):Promise<Generated<string>>;audio(caption:string,id:string,page:number):Promise<Generated<string>>;safeError(error:unknown):string;}
+export interface StoryGenerator{validateOriginal?(selection:Selection,original:OriginalSource):void;translateSource?(text:string,title:string):Promise<Generated<{title:string;text:string}>>;recommendArt?(selection:Selection,original:OriginalSource):Promise<ArtRecommendation>;prepareOriginal?(selection:Selection,id:string):Promise<OriginalSource|null>;recommend?(selection:Selection,id:string,original:OriginalSource,prepareRequirements?:boolean):Promise<Generated<FrameRecommendation>>;outline?(selection:Selection,id:string,original?:OriginalSource):Promise<Generated<StoryboardOutline>>;planBatch?(selection:Selection,id:string,storyboard:Storyboard,original:OriginalSource):Promise<Generated<Plan['pages']>>;reviewFrameCount?(selection:Selection,plan:Plan,original:OriginalSource):Promise<Generated<FrameCountReport>>;review?(selection:Selection,plan:Plan,original:OriginalSource,outline?:StoryboardOutline,candidates?:ReflectionCandidates):Promise<Generated<ReviewReport>>;restructure?(selection:Selection,plan:Plan,original:OriginalSource,issues:ReviewIssue[],coverage?:EditorialCoverage[],frameCountContext?:FrameCountContext):Promise<Generated<StructuralEdits>>;repair?(selection:Selection,plan:Plan,original:OriginalSource,issues:ReviewIssue[],outline?:StoryboardOutline):Promise<Generated<RepairedPage[]>>;reflectionCandidates(selection:Selection,draft:StoryDraft,original:OriginalSource):Promise<Generated<StoryPresentation>>;reflection(selection:Selection,draft:StoryDraft,original:OriginalSource,revision?:{reflection:string;issues:ReviewIssue[]}):Promise<Generated<string>>;plan(selection:Selection,id:string,original?:OriginalSource):Promise<Generated<StoryDraft>>;original(selection:Selection,plan:SourceHint,id:string):Promise<SourceResult>;image(plan:Plan,page:number,id:string,reference:string,style?:ArtStyleId,productionPrompt?:string,artifactId?:string):Promise<Generated<string>>;audio(caption:string,id:string,page:number):Promise<Generated<string>>;safeError(error:unknown):string;}
 
 async function drawRequestedImages(repo:ReaderRepository,generator:StoryGenerator,row:SessionRow,token:string,doc:Document,selection:Selection,throughPage:number){
  const pages=doc.plan!.pages.map((_,page)=>page).filter(page=>page<=throughPage&&!doc.images[page]);
@@ -63,17 +66,22 @@ export async function advanceStory(repo:ReaderRepository,generator:StoryGenerato
     if(!original){
      const book=selection.bookId==='other'?selection.customBook:readerBooks.find(b=>b.id===selection.bookId)?.title||selection.bookId;
      const result=await generator.original(selection,{sourceReference:`《${book||''}》${selection.storyTitle||''}`},id);
-     if(!result.source)throw new ReaderError(503,'原文未能核对，暂时无法准备故事摘要。'+result.message);
+     if(!result.source)throw new ReaderError(503,'The source could not be verified. A summary cannot be prepared yet. '+result.message);
      original=result.source;
     }
     doc.original=structuredClone(original);await repo.saveImageProgress(row,ownedToken,structuredClone(doc));
    }
    const chosen=doc.intake?.selected,candidate=chosen?doc.intake!.batches[chosen.batch]?.stories[chosen.index]:undefined;
    // Candidate guidance or an explicit placeholder stays bound to the saved original until checked.
-   const pendingBrief=candidate?.storyBrief||{summary:doc.storyboard?.outline.summary||'尚未准备完整摘要，请依据已核原文生成。',matchReason:candidate?.matchReason||(storyEditorialContext(selection.theme).mode==='source'?'直接选择原典故事，须按原文补齐完整主线，不额外套主题。':'已选中此故事，须对照原文确认具体主题依据并补齐完整主线。')};
+   const pendingBrief=candidate?.storyBrief||{summary:doc.storyboard?.outline.summary||'A complete summary has not been prepared. Write it from the verified source.',matchReason:candidate?.matchReason||(storyEditorialContext(selection.theme).mode==='source'?'Direct source selection: preserve the complete original story without imposing an additional theme.':'Check the selected story against the source for theme evidence and complete narrative coverage.')};
    if(!doc.original.storyBrief){
     doc.original.storyBrief={...storyBriefSchema.parse(pendingBrief),verified:false};
     await repo.saveImageProgress(row,ownedToken,structuredClone(doc));
+   }
+   generator.validateOriginal?.(selection,doc.original);
+   if(!sourceTranslationReady(doc.original)){
+    const translated=await translateSourceCheckpoint(doc.original,generator);
+    if(translated)return {...translated,promptRecord:undefined,translationOnly:true};
    }
    if(candidate?.source&&!candidate.artRecommendation&&generator.recommendArt){
     const recommendation=artRecommendationSchema.parse(await generator.recommendArt(selection,doc.original));
@@ -81,7 +89,7 @@ export async function advanceStory(repo:ReaderRepository,generator:StoryGenerato
     candidate.artRecommendation=recommendation;
     if(!doc.intake!.manualArt)selection.artStyle=recommendation.artStyle;
    }
-   if(!generator.recommend)throw new ReaderError(503,'生成服务暂不支持画幅建议，请更新服务后重试。');
+   if(!generator.recommend)throw new ReaderError(503,'This provider does not support frame recommendations. Update it and try again.');
    const prepareRequirements=!!doc.intake&&!doc.setupRequirements?.suggestions;
    const result=await generator.recommend(selection,id,doc.original,prepareRequirements),recommendation=frameRecommendationOutputSchema(doc.original,prepareRequirements).parse(result.value);
    if(prepareRequirements){
@@ -91,10 +99,11 @@ export async function advanceStory(repo:ReaderRepository,generator:StoryGenerato
    if(doc.original.storyBrief)doc.original.storyBrief={summary:recommendation.storySummary!,matchReason:recommendation.storyMatchReason!,verified:true};
    doc.frameRecommendation=recommendation;if(selection.length==='auto'&&!doc.intake)doc.frameCountConfirmed=true;return result;
   }
-  if(step.kind==='recommend'){generated=await prepareRecommendation(token);if(doc.intake&&doc.intake.phase!=='confirmed')doc.intake.phase='confirming';}
+  if(step.kind==='recommend'){const result=await prepareRecommendation(token);generated=result;if(doc.intake&&doc.intake.phase!=='confirmed'&&!('translationOnly' in result))doc.intake.phase='confirming';}
   else if(step.kind==='plan'){
    if(doc.original?.storyBrief&&!storyBriefVerified(doc.original)||!storyBriefVerified(doc.original)&&!doc.storyboard?.outline.summary?.trim()){
     const result=await prepareRecommendation(token);
+    if('translationOnly' in result){doc.usage.push({step:'source-translation',model:result.model,requestId:result.requestId,usage:result.usage});return view(await repo.save(row,token,doc,false,null));}
     doc.usage.push({step:'summary',model:result.model,requestId:result.requestId,usage:result.usage,...(result.promptRecord?{promptRecord:result.promptRecord}:{}),...(result.reasoningEffort?{reasoningEffort:result.reasoningEffort}:{})});
     await repo.saveImageProgress(row,token,structuredClone(doc));
    }
@@ -110,7 +119,7 @@ export async function advanceStory(repo:ReaderRepository,generator:StoryGenerato
      if(selection.length!=='auto'&&outline.beats.length!==selection.length)throw Error('PLAN_LENGTH');
      doc.storyboard={outline,pages:[]};generated=result;
     }else{
-     if(!doc.original)throw new ReaderError(503,'原文尚未核对，暂时无法细化分镜。');
+     if(!doc.original)throw new ReaderError(503,'Verify the source before refining the storyboard.');
      if(!generator.planBatch)throw Error('STORYBOARD_UNAVAILABLE');
      const draft=doc.storyboard,count=Math.min(readerStoryboardBatchSize,draft.outline.beats.length-draft.pages.length);
      if(storyBriefVerified(doc.original))draft.outline.summary=doc.original!.storyBrief!.summary;
@@ -125,7 +134,7 @@ export async function advanceStory(repo:ReaderRepository,generator:StoryGenerato
    }
   }
   else if(step.kind==='reflection'){
-   if(!generator.review)throw new ReaderError(503,'生成服务暂不支持结语择优，请更新服务后重试。');
+   if(!generator.review)throw new ReaderError(503,'This provider does not support ending selection. Update it and try again.');
    const result=await generator.reflectionCandidates(selection,structuredClone(doc.draft!),doc.original!);
    const {title,candidates}=storyPresentationSchema.parse(result.value);
    doc.plan=planSchema.parse({...doc.draft,title,reflection:candidates[0]});doc.reflectionCandidates=candidates;delete doc.draft;generated=result;
@@ -135,13 +144,13 @@ export async function advanceStory(repo:ReaderRepository,generator:StoryGenerato
    const review=doc.visualReview!;
    if(review.status==='blocked'){
     // Only an explicit retry can reach a blocked session; reuse the saved issues without a new audit.
-    if(review.stopReason==='requirements')throw new ReaderError(409,'验收要求存在冲突或无法判断，请修改验收要求后创建新版。');
-    if(review.stopReason==='replan')throw new ReaderError(409,review.issues.some(issue=>issue.requiresReplan&&issue.category==='continuity')?'全局人物连续性说明需要修订，请调整制作要求后重新编排。':storyReplanMessage);
-    if(!retry)throw new ReaderError(409,'分镜审片尚未通过，请手动继续修订。');
+    if(review.stopReason==='requirements')throw new ReaderError(409,'Acceptance criteria conflict or cannot be assessed. Edit them and create a revision.');
+    if(review.stopReason==='replan')throw new ReaderError(409,review.issues.some(issue=>issue.requiresReplan&&issue.category==='continuity')?'Character continuity needs revision. Adjust the production instructions and replan.':storyReplanMessage);
+    if(!retry)throw new ReaderError(409,'Storyboard review has not passed. Continue revision explicitly.');
     // Give the continuation its own generation so the later recheck cannot reuse this receipt.
     const partial=review.stopReason==='unchanged';review.round++;review.status='repair';review.repairs=0;if(!partial)review.repaired=[];delete review.stopReason;
    }else if(reviewPhase(review,selection)==='frames'){
-    if(!generator.reviewFrameCount)throw new ReaderError(503,'生成服务暂不支持画幅数审核，请更新服务后重试。');
+    if(!generator.reviewFrameCount)throw new ReaderError(503,'This provider does not support frame-count review. Update it and try again.');
     const result=await generator.reviewFrameCount(selection,structuredClone(doc.plan!),doc.original!);
     const report=parseFrameCountReport(doc.plan!.pages.length,{frameCountReview:result.value.frameCountReview,requirements:result.value.requirements});
     validateEditorialCoverage(report.coverage,doc.original!);
@@ -150,11 +159,11 @@ export async function advanceStory(repo:ReaderRepository,generator:StoryGenerato
     review.status=!report.issues.length?'pending':review.repairs>=readerMaxAutomaticRepairs?'blocked':'repair';
     if(review.status==='blocked')review.stopReason='limit';else delete review.stopReason;generated=result;
    }else{
-    if(!generator.review)throw new ReaderError(503,'生成服务暂不支持分镜审片，请更新服务后重试。');
+    if(!generator.review)throw new ReaderError(503,'This provider does not support storyboard review. Update it and try again.');
     const candidates=doc.reflectionCandidates?reflectionCandidatesSchema.parse(doc.reflectionCandidates):undefined;
     const result=await generator.review(selection,structuredClone(doc.plan!),doc.original!,doc.storyboard?.outline,candidates);
     const report=reviewReportSchema(doc.plan!.pages.length,candidates,selection.acceptancePrompt).parse(result.value);
-    if(selection.length==='auto'&&!report.coverage)throw new ReaderError(502,'审核未返回原文与分镜核对记录，已保留文稿，尚未绘图。');
+    if(selection.length==='auto'&&!report.coverage)throw new ReaderError(502,'Review did not return source coverage evidence. The draft is saved; illustration has not started.');
     if(report.coverage)validateEditorialCoverage(report.coverage,doc.original!);
     const previousTitle=doc.plan!.title;doc.plan={...doc.plan!,title:report.titleReview.title};
     if(candidates&&report.reflectionChoice){doc.plan={...doc.plan!,reflection:candidates[report.reflectionChoice.index-1]};delete doc.reflectionCandidates;}
@@ -167,7 +176,7 @@ export async function advanceStory(repo:ReaderRepository,generator:StoryGenerato
   else if(step.kind==='repair'){
    const review=doc.visualReview!,requested=pendingRepairs(review),issues=review.issues.filter(issue=>requested.includes(issue.page));
    if(review.issues.some(issue=>issue.requiresReplan)){
-    if(selection.length!=='auto'||!generator.restructure)throw new ReaderError(503,'生成服务暂不支持自动调整分镜结构。已保存审核结果，尚未绘图。');
+    if(selection.length!=='auto'||!generator.restructure)throw new ReaderError(503,'This provider does not support storyboard restructuring. Review results are saved; illustration has not started.');
     const count=reviewPhase(review,selection)==='frames'?review.frameCountReports?.at(-1):undefined;
     const before=doc.plan!,result=await generator.restructure(selection,structuredClone(before),doc.original!,review.issues,count?.coverage||review.reports.at(-1)?.coverage,count?{frameCountReview:count.frameCountReview,requirements:count.requirements}:undefined);
     const edited=applyStructuralEdits(before,result.value);
@@ -188,7 +197,7 @@ export async function advanceStory(repo:ReaderRepository,generator:StoryGenerato
     else{doc.plan={...doc.plan!,reflection};review.repaired.push(0);review.status='pending';review.repairs++;}
     generated=result;
    }else{
-    if(!generator.repair)throw new ReaderError(503,'生成服务暂不支持分镜修订，请更新服务后重试。');
+    if(!generator.repair)throw new ReaderError(503,'This provider does not support storyboard revision. Update it and try again.');
     const result=await generator.repair(selection,structuredClone(doc.plan!),doc.original!,issues,doc.storyboard?.outline);
     const pages=repairOutputSchema(requested).parse({pages:result.value}).pages,updated=structuredClone(doc.plan!);
     const changed=pages.filter(({page,caption,prompt})=>caption!==doc.plan!.pages[page-1].caption||prompt!==doc.plan!.pages[page-1].prompt);
@@ -211,14 +220,14 @@ export async function advanceStory(repo:ReaderRepository,generator:StoryGenerato
    // Save that paid directory before source lookup so a source outage cannot replay inference.
    if(doc.storyboard)await repo.saveImageProgress(row,token,structuredClone(doc));
    const result=await generator.original(selection,doc.plan||doc.draft||doc.storyboard!.outline,id);
-   if(!result.source)throw new ReaderError(503,'原文未能保存。'+result.message+' 故事编排已保留，可重试补全原文。');
+   if(!result.source)throw new ReaderError(503,'The source could not be saved. '+result.message+' The storyboard is saved. Retry source retrieval.');
    doc.original=result.source;
   }
   if(doc.visualReview?.status==='blocked'){
-   if(doc.visualReview.stopReason==='requirements')throw new ReaderError(422,'验收要求存在冲突或无法判断，已停止绘图。'+(doc.visualReview.reports.at(-1)?.acceptanceResults||[]).filter(result=>result.status==='unknown').map(result=>result.evidence).join('；')+' 请修改验收要求后创建新版。');
-   if(doc.visualReview.stopReason==='replan')throw new ReaderError(422,(doc.visualReview.issues.some(issue=>issue.requiresReplan&&issue.category==='continuity')?'全局人物连续性说明需要修订，请调整制作要求后重新编排。':storyReplanMessage)+' '+doc.visualReview.issues.filter(issue=>issue.requiresReplan).map(issue=>issue.problem).join('；'));
-   const issues=blockedIssues(doc.visualReview),summary=issues.slice(0,3).map(issue=>`${issue.category==='reflection'?'结语':`第 ${issue.page} 幅`}：${issue.problem}`).join('；');
-   throw new ReaderError(422,`${doc.visualReview.stopReason==='unchanged'?'修订没有产生实际变化':`已自动修复 ${readerMaxAutomaticRepairs} 轮，复核未通过`}，仍有 ${issues.length} 处问题，已停止绘图。${summary}。可手动继续修订。`);
+   if(doc.visualReview.stopReason==='requirements')throw new ReaderError(422,'Acceptance criteria conflict or cannot be assessed. Illustration has stopped. '+(doc.visualReview.reports.at(-1)?.acceptanceResults||[]).filter(result=>result.status==='unknown').map(result=>result.evidence).join('; ')+' Edit the acceptance criteria and create a revision.');
+   if(doc.visualReview.stopReason==='replan')throw new ReaderError(422,(doc.visualReview.issues.some(issue=>issue.requiresReplan&&issue.category==='continuity')?'Character continuity needs revision. Adjust the production instructions and replan.':storyReplanMessage)+' '+doc.visualReview.issues.filter(issue=>issue.requiresReplan).map(issue=>issue.problem).join('; '));
+   const issues=blockedIssues(doc.visualReview),summary=issues.slice(0,3).map(issue=>`${issue.category==='reflection'?'Ending':`Frame ${issue.page}`}: ${issue.problem}`).join('; ');
+   throw new ReaderError(422,`${doc.visualReview.stopReason==='unchanged'?'Revision made no substantive changes':`Review still has issues after ${readerMaxAutomaticRepairs} automatic repair rounds`}; ${issues.length} issues remain. Illustration has stopped. ${summary}. Continue revision explicitly.`);
   }
   return view(await repo.save(row,token,doc,productionComplete(doc,selection),null,progressMap));
  }catch(error){if(error instanceof ReaderError&&error.status===404||persistenceError(error))throw error;onFailed?.(error);return view(await repo.save(row,token,doc,false,error instanceof ReaderError?error.message:generator.safeError(error),progressMap));}

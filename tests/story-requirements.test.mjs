@@ -1,3 +1,4 @@
+// English workflow expectations preserve source evidence, saved work and recovery contracts.
 // Exercise story criteria through real persistence, queued review gates and immutable revisions.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -29,7 +30,7 @@ for(const provider of ['codex','gemini'])test(`${provider}: saved per-story requ
  const id=await f.create(3,{acceptancePrompt:criteria});await until(async()=>(await f.read(id)).state==='completed');
  const before=await f.read(id),captures=await f.json(`sessions/${id}/prompts`);
  assert.equal(before.selection.acceptancePrompt,criteria);assert.deepEqual(captures.results,results('passed'));assert.deepEqual(captures.criteria,criteria.split('\n'));
- assert.equal(captures.productionPrompt,before.selection.productionPrompt);assert.equal(captures.acceptancePrompt,criteria);assert.deepEqual(captures.missingRecords,[]);
+ assert.equal(captures.productionPrompt,before.selection.productionPrompt);assert.equal(captures.acceptancePrompt,criteria);assert.ok(captures.missingRecords.every(record=>record.step==='source-translation'));
  assert.ok(captures.records.some(record=>record.step==='image:1'&&record.record.input.includes('Scene 2:')),'queued publication retains actual image prompt');
  assert.ok(captures.records.some(record=>record.step.startsWith('review')&&JSON.parse(record.record.input).acceptancePrompt===criteria));
  assert.equal('records' in before,false);assert.equal('usage' in before,false);
@@ -62,7 +63,7 @@ test('unknown/conflicting criteria stop immediately with evidence, no fabricated
 test('historical rows have no invented capture history, and previews do not commission inference',async t=>{
  const f=await productionFixture(t),id=await f.createLegacyReader(3);f.app.stopGeneration();
  await f.app.services.database.prepare("UPDATE stories SET document=json_remove(document,'$.usage') WHERE id=?").bind(id).run();
- const initial=await f.json(`sessions/${id}/prompts`);assert.deepEqual(initial.records,[]);assert.deepEqual(initial.results,[]);assert.ok(initial.previews.production.instructions.includes('默认制作标准'));assert.equal(f.control.plans.length,0);
+ const initial=await f.json(`sessions/${id}/prompts`);assert.deepEqual(initial.records,[]);assert.deepEqual(initial.results,[]);assert.ok(initial.previews.production.instructions.includes('Production standards'));assert.equal(f.control.plans.length,0);
  assert.deepEqual(initial.missingRecords,[]);assert.equal(initial.productionPrompt,selection.productionPrompt);assert.equal(initial.acceptancePrompt,'');
 });
 

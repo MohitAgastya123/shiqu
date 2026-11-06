@@ -1,3 +1,4 @@
+// Observe the English CLI readiness banner without changing isolated library fixtures.
 // Own disposable CLI homes and runtime roots. Never inherit user configuration or provider credentials.
 import assert from 'node:assert/strict';
 import {mkdtemp,mkdir,cp,writeFile,rm,readFile} from 'node:fs/promises';
@@ -39,7 +40,7 @@ export function startFixtureCli(f,args=[],variables={}){
  async function stop(){if(child.exitCode!==null||child.signalCode!==null)return;child.kill('SIGTERM');const timer=setTimeout(()=>child.kill('SIGKILL'),5000);try{await exit;}finally{clearTimeout(timer);}}
  async function ready(){
   const deadline=Date.now()+15000;
-  while(!output.includes('拾趣: http://')){
+  while(!output.includes('Shiqu: http://')){
    assert.ok(child.exitCode===null&&child.signalCode===null,'CLI exited before readiness: '+output);
    assert.ok(Date.now()<deadline,'CLI startup timed out: '+output);
    await new Promise(resolve=>setTimeout(resolve,10));

@@ -1,3 +1,4 @@
+// Verify English runtime messages while preserving source/content fixtures.
 // Exercise real desktop settings, first-run choices and shared ownership without a user's data or AI calls.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -117,7 +118,7 @@ function cliProcess(root,args,home,variables={}){
 async function ready(process){
  await new Promise((resolve,reject)=>{
   const timer=setTimeout(()=>reject(Error('CLI readiness timed out: '+process.logs())),10000);
-  const check=()=>{if(process.logs().includes('拾趣: http://')){clearTimeout(timer);resolve();}};
+  const check=()=>{if(process.logs().includes('Shiqu: http://')){clearTimeout(timer);resolve();}};
   process.child.stdout.on('data',check);
   process.child.once('exit',code=>{clearTimeout(timer);reject(Error('CLI exited '+code+': '+process.logs()));});
   check();
@@ -135,7 +136,7 @@ test('CLI creates the saved desktop shelf, shares media/progress, rejects overla
  const port=await freePort(),origin='http://127.0.0.1:'+port,args=['--port',String(port)];
  let current=cliProcess(root,args,context.home);t.after(()=>stopProcess(current));await ready(current);
  const request=(route,options={})=>fetch(origin+route,{signal:AbortSignal.timeout(5000),...options});
- assert.equal(current.logs().includes('请输入'),false);
+ assert.equal(current.logs().includes('Enter'),false);
  assert.deepEqual(await (await request('/api/reader/sessions')).json(),[]);
  await access(path.join(directory,'shiqu.sqlite'));
  const overlap=cliProcess(root,['--port',String(await freePort())],context.home);
@@ -198,9 +199,9 @@ test('CLI reuses saved API configuration without prompts and reset clears only p
  store.save({dataDirectory:directory,libraryConfigured:true,provider:'openai',providerConfigured:true},{provider:'openai',value:'test-only-saved-api-key'});store.close();
  const port=await freePort(),current=cliProcess(root,['--port',String(port)],context.home,{SHIQU_AI_PROVIDER:undefined});t.after(()=>stopProcess(current));await ready(current);
  const response=await fetch('http://127.0.0.1:'+port+'/api/reader/status'),status=await response.json();
- assert.equal(status.provider,'openai');assert.equal(status.configured,true);assert.ok(!current.logs().includes('test-only-saved-api-key'));assert.ok(!current.logs().includes('选择生成服务'));
+ assert.equal(status.provider,'openai');assert.equal(status.configured,true);assert.ok(!current.logs().includes('test-only-saved-api-key'));assert.ok(!current.logs().includes('Choose a generation provider'));
  await stopProcess(current);
- const configure=cliProcess(root,['--configure'],context.home,{SHIQU_AI_PROVIDER:undefined});assert.equal((await once(configure.child,'exit'))[0],1);assert.match(configure.logs(),/交互终端/);
+ const configure=cliProcess(root,['--configure'],context.home,{SHIQU_AI_PROVIDER:undefined});assert.equal((await once(configure.child,'exit'))[0],1);assert.match(configure.logs(),/interactive terminal/);
  const beforeReset=new SystemSettingsStore(locations.settings,locations.library);assert.equal(beforeReset.key('openai'),'test-only-saved-api-key');beforeReset.close();
  await writeFile(path.join(directory,'preserved.txt'),'story data remains');
  const reset=cliProcess(root,['--reset-providers'],context.home,{SHIQU_AI_PROVIDER:undefined});assert.equal((await once(reset.child,'exit'))[0],0);assert.match(reset.logs(),/--configure/);

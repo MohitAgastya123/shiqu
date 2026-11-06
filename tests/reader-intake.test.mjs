@@ -43,7 +43,7 @@ test('creation/action replay are independent of progress; competing choices conf
 
 test('a failed search stays with the search; obsolete jobs do not block the next one',async t=>{
  const f=await fixture(t);let failed=false;f.generation.suggestions=async()=>{f.discoveries.push(1);if(!failed){failed=true;throw Error('controlled failed extraction');}return batch;};
- const id=await create(f);await until(async()=>(await f.read(id)).intake.search.state==='failed');const old=await f.read(id);assert.equal(old.state,'idle');assert.equal(old.intake.phase,'choosing');assert.equal(shelfGenerationStatus(old).group,'待选故事');
+ const id=await create(f);await until(async()=>(await f.read(id)).intake.search.state==='failed');const old=await f.read(id);assert.equal(old.state,'idle');assert.equal(old.intake.phase,'choosing');assert.equal(shelfGenerationStatus(old).group,'Choose a story');
  await setup(f,id,{action:'more'},old);await until(async()=>(await f.read(id)).intake.search.state==='idle');assert.equal(f.discoveries.length,2);assert.equal((await f.read(id)).state,'idle');
  await f.app.services.production.queue.enqueue({id:crypto.randomUUID(),sessionId:id,ownerId:'docker-local-owner',kind:'discover',pool:'search',version:'stale',dependencies:[],payload:{setupGeneration:old.intake.generation},priority:-100});
  await f.app.services.production.tick();assert.equal(f.discoveries.length,2);assert.equal((await f.read(id)).intake.phase,'choosing');
@@ -62,7 +62,7 @@ test('failed preparation can be replaced, manual preferences survive reselect, a
  await setup(f,id,{action:'choose',batch:0,index:0});await until(async()=>(await f.read(id)).intake.phase==='confirming');const current=await f.read(id);assert.equal(current.selection.artStyle,'watercolor');assert.equal(current.selection.productionPrompt,'My saved custom preferences.');assert.equal(current.selection.narrativeDetail,'brief');assert.equal(f.discoveries.length,1);
  const repo=f.app.services.production.repository,row=await repo.get(id,'docker-local-owner'),doc=JSON.parse(row.document);
  await f.app.services.database.prepare("UPDATE stories SET state='running',lock_token='late-token',document=json_set(document,'$.intake.generation',?) WHERE id=?").bind(doc.intake.generation+1,id).run();
- await assert.rejects(repo.save(row,'late-token',doc,false),/状态已更新/);await assert.rejects(repo.saveImageProgress(row,'late-token',doc),/状态已更新/);
+ await assert.rejects(repo.save(row,'late-token',doc,false),/story has changed/);await assert.rejects(repo.saveImageProgress(row,'late-token',doc),/story has changed/);
 });
 
 test('empty batches stay selectable, cap at forty, and pause never dispatches discovery',async t=>{
@@ -79,8 +79,8 @@ test('empty batches stay selectable, cap at forty, and pause never dispatches di
 test('display states distinguish queued extraction, waiting choice and full setup without false completion',async t=>{
  const {generationProgress}=await import('../lib/generation-progress.ts'),{shelfGenerationStatus}=await import('../lib/shelf-generation.ts');
  const f=await fixture(t),id=await create(f);await until(async()=>(await f.read(id)).intake.phase==='choosing');let s=await f.read(id);
- assert.equal(shelfGenerationStatus(s).group,'待选故事');let steps=generationProgress(s,Date.now()).steps;assert.equal(steps[0].label,'提取故事');assert.equal(steps[0].state,'done');assert.equal(steps[1].label,'制作确认');assert.equal(steps[1].state,'current');
- await setup(f,id,{action:'choose',batch:0,index:0});await until(async()=>(await f.read(id)).intake.phase==='confirming');s=await f.read(id);assert.equal(shelfGenerationStatus(s).group,'待制作确认');assert.equal(s.state,'idle');assert.equal(s.retryAllowed,false);assert.equal(s.generationProgress.phase,'production-confirmation');
+ assert.equal(shelfGenerationStatus(s).group,'Choose a story');let steps=generationProgress(s,Date.now()).steps;assert.equal(steps[0].label,'Discover story');assert.equal(steps[0].state,'done');assert.equal(steps[1].label,'Production confirmation');assert.equal(steps[1].state,'current');
+ await setup(f,id,{action:'choose',batch:0,index:0});await until(async()=>(await f.read(id)).intake.phase==='confirming');s=await f.read(id);assert.equal(shelfGenerationStatus(s).group,'Confirm production');assert.equal(s.state,'idle');assert.equal(s.retryAllowed,false);assert.equal(s.generationProgress.phase,'production-confirmation');
 });
 
 test('choosing a new candidate can carry unsaved manual preferences in the same atomic choice',async t=>{
@@ -95,7 +95,7 @@ test('native/preview shared summary follows intake gates and ignores obsolete jo
  const f=await fixture(t),id=await create(f);await until(async()=>(await f.read(id)).intake.phase==='choosing');
  await f.app.services.production.queue.enqueue({id:crypto.randomUUID(),sessionId:id,ownerId:'docker-local-owner',kind:'discover',pool:'search',version:'old',dependencies:[],payload:{setupGeneration:-1},priority:-100});
  await f.app.services.database.prepare("UPDATE production_jobs SET state='failed',error='private old failure' WHERE version='old'").run();
- let summary=readLibrarySummary(f.dataDirectory).stories.find(s=>s.id===id);assert.equal(summary.failed,0);assert.equal(summary.production.phase,'story-choice');assert.equal(summary.production.intakePhase,'choosing');assert.equal(productionSteps({...summary.production,total:null,ready:0})[1].label,'制作确认');
+ let summary=readLibrarySummary(f.dataDirectory).stories.find(s=>s.id===id);assert.equal(summary.failed,0);assert.equal(summary.production.phase,'story-choice');assert.equal(summary.production.intakePhase,'choosing');assert.equal(productionSteps({...summary.production,total:null,ready:0})[1].label,'Production confirmation');
  await setup(f,id,{action:'choose',batch:0,index:0});await until(async()=>(await f.read(id)).intake.phase==='confirming');summary=readLibrarySummary(f.dataDirectory).stories.find(s=>s.id===id);assert.equal(summary.production.phase,'production-confirmation');assert.equal(summary.failed,0);assert.doesNotMatch(JSON.stringify(summary),/quiet narration|private old failure|梦为胡蝶/);
 });
 
@@ -103,7 +103,7 @@ test('reselecting remote candidates prepares distinct originals through the real
  const f=await fixture(t),titles=['第一篇','第二篇'];
  f.generation.suggestions=async()=>({stories:titles.map(title=>({title,description:'来自所选古籍的独立故事。'})),note:''});
  const generator=f.generation.generator.bind(f.generation),retrieved=[];
- f.generation.generator=()=>({...generator(),original:(s,hint,id)=>saveStoryOriginal(f.media,s,hint,id,async url=>{
+ f.generation.generator=()=>({...generator(),translateSource:async(text)=>({value:{title:text.includes('第一篇')?'First story':'Second story',text:text.includes('第一篇')?'First story: the characters and events belong to this selected source and cannot be replaced by the other story.':'Second story: the characters and events belong to this selected source and cannot be replaced by the other story.'},model:'controlled',requestId:'translation',usage:null}),original:(s,hint,id)=>saveStoryOriginal(f.media,s,hint,id,async url=>{
   const page=new URL(url).searchParams.get('page');retrieved.push(page);
   return Response.json({parse:{title:page,text:`<p>这是${page}的独立原文，人物和事件属于当前所选故事，不能被另一篇故事替代，字数足够核验章节出处。</p>`}});
  })});
@@ -114,7 +114,7 @@ test('reselecting remote candidates prepares distinct originals through the real
  for(const index of [0,1,0]){
   await setup(f,id,{action:'choose',batch:0,index});await until(async()=>(await f.read(id)).intake.phase==='confirming');
   const source=(await f.json(`sessions/${id}/source`)).source;originals.push(source);
-  assert.match(source.text,new RegExp(titles[index]));assert.equal(f.control.recommendations.at(-1).verifiedOriginal.text,source.text);
+  assert.match(source.text,new RegExp(['First story','Second story'][index]));assert.equal(f.control.recommendations.at(-1).verifiedOriginal.text,source.text);
  }
  assert.notEqual(originals[0].text,originals[1].text);assert.deepEqual(originals[0],originals[2]);assert.equal(retrieved.length,2);
  assert.equal(f.control.plans.length,0);assert.equal(f.control.calls.length,0);
@@ -125,10 +125,10 @@ test('finding another batch leaves the prepared story in place and observes unti
  await setup(f,id,{action:'choose',batch:0,index:0});await until(async()=>(await f.read(id)).intake.phase==='confirming');
  let release;f.generation.suggestions=async()=>{await new Promise(r=>release=r);return {stories:[],note:'暂无更多。'};};
  await setup(f,id,{action:'more'});await until(()=>release);const finding=await f.read(id);
- assert.equal(finding.intake.phase,'confirming');assert.equal(finding.intake.search.state,'searching');assert.equal(finding.state,'idle');assert.equal(finding.awaitingFrameCount,false);assert.equal(finding.generationProgress.phase,'production-confirmation');assert.equal(shelfGenerationStatus(finding).group,'待制作确认');
+ assert.equal(finding.intake.phase,'confirming');assert.equal(finding.intake.search.state,'searching');assert.equal(finding.state,'idle');assert.equal(finding.awaitingFrameCount,false);assert.equal(finding.generationProgress.phase,'production-confirmation');assert.equal(shelfGenerationStatus(finding).group,'Confirm production');
  const observed=[];let polls=0;
  await observeStoryGeneration({sessionId:id,isActive:()=>true,onSession:s=>observed.push(s.intake.search.state),request:async()=>{polls++;return f.read(id);},sleep:async()=>{release();await until(async()=>(await f.read(id)).intake.search.state==='idle');}});
- assert.equal(polls,2);assert.deepEqual(observed,['searching','idle']);assert.equal(shelfGenerationStatus(await f.read(id)).group,'待制作确认');assert.equal(f.control.recommendations.length,1);assert.equal(f.control.plans.length,0);assert.equal(f.control.calls.length,0);
+ assert.equal(polls,2);assert.deepEqual(observed,['searching','idle']);assert.equal(shelfGenerationStatus(await f.read(id)).group,'Confirm production');assert.equal(f.control.recommendations.length,1);assert.equal(f.control.plans.length,0);assert.equal(f.control.calls.length,0);
 });
 
 test('confirmed intake draws eighty frames once across four storyboard batches',async t=>{
@@ -149,7 +149,7 @@ test('legacy prepared choice receipts read as confirming without writes or paid 
  await f.app.services.production.queue.settle();await f.app.services.production.tick();
  await f.app.services.database.prepare("UPDATE stories SET document=json_set(document,'$.intake.phase','choosing') WHERE id=?").bind(id).run();
  const before=await f.app.services.database.prepare('SELECT document FROM stories WHERE id=?').bind(id).first();
- const s=await f.read(id);assert.equal(s.intake.phase,'confirming');assert.equal(s.generationProgress.phase,'production-confirmation');assert.equal(shelfGenerationStatus(s).group,'待制作确认');
+ const s=await f.read(id);assert.equal(s.intake.phase,'confirming');assert.equal(s.generationProgress.phase,'production-confirmation');assert.equal(shelfGenerationStatus(s).group,'Confirm production');
  const summary=readLibrarySummary(f.dataDirectory).stories.find(s=>s.id===id);assert.equal(summary.production.intakePhase,'confirming');assert.equal(summary.production.phase,'production-confirmation');
  assert.equal((await f.app.services.database.prepare('SELECT document FROM stories WHERE id=?').bind(id).first()).document,before.document,'Reading normalizes the view, never the stored record');
  assert.equal(f.control.recommendations.length,1);assert.equal(f.control.plans.length,0);assert.equal(f.control.calls.length,0);

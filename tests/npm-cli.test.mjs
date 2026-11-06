@@ -1,3 +1,4 @@
+// Verify English runtime messages while preserving source/content fixtures.
 // Check public CLI inputs and platform data paths without touching a user's real library.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -46,12 +47,12 @@ for (const localOnly of [false, true]) test(`CLI startup serves the reader and p
   assert.match(await response.text(), /isolated startup fixture/);
   const urls = phoneUrls(localOnly ? '127.0.0.1' : '0.0.0.0', port);
   if (urls.length) {
-    assert.match(run.output(), /Scan to open 拾趣 on your phone/);
+    assert.match(run.output(), /Scan to open Shiqu on your phone/);
     assert.match(run.output(), /[▀▄█]/);
     for (const url of urls) assert.ok(run.output().includes(url));
     assert.equal((await fetch(urls[0]+'/api/reader/sessions', {signal:AbortSignal.timeout(5000)})).status, 200);
   } else {
-    assert.doesNotMatch(run.output(), /Scan to open 拾趣 on your phone|[▀▄█]/);
+    assert.doesNotMatch(run.output(), /Scan to open Shiqu on your phone|[▀▄█]/);
   }
 });
 

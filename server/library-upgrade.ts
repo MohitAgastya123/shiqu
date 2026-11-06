@@ -1,3 +1,4 @@
+// English product messages; source evidence and machine identifiers remain stable.
 // Publish one canonical story store only after a verified whole-library backup. The pending journal
 // survives every destructive step; recovery restores files in place so service/gate lock inodes stay stable.
 // Consolidated libraries take later migrations in place after their own verified backup. Restores report
@@ -157,7 +158,7 @@ function safetyBackup(directory:string,root:string){
  createLibraryBackup(directory,backup,appVersion(root));const manifest=verifyLibraryBackup(backup);
  for(const file of [...manifest.files.map(f=>f.path),'shiqu-backup.json']){const fd=openSync(path.join(backup,file),'r');try{fsyncSync(fd);}finally{closeSync(fd);}}
  syncDirectory(backup);syncDirectory(path.dirname(backup));
- console.warn('升级前备份已校验：'+backup);
+ console.warn('Verified safety backup before upgrade: '+backup);
  return backup;
 }
 function pendingMigrations(directory:string,root:string){

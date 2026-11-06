@@ -1,3 +1,4 @@
+// Verify English messages without changing credential, process, or source fixtures.
 // Exercise public authentication and helper lifecycle with disposable libraries and no AI requests.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -96,12 +97,12 @@ test('helper receives isolated config/environment, handles split output and stop
  await tunnel.stop();assert.equal(alive(info.pid),false);await assert.rejects(access(config));
 });
 test('helper missing, timeout and startup cancellation leave no process or config',nativeOnly,async t=>{
- await assert.rejects(startDesktopTunnel('http://127.0.0.1:12345','/missing/cloudflared'),/未找到 cloudflared/);
+ await assert.rejects(startDesktopTunnel('http://127.0.0.1:12345','/missing/cloudflared'),/cloudflared was not found/);
  const f=await fake(t,{ready:false});
- const timedOut=assert.rejects(startDesktopTunnel('http://127.0.0.1:12345',f.binary,{timeoutMs:5000}),/未能连接/);
+ const timedOut=assert.rejects(startDesktopTunnel('http://127.0.0.1:12345',f.binary,{timeoutMs:5000}),/could not connect/);
  let info=await f.info();await timedOut;assert.equal(alive(info.pid),false);await assert.rejects(access(info.args[info.args.indexOf('--config')+1]));
  const second=await fake(t,{ready:false}),abort=new AbortController();
- const starting=startDesktopTunnel('http://127.0.0.1:12345',second.binary,{signal:abort.signal});const rejected=assert.rejects(starting,/取消/);
+ const starting=startDesktopTunnel('http://127.0.0.1:12345',second.binary,{signal:abort.signal});const rejected=assert.rejects(starting,/canceled/);
  info=await second.info();abort.abort();await rejected;assert.equal(alive(info.pid),false);
  await assert.rejects(access(info.args[info.args.indexOf('--config')+1]));
 });
@@ -129,7 +130,7 @@ test('tunnel entry pairs safely and helper exit clears public access while LAN s
  const stories=await (await tunnelRequest(target+'/api/reader/sessions',{headers:{...headers,Cookie}})).json();assert.equal(stories.length,1);
  const changed=await tunnelRequest(target+'/api/reader/sessions/'+stories[0].id+'/progress',{method:'POST',headers:{...headers,Cookie,'Content-Type':'application/json'},body:JSON.stringify({storyId:stories[0].id,page:2,saved:true})});assert.equal(changed.status,200);
  process.kill(info.pid,'SIGTERM');await until(()=>updates.length);
- assert.equal(runtime.status.publicUrl,'');assert.match(updates[0].internetError,/局域网仍可使用/);
+ assert.equal(runtime.status.publicUrl,'');assert.match(updates[0].internetError,/LAN access remain available/);
  assert.equal((await fetch(runtime.status.url+'/api/reader/sessions')).status,200);
  await until(async()=>{try{await fetch(target);return false;}catch{return true;}});
  await runtime.stop();await assert.rejects(fetch(runtime.status.url));
@@ -137,7 +138,7 @@ test('tunnel entry pairs safely and helper exit clears public access while LAN s
 test('missing helper leaves direct local/LAN access running without pairing',nativeOnly,async t=>{
  const f=await fixture(t);
  let runtime=await startDesktop({...f.settings,cloudflaredPath:'/missing/cloudflared'},'',f.root);t.after(()=>runtime.stop());
- assert.equal(runtime.status.running,true);assert.equal(runtime.status.publicUrl,'');assert.match(runtime.status.internetError,/未找到 cloudflared/);assert.match(runtime.status.internetError,/无需配对 ID/);
+ assert.equal(runtime.status.running,true);assert.equal(runtime.status.publicUrl,'');assert.match(runtime.status.internetError,/cloudflared was not found/);assert.match(runtime.status.internetError,/without a pairing ID/);
  assert.equal((await fetch(runtime.status.url)).status,200);assert.equal(runtime.server.address().address,'0.0.0.0');
  const stories=await (await fetch(runtime.status.url+'/api/reader/sessions')).json();assert.equal(stories.length,1);assert.equal(new URL(runtime.status.url).hash,'');
  let lan=false;
@@ -150,13 +151,13 @@ test('missing helper leaves direct local/LAN access running without pairing',nat
  assert.equal((await fetch(origin+'/api/reader/sessions/'+stories[0].id+'/progress',{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({storyId:stories[0].id,page:2,saved:true})})).status,200);
  await runtime.stop();await assert.rejects(fetch(origin));
  runtime=await startDesktop({...f.settings,internetEnabled:false},'',f.root);assert.equal((await fetch(runtime.status.url)).status,200);
- assert.match(desktopFailure(new Error('raw-private-data')),/服务启动失败/);
+ assert.match(desktopFailure(new Error('raw-private-data')),/service failed to start/);
 });
 test('helper exiting before readiness closes only the remote entry and retains LAN',nativeOnly,async t=>{
  const f=await fixture(t),helper=await fake(t,{ready:false});
  await writeFile(helper.binary,(await readFile(helper.binary,'utf8')).replace('setInterval(()=>{},1000);','process.exit(1);'),{mode:0o755});
  const runtime=await startDesktop({...f.settings,cloudflaredPath:helper.binary},'',f.root);t.after(()=>runtime.stop());
- assert.equal(runtime.status.running,true);assert.equal(runtime.status.publicUrl,'');assert.match(runtime.status.internetError,/本机和局域网仍可使用/);
+ assert.equal(runtime.status.running,true);assert.equal(runtime.status.publicUrl,'');assert.match(runtime.status.internetError,/Local and LAN access remain available/);
  const info=await helper.info();assert.equal(alive(info.pid),false);await assert.rejects(access(info.args[info.args.indexOf('--config')+1]));
  await assert.rejects(fetch(info.args[info.args.indexOf('--url')+1]));assert.equal((await fetch(runtime.status.url+'/api/reader/sessions')).status,200);
 });
@@ -181,7 +182,7 @@ test('native JSON protocol reports tunnel disconnect and EOF stops the remaining
  const lines=createInterface({input:child.stdout}),ready=once(lines,'line');child.stdin.write(JSON.stringify({action:'start',settings:{...f.settings,cloudflaredPath:helper.binary},key:''})+'\n');
  const initial=JSON.parse((await ready)[0]);assert.ok(initial.publicUrl.startsWith(publicOrigin+'/connect#'));
  const info=await helper.info(),changed=once(lines,'line');process.kill(info.pid,'SIGTERM');const status=JSON.parse((await changed)[0]);
- assert.equal(status.publicUrl,'');assert.equal(status.running,true);assert.equal(status.url,initial.url);assert.match(status.internetError,/局域网/);
+ assert.equal(status.publicUrl,'');assert.equal(status.running,true);assert.equal(status.url,initial.url);assert.match(status.internetError,/LAN/);
  assert.equal((await fetch(status.url+'/api/reader/sessions')).status,200);
  const exited=once(child,'exit');child.stdin.end();await exited;assert.equal(alive(info.pid),false);await assert.rejects(fetch(status.url));
 });

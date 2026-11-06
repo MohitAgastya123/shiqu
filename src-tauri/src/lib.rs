@@ -1,3 +1,4 @@
+// English native controls and diagnostics; persisted identifiers and source data are unchanged.
 // Keep desktop privileges in local-only native commands; reader/phone pages never load this bridge.
 mod config;
 mod library;
@@ -30,7 +31,7 @@ async fn blocking<T: Send + 'static>(
 ) -> Result<T, String> {
     tauri::async_runtime::spawn_blocking(operation)
         .await
-        .map_err(|_| "桌面操作未完成，请重试。".to_string())?
+        .map_err(|_| "The desktop operation did not complete. Retry.".to_string())?
 }
 fn resource_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     if cfg!(debug_assertions) {
@@ -39,7 +40,7 @@ fn resource_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     Ok(app
         .path()
         .resource_dir()
-        .map_err(|_| "无法确定应用资源目录。")?
+        .map_err(|_| "The app resources directory could not be determined.")?
         .join("runtime"))
 }
 fn settings_view(app: &tauri::AppHandle, control: &mut Control) -> Result<Value, String> {
@@ -88,7 +89,7 @@ fn provider_configuration_with(
         }
     }
     let mut efforts =
-        serde_json::to_value(&settings.task_reasoning_efforts).map_err(|_| "任务推理设置无效。")?;
+        serde_json::to_value(&settings.task_reasoning_efforts).map_err(|_| "Invalid task reasoning settings.")?;
     for task in [
         "suggest", "art", "frames", "outline", "plan", "review", "repair",
     ] {
@@ -97,7 +98,7 @@ fn provider_configuration_with(
         }
     }
     settings.task_reasoning_efforts =
-        serde_json::from_value(efforts).map_err(|_| "任务推理设置无效。")?;
+        serde_json::from_value(efforts).map_err(|_| "Invalid task reasoning settings.")?;
     settings.validate()?;
     let name = match settings.provider.as_str() {
         "openai" => Some("OPENAI_API_KEY"),
@@ -118,7 +119,7 @@ async fn get_settings(
 ) -> Result<Value, String> {
     let shared = state.0.clone();
     blocking(move || {
-        let mut control = shared.lock().map_err(|_| "服务控制器不可用。")?;
+        let mut control = shared.lock().map_err(|_| "The service controller is unavailable.")?;
         settings_view(&app, &mut control)
     })
     .await
@@ -132,7 +133,7 @@ async fn library_summary(
     let shared = state.0.clone();
     blocking(move || {
         let settings = {
-            let mut control = shared.lock().map_err(|_| "服务控制器不可用。")?;
+            let mut control = shared.lock().map_err(|_| "The service controller is unavailable.")?;
             open_store(&app, &mut control)?.settings()?
         };
         runtime::ensure_library(&settings, &resource_root(&app)?)?;
@@ -151,7 +152,7 @@ async fn set_library_story_deleted(
     let shared = state.0.clone();
     blocking(move || {
         let settings = {
-            let mut control = shared.lock().map_err(|_| "服务控制器不可用。")?;
+            let mut control = shared.lock().map_err(|_| "The service controller is unavailable.")?;
             open_store(&app, &mut control)?.settings()?
         };
         runtime::ensure_library(&settings, &resource_root(&app)?)?;
@@ -171,9 +172,9 @@ async fn save_settings(
 ) -> Result<Value, String> {
     let shared = state.0.clone();
     blocking(move || {
-        let mut guard = shared.lock().map_err(|_| "服务控制器不可用。")?;
+        let mut guard = shared.lock().map_err(|_| "The service controller is unavailable.")?;
         if guard.runtime.is_some() {
-            return Err("请先停止服务，再修改设置或密钥。".into());
+            return Err("Stop the service before changing settings or keys.".into());
         }
         let replacement;
         let change = match key_action.as_str() {
@@ -183,7 +184,7 @@ async fn save_settings(
                 config::KeyChange::Set(&replacement)
             }
             "delete" => config::KeyChange::Delete,
-            _ => return Err("密钥操作无效。".into()),
+            _ => return Err("Invalid key operation.".into()),
         };
         let mut store = open_store(&app, &mut guard)?;
         settings.library_configured = true;
@@ -213,9 +214,9 @@ async fn reset_providers(
 ) -> Result<Value, String> {
     let shared = state.0.clone();
     blocking(move || {
-        let mut control = shared.lock().map_err(|_| "服务控制器不可用。")?;
+        let mut control = shared.lock().map_err(|_| "The service controller is unavailable.")?;
         if control.runtime.is_some() {
-            return Err("请先停止服务，再重置配置。".into());
+            return Err("Stop the service before resetting configuration.".into());
         }
         open_store(&app, &mut control)?.reset_providers()?;
         settings_view(&app, &mut control)
@@ -238,13 +239,13 @@ async fn choose_path(app: tauri::AppHandle, kind: String) -> Result<Option<Strin
         let chosen = match kind.as_str() {
             "codex" => dialog.blocking_pick_file(),
             "data" | "codexHome" => dialog.blocking_pick_folder(),
-            _ => return Err("文件选择类型无效。".into()),
+            _ => return Err("Invalid file selection type.".into()),
         };
         chosen
             .map(|file| {
                 file.into_path()
                     .map(|path| path.to_string_lossy().into())
-                    .map_err(|_| "请选择本机路径。".into())
+                    .map_err(|_| "Choose a local path.".into())
             })
             .transpose()
     })
@@ -258,14 +259,14 @@ async fn start_server(
 ) -> Result<Value, String> {
     let shared = state.0.clone();
     blocking(move || {
-        let mut control = shared.lock().map_err(|_| "服务控制器不可用。")?;
+        let mut control = shared.lock().map_err(|_| "The service controller is unavailable.")?;
         if let Some(runtime) = &mut control.runtime {
             return Ok(runtime.snapshot());
         }
         let store = open_store(&app, &mut control)?;
         let (settings, key) = provider_configuration(&store)?;
         if !["readonly", "codex"].contains(&settings.provider.as_str()) && key.is_empty() {
-            return Err("请先配置生成服务，或选择只读模式。".into());
+            return Err("Configure a generation provider first, or choose read-only mode.".into());
         }
         match runtime::start(&settings, &key, &resource_root(&app)?) {
             Ok(runtime) => {
@@ -302,13 +303,13 @@ async fn stop_server(state: tauri::State<'_, DesktopState>) -> Result<Value, Str
 async fn server_status(state: tauri::State<'_, DesktopState>) -> Result<Value, String> {
     let shared = state.0.clone();
     blocking(move || {
-        let mut control = shared.lock().map_err(|_| "服务控制器不可用。")?;
+        let mut control = shared.lock().map_err(|_| "The service controller is unavailable.")?;
         if let Some(runtime) = &mut control.runtime {
             match runtime.child.try_wait() {
                 Ok(None) => return Ok(runtime.snapshot()),
                 _ => {
                     drop(control.runtime.take());
-                    control.last_error = Some("服务已退出，请检查设置后重新启动。".into());
+                    control.last_error = Some("The service exited. Check settings and restart it.".into());
                 }
             }
         }
@@ -324,9 +325,9 @@ async fn test_provider(
 ) -> Result<Value, String> {
     let shared = state.0.clone();
     blocking(move || {
-        let mut guard = shared.lock().map_err(|_| "服务控制器不可用。")?;
+        let mut guard = shared.lock().map_err(|_| "The service controller is unavailable.")?;
         if guard.runtime.is_some() {
-            return Err("请先停止服务，再测试配置。".into());
+            return Err("Stop the service before testing configuration.".into());
         }
         let store = open_store(&app, &mut guard)?;
         let (settings, credential) = provider_configuration(&store)?;
@@ -341,13 +342,13 @@ async fn test_provider(
 
 #[tauri::command]
 fn open_reader(app: tauri::AppHandle, state: tauri::State<'_, DesktopState>) -> Result<(), String> {
-    let control = state.0.lock().map_err(|_| "服务控制器不可用。")?;
+    let control = state.0.lock().map_err(|_| "The service controller is unavailable.")?;
     let url = control
         .runtime
         .as_ref()
         .and_then(|runtime| runtime.status["url"].as_str())
-        .ok_or("请先启动服务。")?;
-    let parsed = tauri::Url::parse(url).map_err(|_| "服务地址无效。")?;
+        .ok_or("Start the service first.")?;
+    let parsed = tauri::Url::parse(url).map_err(|_| "Invalid service address.")?;
     if parsed.scheme() != "http"
         || parsed.host_str() != Some("127.0.0.1")
         || parsed.path() != "/"
@@ -356,11 +357,11 @@ fn open_reader(app: tauri::AppHandle, state: tauri::State<'_, DesktopState>) -> 
         || !parsed.username().is_empty()
         || parsed.password().is_some()
     {
-        return Err("服务地址无效。".into());
+        return Err("Invalid service address.".into());
     }
     app.opener()
         .open_url(url, None::<&str>)
-        .map_err(|_| "无法打开默认浏览器，请复制本机链接。".into())
+        .map_err(|_| "The default browser could not be opened. Copy the local link.".into())
 }
 #[tauri::command]
 async fn quit_app(
@@ -405,13 +406,13 @@ pub fn run() {
             quit_app
         ])
         .setup(|app| {
-            let show_item = MenuItem::with_id(app, "show", "打开拾趣设置", true, None::<&str>)?;
-            let stop_item = MenuItem::with_id(app, "stop", "停止服务", true, None::<&str>)?;
-            let quit_item = MenuItem::with_id(app, "quit", "退出拾趣", true, None::<&str>)?;
+            let show_item = MenuItem::with_id(app, "show", "Open Shiqu settings", true, None::<&str>)?;
+            let stop_item = MenuItem::with_id(app, "stop", "Stop service", true, None::<&str>)?;
+            let quit_item = MenuItem::with_id(app, "quit", "Quit Shiqu", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show_item, &stop_item, &quit_item])?;
             let mut tray = TrayIconBuilder::new()
                 .menu(&menu)
-                .tooltip("拾趣")
+                .tooltip("Shiqu")
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "show" => show(app),
                     "stop" | "quit" => {

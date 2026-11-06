@@ -1,3 +1,4 @@
+// English product messages; source identities and historical evidence stay stable.
 // Share the non-secret settings wire format between CLI, desktop and their private runtime bridge.
 // Provider-specific model slots survive switching; credentials always live in a separate table.
 import {z} from 'zod';
@@ -16,8 +17,8 @@ export const systemSettingsSchema=z.object({
  codexPath:z.string().max(4096).default(''),codexModel:z.string().regex(/^[\w.-]{0,100}$/).default('gpt-6.1-sol'),codexHome:z.string().max(4096).default(''),codexReasoningEffort:codexReasoningEffortSchema,
  taskReasoningEfforts:taskReasoningSchema,
 }).strict().superRefine((settings,ctx)=>{
- if(settings.provider==='gemini')for(const task of reasoningTasks)if(!(geminiReasoningEfforts as readonly string[]).includes(settings.taskReasoningEfforts[task]))ctx.addIssue({code:z.ZodIssueCode.custom,path:['taskReasoningEfforts',task],message:'Gemini 仅支持 low、medium、high'});
- for(const field of ['dataDirectory','nodePath','cloudflaredPath','codexPath','codexHome'] as const)if(/[\0\r\n]/.test(settings[field]))ctx.addIssue({code:z.ZodIssueCode.custom,path:[field],message:'路径不能包含控制字符'});
+ if(settings.provider==='gemini')for(const task of reasoningTasks)if(!(geminiReasoningEfforts as readonly string[]).includes(settings.taskReasoningEfforts[task]))ctx.addIssue({code:z.ZodIssueCode.custom,path:['taskReasoningEfforts',task],message:'Gemini supports only low, medium and high.'});
+ for(const field of ['dataDirectory','nodePath','cloudflaredPath','codexPath','codexHome'] as const)if(/[\0\r\n]/.test(settings[field]))ctx.addIssue({code:z.ZodIssueCode.custom,path:[field],message:'Paths cannot contain control characters.'});
 });
 export type SystemSettings=z.infer<typeof systemSettingsSchema>;
 export function defaultSystemSettings(library:string){return systemSettingsSchema.parse({dataDirectory:library});}
@@ -27,7 +28,7 @@ export function settingsVariables(settings:SystemSettings,key:string){
  CODEX_BIN:settings.codexPath||'codex',CODEX_MODEL:settings.codexModel,SHIQU_CODEX_HOME:settings.codexHome,CODEX_REASONING_EFFORT:settings.codexReasoningEffort,
  ...Object.fromEntries(reasoningTasks.map(task=>['SHIQU_REASONING_'+task.toUpperCase(),settings.taskReasoningEfforts[task]]))};
 }
-export function validApiKey(value:string){const key=value.trim();if(!key||new TextEncoder().encode(key).length>4096||/[\0\r\n]/.test(value))throw Error('API 密钥必须为非空单行且不超过 4096 字节。');return key;}
+export function validApiKey(value:string){const key=value.trim();if(!key||new TextEncoder().encode(key).length>4096||/[\0\r\n]/.test(value))throw Error('The API key must be a nonempty single line of at most 4096 bytes.');return key;}
 export function resetProviderSettings(settings:SystemSettings):SystemSettings{
  const defaults=defaultSystemSettings(settings.dataDirectory);
  return {...settings,provider:defaults.provider,providerConfigured:false,textModel:defaults.textModel,imageModel:defaults.imageModel,openaiTextModel:defaults.openaiTextModel,openaiImageModel:defaults.openaiImageModel,codexPath:'',codexHome:'',codexModel:defaults.codexModel,codexReasoningEffort:'',taskReasoningEfforts:defaults.taskReasoningEfforts};

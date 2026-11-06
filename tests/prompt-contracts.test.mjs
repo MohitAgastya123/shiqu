@@ -1,3 +1,4 @@
+// English production expectations; original evidence and historical hashes remain unchanged.
 // Verify real provider request assembly and historical fingerprints without live inference.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -19,8 +20,9 @@ test('pre-cleanup v2 fingerprints and automatic presets remain byte-compatible',
  assert.equal(hash(legacyLocalReadingPrompt({})),'07c41d3da0540047e207c0263496927111fc7ae1b0ee885cfae5303383467844');
  assert.equal(hash(legacyLocalScanJson),'45fcc92b6e872dac4f0f8f638bf40a49346c3551addc7e69f6215ab514701d9c');
  assert.equal(hash(faithfulPrefix+legacyProductionDirection),'6f8b18696d3d955ed54654ae40c2931c9c1f7d7cfe008e5e0d0e0c7d5205c72a');
+ assert.equal(normalizeProductionPrompt(defaultProductionDirection,'原典故事'),'');
  const oldTheme='让人物因执念陷入困境，再通过一次具体遭遇看见另一种可能；转变要自然，保留放下之前的挣扎。';
- for(const body of [legacyProductionDirection,defaultProductionDirection.slice(faithfulPrefix.length)]){
+ for(const body of [legacyProductionDirection,'完整讲清原文主事件的起因、关键行动与结果，首幅自然介绍人物与处境。按事件顺序展开，保留关键对白、反应和停顿；每幅一个静态可见瞬间，相邻幅各有任务。配文自然明白，画面动作与关系可读。结语在独立结束页提炼一层有据的认识，不复述情节、不虚构动机或扩大因果。']){
   assert.equal(normalizeProductionPrompt(oldTheme+body,'放下执念'),defaultProductionPrompt());
   assert.equal(normalizeProductionPrompt(faithfulPrefix+body,'原典故事'),defaultProductionPrompt());
  }
@@ -52,7 +54,7 @@ function responseFor(payload,schema){
 async function requestsFor(provider,acceptancePrompt){
  const inputSelection={...selection,...(acceptancePrompt?{acceptancePrompt}:{})};
  let stage;const seen=new Map(),stored=[];
- function record(instructions,prompt,schema){const payload=JSON.parse(prompt);assert.ok(!instructions.includes(marker));assert.match(instructions,/(?:任务|任务与边界)：\n/);assert.doesNotMatch(instructions,/^## /m);seen.set(stage,{instructions,payload,schema});return responseFor(payload,schema);}
+ function record(instructions,prompt,schema){const payload=JSON.parse(prompt);assert.ok(!instructions.includes(marker));assert.match(instructions,/Task(?: and boundaries)?:\n/);assert.doesNotMatch(instructions,/^## /m);seen.set(stage,{instructions,payload,schema});return responseFor(payload,schema);}
  const runner={status:async()=>({configured:true}),run:async job=>{
   if(job.generateImage){seen.set(stage,{instructions:job.instructions,prompt:job.prompt});return {text:'',image:encoded,model:'controlled'};}
   return {text:JSON.stringify(record(job.instructions,job.prompt,job.schema)),model:'controlled',reasoningEffort:job.reasoningEffort};
@@ -132,19 +134,19 @@ test('all providers send the same stage-specific instructions, data and strict o
   assert.equal(get(stage).payload.theme,undefined,stage);
   assert.equal(get(stage).payload.productionPrompt,selection.productionPrompt,stage);
   assert.equal(get(stage).payload.verifiedOriginal.text,original.text,stage);
-  assert.match(get(stage).instructions,/资料/);
+  assert.match(get(stage).instructions,/reference data/);
  }
  for(const stage of ['draft','outline','batch','batch-later','repair']){
   assert.deepEqual(get(stage).payload.editorialContext,{mode:'theme',theme:selection.theme});
-  assert.doesNotMatch(get(stage).instructions,/余味写给已经读完故事的人/);
+  assert.doesNotMatch(get(stage).instructions,/Write one concise English observation for someone who has finished/);
   assert.doesNotMatch(get(stage).instructions,/优先于上述|优先于单句/);
  }
  assert.deepEqual(Object.keys(get('batch').schema.properties),['pages']);
  assert.deepEqual(Object.keys(get('repair').schema.properties),['pages']);
  assert.ok(get('outline').schema.properties.beats);assert.equal(get('outline').schema.properties.pages,undefined);
- assert.doesNotMatch(get('outline').instructions,/caption 正常目标/);
- assert.doesNotMatch(get('batch').instructions,/本次生成完整文字分镜/);
- assert.doesNotMatch(get('repair').instructions,/本次生成完整文字分镜/);
+ assert.doesNotMatch(get('outline').instructions,/Aim for 10–45 words/);
+ assert.doesNotMatch(get('batch').instructions,/Generate the complete written storyboard/);
+ assert.doesNotMatch(get('repair').instructions,/Generate the complete written storyboard/);
  // Quality definitions are shared once; planning and title duties stay in their own stages.
  for(const stage of ['draft','batch','batch-later','review','review-candidates','repair'])for(const rule of [narrativeMeaningDirection,sourceFidelityDirection,storyboardDirection])assert.equal(occurrences(get(stage).instructions,rule),1,stage);
  for(const stage of ['draft','outline','review','review-candidates'])assert.equal(occurrences(get(stage).instructions,storyScopeDirection),1,stage);
@@ -157,17 +159,17 @@ test('all providers send the same stage-specific instructions, data and strict o
  assert.equal(occurrences(get('batch-later').instructions,storyOpeningDirection),0,'later batches continue instead of restarting');
  assert.equal(occurrences(get('batch-later').instructions,storyScopeDirection),0);
  assert.equal(get('draft').schema.properties.reflection,undefined);
- assert.equal(get('draft').schema.properties.pages.items.properties.caption.maxLength,90);
- assert.match(get('draft').instructions,/目标8至55字/);assert.match(get('draft').instructions,/90字硬上限/);
- assert.match(get('frames').instructions,/独立结束页不计入幅数/);
- assert.match(get('review').instructions,/requiresReplan=true/);assert.match(get('review').instructions,/普通|局部/);
+ assert.equal(get('draft').schema.properties.pages.items.properties.caption.maxLength,500);
+ assert.match(get('draft').instructions,/10–45 words/);assert.match(get('draft').instructions,/hard limit of 500 characters/);
+ assert.match(get('frames').instructions,/separate ending page is excluded/);
+ assert.match(get('review').instructions,/requiresReplan=true/);assert.match(get('review').instructions,/Ordinary|Local/);
  assert.ok(get('review').schema.properties.issues.items.required.includes('requiresReplan'));
  assert.equal(get('review').schema.properties.reflectionChoice,undefined);
  assert.ok(get('review-candidates').schema.properties.reflectionChoice);
  for(const stage of ['scan-main','scan-episodes']){assert.doesNotMatch(get(stage).instructions,/artRecommendation/);assert.equal(get(stage).schema.properties.stories.items.properties.artRecommendation,undefined);}
  assert.ok(get('local').schema.properties.stories.items.properties.artRecommendation);
  assert.equal(get('catalog').payload.theme,undefined);assert.equal(get('catalog').payload.localBook.purpose,'catalog');assert.ok(!get('catalog').schema.properties.stories.items.required.includes('summary'));assert.equal(get('catalog').schema.properties.scan.properties.pendingEvents.items.properties.summary,undefined);
- assert.equal(get('catalog').schema.properties.stories.items.properties.artRecommendation,undefined);assert.match(get('catalog').instructions,/不因读者主题过滤或改变故事边界/);
+ assert.equal(get('catalog').schema.properties.stories.items.properties.artRecommendation,undefined);assert.match(get('catalog').instructions,/change scope for a reader theme/);
  assert.equal(get('theme-match').payload.theme,selection.theme);assert.equal(get('theme-match').payload.stories[0].text,original.text);assert.deepEqual(get('theme-match').schema.properties.matches.items.properties.verdict.enum,['yes','no']);
  assert.match(get('image').prompt,/reference data/);assert.match(get('image').prompt,/Scene 1:/);
  assert.match(get('image').instructions,/native image generation tool directly/);

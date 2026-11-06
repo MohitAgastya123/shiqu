@@ -1,3 +1,4 @@
+// English source lookup messages; canonical Chinese citation names and evidence remain intact.
 // Resolve verified originals and canonical Wikisource chapters without inventing source text.
 import {Parser} from 'htmlparser2';
 import {Converter} from 'opencc-js';
@@ -82,7 +83,7 @@ export async function lookupOriginal(selection:Selection,plan:SourceHint,transpo
  const searchUrl=sourceSearchUrl(selection,plan),known=verifiedPassage(selection,plan);
  if(known)return {source:known,message:'',searchUrl};
  const {book,chapter}=sourceQuery(selection,plan);
- if(!book||!chapter||book.length>60||/https?:/.test(book))return {source:null,message:'暂未找到可核对的原文，可以通过出处检索继续查找。',searchUrl};
+ if(!book||!chapter||book.length>60||/https?:/.test(book))return {source:null,message:'No verifiable source passage was found. Use source search to continue.',searchUrl};
  const make=(parsed:{title:string;text:string;revid?:number})=>{
   const text=extract(parsed.title,parsed.text,book,chapter);if(text.length<30)return null;
   return {title:simplified(parsed.title).replaceAll('/',' · '),text:simplified(text),url:'https://zh.wikisource.org/zh-hans/'+encodeURIComponent(parsed.title).replaceAll('%2F','/'),kind:'chapter' as const,provider:'维基文库',retrievedAt:new Date().toISOString()};
@@ -95,10 +96,10 @@ export async function lookupOriginal(selection:Selection,plan:SourceHint,transpo
    const candidates=(result.query?.search||[]).filter((p:{title:string})=>belongs(p.title,book)).slice(0,2);
    for(const candidate of candidates){const parsed=await wiki({action:'parse',pageid:String(candidate.pageid),prop:'text|revid',variant:'zh-hans'},transport);source=parsed.parse?make(parsed.parse):null;if(source)break;}
   }
-  return {source,message:source?'':'暂未找到与这篇故事对应的原典章节，可以通过出处检索继续查找。',searchUrl};
+  return {source,message:source?'':'No original chapter matching this story was found. Use source search to continue.',searchUrl};
  }catch(error){
   const failure:SourceFailure=error instanceof SourceFetchError?{code:error.code,...(error.status?{status:error.status}:{})}:{code:error instanceof Error&&/timeout|abort/i.test(error.name)?'SOURCE_TIMEOUT':'SOURCE_NETWORK_ERROR'};
   console.error('reader_source_lookup_failed',JSON.stringify(failure));
-  return {source:null,message:'原文来源暂时无法连接，请稍后重试，或打开出处检索。',searchUrl,failure};
+  return {source:null,message:'The source service cannot be reached. Retry shortly or open source search.',searchUrl,failure};
  }
 }

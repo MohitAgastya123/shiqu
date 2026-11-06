@@ -1,3 +1,4 @@
+// Verify English messages without changing credential, process, or source fixtures.
 // Verify subscription routing, native image validation and subprocess isolation without live inference.
 import test from 'node:test';
 import {spawnSync} from 'node:child_process';
@@ -83,7 +84,7 @@ test('invalid effort fails before spawn and ignored config/thread fail before in
   assert.ok(!(await fake.log()).some(row=>row.method==='turn/start'));
   if(mode==='ignored-effort-config')assert.equal((await runner.status()).reason,'REASONING_EFFORT_UNAVAILABLE');
  }
- assert.match(safeCodexError(new CodexError('REASONING_EFFORT_UNAVAILABLE')),/推理档位/);
+ assert.match(safeCodexError(new CodexError('REASONING_EFFORT_UNAVAILABLE')),/reasoning effort/);
 });
 
 test('per-job effort isolates parallel requests and does not change the runner fallback',async t=>{
@@ -153,7 +154,7 @@ test('a real desktop quit during Codex work is recorded as an interruption, not 
  await running.stop();
  const saved=new DatabaseSync(path.join(dataDirectory,'shiqu.sqlite'));t.after(()=>saved.close());
  const job=saved.prepare('SELECT state,interrupted,error FROM production_jobs WHERE session_id=?').get(id),session=saved.prepare('SELECT state,error FROM stories WHERE id=?').get(id);
- assert.equal(job.state,'failed');assert.equal(job.interrupted,1,'A restart can resume this job');assert.doesNotMatch(job.error,/订阅|登录/);
+ assert.equal(job.state,'failed');assert.equal(job.interrupted,1,'A restart can resume this job');assert.doesNotMatch(job.error,/subscription|sign-in/);
  assert.equal(session.state,'idle');assert.equal(session.error,null);
 });
 
@@ -188,7 +189,7 @@ test('invalid Codex JSON, wrong page count and non-image results never reach sto
 });
 test('REST reports Codex readiness without a Gemini key and routes checkpoints through the selected provider',async t=>{
  const root=await mkdtemp(path.join(os.tmpdir(),'shiqu provider rest '));t.after(()=>rm(root,{recursive:true,force:true}));await cp('drizzle',path.join(root,'drizzle'),{recursive:true});await mkdir(path.join(root,'docker'));await cp('docker/seed.sql',path.join(root,'docker/seed.sql'));
- const store=assets();let calls=0;const runner={async status(){return {configured:true};},async run(job){calls++;return {text:JSON.stringify(job.schema?.properties?.count?{count:8,reason:'按完整主线编排。',storySummary:plan.summary,storyMatchReason:'按原文展开。'}:job.schema?.properties?.candidates?{title:plan.title,candidates:[plan.reflection,'醒来之后，梦中的自在仍值得回味。','梦与醒的分界，也未必是心境的分界。']}:plan),image:job.generateImage?Buffer.from(png).toString('base64'):null,model:'codex-test',requestId:'turn',usage:null};}};
+ const store=assets();let calls=0,translationCalls=0;const runner={async status(){return {configured:true};},async run(job){calls++;return {text:JSON.stringify(job.schema?.properties?.text?(translationCalls++,{title:'Zhuangzi source',text:'Zhuang Zhou dreamed of being a butterfly, then awoke and reflected on the transformation of things.'}):job.schema?.properties?.count?{count:8,reason:'Preserve the complete event.',storySummary:plan.summary,storyMatchReason:'按原文展开。'}:job.schema?.properties?.candidates?{title:plan.title,candidates:[plan.reflection,'醒来之后，梦中的自在仍值得回味。','梦与醒的分界，也未必是心境的分界。']}:plan),image:job.generateImage?Buffer.from(png).toString('base64'):null,model:'codex-test',requestId:'turn',usage:null};}};
  const generation=createReaderProvider({SHIQU_AI_PROVIDER:'codex'},store,fetch,runner),app=createApplication({root,dataDirectory:path.join(root,'data'),generation});t.after(()=>app.close());
  const request=(pathname,method='GET',value)=>app.handle(new Request('http://localhost/api/reader/'+pathname,{method,headers:{'Content-Type':'application/json'},body:value?JSON.stringify(value):undefined}));
  const status=await(await request('status')).json();assert.equal(status.provider,'codex');assert.equal(status.configured,true);
@@ -197,7 +198,7 @@ test('REST reports Codex readiness without a Gemini key and routes checkpoints t
  const result=await request(`sessions/${id}/advance`,'POST',{throughPage:0});assert.ok([200,202].includes(result.status));
  const deadline=Date.now()+5000;let row;
  do{row=await(await request(`sessions/${id}`)).json();if(row.story||row.state==='failed')break;assert.ok(Date.now()<deadline);await new Promise(resolve=>setImmediate(resolve));}while(!row?.story&&row?.state!=='failed');
- assert.notEqual(row.state,'failed',JSON.stringify(row));assert.ok(row.story.sourceText);assert.equal(calls,3);
+ assert.notEqual(row.state,'failed',JSON.stringify(row));assert.ok(row.story.sourceText);assert.equal(calls,3+translationCalls);
 
 });
 

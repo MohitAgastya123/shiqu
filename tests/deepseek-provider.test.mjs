@@ -1,3 +1,4 @@
+// Verify English messages without changing credential, process, or source fixtures.
 // Verify DeepSeek's dedicated credentials, Responses transport and unchanged production review gates.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -20,7 +21,7 @@ test('DeepSeek cannot use OpenAI/Gemini keys or invoke image generation',async()
  await assert.rejects(missing.generator().outline(selection,'fixture',original),/KEY_REQUIRED/);
  const ready=createReaderProvider({SHIQU_AI_PROVIDER:'deepseek',DEEPSEEK_API_KEY:'deepseek-only'},{},transport);
  assert.equal((await ready.status()).models.image,'');
- await assert.rejects(ready.generator().image(plan,0,'fixture',''),/DeepSeek.*仅支持文字/);assert.equal(calls,0);
+ await assert.rejects(ready.generator().image(plan,0,'fixture',''),/DeepSeek.*text production only/);assert.equal(calls,0);
 });
 
 test('DeepSeek sends strict JSON to its fixed endpoint with effective effort, thinking headroom and a fifteen-minute deadline',async()=>{

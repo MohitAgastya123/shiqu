@@ -1,19 +1,13 @@
-# 本地资料与运行数据
+# Source library and local data
 
-`library/` 是随代码版本化的只读书库，共24部作品。逐件下载出处、固定版本、SHA-256、收录范围与已知问题见 [catalog.json](library/catalog.json)；署名、文本许可与处理方式见 [来源说明](library/source-notices.md)。
+`library/` is the versioned read-only corpus of 24 classical works. The [catalog](library/catalog.json) records each download, pinned edition, SHA-256, included range and known limitations. [Source notices](library/source-notices.md) record attribution, text licenses and processing rules; third-party source terms are separate from the code's Apache-2.0 license.
 
-书库由16部维基文库电子作品、6部漢籍リポジトリ Kanripo 电子作品和2部 Project Gutenberg 电子书组成。原始下载件保持字节不变；第三方文本及其改编所适用的条款与项目代码的 Apache-2.0 分开。CC BY-SA 4.0 全文随书库保存在 [licenses/](library/licenses/CC-BY-SA-4.0.txt)。
+The corpus contains 16 Wikisource works, six Kanripo works and two Project Gutenberg books. Downloaded originals are kept byte-for-byte for reproducible source checks. The English production workflow translates selected passages and their chapter context and saves those translations with stories; the reader and exports use English text. It does not rewrite the provenance-checked downloads or translate the entire corpus during startup.
 
-此次替换了15部殆知阁来源，以及识典《酉阳杂俎》、漢川草廬《二刻拍案惊奇》的转录版本。旧原件从当前书库移除；2026-10-29已清理本地Git历史中的旧原件与旧识典示例引文，恢复备份另存于仓库外。2026-10-29核对GitHub远端main为`94b38b1`，已包含清理后的历史；本次收尾未执行推送。已有用户故事、原文快照、数据库和媒体不因换版被重写。
+The server parses local originals without executing HTML scripts, verifies manifest hashes and adds deterministic citation identifiers. Source bodies are not truncated or silently repaired. Unknown glyphs, missing text and unresolved transcription problems remain recorded and can make affected story ranges unavailable. A verified transcription is not a claim of a fully collated scholarly edition.
 
-服务端离线解析原件、核验清单与哈希，再添加确定的引用编号。HTML仅静态解析，不执行脚本；Kanripo TXT仅去元数据、页码与版式符号；正文不简繁转换、不补标点、不猜字。新的引用必须匹配当前版本；已保存的可读原文继续使用自己的历史快照。
+All 24 books support local source-grounded discovery. Longer books are read in bounded ordered blocks rather than replaced with summaries. Storyboarding receives the chosen evidence and its saved English translation. Chapter browsing uses English indexed labels while source selections retain the original edition/ranges internally.
 
-全部24本均接入本地全文选题与出处核对。长书按原文顺序分批输入，不以检索或摘要代替原文。分镜请求仅携带选中原文。文字完整性与选题可读性是两回事：原件中的缺字、未解析字形和明确缺文原样保留，相应范围拒选；不声称网络转录已经逐字校勘。
+Some editions have specific limits: Six Records of a Floating Life includes the four surviving records; Strategies of the Warring States uses Kanripo's 501 chapters; Miscellaneous Morsels from Youyang includes 20 main and 10 continuation volumes; Journey to the West includes its 100 chapters and the Chen Guangrui appendix. Historical tables and empty cells in Records of the Grand Historian are retained. Extensive Records of the Taiping Era includes documented glyph/missing-text limitations. Consult the catalog for the exact edition and scope.
 
-《二刻拍案惊奇》保留40卷，末卷是九折杂剧；《酉阳杂俎》保留前集20卷、续集10卷。《西游记》保留100回及第8回后的陈光蕊附录；《阅微草堂笔记》为24卷及纪汝佶六则附录；《浮生六记》只收现存四记，不收伪续。《战国策》采用Kanripo tls版501个独立章文件，章节编号与旧33卷不同。
-
-七部保留版本的原始文件未改动：《世说新语》《子不语》《红楼梦（程乙本）》《山海经》《喻世明言》《史记三家注》《太平广记》。史记十表保留1581行、18555单元格，其中4203个空单元格也保留位置。红楼58回与喻世37卷既有的两处背景字形例外继续仅按固定版本和完整已核对语境允许引用；其他异常继续拦截。太平广记仍有KR字形代号、方框和313卷缺文，不能称无坏字全本。
-
-仅本说明与`library/`纳入Git；SQLite、生成媒体和运行资料由`.gitignore`排除。桌面与 CLI 发行资源只复制只读书库；用户数据库和媒体使用独立的私有目录。既有研究档案留在忽略目录`.data/research/`，不作为运行依赖。
-
-不再内置东郭先生或种梨示例故事与插图。新库不预置故事；已有故事、原文快照和媒体保留在用户本地书库。独立核验过的种梨原文仍用于原典查找缓存，不是示例故事。
+Only documentation and the source corpus are versioned here. User SQLite databases, generated media, caches, research and backups belong in private runtime directories excluded from version control. Desktop/CLI release resources copy the read-only corpus; they do not bundle personal libraries or credentials. New libraries start empty, without generated sample stories.

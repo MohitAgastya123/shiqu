@@ -1,3 +1,4 @@
+// English product messages; source evidence and machine identifiers remain stable.
 // Fork edits into new sessions. Copy immutable media before one CAS publishes the child;
 // family epochs serialize competing drafts without altering originals. Only content a draft was
 // written against can conflict with it: saved images and progress never do. A file that is gone
@@ -24,9 +25,9 @@ export const replacementToken=(selection:string,epoch:number)=>hash(JSON.stringi
 const savedFrameCount=(doc:Document)=>doc.draft?.pages.length??doc.storyboard?.outline.beats.length;
 export async function revisionBasis(repo:ReaderRepository,row:SessionRow,allowInFlight=false){
  const doc=JSON.parse(row.document) as Document;
- if(doc.reselection||await repo.superseded(row.id,row.user_id))throw new ReaderError(409,'这是草稿或旧版本，请打开书架当前版本。');
- if(doc.intake&&doc.intake.phase!=='confirmed')throw new ReaderError(409,'请在制作确认前保存设置草稿。');
- if(!allowInFlight&&!doc.plan&&row.generation_control!=='paused'&&row.generation_control!=='stopped')throw new ReaderError(409,'请先暂停生成，再修改制作内容。');
+ if(doc.reselection||await repo.superseded(row.id,row.user_id))throw new ReaderError(409,'This is a draft or older revision. Open the current bookshelf revision.');
+ if(doc.intake&&doc.intake.phase!=='confirmed')throw new ReaderError(409,'Save a settings draft before confirming production.');
+ if(!allowInFlight&&!doc.plan&&row.generation_control!=='paused'&&row.generation_control!=='stopped')throw new ReaderError(409,'Pause generation before editing production content.');
  const rootId=doc.revision?.rootId||row.id;
  const epoch=(await repo.db.prepare(familyEpoch).bind(row.user_id,rootId,rootId).first<{epoch:number}>())!.epoch;
  const token=hash(JSON.stringify([editableSelection(row.selection),doc.plan,epoch]));
@@ -43,13 +44,13 @@ export async function forkRevision(repo:ReaderRepository,media:MediaStore,ownerI
   const existing=await repo.db.prepare('SELECT * FROM stories WHERE id=?').bind(requestId).first<SessionRow>();
   if(!existing)return null;
   const revision=(JSON.parse(existing.document) as Document).revision;
-  if(existing.user_id!==ownerId||revision?.parentId!==parentId||revision.requestHash!==requestHash)throw new ReaderError(409,'这个提交编号已用于其他修改，请重新打开编辑。');
+  if(existing.user_id!==ownerId||revision?.parentId!==parentId||revision.requestHash!==requestHash)throw new ReaderError(409,'This submission ID has been used for another edit. Reopen the editor.');
   return repo.get(requestId,ownerId);
  };
  const existing=await replay();if(existing)return existing;
- if(await commandReceipt(repo.db,ownerId,requestId))throw new ReaderError(409,'这个操作编号已用于其他内容。');
+ if(await commandReceipt(repo.db,ownerId,requestId))throw new ReaderError(409,'This request ID has already been used for different content.');
  const row=await repo.get(parentId,ownerId),{doc,rootId,epoch,token:current}=await revisionBasis(repo,row);
- if(current!==token)throw new ReaderError(409,'故事或版本已更新，请重新载入后再修改。');
+ if(current!==token)throw new ReaderError(409,'The story or revision has changed. Reload before editing.');
  const original={selection:selectionSchema.parse(JSON.parse(row.selection)),plan:doc.plan,images:doc.images,savedFrameCount:savedFrameCount(doc),...(doc.frameRecommendation?{frameRecommendation:doc.frameRecommendation}:{})};
  const {selection,plan,impact}=checkedRevision(original,changes);
  const images:string[]=original.plan?.pages.map(()=> '')||[],lostPages:number[]=[];
@@ -59,9 +60,9 @@ export async function forkRevision(repo:ReaderRepository,media:MediaStore,ownerI
    const value=original.images[page]||'';
    if(!value)continue;
    const key=referenceImageKey(parentId,value);if(!key){lostPages.push(page);continue;}
-   const asset=await media.get(key).catch(()=>{throw new ReaderError(503,`第 ${page+1} 幅原图暂时无法读取，未创建新版，请稍后重试。`);});if(!asset){lostPages.push(page);continue;}
+   const asset=await media.get(key).catch(()=>{throw new ReaderError(503,`The original image for frame ${page+1} could not be read. No revision was created. Retry later.`);});if(!asset){lostPages.push(page);continue;}
    const bytes=new Uint8Array(await asset.arrayBuffer()),type=mediaType(bytes);
-   if(!type||!await readableImage(bytes).catch(()=>{throw new ReaderError(503,`第 ${page+1} 幅原图暂时无法核对，未创建新版，请稍后重试。`);})){lostPages.push(page);continue;}
+   if(!type||!await readableImage(bytes).catch(()=>{throw new ReaderError(503,`The original image for frame ${page+1} could not be verified. No revision was created. Retry later.`);})){lostPages.push(page);continue;}
    const target=readerImageAsset(requestId,page,imageTypes[type],hash(bytes));
    await media.put(target.key,bytes,{contentType:type});images[page]=target.url;
   }
@@ -81,6 +82,6 @@ export async function forkRevision(repo:ReaderRepository,media:MediaStore,ownerI
   AND (${familyEpoch.replace(' AS epoch','')})=?
   ON CONFLICT(id) DO NOTHING`)
   .bind(requestId,ownerId,JSON.stringify(selection),JSON.stringify(document),paused?'paused':'active',blocked?'failed':'idle',blocked?row.error:null,impact.total-1,now,now,parentId,ownerId,row.document,row.selection,ownerId,rootId,rootId,epoch).run();
- if(!inserted.meta.changes){const raced=await replay();if(raced)return raced;throw new ReaderError(409,'故事或版本已更新，请重新载入后再修改。');}
+ if(!inserted.meta.changes){const raced=await replay();if(raced)return raced;throw new ReaderError(409,'The story or revision has changed. Reload before editing.');}
  return repo.get(requestId,ownerId);
 }

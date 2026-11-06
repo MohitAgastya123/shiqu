@@ -1,3 +1,4 @@
+// English interface: labels, accessibility text, and workflow messages use English.
 // Classify only the latest visible generated records returned by the existing desktop summary.
 import type {ProductionCheckpoint} from '../lib/production-stages';
 
@@ -5,13 +6,13 @@ export type StorySummary={id:string;title:string;book:string;theme:string;artSty
 export type LibrarySummary={stories:StorySummary[];upgradeBackup?:string};
 export type ServiceState='loading'|'unavailable'|'stopped'|'running'|'preview';
 export function overviewStoryState(story:StorySummary):{kind:'completed'|'active'|'attention';label:string}{
- if(story.failed>0||story.state==='failed')return {kind:'attention',label:'需要重试'};
- if(story.production?.intakePhase==='choosing')return {kind:'attention',label:'待选故事'};
- if(story.production?.intakePhase==='confirming')return {kind:'attention',label:'待制作确认'};
- if(story.production?.phase==='frame-count'&&!story.production.frameCountConfirmed)return {kind:'attention',label:'待确认画幅'};
- if(story.running>0||story.queued>0||story.state==='running')return {kind:'active',label:story.running>0||story.state==='running'?'正在生成':'等待生成'};
- if(story.state==='completed')return {kind:'completed',label:'已完成'};
- return {kind:'attention',label:'待继续'};
+ if(story.failed>0||story.state==='failed')return {kind:'attention',label:"Retry needed"};
+ if(story.production?.intakePhase==='choosing')return {kind:'attention',label:"Awaiting story selection"};
+ if(story.production?.intakePhase==='confirming')return {kind:'attention',label:"Awaiting production confirmation"};
+ if(story.production?.phase==='frame-count'&&!story.production.frameCountConfirmed)return {kind:'attention',label:"Awaiting page count confirmation"};
+ if(story.running>0||story.queued>0||story.state==='running')return {kind:'active',label:story.running>0||story.state==='running'?"Generating":"Waiting for generation"};
+ if(story.state==='completed')return {kind:'completed',label:"Completed"};
+ return {kind:'attention',label:"Ready to continue"};
 }
 export function overviewSummary(stories:StorySummary[]){
  const counts={completed:0,active:0,attention:0,saved:0};

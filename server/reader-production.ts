@@ -1,3 +1,4 @@
+// English product messages; source evidence and machine identifiers remain stable.
 // Coordinate reader demand with durable script, image and local publication jobs.
 // Paid work needs fresh viewer demand or durable background intent; manual control overrides both.
 // Scheduling errors never latch: a failed tick dispatches nothing and the next one retries, while
@@ -48,9 +49,10 @@ const sessionLeaseMs=180000;
 const maxAutomaticAttempts=3;
 const publicationYieldMs=15000;
 // The stable prefix also recognizes redraw checkpoints written by older releases.
-const lostImagePrefix='这幅图片的文件已丢失或损坏。';
-const lostImageError=(message:string|null)=>message?.startsWith(lostImagePrefix)===true;
-const lostImageMessage='这幅图片的文件已丢失或损坏。重试会重新绘制这一幅，已保存的其他画面会保留。';
+const lostImagePrefix='This image file is missing or damaged.';
+// Recognize persisted pre-English faults without changing their paid recovery identity.
+const lostImageError=(message:string|null)=>message?.startsWith(lostImagePrefix)===true||message?.startsWith('这幅图片的文件已丢失或损坏。')===true;
+const lostImageMessage='This image file is missing or damaged. Retrying redraws this frame and keeps the other saved images.';
 const searchRound=(job:ProductionJob)=>(JSON.parse(job.payload) as {searchRound?:number}).searchRound;
 // Background order is by page. A viewer's anchor, current page and read-ahead sort ahead of all of it.
 function pagePriority(page:number,demand:Demand){
@@ -96,7 +98,7 @@ export class ReaderProductionCoordinator implements ReaderProduction{
    canRun:job=>this.canRun(job),resumeInterrupted:job=>this.resumeInterrupted(job),onSettled:()=>this.wake(),
    candidateFilter:`j.kind='image-publish' OR NOT EXISTS(SELECT 1 FROM stories s WHERE s.id=j.session_id AND s.user_id=j.owner_id AND (s.generation_control!='active' OR (s.state='failed' AND NOT EXISTS(SELECT 1 FROM reader_faults f WHERE f.session_id=s.id AND f.owner_id=s.user_id AND f.state='recovering' AND (f.command_id=j.recovery_id OR f.kind='interrupted' AND f.job_id=j.id))) OR EXISTS(SELECT 1 FROM library_deletions d WHERE d.story_id=s.id AND d.user_id=s.user_id)))`,
    skipCandidate:job=>!!options.targetSessionId&&job.session_id!==options.targetSessionId||!!options.stopBeforeImages&&['image','image-publish'].includes(job.kind)||job.kind!=='image-publish'&&this.supersededJobs.has(job.session_id),
-   safeError:(error,job)=>error instanceof ReaderError?error.message:job.kind==='image-publish'?'图片已生成，暂时无法展开。请重试继续。':this.provider.safeError(error),
+   safeError:(error,job)=>error instanceof ReaderError?error.message:job.kind==='image-publish'?'The image was generated but could not be saved for reading. Retry to continue.':this.provider.safeError(error),
    terminal:error=>error instanceof ReaderError&&error.status<500,
    handlers:{
     discover:{pool:'search',run:job=>this.discover(job)},
@@ -112,7 +114,7 @@ export class ReaderProductionCoordinator implements ReaderProduction{
  private async find(id:string,ownerId:string){return this.database.prepare('SELECT * FROM stories WHERE id=? AND user_id=?').bind(id,ownerId).first<SessionRow>();}
  private async raw(id:string,ownerId:string){
   const row=await this.find(id,ownerId);
-  if(!row)throw new ReaderError(404,'这篇故事不在你的书架里');return row;
+  if(!row)throw new ReaderError(404,'This story is not on your bookshelf.');return row;
  }
  private searchCurrent(row:SessionRow,round:number|undefined){
   const doc=JSON.parse(row.document) as Document;
@@ -175,7 +177,7 @@ export class ReaderProductionCoordinator implements ReaderProduction{
   return row.generation_mode==='background'&&row.generation_control==='active'&&!await this.database.prepare('SELECT story_id FROM library_deletions WHERE story_id=? AND user_id=?').bind(row.id,row.user_id).first();
  }
  async control(ownerId:string,id:string,action:ProductionAction,handoffOnly=false,requestId?:string){
-  if(this.stopping)throw new ReaderError(503,'制作服务正在停止，请稍后重新打开故事。');
+  if(this.stopping)throw new ReaderError(503,'The production service is stopping. Reopen the story in a moment.');
   await this.repository.get(id,ownerId);
   if(requestId)await authorizeControl(this.database,ownerId,id,requestId,action,this.clock());
   else await this.repository.control(id,ownerId,action,handoffOnly);
@@ -185,16 +187,16 @@ export class ReaderProductionCoordinator implements ReaderProduction{
  async request(ownerId:string,id:string,viewerId:string,page:number,retry=false){return this.demand(ownerId,id,viewerId,page,page+productionReadAhead,retry);}
  async advance(ownerId:string,id:string,throughPage:number,retry:boolean){return this.demand(ownerId,id,'legacy-advance',0,throughPage,retry);}
  private async demand(ownerId:string,id:string,viewerId:string,page:number,throughPage:number,retry:boolean){
-  if(this.stopping)throw new ReaderError(503,'制作服务正在停止，请稍后重新打开故事。');
+  if(this.stopping)throw new ReaderError(503,'The production service is stopping. Reopen the story in a moment.');
   const row=await this.repository.get(id,ownerId),doc=JSON.parse(row.document) as Document;
-  if(retry&&doc.visualReview?.stopReason==='requirements')throw new ReaderError(409,'请修改存在冲突或无法判断的验收要求后创建新版。');
+  if(retry&&doc.visualReview?.stopReason==='requirements')throw new ReaderError(409,'Resolve conflicting or unverifiable acceptance criteria, then create a new revision.');
   if(retry&&doc.visualReview?.status==='blocked'&&doc.visualReview.stopReason==='replan')throw new ReaderError(409,storyReplanMessage);
   if(row.generation_control!=='active'||await this.repository.superseded(id,ownerId))return this.snapshot(ownerId,id);
-  if(doc.plan&&page>=doc.plan.pages.length)throw new ReaderError(400,'请选择有效画幅');
+  if(doc.plan&&page>=doc.plan.pages.length)throw new ReaderError(400,'Select a valid frame.');
   await this.database.prepare(`INSERT INTO production_demand(session_id,owner_id,viewer_id,page,through_page,expires_at,runtime_id) VALUES(?,?,?,?,?,?,?)
    ON CONFLICT(session_id,owner_id,viewer_id) DO UPDATE SET page=excluded.page,through_page=excluded.through_page,expires_at=excluded.expires_at,runtime_id=excluded.runtime_id`)
    .bind(id,ownerId,viewerId,page,Math.min(readerMaxFrames-1,throughPage),this.clock()+productionViewerLeaseMs,this.runtimeId).run();
-  if(retry)throw new ReaderError(400,'重试必须提交当前故障实例与操作编号。');
+  if(retry)throw new ReaderError(400,'Retry requires the current fault ID and a request ID.');
   await this.pruneSuperseded(id);await this.graph(await this.raw(id,ownerId));
   this.wake();return this.snapshot(ownerId,id);
  }
@@ -202,16 +204,16 @@ export class ReaderProductionCoordinator implements ReaderProduction{
  // The review reads as passed first, and its
  // finished checkpoints are removed rather than rerun: a script job would repair what was accepted.
  async overrideReview(ownerId:string,id:string,command?:RecoveryRequest){
-  if(this.stopping)throw new ReaderError(503,'制作服务正在停止，请稍后重新打开故事。');
+  if(this.stopping)throw new ReaderError(503,'The production service is stopping. Reopen the story in a moment.');
   if(command){await this.repository.get(id,ownerId);await authorizeOverride(this.database,ownerId,id,command,this.clock());this.wake();return this.snapshot(ownerId,id);}
   const row=await this.repository.get(id,ownerId),doc=JSON.parse(row.document) as Document,review=doc.visualReview;
   if(await this.repository.superseded(id,ownerId))throw new ReaderError(409,latestVersionMessage);
-  if(review?.status!=='blocked'&&!review?.overridden)throw new ReaderError(409,'这篇故事没有待处理的审片问题。');
+  if(review?.status!=='blocked'&&!review?.overridden)throw new ReaderError(409,'This story has no outstanding storyboard review issues.');
   if(review.status==='blocked'){
    const saved=await this.database.prepare(`UPDATE stories SET document=json_remove(json_set(document,'$.visualReview.status','passed','$.visualReview.overridden',json('true')),'$.visualReview.stopReason'),state='idle',error=NULL,lock_token=NULL,lock_until=0,updated_at=?
     WHERE id=? AND user_id=? AND state!='running' AND NOT ${supersededSql()} AND json_extract(document,'$.visualReview.status')='blocked' AND NOT EXISTS(SELECT 1 FROM library_deletions d WHERE d.story_id=stories.id AND d.user_id=stories.user_id)`)
     .bind(new Date(this.clock()).toISOString(),id,ownerId).run();
-   if(!saved.meta.changes)throw new ReaderError(409,'故事状态已更新，请重新打开后继续。');
+   if(!saved.meta.changes)throw new ReaderError(409,'The story has changed. Reopen it to continue.');
   }
   // Review checkpoints are finished, and a queued one would wait behind the drawing forever.
   // Only text jobs: a repeated request must not touch a failed image. Blocked stories have none yet.
@@ -247,9 +249,9 @@ export class ReaderProductionCoordinator implements ReaderProduction{
  async checkImage(ownerId:string,id:string,page:number,image:string){
   const row=await this.repository.get(id,ownerId),doc=JSON.parse(row.document) as Document;
   if(await this.repository.superseded(id,ownerId))throw new ReaderError(409,latestVersionMessage);
-  if(!doc.plan||!doc.images[page]||doc.images[page]!==image)throw new ReaderError(409,'这幅图片已更新，请刷新后再检查。');
-  const key=referenceImageKey(id,image);if(!key)throw new ReaderError(409,'图片地址无法核对。');
-  let lost:boolean;try{lost=await this.fileLost(key,true);}catch{throw new ReaderError(503,'图片暂时无法读取，请重试检查；尚未重新绘图。');}
+  if(!doc.plan||!doc.images[page]||doc.images[page]!==image)throw new ReaderError(409,'This image has changed. Refresh before checking it again.');
+  const key=referenceImageKey(id,image);if(!key)throw new ReaderError(409,'The image address could not be verified.');
+  let lost:boolean;try{lost=await this.fileLost(key,true);}catch{throw new ReaderError(503,'The image could not be read. Retry the check; no redraw has been started.');}
   const version=this.imageInputs(row).version,existing=(await this.faults(row)).find(fault=>fault.kind==='image-loss'&&fault.page===page);
   if(!lost){
    // A restored file removes a physical loss, but a later ordinary model failure still needs
@@ -271,7 +273,7 @@ export class ReaderProductionCoordinator implements ReaderProduction{
  }
  private async recoveryImageJobs(row:SessionRow,page:number){
   const doc=JSON.parse(row.document) as Document,selection=selectionSchema.parse(JSON.parse(row.selection)),setup=doc.intake?{setupGeneration:doc.intake.generation}:{};
-  if(!doc.plan||!doc.original||!reviewPassed(doc))throw new ReaderError(409,'原文与审片尚未齐备，不能恢复绘图。');
+  if(!doc.plan||!doc.original||!reviewPassed(doc))throw new ReaderError(409,'The source and storyboard review must be ready before drawing can resume.');
   const {displayTitle:_,...generationSelection}=selection;void _;
   const scriptVersion=inputVersion({selection:generationSelection,...setup}),script=this.spec(row,'script','text',scriptVersion,doc.visualReview?'approved':'',[],{...setup},-10);
   await this.queue.enqueue(script,{pages:doc.plan.pages.length});
@@ -288,32 +290,32 @@ export class ReaderProductionCoordinator implements ReaderProduction{
   let row=await this.repository.get(id,ownerId);
   const replay=await commandReceipt(this.database,ownerId,command.requestId);
   if(replay){
-   if(replay.action!=='recover'||replay.session_id!==id||replay.fault_id!==command.faultId)throw new ReaderError(409,'这个操作编号已用于其他内容。');
+   if(replay.action!=='recover'||replay.session_id!==id||replay.fault_id!==command.faultId)throw new ReaderError(409,'This request ID has already been used for different content.');
    return {...await this.snapshot(ownerId,id),recoveryReceipt:{requestId:command.requestId,status:replay.status,error:replay.error}};
   }
-  if(this.stopping)throw new ReaderError(503,'制作服务正在停止，请稍后重试。');
+  if(this.stopping)throw new ReaderError(503,'The production service is stopping. Retry in a moment.');
   if(await this.repository.superseded(id,ownerId))throw new ReaderError(409,latestVersionMessage);
-  if(row.generation_control!=='active')throw new ReaderError(409,'请先恢复生成许可，再重试或重绘。');
+  if(row.generation_control!=='active')throw new ReaderError(409,'Resume production before retrying or redrawing.');
   const doc=JSON.parse(row.document) as Document;
-  if(['requirements','replan'].includes(doc.visualReview?.stopReason||''))throw new ReaderError(409,'请先修改存在问题的制作或验收要求，再提交。');
+  if(['requirements','replan'].includes(doc.visualReview?.stopReason||''))throw new ReaderError(409,'Correct the production instructions or acceptance criteria before submitting.');
   const fault=(await this.faults(row)).find(fault=>fault.id===command.faultId);
-  if(!fault||fault.state!=='pending')throw new ReaderError(409,'这项问题正在处理或已更新，请刷新后再操作。');
+  if(!fault||fault.state!=='pending')throw new ReaderError(409,'This issue is being handled or has changed. Refresh before continuing.');
   let jobs:string[],resolutionJob:string,redraw=false,adopt:{jobId:string;result:string;attempts:number}|undefined;
   if(fault.kind==='image-loss'){
-   const page=fault.page;if(page===null)throw new ReaderError(409,'无法确定待恢复画幅。');
+   const page=fault.page;if(page===null)throw new ReaderError(409,'The frame to recover could not be identified.');
    const current=doc.images[page];
-   if(fault.image&&current!==fault.image)throw new ReaderError(409,'图片已更新，请重新检查。');
+   if(fault.image&&current!==fault.image)throw new ReaderError(409,'The image has changed. Check it again.');
    const key=current?referenceImageKey(id,current):null;
    if(key&&!await this.fileLost(key,true)){
     const receipt=await authorizeRecovery(this.database,{ownerId,sessionId:id,...command,jobs:[],resolutionJob:'',resolved:true,basis:row},this.clock());
     await this.completeHealthy(ownerId,id);this.wake();return {...await this.snapshot(ownerId,id),recoveryReceipt:{requestId:receipt.request_id,status:receipt.status,error:receipt.error}};
    }
-   const pair=await this.recoveryImageJobs(row,page);if(!pair.image||!pair.publication)throw new ReaderError(409,'图片任务尚未准备好。');
+   const pair=await this.recoveryImageJobs(row,page);if(!pair.image||!pair.publication)throw new ReaderError(409,'The image task is not ready yet.');
    const paid=pair.image.result?JSON.parse(pair.image.result) as Generated<string>:null,paidKey=paid?.value?referenceImageKey(id,paid.value):null;
    const reusable=paidKey&&!await this.fileLost(paidKey,true);
    if(!reusable&&page>0){
     const anchor=doc.images[0]?referenceImageKey(id,doc.images[0]):null;
-    if(!anchor||await this.fileLost(anchor)|| (await this.faults(row)).some(f=>f.page===0&&f.id!==fault.id))throw new ReaderError(409,'请先检查并恢复第 1 幅参考图，再重绘这一幅。');
+    if(!anchor||await this.fileLost(anchor)|| (await this.faults(row)).some(f=>f.page===0&&f.id!==fault.id))throw new ReaderError(409,'Check and restore the reference image in frame 1 before redrawing this frame.');
    }
    redraw=!reusable;jobs=redraw?[pair.image.id,pair.publication.id]:[pair.publication.id];resolutionJob=pair.publication.id;
    // The dependent call failed before inference when its reference disappeared. Restore that
@@ -326,19 +328,19 @@ export class ReaderProductionCoordinator implements ReaderProduction{
    const step=nextStep(doc,selectionSchema.parse(JSON.parse(row.selection)),readerMaxFrames-1);
    const legacy=fault.version==='legacy'&&fault.job_id?await this.queue.job(fault.job_id):null;
    const job=legacy?.kind==='image-publish'?legacy:fault.job_id&&fault.version!=='legacy'?await this.queue.job(fault.job_id):(await this.currentJobs(row)).find(job=>job.pool==='text'&&['queued','failed'].includes(job.state)&&(JSON.parse(job.payload).stepKey===step?.key||job.kind==='prepare'))||(step?.kind==='image'?(await this.currentJobs(row)).find(job=>job.kind==='image'&&['queued','failed'].includes(job.state)&&JSON.parse(job.payload).page===(fault.page??step.page)):undefined);
-   if(!job)throw new ReaderError(409,'恢复任务已更新，请刷新后再操作。');
+   if(!job)throw new ReaderError(409,'The recovery task has changed. Refresh before continuing.');
    if(job.kind==='image-publish'){
     const result=jobDependencies(job)[0],paid=result?await this.queue.job(result):null;
     const key=paid?.result?referenceImageKey(id,JSON.parse(paid.result).value):null;
     if(!key||await this.fileLost(key,true)){
      await this.database.prepare("UPDATE production_jobs SET state='failed',error=?,failure_id=?,updated_at=? WHERE id=? AND state='failed' AND failure_id=?").bind(lostImageMessage,randomUUID(),this.clock(),job.id,fault.id).run();
-     throw new ReaderError(409,'已生成图片的文件也已丢失。请刷新后明确选择重绘这一幅。');
+     throw new ReaderError(409,'The generated image file is also missing. Refresh and explicitly choose to redraw this frame.');
     }
    }
    if(!fault.job_id)await this.database.prepare("UPDATE reader_faults SET job_id=?,version=? WHERE id=? AND state='pending'").bind(job.id,job.version,fault.id).run();
    if(legacy?.kind==='image-publish'){
     const pair=await this.recoveryImageJobs(row,JSON.parse(job.payload).page),paid=await this.queue.job(jobDependencies(job)[0]);
-    if(!paid?.result||!pair.image||!pair.publication)throw new ReaderError(409,'已生成回执暂不可用，请重新核对。');
+    if(!paid?.result||!pair.image||!pair.publication)throw new ReaderError(409,'The saved generation receipt is unavailable. Check again.');
     adopt={jobId:pair.image.id,result:paid.result,attempts:paid.attempts};jobs=[pair.publication.id];resolutionJob=pair.publication.id;
    }else{
     if(fault.version==='legacy')await this.database.prepare("UPDATE reader_faults SET job_id=?,version=? WHERE id=? AND state='pending'").bind(job.id,job.version,fault.id).run();
@@ -405,11 +407,15 @@ export class ReaderProductionCoordinator implements ReaderProduction{
    if(['discovering','choosing','confirming'].includes(doc.intake.phase))return;
   }
   const preparing=selection.narrativeDetail&&!doc.frameCountConfirmed&&!doc.plan&&(selection.length!=='auto'||!doc.frameRecommendation);
-  // A distinct job owns each saved planning checkpoint; the empty key is the complete-script barrier.
-  const scriptKey=!preparing&&(!doc.plan||!reviewPassed(doc))&&(doc.visualReview||doc.draft||doc.storyboard||selection.length==='auto'||selection.length>readerStoryboardBatchSize)?nextStep(doc,selection,0)?.key||'':doc.visualReview?'approved':'';
+  // Translation checkpoints need individual receipts even for small fixed-length stories.
+  // The empty key remains the complete-script barrier once all preparation is saved.
+  const pending=nextStep(doc,selection,0);
+  const scriptKey=(!doc.plan||!reviewPassed(doc))&&pending?pending.key:doc.visualReview?'approved':'';
   const setup=doc.intake?{setupGeneration:doc.intake.generation}:{};
   const {displayTitle:_,...generationSelection}=selection;void _;
-  const scriptVersion=inputVersion({selection:generationSelection,...setup}),script=this.spec(row,preparing?'prepare':'script','text',scriptVersion,scriptKey,[],{stepKey:scriptKey,...setup},-10);
+  // Initial source preparation may save a translation before the same plan step can execute.
+  const scriptJobKey=pending?.kind==='plan'&&!doc.original?`source:${scriptKey}`:scriptKey;
+  const scriptVersion=inputVersion({selection:generationSelection,...setup}),script=this.spec(row,preparing?'prepare':'script','text',scriptVersion,scriptJobKey,[],{stepKey:scriptKey,...setup},-10);
   await this.queue.enqueue(script,doc.plan&&doc.original&&reviewPassed(doc)?{pages:doc.plan.pages.length}:undefined);
   if(!doc.plan||!doc.original||!reviewPassed(doc))return;
   if(doc.plan.pages.every((_,page)=>!!doc.images[page])&&!(await this.faults(row)).length){
@@ -496,7 +502,7 @@ export class ReaderProductionCoordinator implements ReaderProduction{
    if(row.lock_until>this.clock())return false;
    // Publication must recover a deleted story too; visible repository reads intentionally hide it.
    await this.database.prepare("UPDATE stories SET state='failed',error=?,lock_token=NULL,lock_until=0,updated_at=? WHERE id=? AND user_id=? AND state='running' AND lock_until<=?")
-    .bind('上次制作已中断，已保留保存的结果。',new Date(this.clock()).toISOString(),row.id,row.user_id,this.clock()).run();return false;
+    .bind('Previous production was interrupted. Saved results have been retained.',new Date(this.clock()).toISOString(),row.id,row.user_id,this.clock()).run();return false;
   }
   const token=randomUUID(),now=this.clock();
   const acquired=await this.database.prepare(`UPDATE stories SET state='running',lock_token=?,lock_until=?,error=NULL,updated_at=?
@@ -621,7 +627,7 @@ export class ReaderProductionCoordinator implements ReaderProduction{
    // A 4xx stays failed: replaying a blocked review would pay for repair without the reader asking.
    const terminal=failure instanceof ReaderError&&failure.status<500;
    if(this.stopping&&!terminal)await this.database.prepare("UPDATE stories SET state='idle',error=NULL WHERE id=? AND user_id=? AND state='failed'").bind(row.id,row.user_id).run();
-   throw terminal?failure:new ReaderError(503,result.error||'故事编排暂未完成');
+   throw terminal?failure:new ReaderError(503,result.error||'The storyboard is not complete yet.');
   }
   // A step was waiting but the story changed first. Nothing ran, so take it on the next turn.
   if(!acquired&&result.retryAllowed)throw new JobYield();
@@ -631,17 +637,19 @@ export class ReaderProductionCoordinator implements ReaderProduction{
   if(doc.visualReview&&!reviewPassed(doc))return {review:doc.visualReview.status};
   if(doc.draft)return {storyboardFrames:doc.draft.pages.length,reflectionPending:true};
   if(doc.storyboard&&!doc.plan)return {storyboardFrames:doc.storyboard.pages.length};
+  // Source translation has durable substeps before the existing recommendation checkpoint.
+  if(!doc.plan&&!doc.draft&&!doc.storyboard&&nextStep(doc,selection,0)?.kind==='recommend')return {sourceTranslation:doc.original?.translationProgress?.parts.length||0};
   if(job.kind==='prepare'&&doc.frameRecommendation&&!doc.plan)return {prepared:true};
   // A retried legacy script may finish its saved summary before it can plan; keep the same grant.
   if(job.kind==='script'&&!doc.plan&&doc.original?.storyBrief?.verified&&doc.frameRecommendation)throw new JobYield();
-  if(!doc.plan||!doc.original)throw new ReaderError(503,'故事仍在更新，请重试继续。');
+  if(!doc.plan||!doc.original)throw new ReaderError(503,'The story is still updating. Retry to continue.');
   return {pages:doc.plan.pages.length};
  }
  private async image(job:ProductionJob){
   const row=await this.raw(job.session_id,job.owner_id),doc=JSON.parse(row.document) as Document,selection=selectionSchema.parse(JSON.parse(row.selection));
   if(!this.currentJob(row,job))return {obsolete:true};
   const {page}=JSON.parse(job.payload) as {page:number};
-  if(!reviewPassed(doc))throw new ReaderError(409,'分镜尚未通过审片，暂不生成图片。');
+  if(!reviewPassed(doc))throw new ReaderError(409,'The storyboard has not passed review. Drawing has not started.');
   const command=job.recovery_id?await commandReceipt(this.database,row.user_id,job.recovery_id):null;
   const redraw=command?.action==='recover'&&!!JSON.parse(command.payload).redraw;
   if(doc.images[page]&&!redraw)return {value:doc.images[page],model:'saved',requestId:null,usage:null};
@@ -649,11 +657,11 @@ export class ReaderProductionCoordinator implements ReaderProduction{
    const restored=referenceImageKey(row.id,doc.images[page]);
    if(restored&&!await this.fileLost(restored,true))return {value:doc.images[page],model:'saved',requestId:null,usage:null};
   }
-  if(page>0&&!doc.images[0])throw new ReaderError(409,'角色参考尚未保存');
+  if(page>0&&!doc.images[0])throw new ReaderError(409,'The character reference has not been saved.');
   // Check before paying. A key that can't resolve keeps the provider's existing error.
   const selectedReference=await new BookImageReferences(this.database,this.media,row.user_id).resolve(row.id,page>0?doc.images[0]:'');
   const reference=selectedReference?referenceImageKey(row.id,selectedReference):null;
-  if(reference&&await this.fileLost(reference).catch(()=>{throw new ReaderError(503,'参考图片暂时无法核对，请稍后重试；尚未开始绘图。');}))throw new ReaderError(409,lostImageMessage);
+  if(reference&&await this.fileLost(reference).catch(()=>{throw new ReaderError(503,'The reference image could not be verified. Retry later; drawing has not started.');}))throw new ReaderError(409,lostImageMessage);
   if(!this.currentJob(await this.raw(job.session_id,job.owner_id),job))return {obsolete:true};
   if(await this.repository.superseded(row.id,row.user_id))throw new JobYield();
   return this.provider.generator().image(doc.plan!,page,row.id,selectedReference,selection.artStyle,selection.productionPrompt,inputVersion([job.id,job.lease_token]));
@@ -667,7 +675,7 @@ export class ReaderProductionCoordinator implements ReaderProduction{
   const row=await this.raw(job.session_id,job.owner_id),doc=JSON.parse(row.document) as Document;
   if(!this.currentJob(row,job))return {obsolete:true};
   if(doc.images[page]===result.value)return {value:result.value};
-  const lease=this.leases.get(row.id);if(!lease)throw new ReaderError(409,'故事状态已更新，请重新打开后继续。');
+  const lease=this.leases.get(row.id);if(!lease)throw new ReaderError(409,'The story has changed. Reopen it to continue.');
   const usage={step:`image:${page}`,model:result.model,requestId:result.requestId,usage:result.usage,...(result.promptRecord?{promptRecord:result.promptRecord}:{})};
   const saved=await this.database.prepare(`UPDATE stories SET document=json_set(document,?, ?, '$.usage',json_insert(json_extract(document,'$.usage'),'$[#]',json(?))),updated_at=?
    WHERE id=? AND user_id=? AND state='running' AND lock_token=? AND COALESCE(json_extract(document,?),'')=?
@@ -675,7 +683,7 @@ export class ReaderProductionCoordinator implements ReaderProduction{
    AND COALESCE(json_extract(document,'$.intake.generation'),-1)=?
    AND EXISTS(SELECT id FROM production_jobs WHERE id=? AND state='running' AND lease_token=?)`)
    .bind(`$.images[${page}]`,result.value,JSON.stringify(usage),new Date(this.clock()).toISOString(),row.id,row.user_id,lease.token,`$.images[${page}]`,doc.images[page]||'',row.selection,row.document,doc.intake?.generation??-1,job.id,job.lease_token).run();
-  if(saved.meta.changes!==1)throw new ReaderError(409,'故事状态已更新，请重新打开后继续。');
+  if(saved.meta.changes!==1)throw new ReaderError(409,'The story has changed. Reopen it to continue.');
   return {value:result.value};
  }
  wake(){

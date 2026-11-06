@@ -1,3 +1,4 @@
+// Verify English runtime projections while retaining canonical Chinese source evidence.
 // Reproduce a premature Honglou anchor and verify full chapters reach every generation adapter.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -37,13 +38,14 @@ test('discontinuous and cross-chapter anchors expand each involved chapter once 
 
 test('the reader exposes saved full chapters and citations while historical passage-only stories stay readable',async()=>{
  const {selection}=await honglou(),original=await library.storyOriginal(selection);
+ original.englishSource={title:'The gold-lock passage',text:'The visitor examines a gold lock.',chapterTitle:'Dream of the Red Chamber, Chapter 8',chapterText:'The visitor examines the lock, meets the arriving guest, puts on his cloak, and departs.'};
  const row={id:'chapter-context',selection:JSON.stringify(selection),document:JSON.stringify({plan:makePlan(8),original,images:[],audio:[],usage:[]}),state:'idle',page:0,saved:0,created_at:'2026-11-01',updated_at:'2026-11-01'};
  let story=view(row).story;
- assert.equal(story.sourceText,original.chapterContext.text);assert.equal(story.sourceReference,original.chapterContext.title);
- assert.match(story.sourceText,/好了，披上斗篷罷/);
+ assert.equal(story.sourceText,original.englishSource.chapterText);assert.equal(story.sourceReference,original.englishSource.chapterTitle);
+ assert.match(story.sourceText,/puts on his cloak/);assert.match(original.chapterContext.text,/好了，披上斗篷罷/);
  const legacy=structuredClone(original);delete legacy.chapterContext;
  row.document=JSON.stringify({plan:makePlan(8),original:legacy,images:[],audio:[],usage:[]});story=view(row).story;
- assert.equal(story.sourceText,legacy.text);assert.equal(story.sourceReference,legacy.title);
+ assert.equal(story.sourceText,legacy.englishSource.text);assert.equal(story.sourceReference,legacy.englishSource.title);const untranslated=structuredClone(legacy);delete untranslated.englishSource;row.document=JSON.stringify({plan:makePlan(8),original:untranslated,images:[],audio:[],usage:[]});assert.equal(view(row).story.sourceText,'');
 });
 
 test('isolated Liaozhai and Shishuo stories keep their exact source without neighboring stories',async()=>{
@@ -91,5 +93,5 @@ test('full context preserves unreadable markers outside the qualified story and 
  books.book=async()=>({...book,sections:[{...section,units}]});
  const original=await books.storyOriginal(selection);assert.match(original.chapterContext.text,/缺字□/);assert.doesNotMatch(original.text,/□/);
  units.at(-1).text='原文'.repeat(1000001);
- await assert.rejects(books.storyOriginal(selection),e=>e.status===400&&/原文不会截断/.test(e.message));
+ await assert.rejects(books.storyOriginal(selection),e=>e.status===400&&/Original text is never truncated/.test(e.message));
 });

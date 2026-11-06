@@ -1,3 +1,4 @@
+// English workflow expectations preserve source evidence, saved work and recovery contracts.
 // Keep structural omissions out of local repairs and drawing; ordinary opening edits remain repairable.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -22,7 +23,7 @@ for(const provider of ['codex','gemini'])test(`${provider}: structural omissions
  await until(async()=>(await f.read(id)).state==='failed');
  const stopped=await f.read(id),before=await document(f,id);
  assert.equal(stopped.generationProgress.reviewStopReason,'replan');assert.equal(stopped.retryAllowed,false);
- assert.equal(stopped.reviewIssues[0].requiresReplan,true);assert.match(stopped.error,/重新编排/);
+ assert.equal(stopped.reviewIssues[0].requiresReplan,true);assert.match(stopped.error,/replan/);
  assert.equal(before.visualReview.reports.length,1);assert.equal(before.visualReview.repairs,0);
  assert.equal(f.control.repairs.length,0);assert.equal(f.control.calls.length,0);
  assert.equal((await f.request(`sessions/${id}/recover`,'POST',{requestId:crypto.randomUUID(),faultId:(await f.read(id)).faults[0].id})).status,409);

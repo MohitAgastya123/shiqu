@@ -1,10 +1,11 @@
+// English product text and generation contracts; canonical source evidence remains unchanged.
 // Observe discovery calls once without storing prompts, provider bodies, or raw errors.
 // Only known content/output failures may be isolated; ambiguous service failures stop dispatch.
 import {ReaderError} from './reader-model.ts';
 export type DiscoveryCode='refused'|'invalid-output'|'timeout'|'service';
 export class DiscoveryFailure extends ReaderError{
  code:DiscoveryCode;
- constructor(code:DiscoveryCode){super(code==='service'?503:502,code==='service'?'生成服务暂时不可用，已保留进度，请重试。':'本篇主题判断暂未完成，已保留其他结果。');this.code=code;}
+ constructor(code:DiscoveryCode){super(code==='service'?503:502,code==='service'?'The generation service is unavailable. Progress is saved; retry.':'Theme matching did not finish for this story. Other results are saved.');this.code=code;}
 }
 export function discoveryCode(error:unknown):DiscoveryCode{
  if(error instanceof DiscoveryFailure)return error.code;

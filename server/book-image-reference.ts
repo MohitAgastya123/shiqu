@@ -1,3 +1,4 @@
+// English product messages; source evidence and machine identifiers remain stable.
 // Keep one owner-scoped reference per book. Only server-resolved local pictures become
 // immutable snapshots; selection changes affect future calls, never paid job identities.
 import {createHash,randomUUID} from 'node:crypto';
@@ -15,8 +16,8 @@ export type BookReference={storyId:string;page:number;token:string};
 type SavedReference={owner_id:string;book_key:string;story_id:string;page:number;token:string;asset_key:string};
 type Source={bookKey:string;image:string;validPage:boolean;guard:string;values:unknown[]};
 const digest=(value:string|Uint8Array)=>createHash('sha256').update(value).digest('hex');
-function bookKey(id:string,custom?:string){const name=(id==='other'?custom||'':id).trim(),known=readerBooks.find(book=>book.id===name||book.title===name);if(!name)throw new ReaderError(400,'请先确定所属书籍。');return known?'book:'+known.id:(id==='other'?'custom:':'book:')+name;}
-function picture(bytes:Uint8Array){const type=mediaType(bytes);if(!type||bytes.length>12*1024*1024||!imageDimensions(bytes))throw new ReaderError(400,'请选择有效的PNG、JPEG或WebP图片（不超过12MB）。');return type;}
+function bookKey(id:string,custom?:string){const name=(id==='other'?custom||'':id).trim(),known=readerBooks.find(book=>book.id===name||book.title===name);if(!name)throw new ReaderError(400,'Choose a source book first.');return known?'book:'+known.id:(id==='other'?'custom:':'book:')+name;}
+function picture(bytes:Uint8Array){const type=mediaType(bytes);if(!type||bytes.length>12*1024*1024||!imageDimensions(bytes))throw new ReaderError(400,'Choose a valid PNG, JPEG, or WebP image of at most 12 MB.');return type;}
 const visible="NOT EXISTS(SELECT 1 FROM library_deletions d WHERE d.story_id=? AND d.user_id=?)";
 export class BookImageReferences{
  private database:Database;private media:MediaStore;private owner:string;
@@ -27,7 +28,7 @@ export class BookImageReferences{
    const selection=JSON.parse(row.selection),doc=JSON.parse(row.document),image=doc.plan?.pages[page]?doc.images[page]||'':'';
    return {bookKey:bookKey(selection.bookId,selection.customBook),image,validPage:!!doc.plan?.pages[page],guard:`EXISTS(SELECT 1 FROM stories WHERE id=? AND user_id=? AND selection=? AND json_extract(document,?)=? AND ${visible})`,values:[id,this.owner,row.selection,`$.images[${page}]`,image,id,this.owner]};
   }
-  throw new ReaderError(404,'这篇故事不在你的书架里');
+  throw new ReaderError(404,'This story is not on your bookshelf.');
  }
  private async selected(key:string){
   const row=await this.database.prepare('SELECT * FROM book_image_references WHERE owner_id=? AND book_key=?').bind(this.owner,key).first<SavedReference>();
@@ -41,33 +42,33 @@ export class BookImageReferences{
  }
  async set(id:string,page:number,starred:boolean,token?:string){
   const source=await this.source(id,page);
-  if(!source.validPage)throw new ReaderError(400,'请选择有效画幅。');
+  if(!source.validPage)throw new ReaderError(400,'Select a valid frame.');
   if(!starred){
-   if(!token)throw new ReaderError(400,'请重新读取当前星标后再取消。');
+   if(!token)throw new ReaderError(400,'Reload the current reference selection before removing it.');
    await this.database.prepare('DELETE FROM book_image_references WHERE owner_id=? AND book_key=? AND story_id=? AND page=? AND token=?').bind(this.owner,source.bookKey,id,page,token).run();
    return this.get(id);
   }
-  if(!source.image)throw new ReaderError(400,'这幅画面还没有图片，暂时不能设为参考图。');
+  if(!source.image)throw new ReaderError(400,'This frame has no image yet and cannot be used as a reference.');
   let key=referenceImageKey(id,source.image);
   if(!key&&/^\/api\/media\/[a-zA-Z0-9_-][a-zA-Z0-9._-]*$/.test(source.image))key=source.image.slice('/api/media/'.length);
-  if(!key)throw new ReaderError(400,'只能选择本地已保存的故事图片。');
-  const object=await this.media.get(key).catch(()=>{throw new ReaderError(503,'图片暂时无法读取，请稍后重试。');});
-  if(!object)throw new ReaderError(400,'这幅图片文件已丢失，请选择其他画面。');
+  if(!key)throw new ReaderError(400,'Only locally saved story images can be selected.');
+  const object=await this.media.get(key).catch(()=>{throw new ReaderError(503,'The image could not be read. Retry later.');});
+  if(!object)throw new ReaderError(400,'This image file is missing. Choose another frame.');
   const bytes=new Uint8Array(await object.arrayBuffer()),type=picture(bytes),asset=`book-reference/${digest(this.owner)}/${digest(source.bookKey)}/${digest(bytes)}.${imageTypes[type]}`;
   await this.media.put(asset,bytes,{contentType:type});
   const result=await this.database.prepare(`INSERT INTO book_image_references(owner_id,book_key,story_id,page,token,asset_key,updated_at) SELECT ?,?,?,?,?,?,? WHERE ${source.guard} ON CONFLICT(owner_id,book_key) DO UPDATE SET story_id=excluded.story_id,page=excluded.page,token=excluded.token,asset_key=excluded.asset_key,updated_at=excluded.updated_at`).bind(this.owner,source.bookKey,id,page,randomUUID(),asset,new Date().toISOString(),...source.values).run();
-  if(!result.meta.changes)throw new ReaderError(409,'这幅画面已更新，请重新打开后再选。');
+  if(!result.meta.changes)throw new ReaderError(409,'This frame has changed. Reopen it before selecting.');
   return this.get(id);
  }
  async resolve(id:string,fallback:string){
   const source=await this.source(id),row=await this.selected(source.bookKey);if(!row)return fallback;
   const match=/^book-reference\/[a-f0-9]{64}\/[a-f0-9]{64}\/([a-f0-9]{64})\.(png|jpg|webp)$/.exec(row.asset_key);
-  if(!match)throw new ReaderError(503,'本书参考图不可用，请重新选择或取消星标。');
+  if(!match)throw new ReaderError(503,'The book reference image is unavailable. Select another image or remove the reference.');
   const object=await this.media.get(row.asset_key).catch(()=>null);
-  if(!object)throw new ReaderError(503,'本书参考图不可用，请重新选择或取消星标。');
+  if(!object)throw new ReaderError(503,'The book reference image is unavailable. Select another image or remove the reference.');
   const bytes=new Uint8Array(await object.arrayBuffer());let type;
-  try{type=picture(bytes);}catch{throw new ReaderError(503,'本书参考图不可用，请重新选择或取消星标。');}
-  if(digest(bytes)!==match[1])throw new ReaderError(503,'本书参考图不可用，请重新选择或取消星标。');
+  try{type=picture(bytes);}catch{throw new ReaderError(503,'The book reference image is unavailable. Select another image or remove the reference.');}
+  if(digest(bytes)!==match[1])throw new ReaderError(503,'The book reference image is unavailable. Select another image or remove the reference.');
   const asset=readerImageAsset(id,0,imageTypes[type],match[1]);
   await this.media.put(asset.key,bytes,{contentType:type});return asset.url;
  }

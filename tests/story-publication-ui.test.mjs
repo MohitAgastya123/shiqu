@@ -47,25 +47,25 @@ test('settings show the resolved default author, refresh on return and keep expl
  setRequest(async path=>{assert.equal(path,'reader/publication-defaults');reads++;return {publication:current};});
  const props={story:{...makeStory(1),generated:true},onEdit(){}};
  const render=()=>{beginRender();const tree=Summary(props);flushEffects();return tree;};
- assert.match(text(render()),/制作：正在读取署名/);
- await until(()=>text(render()).includes('制作：默认制作人'));assert.equal(reads,1);assert.ok(!text(render()).includes('沿用「我的」默认署名'));
+ assert.match(text(render()),/Created by: Loading credits/);
+ await until(()=>text(render()).includes('Created by: 默认制作人'));assert.equal(reads,1);assert.ok(!text(render()).includes('沿用「我的」默认署名'));
  current={...defaults,author:'实时更新的默认名字'};window.dispatchEvent(new Event('focus'));
- assert.match(text(render()),/制作：正在读取署名/);await until(()=>text(render()).includes('制作：实时更新的默认名字'));assert.equal(reads,2);
+ assert.match(text(render()),/Created by: Loading credits/);await until(()=>text(render()).includes('Created by: 实时更新的默认名字'));assert.equal(reads,2);
  document.visibilityState='hidden';document.dispatchEvent(new Event('visibilitychange'));assert.equal(reads,2);
  current={...defaults,author:'切回页面后的名字'};document.visibilityState='visible';document.dispatchEvent(new Event('visibilitychange'));
- await until(()=>text(render()).includes('制作：切回页面后的名字'));assert.equal(reads,3);
- props.story={...props.story,publication:initial};assert.match(text(render()),/制作：本篇制作人/);
+ await until(()=>text(render()).includes('Created by: 切回页面后的名字'));assert.equal(reads,3);
+ props.story={...props.story,publication:initial};assert.match(text(render()),/Created by: 本篇制作人/);
  window.dispatchEvent(new Event('focus'));assert.equal(reads,3,'an explicit work author needs no default lookup');
- props.story=makeStory(1);assert.match(text(render()),/制作：未署名/);assert.equal(reads,3,'shared samples must keep their own credit');
+ props.story=makeStory(1);assert.match(text(render()),/Created by: Uncredited/);assert.equal(reads,3,'shared samples must keep their own credit');
 });
 
 test('settings distinguish a failed lookup from an unsigned work and allow retry',async t=>{
  const {Summary,beginRender,flushEffects,setRequest}=summaryHarness(t);let fail=true,current=defaults;
  setRequest(async()=>{if(fail)throw Error('读取失败');return {publication:current};});
  const render=()=>{beginRender();const tree=Summary({story:{...makeStory(1),generated:true}});flushEffects();return tree;};
- render();await until(()=>!render().props['aria-busy']);assert.match(text(render()),/制作：暂时无法读取/);assert.ok(!text(render()).includes('制作：未署名'));
- fail=false;button(render(),'重新读取署名').props.onClick();render();await until(()=>text(render()).includes('制作：默认制作人'));
- current=null;window.dispatchEvent(new Event('focus'));await until(()=>text(render()).includes('制作：未署名'));
+ render();await until(()=>!render().props['aria-busy']);assert.match(text(render()),/Created by: Could not load/);assert.ok(!text(render()).includes('Created by: Uncredited'));
+ fail=false;button(render(),"Reload credits").props.onClick();render();await until(()=>text(render()).includes('Created by: 默认制作人'));
+ current=null;window.dispatchEvent(new Event('focus'));await until(()=>text(render()).includes('Created by: Uncredited'));
 });
 
 test('late default reads cannot replace a newer name or flash the previous story author',async t=>{
@@ -74,10 +74,10 @@ test('late default reads cannot replace a newer name or flash the previous story
  const props={story:{...makeStory(1),generated:true}};
  const render=()=>{beginRender();const tree=Summary(props);flushEffects();return tree;};
  render();window.dispatchEvent(new Event('focus'));assert.equal(resolves.length,2);
- resolves[1]({publication:{...defaults,author:'较新的名字'}});await until(()=>text(render()).includes('制作：较新的名字'));
- resolves[0]({publication:{...defaults,author:'迟到的旧名字'}});await new Promise(resolve=>setImmediate(resolve));assert.match(text(render()),/制作：较新的名字/);
- props.story={...props.story,id:'another-story'};assert.match(text(render()),/制作：正在读取署名/);assert.ok(!text(render()).includes('较新的名字'));
- resolves[2]({publication:{...defaults,author:'另一篇的默认名字'}});await until(()=>text(render()).includes('制作：另一篇的默认名字'));
+ resolves[1]({publication:{...defaults,author:'较新的名字'}});await until(()=>text(render()).includes('Created by: 较新的名字'));
+ resolves[0]({publication:{...defaults,author:'迟到的旧名字'}});await new Promise(resolve=>setImmediate(resolve));assert.match(text(render()),/Created by: 较新的名字/);
+ props.story={...props.story,id:'another-story'};assert.match(text(render()),/Created by: Loading credits/);assert.ok(!text(render()).includes('较新的名字'));
+ resolves[2]({publication:{...defaults,author:'另一篇的默认名字'}});await until(()=>text(render()).includes('Created by: 另一篇的默认名字'));
 });
 
 test('restore fetches current defaults, locks duplicate requests and changes all draft fields without saving',async()=>{
@@ -85,13 +85,13 @@ test('restore fetches current defaults, locks duplicate requests and changes all
  setRequest((...args)=>{calls.push(args);return new Promise(resolve=>release=resolve);});
  const render=()=>{beginRender();return Editor({story:{...makeStory(1),publication:initial},onClose:()=>closed++,onSave:async(...args)=>saves.push(args)});};
  const submit=()=>find(render(),node=>node.type==='form').props.onSubmit({preventDefault(){}});
- button(render(),'恢复默认说明').props.onClick();button(render(),'正在读取默认…').props.onClick();submit();
- assert.deepEqual(calls,[['reader/publication-defaults']]);assert.equal(render().props.busy,true);assert.equal(input(render(),'制作署名').props.disabled,true);assert.deepEqual(saves,[]);
+ button(render(),"Restore defaults").props.onClick();button(render(),"Loading defaults…").props.onClick();submit();
+ assert.deepEqual(calls,[['reader/publication-defaults']]);assert.equal(render().props.busy,true);assert.equal(input(render(),"Creator credit").props.disabled,true);assert.deepEqual(saves,[]);
  release({publication:defaults});await until(()=>!render().props.busy);
- for(const [key,label] of Object.entries({author:'制作署名',workUrl:'公开作品链接',contact:'公开联系方式',sourceNote:'来源版本与许可说明',reuse:'转载与再使用条件'}))assert.equal(input(render(),label).props.value,defaults[key]);
+ for(const [key,label] of Object.entries({author:"Creator credit",workUrl:"Public work link",contact:"Public contact",sourceNote:"Source edition and license",reuse:"Reuse and redistribution terms"}))assert.equal(input(render(),label).props.value,defaults[key]);
  assert.equal(find(render(),node=>node.props?.type==='range').props.value,32);
- assert.match(text(find(render(),node=>node.props?.role==='status')),/保存后应用于本篇/);
- assert.deepEqual(saves,[]);button(render(),'取消').props.onClick();assert.equal(closed,1);
+ assert.match(text(find(render(),node=>node.props?.role==='status')),/Save to apply them to this story/);
+ assert.deepEqual(saves,[]);button(render(),"Cancel").props.onClick();assert.equal(closed,1);
  // Saving the loaded draft still compares against the story that was opened, not the defaults.
  submit();await until(()=>saves.length===1);assert.deepEqual(saves,[[defaults,initial]]);
 });
@@ -100,15 +100,15 @@ test('a failed restore keeps local edits and retry reads latest defaults; missin
  const {Editor,beginRender,setRequest,resetHooks}=harness();let fail=true,next=defaults;const saves=[];
  setRequest(async()=>{if(fail)throw Error('读取失败');return {publication:next};});
  const render=()=>{beginRender();return Editor({story:{...makeStory(1),publication:initial},onClose(){},onSave:async(...args)=>saves.push(args)});};
- input(render(),'制作署名').props.onChange({target:{value:'未保存修改'}});
- button(render(),'恢复默认说明').props.onClick();await until(()=>!render().props.busy);
- assert.equal(input(render(),'制作署名').props.value,'未保存修改');assert.equal(text(find(render(),node=>node.props?.role==='alert')),'读取失败');assert.deepEqual(saves,[]);
- fail=false;button(render(),'恢复默认说明').props.onClick();await until(()=>!render().props.busy);assert.equal(input(render(),'制作署名').props.value,defaults.author);
- next={...defaults,author:'更新后的默认署名'};button(render(),'恢复默认说明').props.onClick();await until(()=>!render().props.busy);assert.equal(input(render(),'制作署名').props.value,next.author);
- next=null;button(render(),'恢复默认说明').props.onClick();await until(()=>!render().props.busy);assert.equal(input(render(),'制作署名').props.value,'');assert.match(text(find(render(),node=>node.props?.role==='status')),/尚未设置默认说明/);
+ input(render(),"Creator credit").props.onChange({target:{value:'未保存修改'}});
+ button(render(),"Restore defaults").props.onClick();await until(()=>!render().props.busy);
+ assert.equal(input(render(),"Creator credit").props.value,'未保存修改');assert.equal(text(find(render(),node=>node.props?.role==='alert')),'读取失败');assert.deepEqual(saves,[]);
+ fail=false;button(render(),"Restore defaults").props.onClick();await until(()=>!render().props.busy);assert.equal(input(render(),"Creator credit").props.value,defaults.author);
+ next={...defaults,author:'更新后的默认署名'};button(render(),"Restore defaults").props.onClick();await until(()=>!render().props.busy);assert.equal(input(render(),"Creator credit").props.value,next.author);
+ next=null;button(render(),"Restore defaults").props.onClick();await until(()=>!render().props.busy);assert.equal(input(render(),"Creator credit").props.value,'');assert.match(text(find(render(),node=>node.props?.role==='status')),/No defaults are set/);
  assert.equal(find(render(),node=>node.props?.type==='range').props.value,24);
  find(render(),node=>node.type==='form').props.onSubmit({preventDefault(){}});await until(()=>saves.length===1);assert.deepEqual(saves,[[emptyPublication,initial]]);
- resetHooks();beginRender();const global=Editor({publication:defaults,onClose(){},onSave:async()=>{}});assert.equal(button(global,'恢复默认说明'),null);
+ resetHooks();beginRender();const global=Editor({publication:defaults,onClose(){},onSave:async()=>{}});assert.equal(button(global,"Restore defaults"),null);
 });
 
 test('watermark sizing shows a 24px default and saves an independent single-story value',async()=>{
@@ -128,16 +128,16 @@ for(const format of ['pdf','png','zip'])test(`${format}: every output attempt re
  const props={story:{...makeStory(1),generated:true},format,className:'download',disabled:false,busy:false,onExport:story=>exported.push(story),onEdit:()=>edited++,children:'下载'};
  const render=()=>{beginRender();return ExportControl(props);};
  const control=()=>find(render(),node=>node.props?.className==='download');
- const confirmation=()=>find(render(),node=>node.props?.title==='作品还未署名');
+ const confirmation=()=>find(render(),node=>node.props?.title==="No creator credit set");
  const settle=()=>until(()=>!control().props['aria-busy']);
  const click=async()=>{control().props.onClick();await settle();};
  await click();assert.equal(reads,1);assert.equal(exported.length,0);assert.ok(confirmation());
- button(render(),'取消').props.onClick();assert.equal(confirmation(),null);assert.equal(exported.length,0);
- await click();button(render(),'先填写署名').props.onClick();assert.equal(edited,1);assert.equal(exported.length,0);assert.equal(confirmation(),null);
- await click();button(render(),'仍以未署名导出 '+format.toUpperCase()).props.onClick();await settle();assert.equal(exported.length,1);assert.equal(confirmation(),null);assert.equal(reads,4);
+ button(render(),"Cancel").props.onClick();assert.equal(confirmation(),null);assert.equal(exported.length,0);
+ await click();button(render(),"Add creator credit").props.onClick();assert.equal(edited,1);assert.equal(exported.length,0);assert.equal(confirmation(),null);
+ await click();button(render(),"Export without credit "+format.toUpperCase()).props.onClick();await settle();assert.equal(exported.length,1);assert.equal(confirmation(),null);assert.equal(reads,4);
  // An already prepared file goes through this same callback; the reader validates its resolved export key.
- await click();assert.ok(confirmation());assert.equal(exported.length,1);button(render(),'取消').props.onClick();
- for(const author of ['   ','未署名']){props.story={...props.story,publication:{...emptyPublication,author}};await click();assert.ok(confirmation());button(render(),'取消').props.onClick();}
+ await click();assert.ok(confirmation());assert.equal(exported.length,1);button(render(),"Cancel").props.onClick();
+ for(const author of ['   ',"Uncredited"]){props.story={...props.story,publication:{...emptyPublication,author}};await click();assert.ok(confirmation());button(render(),"Cancel").props.onClick();}
  props.story={...props.story,publication:initial};await click();assert.equal(confirmation(),null);assert.equal(exported.length,2);assert.equal(exported.at(-1).publication.author,initial.author);
  const before=reads;props.disabled=true;await click();assert.equal(reads,before);assert.equal(exported.length,2);
 });
@@ -173,7 +173,7 @@ test('continuing from unsigned confirmation rechecks a default name saved while 
  setRequest(async()=>{reads++;return {publication:current};});
  const render=()=>{beginRender();return ExportControl({story:{...makeStory(1),generated:true},format:'zip',className:'download',disabled:false,busy:false,onExport:story=>exported.push(story),children:'下载'});};
  const control=()=>find(render(),node=>node.props?.className==='download');
- control().props.onClick();await until(()=>!control().props['aria-busy']);assert.ok(find(render(),node=>node.props?.title==='作品还未署名'));
- current=defaults;button(render(),'仍以未署名导出 ZIP').props.onClick();await until(()=>!control().props['aria-busy']);
+ control().props.onClick();await until(()=>!control().props['aria-busy']);assert.ok(find(render(),node=>node.props?.title==="No creator credit set"));
+ current=defaults;button(render(),'Export without credit ZIP').props.onClick();await until(()=>!control().props['aria-busy']);
  assert.equal(reads,2);assert.equal(exported.length,1);assert.equal(exported[0].publication.author,defaults.author);
 });

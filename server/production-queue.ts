@@ -1,3 +1,4 @@
+// English product messages; source evidence and machine identifiers remain stable.
 // Schedule durable, versioned jobs in independent bounded pools. Dependencies consume saved
 // outputs; lease tokens prevent late completions from overwriting a replacement attempt.
 // Wall-clock expiry only reclaims attempts from dead services, so a live one survives sleep.
@@ -13,7 +14,7 @@ export type ProductionJob={id:string;session_id:string;owner_id:string;kind:stri
 export type JobContext={outputs:Record<string,unknown>;isCurrent:()=>Promise<boolean>};
 export type JobHandler={pool:string;drain?:boolean;run:(job:ProductionJob,context:JobContext)=>Promise<unknown>};
 type Options={targetSessionId?:string;limits:Record<string,number>;handlers:Record<string,JobHandler>;candidateFilter?:string;skipCandidate?:(job:ProductionJob)=>boolean;canRun?:(job:ProductionJob)=>Promise<boolean>;onSettled?:()=>void;resumeInterrupted?:(job:ProductionJob)=>Promise<boolean>;safeError?:(error:unknown,job:ProductionJob)=>string;terminal?:(error:unknown,job:ProductionJob)=>boolean;now?:()=>number;leaseMs?:number};
-const interruptedMessage='上次生成已中断，已保留保存的结果。请重试继续。';
+const interruptedMessage='Previous generation was interrupted. Saved results have been retained. Retry to continue.';
 // A handler that stopped without spending an attempt: the job waits in the queue for its next turn.
 export class JobYield extends Error{}
 export function inputVersion(input:unknown){return createHash('sha256').update(JSON.stringify(input)).digest('hex');}
@@ -129,7 +130,7 @@ export class ProductionQueue{
    // A stop kills provider processes, so a failure now is not evidence about the work itself.
    const interrupted=this.stopping&&!handler.drain&&!this.options.terminal?.(error,job);
    // Only safe application messages are persisted; provider responses may contain private data.
-   const message=interrupted?interruptedMessage:this.options.safeError?.(error,job)||'制作暂时未完成，已保存的结果会保留。';
+   const message=interrupted?interruptedMessage:this.options.safeError?.(error,job)||'Production is not complete. Saved results will be retained.';
    const finishedAt=this.clock(),timing=JSON.stringify({startedAt:job.updated_at,finishedAt});
    try{await this.database.prepare(`UPDATE production_jobs SET payload=${timedPayload},state='failed',error=?,interrupted=?,failure_id=?,lease_token=NULL,lease_until=0,updated_at=? WHERE id=? AND state='running' AND lease_token=?`)
     .bind(timing,message,interrupted?1:0,interrupted&&job.failure_id?job.failure_id:randomUUID(),finishedAt,job.id,job.lease_token).run();}

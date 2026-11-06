@@ -1,111 +1,81 @@
-# 拾趣 · Shiqu
+# Shiqu
 
-用拾趣，把中国古典故事变成你自己的连环画。支持电脑与手机阅读，以及 PDF、PNG 长图和 ZIP 导出。故事、图片和阅读进度保存在你的电脑上。
+Create English illustrated stories from Chinese classics. Read on a computer or phone, and export PDF, PNG overviews, or ZIP archives. Stories, images, and reading progress stay on your computer. AI generation sends the required source passages, prompts, and references to your selected provider.
 
-[在线阅读拾趣好故事 →](https://yysun.github.io/awesome-shiqu/)
+## Quick start
 
-## 快速开始制作
-
-三种方式，任选一种：
-
-### 1. npx：一条命令启动
-
-需要 **Node 24**：
+Requires Node 24:
 
 ```bash
-npx @apprun/shiqu
+pnpm dlx @apprun/shiqu
 ```
 
-按提示选择书库和生成服务，打开终端打印的网址即可使用。同一可信 Wi-Fi 下，手机可扫描终端二维码接着读。保持终端运行，按 Ctrl+C 停止。[CLI 使用说明](https://github.com/yysun/shiqu/blob/main/.docs/user-guide.md#cli-启动)
+Choose a library directory and AI provider, then open the printed address. Keep the terminal running; Ctrl+C stops the service. For local-only access, add `--host 127.0.0.1`. Local-network devices otherwise share your bookshelf and generation permissions.
 
-在本机回环地址打开「我的 → 生成服务与模型」，可修改与桌面/CLI/技能共用的提供方、模型、推理和 API 密钥。页面区分已保存值与当前运行配置；保存后重启服务生效，显式环境/配置文件覆盖仍优先。已保存密钥不会返回浏览器，手机/局域网阅读入口不提供凭据编辑。
+Choose Codex subscription mode (macOS/Linux, separate signed-in Codex CLI required), OpenAI API, Gemini, or read-only mode. API keys are billed separately and stored as plaintext in the local settings database, protected by OS permissions. Use `--configure` to change provider settings; restart the running service to apply them.
 
-### 2. Desktop：下载安装
+The app includes 24 books and 15 art styles. New story titles, summaries, captions, character descriptions, reviews, and endings are English. Production preparation saves an English source translation while preserving verified original evidence internally. A story contains 1–80 illustrated frames.
 
-内置 Node，无需另装运行环境。支持 Apple Silicon Mac（macOS 13.5+）和 Windows 10/11 x64。
+## Desktop and Codex
 
-[下载 macOS DMG](https://github.com/yysun/shiqu/releases/latest/download/shiqu-standard-macos-arm64.dmg) · [下载 Windows 安装程序](https://github.com/yysun/shiqu/releases/latest/download/shiqu-standard-windows-x64-setup.exe) · [版本与校验文件](https://github.com/yysun/shiqu/releases/latest)
+[Desktop releases](https://github.com/yysun/shiqu/releases/latest) include Node for Apple Silicon macOS 13.5+ and Windows 10/11 x64. The desktop console manages configuration and the service; the reader opens in your browser.
 
-打开拾趣，在「设置」中选择生成服务，保存并启动，再点击「在浏览器打开」。安装包未签名，首次打开的系统提示见[桌面版入门](https://github.com/yysun/shiqu/blob/main/.docs/user-guide.md#桌面版入门)。
-
-### 3. Skill：让 Codex 帮你制作
-
-需要 **Node 24**。运行一次，安装供当前用户各项目使用的技能：
+Install the Codex skill:
 
 ```bash
-npx @apprun/shiqu skill install --scope global
+pnpm dlx @apprun/shiqu skill install --scope global
 ```
 
-然后在 Codex 中说：
+Example request:
 
 ```text
-$shiqu 从《庄子》中找一个关于善意与误解的故事，用水墨写意。
-先给我候选和制作方案，确认后再生成插图，完成后导出离线预览和公开 ZIP。
+$shiqu Find a Zhuangzi story about kindness and misunderstanding. Use ink wash.
+Show candidates and a production plan before drawing. After confirmation,
+export an offline HTML preview and a public ZIP.
 ```
 
-无需启动桌面或浏览器服务。[提示词示例](https://github.com/yysun/shiqu/blob/main/.docs/use-as-skill.md) · [技能安装与配置](https://github.com/yysun/shiqu/blob/main/.docs/user-guide.md#无服务-cli-与-codex-技能)
+## CLI commands
 
-生成服务可选 Codex、OpenAI API 或 Gemini，也可选择只读。Codex 需 macOS / Linux，并另行安装和登录 Codex CLI；OpenAI API 与 Gemini 使用各自 API 密钥并单独计费。[如何选择后端](https://github.com/yysun/shiqu/blob/main/.docs/user-guide.md#如何选择后端)
+Prefix these commands with `pnpm dlx @apprun/shiqu`. Source checkouts use `pnpm cli`. Stop any service using the same library before running direct library commands.
 
-## CLI 命令
-
-以下命令均加上前缀 `npx @apprun/shiqu`。不带子命令时启动浏览器服务；带子命令时直接操作本地书库。执行书库命令前，先停止占用同一书库的服务。
-
-| 命令 | 用途 |
+| Command | Purpose |
 | --- | --- |
-| `help --json` | 查看命令目录、参数、JSON 输入与示例 |
-| `init`, `status` | 显式初始化书库，或检查书库完整性与数量统计 |
-| `catalog`, `books`, `themes`, `styles` | 列出书籍、主题和画风 |
-| `books contents BOOK_ID --query TEXT` | 浏览或搜索书籍的本地目录，查询条件可省略 |
-| `stories list`, `stories get ID`, `stories current ID` | 查看故事列表、故事详情与当前版本 |
-| `stories create --input FILE` | 保存新故事的选题条件 |
-| `stories setup`, `stories search`, `stories choose`, `stories confirm` | 设置要求、查找候选、选择故事与确认制作 |
-| `run ID`, `stories run ID` | 制作指定故事；`--until` 可选 candidates、prepared、reviewed 或 completed |
-| `stories edit ID --input FILE` | 使用 `stories revisions ID` 返回的 token 保存修改版本 |
-| `stories pause`, `stories resume`, `stories stop` | 暂停、恢复或停止故事制作 |
-| `stories retry`, `stories override` | 重试当前故障，或明确跳过审核问题 |
-| `stories rename`, `stories delete`, `stories restore`, `stories favorite`, `stories reference` | 改名、删除、恢复、收藏故事，或设置本书参考图 |
-| `stories revisions`, `stories prompts`, `stories review-history`, `stories source` | 查看版本、提示词、审核记录与原文 |
-| `stories reselect`, `stories replace`, `stories cancel-reselection` | 发起、应用或取消重新选题 |
-| `preview ID --output FILE` | 导出可独立打开的离线 HTML 预览 |
-| `export ID --format FORMAT --output FILE` | 导出 json、md、zip、pdf 或 png |
-| `skill show`, `skill install`, `skill check`, `skill update` | 查看、安装、检查或更新 Codex 技能 |
-| `config get`, `config set`, `config reset` | 查看、保存或重置共享生成服务配置 |
-| `backup DIR`, `verify-backup DIR`, `restore DIR`, `diagnostics FILE` | 备份、校验、恢复书库，或导出脱敏诊断 |
-| `api METHOD reader/ROUTE` | 在当前进程调用允许的 reader 接口 |
+| `help --json` | Current commands, arguments, schemas, and examples |
+| `init`, `status` | Initialize or inspect a library |
+| `books`, `themes`, `styles`, `books contents BOOK_ID` | Browse book, theme, style, and chapter catalogs |
+| `stories list`, `stories get ID`, `stories current ID` | Inspect stories and their current revisions |
+| `stories create --input FILE` | Save a new story request |
+| `stories setup`, `stories search`, `stories choose`, `stories confirm` | Save discovery and production decisions |
+| `run ID --until candidates\|prepared\|reviewed\|completed` | Advance production for one story |
+| `stories edit ID --input FILE` | Create a revision using a current revision token |
+| `stories pause`, `stories resume`, `stories stop` | Control production |
+| `stories retry`, `stories override` | Explicitly recover a fault or override review |
+| `stories rename`, `delete`, `restore`, `favorite`, `reference` | Organize stories and select book references |
+| `stories revisions`, `prompts`, `review-history`, `source` | Inspect saved evidence |
+| `stories reselect`, `replace`, `cancel-reselection` | Replace a story selection within its family |
+| `preview ID --output FILE` | Write a standalone offline HTML preview |
+| `export ID --format FORMAT --output FILE` | Export JSON, Markdown, ZIP, PDF, or PNG |
+| `skill show`, `install`, `check`, `update` | Manage the Codex skill |
+| `config get`, `set`, `reset` | Manage shared provider configuration |
+| `backup DIR`, `verify-backup DIR`, `restore DIR`, `diagnostics FILE` | Maintain a library |
 
-只有显式 `run` 执行 AI 生成，其他命令只查看或保存状态。故事操作需传入故事 ID；选题操作还需 `--generation N`。JSON 输入使用 `--input FILE`，或用 `--input -` 从标准输入读取。各命令的必填字段与恢复规则见 `help --json`。
+Only explicit `run` performs inference. Other commands inspect or save state. JSON input is read with `--input FILE` or `--input -` for stdin. Mutation replay requires the same request ID and original inputs; see `help --json`.
 
-用 `--data-dir DIR` 指定书库。ZIP、PDF、PNG 要求当前版本全部图片完成，导出路径必须尚不存在。恢复书库需显式指定尚不存在的 `--data-dir DIR`。[完整命令流程](https://github.com/yysun/shiqu/blob/main/.docs/user-guide.md#直接使用命令) · [备份、恢复与诊断](https://github.com/yysun/shiqu/blob/main/.docs/user-guide.md#书库维护命令)
+ZIP/PDF/PNG exports require all current-revision images. Ordinary exports write a new path and do not overwrite. Public ZIPs retain collection-compatible filenames, English prose, source attribution, author credit, and AI disclosures. Restores require a new explicit `--data-dir`; they never overwrite the active library.
 
-### 浏览器服务启动参数
+## Startup options
 
-| 参数 | 用途 |
-| --- | --- |
-| `--port PORT`, `--host ADDRESS` | HTTP 端口（默认 3000）与监听地址（默认 0.0.0.0）；仅限本机访问时使用 `--host 127.0.0.1` |
-| `--data-dir DIR`, `--config FILE` | 指定书库目录，或加载指定的环境配置文件 |
-| `--configure`, `--reset-providers` | 配置或清除已保存的生成服务设置与密钥 |
-| `--backup DIR`, `--verify-backup DIR`, `--restore DIR`, `--diagnostics FILE` | 维护命令的参数形式，每次单独执行一项 |
-| `--help`, `--version` | 查看启动帮助或当前版本 |
+Use `--port PORT`, `--host ADDRESS`, `--data-dir DIR`, or `--config FILE` to override the current invocation. Default HTTP port: 3000; default bind: 0.0.0.0. Environment and config overrides do not automatically change saved settings. Project `.env` files are not loaded automatically. `--reset-providers` clears provider profiles and keys while retaining stories.
 
-## 更多说明
+## Development
 
-[使用指南](https://github.com/yysun/shiqu/blob/main/.docs/user-guide.md) · [手机阅读](https://github.com/yysun/shiqu/blob/main/.docs/user-guide.md#在手机上阅读) · [制作与导出](https://github.com/yysun/shiqu/blob/main/.docs/user-guide.md#制作与阅读故事) · [常见问题](https://github.com/yysun/shiqu/blob/main/.docs/user-guide.md#常见问题)
-
-## 开发者
-
-源码开发使用 **Node 24.22.1** 与 **pnpm 11.25.0**：
+Use Node 24.22.1 and pnpm 11.25.0:
 
 ```bash
-nvm install
-nvm use
-corepack enable pnpm
-pnpm run setup
+pnpm install --frozen-lockfile
 pnpm dev
+pnpm desktop:preview
+pnpm cli help --json
 ```
 
-桌面 UI 预览用 `pnpm desktop:preview`，源码目录的 CLI 帮助用 `pnpm cli help --json`。[开发指南](https://github.com/yysun/shiqu/blob/main/.docs/development.md) · [桌面开发与打包](https://github.com/yysun/shiqu/blob/main/desktop/README.md)
-
-## 来源与许可
-
-项目原创代码与文档采用 [Apache-2.0](https://github.com/yysun/shiqu/blob/main/LICENSE)，另见 [NOTICE](https://github.com/yysun/shiqu/blob/main/NOTICE)。古典原文遵循各自的[来源许可](https://github.com/yysun/shiqu/blob/main/data/library/source-notices.md)。生成的故事与插图不会自动适用代码许可，分享前请检查[署名与转载说明](https://github.com/yysun/shiqu/blob/main/.docs/user-guide.md#署名与转载)及 [ZIP 内容](https://github.com/yysun/shiqu/blob/main/.docs/user-guide.md#zip-内容与提示词分享)。
+[User guide](https://github.com/yysun/shiqu/blob/main/.docs/user-guide.md) · [Source](https://github.com/yysun/shiqu) · [License](https://github.com/yysun/shiqu/blob/main/LICENSE) · [Source notices](https://github.com/yysun/shiqu/blob/main/data/library/source-notices.md)

@@ -1,3 +1,4 @@
+// English workflow expectations preserve source evidence, saved work and recovery contracts.
 // Exercise paid text checkpoints, strict repair scopes and image gating through both provider adapters.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -16,7 +17,7 @@ for(const provider of ['codex','gemini'])test(`${provider}: review is a separate
  await f.demand(id);await ready;
  assert.equal(f.control.calls.length,0);const pending=await document(f,id);assert.equal(pending.plan.pages.length,8);assert.equal(pending.visualReview.status,'pending');
  const jobs=await f.app.services.production.queue.jobs(id,owner);assert.ok(jobs.some(j=>j.kind==='script'&&JSON.parse(j.payload).stepKey==='review:0'&&j.state==='running'));assert.ok(jobs.every(j=>j.kind!=='image'));
- await assert.rejects(f.app.services.production.image({session_id:id,owner_id:owner,payload:JSON.stringify({page:0})}),/尚未通过审片/);
+ await assert.rejects(f.app.services.production.image({session_id:id,owner_id:owner,payload:JSON.stringify({page:0})}),/has not passed review/);
  release();await until(()=>f.control.calls.length===1);
  assert.equal((await document(f,id)).visualReview.status,'passed');assert.equal(f.control.reviews.length,1);
 });
@@ -25,7 +26,7 @@ for(const provider of ['codex','gemini'])test(`${provider}: twenty automatic rep
  const f=await productionFixture(t,provider),id=await f.createLegacyReader(),viewer=crypto.randomUUID();let blocked=true;
  f.control.beforeText=async kind=>kind==='review'?{issues:blocked?[issue(3)]:[]}:undefined;
  await f.demand(id,viewer);await until(async()=>(await f.read(id)).state==='failed');
- const stopped=await f.read(id);assert.equal(stopped.retryStage,'review');assert.equal(stopped.generationProgress.reviewStatus,'blocked');assert.match(stopped.error,/第 3 幅/);
+ const stopped=await f.read(id);assert.equal(stopped.retryStage,'review');assert.equal(stopped.generationProgress.reviewStatus,'blocked');assert.match(stopped.error,/Frame 3/);
  assert.equal(f.control.reviews.length,21);assert.equal(f.control.repairs.length,20);assert.equal(f.control.calls.length,0);
  await f.app.services.production.tick();await f.read(id);assert.equal(f.control.reviews.length,21);
  blocked=false;const requestId=crypto.randomUUID(),command={requestId,faultId:stopped.faults[0].id};await Promise.all([f.json(`sessions/${id}/recover`,'POST',command),f.json(`sessions/${id}/recover`,'POST',command)]);await until(()=>f.control.calls.length===1);
@@ -95,7 +96,7 @@ test('old complete plans remain readable without a retroactive audit',async t=>{
 test('a saved review whose queue receipt was lost is not paid twice',async t=>{
  const f=await productionFixture(t),id=await f.createLegacyReader(),repo=new ReaderRepository(f.app.services.database),g=f.generation.generator();
  f.control.beforeText=async kind=>kind==='review'&&f.control.reviews.length===1?{issues:[issue(2)]}:undefined;
- await advanceStory(repo,g,owner,id,0);await advanceStory(repo,g,owner,id,0);await advanceStory(repo,g,owner,id,0);assert.equal((await document(f,id)).visualReview.status,'repair');
+ for(let i=0;i<20&&(await document(f,id)).visualReview?.status!=='repair';i++)await advanceStory(repo,g,owner,id,0);assert.equal((await document(f,id)).visualReview.status,'repair');
  const stale={id:crypto.randomUUID(),sessionId:id,ownerId:owner,kind:'script',pool:'text',version:'lost-review-receipt',dependencies:[],payload:{stepKey:'review:0'},priority:-20};
  await f.app.services.production.queue.enqueue(stale);await f.demand(id);await until(()=>f.control.calls.length===1);
  assert.equal((await f.app.services.production.queue.job(stale.id)).state,'succeeded');assert.equal(f.control.reviews.length,2);assert.equal(f.control.repairs.length,1);

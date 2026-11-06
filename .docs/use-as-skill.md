@@ -1,328 +1,138 @@
-# 通过 SKILL 使用拾趣：提示词示例
+# Use Shiqu through Codex
 
-技能通过拾趣 CLI 复用桌面与 `pnpm dev` 使用的共享设置数据库：提供方、对应密钥、模型和任务推理档位只需保存一次。源码入口使用 `pnpm cli`；显式 shell 变量优先且只影响本次运行，CLI 和开发后端均不自动读取项目 `.env`。技能自身不保存另一套生成配置或密钥。修改设置后重启已运行服务，下一次 CLI 执行会读取新配置；同一书库的 CLI 操作需先停止占用它的服务。
+[Overview](../README.md) · [User guide](user-guide.md) · [CLI task contract](../skills/shiqu/SKILL.md)
 
-## 安装技能
+The Shiqu skill lets Codex discover stories, prepare English comics, revise saved work, export artifacts, and maintain your local library. It calls the same production CLI used by the application. You do not need to start the desktop app, browser frontend, or HTTP service for direct CLI tasks.
 
-### 在所有项目中使用
+## Install
 
-```text
-请为我全局安装拾趣技能，让我可以在各个项目中使用。
-技能来源：https://github.com/yysun/shiqu/tree/main/skills/shiqu
-如果已经安装，先比较现有内容；有差异时先说明，不直接覆盖我修改过的指引。
-只完成安装，不创建书库、不配置生成服务、不开始制作。
+Requires Node 24. Install for your user or the current project:
+
+```bash
+pnpm dlx @apprun/shiqu skill install --scope global
+pnpm dlx @apprun/shiqu skill install --scope project
 ```
 
-### 仅在当前项目使用
+Source checkouts use `pnpm cli` instead of `pnpm dlx @apprun/shiqu`. Installed global commands can use `shiqu`. Keep the selected entry point and package version consistent throughout a task. If a newly installed skill is not listed in Codex, restart Codex. `skill show` prints the contract without installing it.
 
-```text
-请把拾趣技能安装到当前项目，仅供这个项目使用。
-技能来源：https://github.com/yysun/shiqu/tree/main/skills/shiqu
-保留项目中已有的其他技能，不修改全局配置，也不开始生成故事。
+Choose a generation provider once in desktop Settings or with the CLI:
+
+```bash
+pnpm dlx @apprun/shiqu --configure
 ```
 
-## 检查技能升级
+Codex subscription mode requires a separately installed and signed-in Codex CLI on macOS/Linux. OpenAI API and Gemini use their own keys and separate billing. Read-only mode requires no credentials. The app and skill share saved provider profiles and library location. Explicit environment overrides apply only to that invocation.
+
+## Start with a candidate checkpoint
 
 ```text
-$shiqu 检查拾趣技能是否有正式发布的新版，告诉我当前版本、最新版本和是否改过本地指引。
-这次只检查，不替换现有内容；如果无法联网，继续使用现有版本。
+$shiqu Use the library /absolute/private/library. Find a story in Zhuangzi
+about kindness and misunderstanding. Use ink wash and balanced narrative detail.
+Show me the candidates, English source summary, and proposed production settings.
+Wait for my choice before drawing.
 ```
 
-### 开启自动更新
+Shiqu includes 24 books. Their English display titles do not change canonical source IDs. Chapter browsing uses English indexed chapter/story labels. Original Chinese evidence stays internal, while explicitly requested preparation translates the selected passage and full chapter context into English and saves it. No translation is triggered merely by reading a story.
+
+Custom book-name and public URL discovery have limited source verification; URLs require Gemini. General book-file upload and pasted-story input are not currently available. Ask Codex to inspect supported commands rather than inventing an import path.
+
+## Approve text before illustrations
 
 ```text
-$shiqu 为全局安装的拾趣技能开启自动更新，并保存这个偏好。
-以后使用时，如果有正式新版且我没有修改本地指引，可以自动更新，并使用配套版本的拾趣。
-保留我在项目中指定的版本，不覆盖定制内容，不改变书库和模型配置。
+$shiqu Continue the selected story through storyboard review, then stop before
+illustrations. Export an offline HTML text preview so I can review the pacing.
+Keep the event's actual ending and show the listener's decisive response.
 ```
 
-### 关闭自动更新
+The CLI supports `run --until candidates`, `prepared`, `reviewed`, or `completed`. Those are requested boundaries; Codex must inspect the actual returned stop reason and saved state. A blocked review or paused story does not count as reaching the requested boundary. Text approval and image approval are separate when your request makes them separate.
+
+To authorize the remaining stages:
 
 ```text
-$shiqu 关闭全局拾趣技能的自动更新并保存偏好。
-以后只提示可用新版，等我明确要求时再更新。
+$shiqu The reviewed storyboard is approved. Create all illustrations, credit
+“My Name”, and export an offline preview and public ZIP to /absolute/output.
 ```
 
-### 单次升级
+Each story contains 1–80 illustrated frames. The production workflow saves checkpoints, reviews and repairs the storyboard, and generates images only after review passes or an explicit override. Drawing uses the selected provider and may consume its quota or incur API charges.
+
+## Revise an existing story
 
 ```text
-$shiqu 把当前项目使用的拾趣技能更新到最新正式版，之后用配套版本继续工作。
-保留本地修改；如果无法确认现有指引来自哪个版本，先说明差异，不直接覆盖。
-这次更新不代表允许以后自动升级。
+$shiqu Find “The Butterfly Dream” in my saved library. Keep the original source
+and reusable images. Change the acceptance criteria to require that the final
+reflection stays within what the source supports. Explain the revision impact
+before running production for the new version.
 ```
 
-## 第一次使用
+Saved revision tokens and current-family IDs prevent stale edits. Renaming changes only the display title. Changes to captions or an ending can preserve compatible art; changing the first reference image, characters, art style, or global visual instructions can require more redraws. Pause remains paused unless you authorize resuming. Failures require recovery of the current fault, not blind reruns.
+
+## Copy approved text and decide about images
 
 ```text
-$shiqu 检查拾趣是否可以使用，告诉我当前书库、生成服务和模型配置。
-列出可用书籍与画风；如果还缺少必要配置，说明缺少什么。
-只检查，不修改设置、不生成内容，也不要显示任何密钥。
+$shiqu Copy the reviewed text and review records for STORY_ID from
+/absolute/source-library to /absolute/target-library. Leave the copy paused.
+Show me the text result and available image count before copying images.
 ```
 
-## 选择书库
+Copying text and copying existing images are separate actions unless you explicitly requested both. Codex first records the new target ID, then attaches images to that same copy after your decision. It must not recreate the text copy, substitute image generation, or reuse old images after changing style. Unreviewed text can be copied only through explicit draft mode and cannot receive copied images until formal review passes.
 
-### 创建指定位置的书库
+## Inspect and organize without generation
 
 ```text
-$shiqu 使用我的文稿目录下“拾趣书库”文件夹保存故事。
-如果目录或数据库不存在，自动建立；如果已经有数据，完整保留。
-显示最终使用的位置，不改变桌面应用保存的默认书库，不开始生成。
+$shiqu List current stories in /absolute/private/library. Group them by source
+book and report completed, paused, and failed stories. Include actual missing
+image counts and save the report outside the private library. Do not generate.
 ```
 
-### 使用已有书库
+Inspection, filtering, grouping, comparison, favorites, renaming, deletion/restoration, previews, and exports do not authorize inference. Codex can write task-specific orchestration programs, but database mutations, generation, review, revision, and image/archive rendering must use Shiqu's production implementation.
+
+## Export
 
 ```text
-$shiqu 使用我现有的拾趣书库，先确认位置，再列出已有故事和制作状态。
-不要搬移、合并或重建数据；发现数据库损坏时停止并说明问题。
+$shiqu Export the latest complete revision of “The Butterfly Dream” as a public
+ZIP and PDF to /absolute/output. Use my saved credit and reuse settings.
+Verify every frame and report the output paths. Do not publish or commit.
 ```
 
-## 配置生成服务与模型
+ZIP/PDF/PNG require every image of the current revision. Missing images are reported; older complete revisions are not substituted. HTML previews and JSON/Markdown can deliver clearly labeled intermediate work. Exports run locally without new AI calls.
 
-### 使用 Codex
+Public archives retain the stable collection filenames `故事.json`, `分镜.md`, `署名与转载.txt`, and numbered WebPs under `图片/`. New story prose, saved source translations, credits, and disclosures are English. Full internal prompt history is included only when explicitly requested for direct public CLI export. Existing signed archive conversion preserves WebP bytes and metadata rather than re-encoding them.
 
-```text
-$shiqu 读取当前生成设置，将提供方改为 Codex，模型设为 gpt-6.1-sol，推理档位设为 high。
-先说明要修改哪些设置，确认后保存。
-保留其他提供方的模型和密钥，保留书库位置，不开始制作故事。
-```
+Use your own author credit. Unsigned export requires explicit consent through `--allow-unsigned`; Codex must never invent a credit. Keep artifacts outside private libraries and served app directories. Project-specific export rules and canonical paths take precedence. Exporting does not authorize Git commits, pushes, or publication.
 
-### 使用 OpenAI API
+## Back up and restore
 
 ```text
-$shiqu 我想用 OpenAI API 制作故事。先检查当前是否已有密钥和文本、图片模型配置。
-让我确认要使用的模型后再保存；已有密钥时不要重新索取或显示它。
-需要新密钥时指导我通过本地私有输入完成，不要让我把密钥贴到对话里。
-只完成配置，不发起生成。
-```
-
-### 使用已有 Gemini 配置
-
-```text
-$shiqu 将生成服务切换为我已配置的 Gemini，保留该服务原来的文本和图片模型。
-告诉我保存后的模型名称以及是否还缺少配置，不显示密钥，不修改其他服务的配置。
-```
-
-### 只阅读和整理
-
-```text
-$shiqu 将拾趣设为只读模式，保留已有的服务密钥和模型设置。
-我接下来只想查看、整理和导出已有故事，不进行生成。
-```
-
-## 从零开始制作故事
-
-```text
-$shiqu 从《庄子》中找一个关于善意与误解的完整故事，用水墨写意、适中的叙事详略。
-先给我候选、原文摘要、出处和制作方案，等我确认后再生成插图。
-忠实保留原文的起因、人物关键回应和结局，不添加说教。
-完成后署名“我的名字”，把离线预览和公开作品包保存到文稿目录下的“拾趣输出”。
-```
-
-## 先选题，不开始制作
-
-```text
-$shiqu 从《世说新语》中找符合“聪明与糊涂”主题的完整故事。
-列出已找到的候选、出处和符合主题的理由，指出是否有尚未判断的结果。
-给我候选后暂停，不替我选择，也不开始制作。
-```
-
-## 只使用指定篇章
-
-```text
-$shiqu 查询《庄子》的本地章节，只从“齐物论”中选择一个完整故事，采用原典模式。
-先展示可以核对的原文和出处，不补造不存在的标题、情节或段落。
-由我确认故事后，再讨论画风与制作要求。
-```
-
-## 明确制作与验收要求
-
-```text
-$shiqu 选择一篇《聊斋志异》故事，采用复古连环画和适中的叙事详略。
-制作要求：叙事简洁，保留人物每一次关键回应，不增加原文没有的善恶说教。
-验收要求：关键回应落实到可见画面；最后一幅体现原文结局；人物身份和服饰前后一致。
-先给我原文摘要和制作方案，等我确认。
-```
-
-## 先审核分镜，再决定是否绘图
-
-```text
-$shiqu 继续《故事名》，先完成文字编排和分镜审核，在开始绘图之前停下。
-给我看分镜、审核结果、未解决的问题，以及实际使用的制作与审核提示词。
-不要自动越过审核，也不要在我确认之前生成图片。
-```
-
-## 确认后继续完成
-
-```text
-$shiqu 我确认《故事名》刚才展示的制作方案和画风，请继续完成当前版本。
-沿用已经保存的原文、分镜和制作结果，不重新选题。
-遇到需要修改要求或人工决定的问题时停下说明，完成后给我离线预览。
-```
-
-## 修改验收要求
-
-```text
-$shiqu 找到《故事名》的当前版本，把验收要求增加为“关键人物的回应必须落实到画面”。
-保留原文、分镜和可复用图片，先说明修改影响。
-我确认后再创建新版、审核和制作；旧版保留供对照，避免重复创建相同修改。
-```
-
-## 只修改一幅旁白
-
-```text
-$shiqu 打开《故事名》的当前分镜，把第 2 幅旁白改成“他停下脚步，回头看了一眼。”。
-保留其他旁白、画面提示词和人物设定，先说明能否复用原图。
-确认后创建新版本，不覆盖旧版，不顺带修改其他内容。
-```
-
-## 更换画风
-
-```text
-$shiqu 将《故事名》的当前版本改为剪纸艺术，保留原文和故事主线。
-先说明哪些内容需要重新生成，等我确认后再创建新版、审核和绘图。
-旧版保留，不要把旧版图片冒充成新画风的结果。
-```
-
-## 修改故事标题
-
-```text
-$shiqu 找到《原故事名》的当前版本，将显示标题改为《新故事名》。
-只改名字，保留原文、分镜、图片、阅读进度和制作要求，不重新生成。
-```
-
-## 对照版本与审核历史
-
-```text
-$shiqu 对照《故事名》的当前版本和上一版，说明分镜、制作要求、验收要求和图片发生了哪些变化。
-列出审核发现的问题及处理结果，区分已经保存的记录和没有留存的信息。
-只比较，不创建新版本、不重新审核或绘图。
-```
-
-## 暂停制作
-
-```text
-$shiqu 暂停《故事名》的制作，安全结束当前执行并保留已经保存的结果。
-告诉我已经完成到哪一步，以及还有哪些内容未完成。
-不要顺带停止或修改其他故事。
-```
-
-## 恢复未完成的故事
-
-```text
-$shiqu 检查《故事名》的当前版本，列出已完成和未完成步骤。
-如果只是暂停，按我的授权恢复并继续；如果有故障，先说明原因和建议动作，等我确认。
-复用已经保存且仍可使用的检查点，不重新制作已完成的部分。
-```
-
-## 处理失败
-
-```text
-$shiqu 《故事名》制作失败了。读取当前版本、故障和审核历史，判断是缺图、生成服务错误还是验收要求冲突。
-说明保留了哪些结果、建议如何恢复，等我确认后再处理。
-不要自动换服务、反复重试、跳过审核，或在失败后偷偷改用旧版本。
-```
-
-## 设置署名
-
-### 设置默认署名
-
-```text
-$shiqu 将以后导出时使用的默认制作署名设为“我的名字”。
-先展示现有署名信息；只修改署名，保留作品链接、联系方式、来源说明和转载条件。
-不要改写已有作品中单独填写的署名。
-```
-
-### 只修改一篇作品的署名
-
-```text
-$shiqu 将《故事名》当前版本的制作署名设为“我的名字”。
-仅修改这篇作品，保留它已有的其他署名与转载信息，不改变全局默认值。
-```
-
-## 生成离线预览
-
-```text
-$shiqu 为《故事名》的当前版本生成可以直接打开的离线预览，保存到文稿目录下的“拾趣输出”。
-只使用已有分镜和图片；尚未生成的画面如实显示，不发起生成。
-告诉我预览文件的位置。
-```
-
-## 导出完整作品
-
-```text
-$shiqu 将《故事名》的当前已完成版本导出为公开作品 ZIP、PDF 和 PNG，并生成离线预览。
-署名使用“我的名字”，保存到文稿目录下的“拾趣输出”。
-保留原文出处、署名和 AI 披露，公开包不包含内部制作与审核提示词。
-如果缺图或版本未完成，列出原因；不改用旧版，不补画，不覆盖已有文件，不自动发布。
-```
-
-## 导出内部制作记录
-
-```text
-$shiqu 为我保存《故事名》当前已完成版本的内部制作记录，包含已留存的制作、审核与画面提示词。
-保留来源和版本信息，不补造未留存的记录。
-保存到我的私有输出目录，明确告诉我哪个文件包含内部内容，不把它当作公开作品包分享。
-```
-
-## 批量导出
-
-```text
-$shiqu 列出当前书库中《庄子》已完成的当前版本，按故事名给出待导出清单。
-我确认清单和署名后，每篇导出一个公开作品 ZIP，保存到新建的“庄子作品”输出文件夹。
-跳过缺图或未完成的作品并报告原因，不发起生成、不改用旧版、不自动发布。
-```
-
-## 整理书架
-
-```text
-$shiqu 编写并运行一个临时程序，按书籍汇总当前书库的当前版本，保存为 Markdown 报告。
-列出每篇的制作状态、总幅数、缺图幅数和需要人工决定的原因；尚无分镜的标记为“未编排”。
-只分析已有记录，不生成、不恢复、不修改故事；图片地址存在但未验证可读时如实说明。
+$shiqu Back up the stopped library /absolute/private/library to a new private
+directory /absolute/private/backup. Verify it and report the saved path.
 ```
 
 ```text
-$shiqu 按书籍列出当前书库中的故事，分别标记已完成、未完成、暂停和失败。
-指出哪些可以接续制作、哪些需要人工决定。
-只整理清单，不删除、恢复或开始制作任何故事。
+$shiqu Verify /absolute/private/backup and restore it to a new directory
+/absolute/private/restored-library. Do not overwrite or switch my active library.
 ```
 
-```text
-$shiqu 将我确认清单中的三篇故事加入收藏。
-把《指定故事》的第 1 幅设为本书星标参考图，先确认当前版本和画幅可用。
-不重新绘图，不修改已经生成的图片，也不改变其他书的参考图。
+Stop services before backup. Restore only to a new explicit directory. Upgrades use the verified whole-library backup gate; preserve the reported safety path. A diagnostic report contains redacted metadata and cannot restore the library. Settings backups contain API keys and must stay private.
+
+## Skill updates
+
+On activation, the skill runs `skill check` through the selected CLI. Checks normally cache for 24 hours; `--refresh` performs a fresh check. The default is to report updates without replacing the skill. Enable automatic updates only with an explicit request:
+
+```bash
+pnpm dlx @apprun/shiqu skill check --scope global --auto-update on
+pnpm dlx @apprun/shiqu skill check --scope global --auto-update off
 ```
 
-## 备份书库
+When permitted, Codex uses the returned pinned update command and working directory. Locally modified, unknown, or version-locked installations are not overwritten automatically. `skill update` copies the skill bundled with the running package; it does not itself discover/download the newest package. After updating, Codex rereads the skill and checks the matching version's `help --json`. Skill management does not change the story library or generation credentials.
 
-```text
-$shiqu 将我的拾趣书库完整备份到文稿目录下一个新的“拾趣书库备份”文件夹。
-先确认没有其他应用正在使用这个书库，完成后验证备份。
-保留原书库，不把私有备份作为公开作品分享。
+## Direct command reference
+
+```bash
+pnpm cli help --json
+pnpm cli stories list --data-dir /absolute/private/library
+pnpm cli books contents zhuangzi --data-dir /absolute/private/library
+pnpm cli run STORY_ID --until reviewed --data-dir /absolute/private/library
+pnpm cli preview STORY_ID --output /absolute/preview.html --data-dir /absolute/private/library
 ```
 
-## 恢复到新目录
-
-```text
-$shiqu 验证我指定的书库备份，恢复到一个新的“拾趣恢复检查”文件夹。
-检查故事列表和媒体是否完整，不覆盖原书库、不切换默认位置，也不开始生成。
-先给我检查结果，再由我决定是否使用恢复后的书库。
-```
-
-## 导出诊断
-
-```text
-$shiqu 为当前书库导出脱敏诊断，保存到我的“拾趣输出”文件夹。
-报告数据库状态、任务计数和安全事件，不包含密钥、书名、原文、提示词或原始服务响应。
-不要用完整书库备份代替诊断附件，不自动发送或分享文件。
-```
-
-## 一次说明完整任务
-
-```text
-$shiqu 使用文稿目录下的“拾趣书库”，沿用已经保存的生成服务配置。
-从《世说新语》中选一个关于人情冷暖的完整故事，采用水彩绘本、适中的叙事详略。
-先展示候选、出处、原文摘要、画风和制作方案；选题和方案都由我确认。
-制作时保留关键人物的行动、回应与结局；通过文字审核后先让我看分镜，再决定是否绘图。
-完成后署名“我的名字”，输出离线预览、PDF 和公开作品 ZIP 到文稿目录下的“拾趣输出”。
-公开包保留来源与 AI 披露，不包含内部提示词；遇到缺图、失败或冲突先报告，不自动绕过。
-```
+Commands take private JSON through `--input FILE` or `--input -`. Subcommands return one JSON envelope; logs go to stderr. Use argument arrays rather than shell interpolation for user text and paths. Serialize calls against one library and retain original UUID/generation/token/faultId/input for exact replay. A successful command or exit status is not proof that the story is complete: inspect `reason`, review/fault state, and media integrity.

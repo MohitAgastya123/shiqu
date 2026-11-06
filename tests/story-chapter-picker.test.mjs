@@ -1,3 +1,4 @@
+// Check English indexed chapter labels and unchanged original-text search/source receipts.
 // Exercise real contents receipts and durable preparation without discovery or paid providers.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -8,17 +9,18 @@ import {selectionSchema} from '../lib/reader-model.ts';
 import {productionFixture,until,selection} from './fixtures/production.mjs';
 const books=new LocalBooks(process.cwd());
 const choose=bookId=>selectionSchema.parse({...selection,bookId});
+async function pearEntry(contents){const book=await books.book(choose('liaozhai'));const unit=book.sections.flatMap(section=>section.units).find(unit=>unit.text==='種梨');return contents.entries.find(entry=>entry.id===unit.id);}
 
 test('contents preserve named stories, single anecdotes and chapter receipts with quality gates',async()=>{
  const liaozhai=await bookContents(books,choose('liaozhai'));
- const story=liaozhai.entries.find(entry=>entry.title==='種梨');assert.ok(story?.source);assert.equal(story.chapter,'第一卷');
+ const story=await pearEntry(liaozhai);assert.ok(story?.source);assert.equal(story.chapter,'Chapter 1');assert.match(story.title,/^Story \d+$/);
  const original=await books.selected({...choose('liaozhai'),source:story.source});assert.match(original.text,/種梨/);assert.doesNotMatch(original.text,/勞山道士/);
  const shishuo=await bookContents(books,choose('shishuo'));assert.equal(shishuo.entries.length,1129);
  for(const entry of shishuo.entries.filter(entry=>entry.source))assert.equal(entry.source.firstUnit,entry.source.lastUnit);
- const chapter=await bookContents(books,choose('西游记'));assert.match(chapter.entries[0].title,/第一回/);assert.ok(chapter.entries[0].source);
+ const chapter=await bookContents(books,choose('西游记'));assert.match(chapter.entries[0].title,/^Chapter 1$/);assert.ok(chapter.entries[0].source);
  const book=await books.book(choose('zhuangzi')),section=book.sections[0];
  const blocked=indexBookContents(books,{...book,id:'shishuo',sections:[{...section,units:[{...section.units[0],text:'這段原文有□缺字，不能依據它編造故事。'}]}]});
- assert.equal(blocked.entries[0].source,undefined);assert.match(blocked.entries[0].unavailable,/缺字/);
+ assert.equal(blocked.entries[0].source,undefined);assert.match(blocked.entries[0].unavailable,/missing text/);
  await assert.rejects(bookContents(books,choose('unknown')),e=>e.status===400);
 });
 
@@ -27,15 +29,15 @@ test('metadata browsing needs no configured provider; direct intake derives titl
  let discoveries=0;f.generation.suggestions=async()=>{discoveries++;throw Error('Direct choice must skip discovery');};
  const status=f.generation.status;f.generation.status=async()=>({configured:false});
  const contents=await f.json('books/liaozhai/contents');f.generation.status=status;
- const entry=contents.entries.find(entry=>entry.title==='種梨'),requestId=crypto.randomUUID();
+ const entry=await pearEntry(contents),requestId=crypto.randomUUID();
  const body={requestId,intake:true,selection:{...selection,bookId:'liaozhai',storyTitle:'forged title',source:entry.source}};
  const created=await f.json('sessions','POST',body);assert.equal(created.selection.storyTitle,entry.title);assert.deepEqual(created.intake.selected,{batch:0,index:0});
  await until(async()=>(await f.read(requestId)).intake.phase==='confirming');
  const prepared=await f.read(requestId),original=await f.json(`sessions/${requestId}/source`);
- assert.match(original.source.text,/種梨/);assert.deepEqual(original.source.localSource,entry.source);
+ assert.match(original.source.text,/controlled English translation/);const raw=JSON.parse((await f.app.services.database.prepare('SELECT document FROM stories WHERE id=?').bind(requestId).first()).document).original;assert.match(raw.text,/種梨/);assert.deepEqual(original.source.localSource,entry.source);
  assert.equal(prepared.frameRecommendation.count,7);assert.equal(prepared.intake.search.state,'idle');assert.equal(discoveries,0);assert.equal(f.control.recommendations.length,1);assert.equal(f.control.plans.length,0);assert.equal(f.control.calls.length,0);
  assert.equal((await f.json('sessions','POST',body)).id,requestId);assert.equal((await f.json('sessions')).length,1);
- const other=contents.entries.find(entry=>entry.source&&entry.id!==contents.entries.find(e=>e.title==='種梨').id);
+ const other=contents.entries.find(candidate=>candidate.source&&candidate.id!==entry.id);
  assert.equal((await f.request('sessions','POST',{...body,selection:{...body.selection,source:other.source}})).status,409);
  await f.restart();f.app.services.localBooks=books;assert.equal((await f.read(requestId)).intake.phase,'confirming');assert.equal(f.control.plans.length,0);assert.equal(f.control.calls.length,0);
 });
@@ -66,9 +68,9 @@ test('Three Kingdoms search finds Huang Zhong at Dingjun Mountain beyond the pre
  const query=async value=>f.json('books/'+encodeURIComponent('三国演义')+'/contents?q='+encodeURIComponent(value));
  const simplified=await query('黄忠 定军山'),traditional=await query('黃忠 定軍山'),reversed=await query('定軍山　黄忠');
  const ids=result=>result.entries.map(entry=>entry.id);
- assert.ok(simplified.entries.some(entry=>entry.title.startsWith('第七十一回')));
+ assert.ok(simplified.entries.some(entry=>entry.title==='Chapter 71'));
  assert.deepEqual(ids(simplified),ids(traditional));assert.deepEqual(ids(simplified),ids(reversed));
- const chapter=simplified.entries.find(entry=>entry.title.startsWith('第七十一回'));
+ const chapter=simplified.entries.find(entry=>entry.title==='Chapter 71');
  assert.doesNotMatch(chapter.excerpt,/定軍山|定军山/);assert.ok(chapter.source);
  for(const entry of simplified.entries){assert.ok(entry.excerpt.length<=100);assert.deepEqual(Object.keys(entry).sort(),['chapter','excerpt','id','kind','source','title']);}
  assert.equal((await query('黄忠 不存在的山名')).entries.length,0);

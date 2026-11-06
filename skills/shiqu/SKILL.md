@@ -1,83 +1,84 @@
 ---
 name: shiqu
-description: 根据拾趣的数据契约与业务规则，自主编写任务程序，完成故事选题、制作、编辑、书库分析和批量整理，并预览、导出或维护作品。适用于明确使用拾趣的任务。
+description: Use Shiqu's production data contracts and business rules to discover, create, edit, analyze, organize, preview, export, and maintain illustrated stories. Apply only when the user explicitly requests Shiqu work.
 ---
 
-# 拾趣任务契约
+# Shiqu task contract
 
-根据用户目标和已保存状态决定操作，自主编写并运行本次任务需要的程序。筛选、分组、比较、报告和批量调度由你实现，不必为每种任务寻找专用命令；简单任务可以直接调用现有操作。
+Choose actions from the user's objective and saved state. Write task-specific programs for filtering, grouping, comparison, reporting, or batch orchestration when helpful; simple requests can call the existing operations directly.
 
-程序通过拾趣现有生产入口读取、保存和执行，不重写状态机、模型调用、审核、版本管理、媒体编码或导出逻辑，不直接改 SQLite 或媒体文件。当前公开入口是 CLI 子命令；没有公开 SDK，不依赖 npm 缓存路径或未导出的内部模块。无需启动 HTTP 服务、桌面或前端；不带子命令会启动浏览器服务。
+Use Shiqu's existing production entry points for all reads, mutations, inference, review, revision, media encoding, and exports. Never rewrite the state machine or modify SQLite/media files directly. The public entry is the CLI subcommands; there is no public SDK. Do not depend on npm cache paths or private internal modules. Direct commands do not need the HTTP service, desktop, or frontend. Running without a subcommand starts the browser service.
 
-## 执行环境与协议
+## Runtime and protocol
 
-- 使用 Node 24。源码项目沿用 `pnpm cli`，已安装命令沿用 `shiqu`，其他环境可用 `pnpm dlx @apprun/shiqu`。用户指定入口、版本或项目版本锁优先。先读取该入口的 `help --json`，核对 appVersion、当前输入与可用操作；下面是稳定语义，不是完整输入 Schema。
-- 所有书库操作使用同一绝对路径：显式 `--data-dir` 优先，其次 `SHIQU_DATA_DIR`、已保存位置和默认书库。首次访问自动建库并迁移，无需先 init；不因此更改默认位置或模型配置。书库被其他服务占用时报告占用，不绕过锁。
-- 自主程序使用进程 API 的可执行文件与参数数组，JSON 经 `--input -` 的 stdin 或私有文件传入；不要把标题、路径、原文、提示词拼接成 shell 命令。沿用入口及其工作目录，处理 stdout 与 stderr，设置有限超时。同一书库的 CLI 调用串行执行，避免独占开库冲突。
-- 子命令 stdout 为一个 JSON 信封：成功 `{schemaVersion:1,ok:true,data:...}`，失败 `{schemaVersion:1,ok:false,error:{code,message,details?}}`；日志在 stderr。检查退出码、信封及业务结果。`skill show` 默认是 Markdown，带 `--json` 才是信封。不要把非零退出的 JSON 丢弃，也不要把退出码 0 或 `ok:true` 当作故事完成。
-- CLI 子命令无交互，所有询问、检查点和阶段选择由本技能在对话中处理；不要向 CLI 发送终端按键或等待它提问。
-- 继续使用已保存的提供方与模型；缺配置时查当前 `config` 帮助。密钥仅经已有环境、私有 JSON 文件或 stdin 传入，不进入 argv、对话、报告或日志；不自行切换提供方或计费方式。
+- Use Node 24. Source projects use `pnpm cli`; installed commands use `shiqu`; other environments can use `pnpm dlx @apprun/shiqu`. Honor user-selected entry points and version locks. Read `help --json` first to confirm appVersion, available operations, and current schemas.
+- Use the same absolute library path for all operations. Explicit `--data-dir` wins over `SHIQU_DATA_DIR` and saved locations. Respect ownership locks; do not bypass a service using the library. Initial access initializes/upgrades through the production initializer without changing saved provider preferences.
+- Launch subprocesses with executable and argument arrays. Pass JSON through `--input -` stdin or a private file. Never interpolate titles, paths, originals, or prompts into shell commands. Preserve the entry point and working directory; check stdout, stderr, exit status, and bounded timeouts. Serialize CLI calls against one library.
+- Subcommands return one JSON envelope: success `{schemaVersion:1,ok:true,data:...}` or failure `{schemaVersion:1,ok:false,error:{code,message,details?}}`; logs go to stderr. `skill show` is Markdown unless `--json` is given. Preserve failure envelopes and do not confuse exit code 0 or `ok:true` with completed production.
+- Commands are noninteractive. Handle conversation checkpoints yourself; do not send terminal keystrokes or wait for CLI prompts.
+- Reuse the saved provider/model. Inspect current `config` help if setup is missing. Credentials enter only through existing environment, private files, or stdin, never argv, chat, reports, or logs. Never switch billing/provider implicitly.
 
-## 数据契约
+## Data contracts
 
-以当前版本实际返回为准；缺失的可选字段表示未提供，不补造。读取结果和操作输入是不同结构，不把整个读取对象直接回写。
+Use the current returned schema. Optional absent fields are unknown, not invented. Read objects and write inputs differ; never write back an entire snapshot.
 
-| 对象 | 字段与含义 |
+| Object | Meaning |
 | --- | --- |
-| 制作选择 `selection` | `bookId`、`theme`；`artStyle` 使用目录中的 id；`narrativeDetail` 为 `brief\|balanced\|detailed`，表示详略而非固定幅数；`productionPrompt` 为制作要求，`acceptancePrompt` 为验收要求；`length` 默认 `auto`，固定数量范围查当前协议。`storyTitle` 是选中的源故事，`displayTitle` 是独立显示名，改显示名用 rename。 |
-| 本地来源 `source` | `{edition,sectionId,firstUnit,lastUnit,continuations?}`；`edition` 是版本哈希，续段包含章节和起止单元。引用目录或候选返回的真实范围，不能按标题或摘要猜造。 |
-| 故事快照 `session` | `id` 是版本 UUID；`selection`、`state`、`generationControl`、`intake?`、`revision?`、`superseded?`、`faults?`、`story`。`state` 为 `idle\|running\|failed\|completed`，`generationControl` 为 `active\|paused\|stopped`，两者分别检查。`stage` 是展示文案，逻辑判断使用结构化字段。 |
-| 生产进度 | `generationProgress?` 含 `phase`、`frameCount`、`storyboardFrames?`、`reviewStatus?` 等；`productionState?` 为 `running\|queued\|paused`。正文为 null 时仍可能已有部分分镜，结合进度区分“未编排”和“编排中”；未知数量不当作 0。 |
-| 选题 `intake` | `phase` 为 `discovering\|choosing\|preparing\|confirming\|confirmed`；`generation` 是动作的并发前提；`batches[].stories[]` 是已保存候选，`selected` 为 `{batch,index}`，两者从 0 开始；`draft` 是制作设置；`search.state/error` 表示提取状态。 |
-| 故事正文 `story` | 编排未完成时可为 null；已有正文含 `title`、`pages[]`、`sourceText`、`original?`、`sourceReference`、`publication?`。每幅含 `caption`、`prompt`、`image`；空 image 表示缺图，非空地址仍可能不可读。`ready` 不是媒体完整性证明。书架 list 省略 original 并清空 sourceText，要查看原文需 get/source，不能据 list 判定原文丢失。 |
-| 版本 | `stories current` 返回该家族当前快照；`revision` 包含 `parentId/rootId/number`。编辑前读取 `stories revisions` 返回的 `token`，输入为 `{token,changes}`；不根据时间或标题猜当前版本。 |
-| 故障 | `faults[]` 含 `id`、`message`、`page`、`stage`、`state`、`retryAllowed`；恢复输入 `faultId` 取其 id。`run` 返回 `{reason,session}`，reason 表示本次停止原因。 |
+| `selection` | `bookId`, `theme`, catalog `artStyle` ID, `narrativeDetail` (`brief\|balanced\|detailed`), `productionPrompt`, `acceptancePrompt`, and `length` (normally `auto`; 1–80 when fixed). `storyTitle` identifies the source story; `displayTitle` is independent and changed through rename. |
+| `source` | Exact `{edition,sectionId,firstUnit,lastUnit,continuations?}` returned by catalog/candidates. Preserve the edition hash and ranges; never guess them from a title or summary. |
+| `session` | Version UUID `id`, `selection`, `state`, `generationControl`, optional `intake`, `revision`, `superseded`, `faults`, and `story`. `state` and control are separate; `stage` is display prose, not a logic contract. |
+| Progress | `generationProgress.phase/frameCount/storyboardFrames/reviewStatus`; `productionState` is `running\|queued\|paused`. A null story can still have partial storyboard progress. Unknown counts are not zero. |
+| `intake` | `discovering\|choosing\|preparing\|confirming\|confirmed`, concurrency `generation`, saved candidate batches, zero-based `{batch,index}` selection, settings draft, and search state/error. |
+| `story` | Title, pages, English `sourceText`, source attribution, publication metadata, and optional original record. Frames contain `caption`, `prompt`, and `image`. An image URL is not proof of readable media. Shelf list deliberately omits full original/source text; read get/source when needed. |
+| Revision | `stories current` resolves the family current version. `stories revisions` returns the token required by `{token,changes}`. Never infer current version from a timestamp or title. |
+| Fault | `id`, message, page, stage, state, and retry permission. Recovery uses the current `faultId`. `run` returns `{reason,session}`; inspect both. |
 
-## 业务规则
+New production is English, including source translations saved during preparation. Verified Chinese text and canonical IDs are internal evidence, not English reading content. Do not rewrite source hashes or substitute a free-form translation outside the production workflow. Reading/exporting does not start a paid translation. Existing content without English source must be explicitly prepared.
 
-- 原文、候选、摘要、分镜、图片和审核历史以保存结果为依据。自由生成的内容用于分析或建议；正式故事的生成、审核和修订通过同一生产实现执行，不另建一条模型流水线或伪造完成记录。
-- 保存意图不调用模型，只有显式 `run` 推进生产，可能产生费用。用户只要求查看、整理、比较、预览或导出时，不运行生产。用户要求的候选、方案确认和生图前检查点必须保留；已有授权足够时继续，缺少影响结果的选择时再询问。
-- 创建、选题动作、编辑、控制和恢复等支持 requestId 的操作，发出前保存 UUID 与原始输入。重放沿用同一 requestId 及原 generation/token/faultId，不能重新取当前值。跨步骤重新读取状态；新动作使用新 UUID。CONFLICT 时停止该项并重新读取，不通过换 requestId 自动重试原动作来掩盖冲突。
-- search/choose/confirm/setup 携带读取时的 `intake.generation`。编辑和重选会创建版本，后续使用操作返回的新 id 或 current 返回的 id；旧版不能继续制作或完整导出。
-- 暂停保持暂停，失败先检查 faults 和已保存依据。恢复必须有用户授权，且针对当前 faultId；审核越过需要明确 override 意图，不能把越过说成审核通过。超时或中断后先读取保存状态，不循环重跑。
-- 批量程序逐项记录目标 id、请求身份、结果和停止原因；遇到需要用户决定、冲突、暂停或故障时停止该项。其他独立项仅在原授权内继续；报告成功、失败、跳过和未处理项，不能把部分完成称为全部完成。
+## Business rules
 
-## 可用操作与停止条件
+- Saved originals, candidates, summaries, storyboards, images, and review history are authoritative. Analysis and suggestions are not completed production results.
+- Only explicit `run` advances inference and may incur usage. Inspecting, organizing, comparing, previewing, and exporting do not authorize generation. Honor requested candidate, source, plan, text-review, or pre-image checkpoints. Continue previously authorized stages without redundant confirmation.
+- Persist a UUID and original input before operations supporting requestId. Replay uses that same requestId and original generation/token/faultId. New actions use new UUIDs. On CONFLICT, stop that item and reload; do not hide a conflict with a new request ID.
+- Search/choose/confirm/setup carry the read `intake.generation`. Revisions and replacements return a new version ID; use it or resolve current. Old versions cannot continue production or supply complete current exports.
+- Keep paused work paused. Inspect faults and paid saved results before recovery. Recovery needs authorization for the current fault. Review override requires explicit intent and must never be described as a passed review. After interruption/timeout, inspect saved state rather than looping reruns.
+- Batch reports record target ID, request identity, result, and stop reason. Stop items requiring user decisions, conflicts, pause, or fault handling. Continue independent items only within scope; distinguish success, failure, skipped, and untouched items.
 
-按任务和当前快照组合操作，不机械执行整条流程。具体参数、可编辑字段和输入示例查同版本 help；`api` 仅提供已有持久化/观察白名单，不是任意 HTTP 或推理入口。
+## Operations and stop conditions
 
-| 目的 | 生产入口与判断 |
+| Objective | Production operation |
 | --- | --- |
-| 发现数据 | `books/themes/styles` 查目录，`books contents` 查章节；`stories list/get/current` 查书库与当前版本；`source/prompts/review-history/revisions` 查保存依据。 |
-| 新建或选题 | `stories create` 接收 selection 或 `{selection,intake:true}`，默认进入选题；search 保存提取意图，choose 保存候选索引，confirm 保存制作确认，setup 保存其他选题动作。它们不执行生成。 |
-| 执行生产 | `run <id> --until candidates\|prepared\|reviewed\|completed`。candidates 后按用户目标选择或等待；prepared 后检查原文、摘要和方案并确认；reviewed 在审核通过且生图前停止；默认 completed。每次检查返回 reason 和 session，不假定达到了请求边界。 |
-| 解释停止原因 | `choice` 需选题；`frame_count_required` 是旧故事等待幅数确认，按 help 的 frameCount 输入处理；`already_prepared/already_selected` 表示已越过该边界，改用下一步；`paused` 保持暂停，`blocked` 检查故障，`superseded` 查当前版本。不能在同一停止边界空转。 |
-| 修改与控制 | `stories edit` 使用 token/changes 创建新版；rename 仅改显示名。pause/resume/stop 控制制作；retry/override 针对当前故障。reselect/replace/cancel-reselection 按现有草稿协议处理。 |
-| 跨库复制 | `stories copy <来源故事id> --from-data-dir <来源书库> --data-dir <目标书库>` 默认仅复制已通过审核的文本与审核记录，新故事初始暂停。`stories copy-images <目标故事id>` 用同一对书库及输入 `{sourceId:"来源故事id"}` 给已有文本副本补充图片，不创建另一个故事。`copy` 也支持显式 `--copy-images` / `--no-copy-images` 或输入 `copyImages`；仅在用户已决定时使用。换画风时不能复制旧图片。 |
-| 预览与交付 | preview 输出独立离线 HTML；export 支持 zip/pdf/png/json/md，使用共享序列化、图片编码、水印和元数据规则。自主程序可组织导出清单，不能自己重建作品包。 |
-| 维护 | backup 创建完整私有快照，verify-backup 验证；restore 仅恢复到新的 data-dir，不覆盖原库或自动切换默认位置。diagnostics 输出脱敏诊断；它与私有完整备份用途不同。 |
+| Discover data | `books/themes/styles`, `books contents`; `stories list/get/current`; `source/prompts/review-history/revisions` |
+| Create/select | `stories create` accepts selection or `{selection,intake:true}`; search saves discovery intent, choose saves candidate indexes, confirm saves production approval, setup saves other intake actions. These do not run inference. |
+| Run | `run ID --until candidates\|prepared\|reviewed\|completed`; inspect the actual reason/session before continuing. `reviewed` stops after approval and before drawing. |
+| Explain a stop | `choice` needs selection; `frame_count_required` is a legacy confirmation gate; `already_prepared/already_selected` means move to the next applicable stage; paused stays paused; blocked needs fault inspection; superseded needs current. Never spin on the same boundary. |
+| Edit/control | `stories edit` uses token/changes; rename affects only display. pause/resume/stop control intent; retry/override target current faults. reselect/replace/cancel-reselection follow saved draft contracts. |
+| Copy | `stories copy SOURCE_ID --from-data-dir SOURCE --data-dir TARGET` normally copies approved text/review as a paused independent story. `stories copy-images TARGET_ID` with input `{sourceId:"SOURCE_ID"}` adds images to that same copy. Do not copy old images with a changed style. |
+| Preview/export | preview writes standalone offline HTML; export supports zip/pdf/png/json/md through shared production serialization, encoding, watermark, and metadata helpers. Never rebuild the artwork archive yourself. |
+| Maintain | backup creates a private full snapshot; verify-backup verifies; restore writes only to a new explicit data-dir without changing defaults; diagnostics writes redacted metadata. |
 
-## 制片流程控制
+## Production checkpoints
 
-本技能负责决定下一阶段，CLI 负责执行明确动作。根据用户目标和已保存状态推进；用户指定的选题、原文、方案、文本或生图前检查点，必须先报告结果并取得所需选择，再运行后续命令。文本与图片是分别可交付的结果，文本完成不代表已获准处理图片。
+The skill chooses the next stage; the CLI executes an explicit action. Text and images are separately deliverable. Completing text is not implicit permission to draw.
 
-- 制作时按需要使用 `run --until candidates|prepared|reviewed|completed`，核对实际返回的 `reason/session` 后再选下一步。审核通过、生图尚未开始时可预览文本并处理反馈；不要为检查文本而直接运行到 `completed`。用户已经明确授权的阶段可以继续，不重复询问；未授权的生图、恢复或越过审核不自动执行。
-- 复制故事时，先调用不含图片的 `stories copy`，记录来源书库、来源 id、目标书库、返回的目标 id，以及原创建 requestId 和输入。核对目标文本与审核记录后，先向用户说明“文本已复制”，再在对话中询问是否复制来源已有图片；展示已有图片数/总幅数，不能用图片生成代替图片复制。
-- 用户同意复制图片后，调用 `stories copy-images <目标id> --from-data-dir <来源书库> --data-dir <目标书库>`，输入 `{sourceId:"来源id"}`。这是给同一文本副本补图的独立动作，不修改原创建请求、不重新复制文本。用户拒绝或尚未回答时，保留文本并等待；用户此前已明确要求连图片一起复制时，沿用该授权，无需再问。
-- 更换画风或来源没有图片时，说明不能沿用旧图或没有可复制图片。若用户想制作新图，先确认画风和制作范围，再通过目标故事的恢复与 `run` 生产流程执行。复制文本和图片均不重新审核、不调用模型；图片复制失败保留文本，沿用相同目标 id 与来源输入重试，遇到输入冲突时停止并重新核对。
+- Use `run --until` boundaries as needed. At reviewed, preview the text and obtain required decisions before drawing. Do not run to completed merely to inspect text. Already authorized image generation can continue; unapproved recovery/override cannot.
+- For a copy, first copy text without images and record source library/ID, target library/ID, original creation UUID and input. Verify text and review records, report that text is copied, and ask whether to copy existing images, including available/total counts. A prior explicit request to include images remains sufficient authorization.
+- After image-copy approval, call `copy-images` for that same target with the same source. Do not alter the original creation request or copy text again. If no approval arrives, keep the text and wait.
+- If the source has no images or the style changes, explain why images cannot be reused. New drawing requires the intended style/scope and proceeds through target recovery/run. Copying text/images does not re-review or call a model. Partial image-copy failure retains text and retries the same target/source input; stop on input conflict.
 
-## 验收与交付
+## Acceptance and delivery
 
-- 整理报告：说明使用的书库、筛选范围与当前版本；缺图数量来自实际 pages，尚无分镜时报告“未编排”，部分分镜报告“编排中”，不当作 0 幅完成。分析字段不全时补读 get/current/source，仍缺失则标注未知。
-- 制作完成：重新读取当前版本，核对状态、审核/故障与所有预期画幅。完整 ZIP/PDF/PNG 还必须由现有导出入口验证图片全部可读；不因有 image 地址就宣称可完整导出。预览和 JSON/Markdown 可以交付中间稿，明确未完成部分。
-- 公开 ZIP 默认只含 `故事.json`、`分镜.md`、`署名与转载.txt` 和 `图片/` 下编号 WebP。保留已保存原文、来源、作者与 AI 披露；不包含内部提示词，只有用户明确需要内部记录时使用 `--include-prompts`。
-- 使用用户署名；未提供时说明，只有明确选择不署名才用 `--allow-unsigned`。不伪造作者、不跳过缺图、不改用旧版。产物放在私有书库和应用静态目录之外；普通导出写新路径，不覆盖已有文件。项目若有专用导出约定，沿用其生产导出脚本。
-- 交付实际文件路径和已核实结果；报告未完成项及原因，不承诺尚未验证的生成或媒体完整性。临时程序和私有输入保存在临时目录，清理本次临时输入；保留用户要求的报告和作品。导出、整理或备份不代表授权 Git 提交、推送或发布；不把私有备份存到公开作品目录。
+- Reports name the library, filters, and current revision. Count missing images from actual pages. Distinguish no storyboard, partial storyboard, and completed frames; unknown is not zero.
+- Before declaring completion, reread current, inspect state/review/faults and every expected frame. ZIP/PDF/PNG must pass the existing exporter media checks. Preview and JSON/Markdown may deliver intermediate drafts with incomplete work clearly identified.
+- Public ZIPs contain `故事.json`, `分镜.md`, `署名与转载.txt`, and numbered WebP files under `图片/`. Those filenames are a stable collection protocol. Keep saved English source, source attribution, author credit, and AI disclosures. Exclude internal prompts unless explicitly requested with `--include-prompts`.
+- Use the user's author credit. If absent, ask or report it; use `--allow-unsigned` only after explicit choice. Never invent an author, skip missing images, or export an older revision instead.
+- Put outputs outside private libraries and served asset directories. Ordinary export writes a new path without overwrite. Honor project-specific production export scripts and their canonical destination/replacement rules.
+- Deliver actual paths and verified results, including incomplete items and reasons. Keep temporary programs/private inputs in temporary directories and clean them up; retain requested reports/artifacts. Export, organization, or backup does not authorize commits, pushes, or publication. Never place private backups in a public collection.
 
-## 版本检查与更新
+## Skill version checks
 
-- 每次启用技能，用上述入口执行 `skill check`。它自动发现当前项目祖先目录（截至 Git 根）或全局安装；确认返回的 path 是本次加载的技能。返回 `not_installed` 时，说明未发现安装副本，沿用已读取的正文和当前入口，不为原任务隐式安装技能。若同名副本并存而发现结果不匹配，明确指定 `--scope project|global` 和安装根目录，不更新其他副本。查询缓存 24 小时，用户要求立即检查时加 `--refresh`。离线、旧 CLI 不支持检查或检查失败时简短说明，沿用可用版本继续原任务，不循环重试。
-- 默认只报告新版。仅用户明确要求开启/关闭自动更新时，执行 `skill check --auto-update on|off`（必要时指定范围）；不要从一次故事任务推断自动更新授权。
-- 无版本锁且 `autoUpdateReady` 为 true 时，以返回的 updateCwd 为工作目录执行 updateCommand 参数数组；它固定 npm 正式发布版本并带 `--automatic`，更新时会再次检查偏好。本地修改或未知来源副本不自动覆盖。用户明确要求单次更新但未开启自动更新时，也可执行返回的 updateCommand。
-- 更新成功后重新读取返回 path 的技能，用返回 version 对应的 `pnpm dlx @apprun/shiqu@<version> help --json`，后续任务沿用该固定版本。未更新且无用户/项目版本锁、非源码入口时，已管理副本优先用 check 返回的 installedVersion 对应 CLI；自定义副本或源码入口沿用用户选择并核对兼容性。更新失败保留现状，不手工覆盖或删除状态以绕过保护。
-- `skill update --scope project|global` 只安装正在运行的 CLI 包自带技能，不自行寻找最新包。安装记录缺失时，仅与运行包正文完全相同的旧副本可用该版本 `skill install` 建立记录；不同内容需人工比较合并。检查/更新不操作书库或生成配置。
+- On activation, run `skill check` through the selected entry. It discovers the nearest project or global installation; verify the returned path matches this skill. `not_installed` does not authorize installation. With multiple copies, specify the intended scope/root; do not update another copy. Checks cache for 24 hours; use `--refresh` only when requested. Offline/unsupported checks do not block the user's task or justify retry loops.
+- Default behavior only reports updates. Enable/disable automatic updates with `skill check --auto-update on|off` only on explicit request.
+- If no version lock exists and `autoUpdateReady` is true, execute the returned pinned updateCommand argument array in updateCwd. It rechecks preferences and never overwrites modified/unknown copies. An explicitly requested one-time update can also use that command.
+- After success, reread the returned skill path and use `pnpm dlx @apprun/shiqu@<version> help --json` for that version. Otherwise preserve source/custom entry choices and compatibility checks. Failed updates retain the installation; never remove state to bypass protections.
+- `skill update --scope project|global` copies the skill bundled with the running package; it does not discover/download the newest version. Missing installation records can be established only for identical content. Skill checks/updates do not mutate libraries or provider settings.

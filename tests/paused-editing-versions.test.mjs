@@ -1,3 +1,4 @@
+// English errors preserve paused revision and confirmation boundaries.
 // Exercise paused edits against real SQLite, workers and media without contacting a model.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -79,7 +80,7 @@ test('pre-confirmation drafts cannot bypass intake; empty-plan impact does not i
  const base={selection:{...selection,length:5},plan:null,images:[]};
  assert.equal(revisionImpact(base,{}).changed,false);assert.equal(revisionImpact(base,{artStyle:'paper-cut'}).replan,true);
  const revision=checkedRevision(base,{productionPrompt:'new'});assert.equal(revision.plan,null);assert.equal(revision.selection.length,'auto');
- assert.throws(()=>checkedRevision(base,{plan:makePlan(5)}),/完整分镜/);
+ assert.throws(()=>checkedRevision(base,{plan:makePlan(5)}),/complete storyboard/);
 });
 
 test('client snapshots cannot replace the latest card with a historical direct read',()=>{
