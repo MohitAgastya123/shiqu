@@ -9,6 +9,13 @@
 - 源码开发中已安装的命令行工具使用 `pnpm exec`；发布包和已安装技能的调用遵循上述 npx 默认入口。
 - Keep `pnpm-lock.yaml` in sync with dependency changes. Do not introduce npm or Yarn lockfiles.
 
+## Agent Test Selection
+
+- After code changes, use `pnpm test:changed` for working-tree impact checks. Preview with `pnpm test:changed --plan` (or `--json`). It includes staged, unstaged and untracked paths, always keeps small contracts, and runs affected suites with full provider/heavy flags.
+- In a shared checkout, inspect the preview first. Use `pnpm test:pr --files <your changed paths...>` to scope verification to your own work; do not modify or include concurrent work merely to make a check pass.
+- Register new test files in `tests/manifest.json`. Unknown paths, shared schemas, dependencies, Node/toolchain changes and failed/empty change detection select full source coverage. Do not bypass that fallback to save time.
+- Run `pnpm typecheck` and `pnpm lint` for code changes. Run applicable native source checks when the plan reports `native: true`; JS runner results alone do not prove native coverage. Main/release CI retains full qualification.
+
 ## CLI 与技能同步
 
 - 修改 CLI 命令、输入、行为或流程规则时，必须在同一次变更中同步更新内置的 `skills/shiqu/SKILL.md` 及受影响的使用示例，确保技能与 CLI 的实际帮助和生产行为一致。

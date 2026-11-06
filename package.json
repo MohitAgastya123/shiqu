@@ -37,7 +37,7 @@
     "test:full": "pnpm test:e2e --gate=full",
     "test:providers": "node scripts/test-providers.mjs",
     "test:books": "node scripts/test-books.mjs",
-    "test:startup": "node --experimental-strip-types --test --test-concurrency=2 tests/npm-cli.test.mjs tests/cli-library.test.mjs tests/system-settings.test.mjs tests/startup-matrix.test.mjs tests/settings-faults.test.mjs",
+    "test:startup": "node --experimental-strip-types --test --test-concurrency=2 tests/npm-cli.test.mjs tests/cli-library.test.mjs tests/system-settings.test.mjs tests/startup-matrix.test.mjs tests/startup-cli-flow.test.mjs tests/settings-faults.test.mjs",
     "test:pty": "node scripts/test-providers.mjs tests/startup-pty.test.mjs",
     "typecheck": "tsc --noEmit",
     "codex:login": "node --env-file-if-exists=.env scripts/codex-login.mjs login",
@@ -53,7 +53,10 @@
     "desktop:smoke": "node scripts/desktop-smoke.mjs",
     "eval:discovery": "node --experimental-strip-types scripts/eval-story-discovery.mjs",
     "export:story": "node --experimental-strip-types scripts/export-story.mjs",
-    "test:e2e": "node --experimental-strip-types scripts/test-story-e2e.mjs"
+    "test:e2e": "node --experimental-strip-types scripts/test-story-e2e.mjs",
+    "test:pr": "node scripts/test-pr.mjs",
+    "test:plan": "node scripts/test-pr.mjs --plan",
+    "test:changed": "node scripts/test-pr.mjs --changed"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

@@ -1,10 +1,11 @@
-// Run regression tests with the full production-flow provider matrix and heavy cases (all files by default).
+// 回归入口使用注册表并开启完整提供方及重型用例；显式文件参数保留原有用法。
 import {spawn} from 'node:child_process';
+import {loadMetadata,supported} from './test-metadata.mjs';
 const env={...process.env,SHIQU_TEST_TIER:'full'};
-// Run as a top-level test process, even when started from another test runner.
+// 嵌套执行时清除 Node 测试上下文。
 delete env.NODE_TEST_CONTEXT;
-// Arguments select test files; none runs the whole regression suite.
+// 未指定文件时执行注册表中的全部 JS 回归。
 const files=process.argv.slice(2);
-const child=spawn(process.execPath,['--experimental-strip-types','--test',...(files.length?files:['tests/*.test.mjs'])],{env,stdio:'inherit'});
+const child=spawn(process.execPath,['--experimental-strip-types','--test',...(files.length?files:loadMetadata().tests.filter(entry=>['unit','flows','books'].includes(entry.suite)&&supported(entry)).map(entry=>entry.file))],{env,stdio:'inherit'});
 for(const signal of ['SIGINT','SIGTERM'])process.once(signal,()=>child.kill(signal));
 child.once('exit',(code,signal)=>{process.exitCode=code??(signal?1:0);});

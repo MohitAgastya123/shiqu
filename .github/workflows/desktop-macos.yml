@@ -1,10 +1,10 @@
-# 每个 PR 运行小型完整性冒烟，相关变更追加真实原著套件；main 与发布标签完整检查原著。
-# main 另跑制作流程；发布标签仍通过本地 pre-push 检查并在 CI 验证原生安装包。
+# PR 按显式责任域运行契约、集成及 E2E；main、标签和手动运行完整 JS。
+# 原生源码检查纳入 Shared checks，安装包只在标签或手动运行时构建。
 name: Desktop
 
 on:
   push:
-    # main: simulated-LLM pipeline tests after merge; v* tags: native builds and release.
+    # main 完整回归；v* 标签追加原生构建与发布。
     branches: [main]
     tags: ['v*']
   workflow_dispatch:
@@ -21,7 +21,9 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       code: ${{ steps.changes.outputs.code }}
-      books: ${{ steps.changes.outputs.books }}
+      scope: ${{ steps.changes.outputs.scope }}
+      native: ${{ steps.changes.outputs.native }}
+      browser: ${{ steps.changes.outputs.browser }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -33,13 +35,13 @@ jobs:
           HEAD: ${{ github.event.pull_request.head.sha }}
         run: node scripts/ci-scope.mjs
 
-  checks:
-    name: Shared checks
+  javascript:
+    name: JavaScript checks
     needs: scope
-    # 文档 PR 也运行冒烟；范围检测失败时按需步骤默认运行全部检查。
-    if: ${{ !cancelled() && github.event_name != 'push' }}
-    # macOS is the shipped Unix platform for the CLI/server and desktop runtime JavaScript (tag builds run only
-    # cargo test); Rust tests, formatting and native packaging are checked by the tag build jobs below.
+    if: ${{ !cancelled() }}
+    concurrency:
+      group: javascript-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' || github.ref == 'refs/heads/main' }}
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v6
@@ -64,25 +66,43 @@ jobs:
         if: github.event_name != 'pull_request' || needs.scope.outputs.code != 'false'
       - run: pnpm lint
         if: github.event_name != 'pull_request' || needs.scope.outputs.code != 'false'
-      # 快速层包含小型原著冒烟、通用缓存和混合服务测试。
-      - run: pnpm test
-        if: github.event_name != 'pull_request' || needs.scope.outputs.code != 'false'
-      - name: Book integrity smoke for documentation changes
-        if: github.event_name == 'pull_request' && needs.scope.outputs.code == 'false'
-        run: pnpm exec node --experimental-strip-types --test tests/book-integrity-smoke.test.mjs
-      - name: Full book checks for relevant changes
-        if: github.event_name == 'pull_request' && needs.scope.outputs.books != 'false'
-        run: pnpm test:books
+      - uses: actions/cache@v6
+        if: github.event_name != 'pull_request' || needs.scope.outputs.browser != 'false'
+        with:
+          path: ~/Library/Caches/ms-playwright
+          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+      - name: Install browser for selected journeys
+        if: github.event_name != 'pull_request' || needs.scope.outputs.browser != 'false'
+        run: pnpm exec playwright install chromium
+      - name: Affected PR suites
+        if: github.event_name == 'pull_request'
+        env:
+          SHIQU_TEST_SCOPE: ${{ needs.scope.outputs.scope }}
+        run: pnpm test:pr
+      - name: Full source qualification for this commit
+        if: github.event_name != 'pull_request'
+        run: pnpm test:pr --full
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: javascript-test-evidence
+          path: |
+            .data/test-plans/
+            .data/e2e/
+          if-no-files-found: ignore
 
-  flows:
-    name: Pipeline flows
-    # PR checks skip the controlled production-pipeline tests; run them after each merge to main without
-    # blocking pull requests. A newer push to main cancels an older run.
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    concurrency:
-      group: pipeline-flows-main
-      cancel-in-progress: true
-    runs-on: macos-15
+  native:
+    name: Native source / ${{ matrix.os }}
+    needs: scope
+    if: ${{ !cancelled() && github.event_name == 'pull_request' && needs.scope.outputs.native != 'false' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, windows-2022]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -102,42 +122,51 @@ jobs:
           key: pnpm-${{ runner.os }}-${{ runner.arch }}-${{ steps.pnpm-store.outputs.version }}-${{ hashFiles('.nvmrc') }}-${{ hashFiles('pnpm-lock.yaml') }}
           restore-keys: pnpm-${{ runner.os }}-${{ runner.arch }}-${{ steps.pnpm-store.outputs.version }}-${{ hashFiles('.nvmrc') }}-
       - run: pnpm install --frozen-lockfile
-      - run: pnpm test:flows
-
-  books:
-    name: Book integrity
-    # 合并、发布和手动运行都做全量原著检查，补足路径范围判定的回归保障。
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
-    concurrency:
-      group: book-integrity-${{ github.ref }}
-      cancel-in-progress: ${{ github.ref == 'refs/heads/main' }}
-    runs-on: macos-15
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: dtolnay/rust-toolchain@master
         with:
-          node-version-file: .nvmrc
-          package-manager-cache: false
-      - name: Enable pinned pnpm
-        run: corepack enable pnpm
-      - name: Locate pnpm store
-        id: pnpm-store
-        run: |
-          echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
-          echo "version=$(pnpm --version)" >> "$GITHUB_OUTPUT"
+          toolchain: 1.93.0
+          components: rustfmt
+      - name: Identify Rust toolchain
+        id: rust
+        run: echo "version=$(rustc --version | tr ' ' '-')" >> "$GITHUB_OUTPUT"
       - uses: actions/cache@v6
         with:
-          path: ${{ steps.pnpm-store.outputs.path }}
-          key: pnpm-${{ runner.os }}-${{ runner.arch }}-${{ steps.pnpm-store.outputs.version }}-${{ hashFiles('.nvmrc') }}-${{ hashFiles('pnpm-lock.yaml') }}
-          restore-keys: pnpm-${{ runner.os }}-${{ runner.arch }}-${{ steps.pnpm-store.outputs.version }}-${{ hashFiles('.nvmrc') }}-
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm test:books
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: native-${{ runner.os }}-${{ runner.arch }}-${{ steps.rust.outputs.version }}-${{ hashFiles('src-tauri/Cargo.lock', 'pnpm-lock.yaml', '.nvmrc') }}
+      - run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
+      - name: Native source tests without bundle preparation
+        env:
+          TAURI_CONFIG: '{"bundle":{"resources":[]}}'
+        # 此用例验证已准备的安装包资源，保留在发布构建的完整 cargo test 中。
+        run: cargo test --manifest-path src-tauri/Cargo.toml --locked --lib -- --skip runtime::tests::desktop_uses_verified_bundle_and_ignores_saved_system_path
+
+  checks:
+    name: Shared checks
+    needs: [scope, javascript, native]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every selected check
+        env:
+          JS_RESULT: ${{ needs.javascript.result }}
+          NATIVE_RESULT: ${{ needs.native.result }}
+          NATIVE_REQUIRED: ${{ github.event_name == 'pull_request' && needs.scope.outputs.native != 'false' }}
+        run: |
+          test "$JS_RESULT" = success
+          if [ "$NATIVE_REQUIRED" = true ]; then
+            test "$NATIVE_RESULT" = success
+          else
+            test "$NATIVE_RESULT" = skipped
+          fi
 
   build:
     name: Desktop / ${{ matrix.platform }} ${{ matrix.arch }}
-    needs: [checks, books]
+    needs: checks
     # Installers are built for release tags and manual runs only, never for pull requests or main pushes.
-    if: ${{ !cancelled() && needs.books.result == 'success' && (github.event_name == 'workflow_dispatch' && needs.checks.result == 'success' || github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && needs.checks.result == 'skipped') }}
+    if: ${{ !cancelled() && needs.checks.result == 'success' && (github.event_name == 'workflow_dispatch' || github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) }}
     strategy:
       fail-fast: false
       matrix:

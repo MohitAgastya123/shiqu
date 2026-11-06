@@ -1,23 +1,38 @@
-// Verify separate text/image providers through the production provider, settings store, CLI setup and desktop checks.
-// Controlled transports and temporary settings only; no live inference or user data.
+// 适配器与配置契约使用受控输入；真实启动和制作流程由独立文件覆盖。
 import test from 'node:test';
+
 import assert from 'node:assert/strict';
+
 import {mkdtemp,rm} from 'node:fs/promises';
+
 import path from 'node:path';
+
 import os from 'node:os';
+
 import {createReaderProvider,withImageProvider} from '../server/generation.ts';
+
 import {withLocalBooks} from '../server/local-generation.ts';
+
 import {LocalBooks} from '../server/local-books.ts';
+
 import {SystemSettingsStore} from '../server/system-settings.ts';
+
 import {configureProvider,effectiveProviderVariables,providerReady} from '../server/cli-setup.ts';
+
 import {testDesktopProvider,desktopVariables} from '../server/desktop.ts';
+
 import {defaultSystemSettings,settingsVariables,resetProviderSettings,effectiveImageProvider} from '../lib/system-settings.ts';
+
 import {geminiGenerationTimeoutMs} from '../lib/reader-limits.ts';
+
 import {codexGenerationTimeoutMs} from '../lib/codex-settings.ts';
+
 import {png} from './fixtures/images.mjs';
-import {productionFixture,makePlan,until} from './fixtures/production.mjs';
+
+import {makePlan} from './fixtures/production.mjs';
 
 function memoryMedia(){const stored=new Map();return {stored,async get(key){const value=stored.get(key);return value?{arrayBuffer:async()=>value.bytes.slice().buffer}:null;},async put(key,bytes,options){stored.set(key,{bytes:new Uint8Array(bytes),...options});}};}
+
 function controlled({geminiStatus=200}={}){
  const calls={gemini:[],codex:[]};
  const transport=async(url,options)=>{
@@ -28,7 +43,9 @@ function controlled({geminiStatus=200}={}){
  const runner={async status(){return {configured:true};},async run(job){calls.codex.push(job);if(job.generateImage)return {image:Buffer.from(png).toString('base64'),text:'',model:'controlled',requestId:'controlled',usage:null};throw Object.assign(new Error('INVALID_OUTPUT'),{name:'CodexError'});}};
  return {calls,transport,runner};
 }
+
 async function temporary(t){const root=await mkdtemp(path.join(os.tmpdir(),'shiqu separate providers '));t.after(()=>rm(root,{recursive:true,force:true}));return {root,file:path.join(root,'config','desktop.sqlite'),library:path.join(root,'library')};}
+
 function prompts(answers,keys=[]){return {text:async()=>{assert.ok(answers.length,'unexpected text prompt');return answers.shift();},secret:async()=>{assert.ok(keys.length,'unexpected secret prompt');return keys.shift();}};}
 
 test('Codex text with Gemini images: drawing, timeouts and status come from the image provider only',async()=>{
@@ -67,13 +84,6 @@ test('status requires both sides and names the unready image service; read-only 
  assert.throws(()=>createReaderProvider({SHIQU_AI_PROVIDER:'codex',SHIQU_IMAGE_PROVIDER:'unknown'},memoryMedia(),c.transport,c.runner),/SHIQU_IMAGE_PROVIDER/);
  const same=await createReaderProvider({SHIQU_AI_PROVIDER:'codex',SHIQU_IMAGE_PROVIDER:'codex'},memoryMedia(),c.transport,c.runner).status();
  assert.equal(same.imageProvider,undefined);assert.equal(same.models.image,'codex-image-generation');
-});
-
-test('production queue draws every frame through the separate image provider and keeps text on the text provider',async t=>{
- const f=await productionFixture(t,'codex',{},{imageProvider:'gemini'}),id=await f.createLegacyReader();
- f.control.hold=false;await f.demand(id);await until(async()=>(await f.read(id)).ready===7);
- assert.equal(f.control.calls.length,7);assert.ok(f.control.calls.every(call=>call.via==='gemini'));
- assert.deepEqual([...f.control.textVia],['codex']);assert.equal(f.control.plans.length,1);
 });
 
 test('settings keep the image provider optional, scoped to active credentials and cleared by reset',async t=>{

@@ -1,12 +1,11 @@
-// Share the full creation-to-reading browser flow between release smoke and exhaustive lifecycle coverage.
-// Both entrypoints exercise the same production workflow and assertions with isolated controlled adapters.
+// 共用完整制作到阅读场景；不同入口使用独立证据命名，避免并行运行互相覆盖。
 import assert from 'node:assert/strict';
 import {storyBrowser} from './story-browser.mjs';
 import {until} from './production.mjs';
 const dialog=(page,name)=>page.getByRole('dialog',{name,exact:true});
 async function oneCard(f,id){assert.deepEqual((await f.json('sessions')).map(s=>s.id),[id]);}
-export async function creationLifecycle(t){
- const b=await storyBrowser(t,'C001');await b.execute(async()=>{
+export async function creationLifecycle(t,caseId='C001'){
+ const b=await storyBrowser(t,caseId);await b.execute(async()=>{
   const {f,page,library}=b,initial=await b.create({prepare:false,theme:'知恩图报'});
   const picker=dialog(page,'故事设置');await picker.getByRole('button',{name:'输入标题',exact:true}).click();await picker.getByLabel('故事标题',{exact:true}).fill('乌龟报恩');
   assert.equal(library.calls.catalog.length,0);await b.screenshot('before-start');

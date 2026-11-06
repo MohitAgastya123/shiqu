@@ -5,6 +5,7 @@ import {spawnSync} from 'node:child_process';
 import {mkdtemp,mkdir,writeFile,copyFile,chmod,readFile,readdir,rm} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import {loadMetadata} from '../scripts/test-metadata.mjs';
 import {userFlowTests,extendedFlowTests,selectTests} from '../scripts/test-story-e2e.mjs';
 
 test('both local publication gates require the production-backed lifecycle E2E',async()=>{
@@ -25,7 +26,7 @@ test('smoke gates stay focused while the explicit full selection preserves all r
  const unitTests=(await readdir(new URL('./',import.meta.url))).filter(name=>name.endsWith('.test.mjs')).map(name=>'tests/'+name);
  assert.match(manifest.scripts['test:full'],/test:e2e --gate=full$/);
  const full=await selectTests('full');
- assert.equal(full.length,new Set(full).size);assert.deepEqual(new Set(full),new Set([...unitTests,...userFlowTests,...extendedFlowTests]));
+ assert.equal(full.length,new Set(full).size);assert.deepEqual(new Set(full),new Set(loadMetadata().tests.filter(entry=>entry.level!=='native'&&entry.platforms.includes(process.platform)).map(entry=>entry.file)));
  for(const gate of ['release','npm']){
   const selected=await selectTests(gate);
   assert.equal(selected.length,new Set(selected).size);
@@ -58,10 +59,12 @@ async function fixture(t,{failedFlow}={}){
  const root=await mkdtemp(path.join(os.tmpdir(),'shiqu hook test '));t.after(()=>rm(root,{recursive:true,force:true}));
  const checkout=path.join(root,'checkout'),remote=path.join(root,'remote.git'),bin=path.join(root,'bin'),log=path.join(root,'checks.log');
  await mkdir(checkout);await mkdir(bin);await mkdir(path.join(checkout,'scripts'));await mkdir(path.join(checkout,'.githooks'));
- for(const file of ['scripts/pre-push.mjs','scripts/test-story-e2e.mjs','.githooks/pre-push'])await copyFile(new URL('../'+file,import.meta.url),path.join(checkout,file));
+ for(const file of ['scripts/pre-push.mjs','scripts/test-story-e2e.mjs','scripts/test-metadata.mjs','scripts/test-source.mjs','.githooks/pre-push'])await copyFile(new URL('../'+file,import.meta.url),path.join(checkout,file));
  // 发布与扩展执行器使用临时用例，验证失败传播时不递归运行真实套件。
  await mkdir(path.join(checkout,'tests'));
- for(const file of new Set([...userFlowTests,...extendedFlowTests,...await selectTests('release')]))await writeFile(path.join(checkout,file),`import test from 'node:test';\ntest('release flow probe',()=>{${file===failedFlow?"throw Error('CONTROLLED_USER_FLOW_FAILURE');":''}});\n`);
+ for(const file of new Set(['tests/book-integrity-smoke.test.mjs',...userFlowTests,...extendedFlowTests,...await selectTests('release')]))await writeFile(path.join(checkout,file),`import test from 'node:test';\ntest('release flow probe',()=>{${file===failedFlow?"throw Error('CONTROLLED_USER_FLOW_FAILURE');":''}});\n`);
+ const owned=new Set(['tests/book-integrity-smoke.test.mjs',...userFlowTests,...extendedFlowTests,...await selectTests('release')]);
+ const metadata=loadMetadata();await writeFile(path.join(checkout,'tests/manifest.json'),JSON.stringify({...metadata,tests:metadata.tests.filter(entry=>owned.has(entry.file))}));
  await chmod(path.join(checkout,'.githooks/pre-push'),0o755);
  await writeFile(path.join(checkout,'.nvmrc'),process.versions.node);
  await writeFile(path.join(checkout,'package.json'),JSON.stringify({packageManager:'pnpm@11.25.0'}));
