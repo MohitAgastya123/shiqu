@@ -1,5 +1,6 @@
 // English product text and generation contracts; canonical source evidence remains unchanged.
 // Explain saved generation checkpoints without treating a shelf visit as demand for new work.
+// Sort shelf production states with required user actions before running, queued and paused work; preserve order within a state.
 import type {SessionView} from './reader-model.ts';
 
 export function shelfGenerationStatus(session:SessionView){
@@ -13,4 +14,16 @@ export function shelfGenerationStatus(session:SessionView){
  if(session.productionState==='running'||!session.productionState&&session.state==='running')return {group:'Generating',message:session.stage,detail:session.intake&&session.intake.phase!=='confirmed'?'Preparing production in the background. Storyboarding and drawing wait for confirmation.':'Generating the whole story in the background. You can pause at any time.',action:'View progress'};
  if(session.productionState==='queued'||session.generationMode==='background')return {group:'Queued',message:'Queued',detail:'Queued; production starts automatically when its turn arrives.',action:'View progress'};
  return {group:'Paused',message:'Paused',detail:'Continue generation to resume. Saved results are retained.',action:'View details'};
+}
+
+// Production states requiring user action stay visible at the start of the shelf production section.
+export const shelfNeedsUserGroups=['Ready to discover','Choose a story','Confirm production','Choose frame count','Failed'] as const;
+const productionOrder=[...shelfNeedsUserGroups,'Generating','Queued','Paused'];
+export function shelfProductionPriority(group:string){
+ const index=productionOrder.indexOf(group);
+ return index<0?productionOrder.length:index;
+}
+export function sortShelfProductions<T>(items:T[],group:(item:T)=>string){
+ // Array.prototype.sort is stable, preserving shelf order within each state.
+ return [...items].sort((a,b)=>shelfProductionPriority(group(a))-shelfProductionPriority(group(b)));
 }

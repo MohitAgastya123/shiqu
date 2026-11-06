@@ -1,6 +1,7 @@
 // Verify English product projections while preserving original glyph and source identity checks.
 // Verify source qualification across all local books, real audited leaks and persisted pre-plan checkpoints.
 import test from'node:test';import assert from'node:assert/strict';import{mkdtemp,rm,readFile}from'node:fs/promises';import path from'node:path';import os from'node:os';
+import {books} from './fixtures/test-tier.mjs';
 import{hasSourceAnomaly}from'../server/local-source-quality.ts';import{LocalBooks}from'../server/local-books.ts';import{withLocalBooks}from'../server/local-generation.ts';import{openDatabase}from'../server/database.ts';import{ReaderRepository}from'../lib/reader-repository.ts';import{advanceStory}from'../lib/reader-engine.ts';import{FileMedia}from'../server/media.ts';
 const library=new LocalBooks(process.cwd()),select=bookId=>({bookId,theme:'信任与担当',artStyle:'ink-pencil',length:8,voice:false}),reference=(b,s,u)=>({edition:b.edition,sectionId:s.id,firstUnit:u.id,lastUnit:u.id});
 const plan={title:'可读原文的故事',summary:'他会如何选择？',sourceReference:'不可由模型猜写的出处',adaptationNote:'现代简体旁白，保留原文事实。',reflection:'信任从何而来？',characters:'An adult Chinese scholar wearing plain robes.',pages:Array.from({length:8},()=>({caption:'他仔细观察眼前的事情，终于明白朋友的用心。',prompt:'An adult Chinese scholar carefully observes his friend.'}))};
@@ -31,7 +32,7 @@ test('retained historical source leaks and current omissions fail closed',async(
  const b=await library.book(select('太平广记')),s=b.sections[312],start=s.units.findIndex(u=>u.text.includes('下有/脱文'));assert.ok(start>0);assert.throws(()=>library.resolve(b,{edition:b.edition,sectionId:s.id,firstUnit:s.units[start-1].id,lastUnit:s.units[start].id}),e=>e.status===400);
 });
 
-test('every shipped book applies the same text and chapter-title rules, preserving rare real glyphs',async()=>{
+test('every shipped book applies the same text and chapter-title rules, preserving rare real glyphs',books,async()=>{
  const catalog=JSON.parse(await readFile('data/library/catalog.json'));
  for(const entry of catalog.books){const b=await library.book(select(entry.id)),s=b.sections[0],u=s.units[0],clean='𫠦𤣥䧿是真实汉字。原文中的人物经过思考，终于明白朋友的用意。';
   const fixture=value=>({...b,sections:[{...s,title:'可读篇题',units:[{...u,text:value,narrative:true,unreadable:false}]}]});

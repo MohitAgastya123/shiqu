@@ -5,6 +5,8 @@
 // Display-name editing uses a saved session even before a generated story exists.
 // Swipe offsets live in a drag store and frames render through a memoized filmstrip, so pointer moves
 // do not re-render Reader. Identical poll snapshots keep their previous story and progress references.
+// Default to an ungrouped shelf unless a saved grouping preference exists.
+// Show count placeholders while the initial library load is pending.
 
 import {themeLabel} from '../english-labels';
 import {pruneReadingCaches,type LibraryInventory} from '../reading-cache.ts';
@@ -16,7 +18,7 @@ import ProviderSettings,{ProviderRuntimeSummary} from './ProviderSettings';
 import type {ProviderSettingsView} from '@/lib/provider-settings';
 import {useBookReference} from '../useBookReference';
 import {useCallback, useEffect, useRef, useState} from 'react';
-import {ArrowLeft, ArrowRight, Bookmark, BookOpen, Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Compass, Feather, Leaf, List, Moon, Play, RotateCcw, ImageDown, Settings2, Sparkles, UserRound, X, Loader2, FileDown, FileArchive, RefreshCw, Trash2} from 'lucide-react';
+import {ArrowLeft, ArrowRight, Bookmark, BookOpen, Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Compass, Feather, Leaf, List, Moon, Play, RotateCcw, ImageDown, BookOpenText, Settings2, Sparkles, UserRound, X, Loader2, FileDown, FileArchive, RefreshCw, Trash2} from 'lucide-react';
 import {randomId, request} from './shared';
 import type {Story} from '@/lib/content';
 import type {GeneratedStory,Selection,SessionView} from '@/lib/reader-model';
@@ -83,7 +85,7 @@ export default function Reader(){
  const startupDeletions=useRef<Promise<LibraryInventory>|null>(null);
  const authoritativeProgress=useRef<Progress[]>([]);
  const [shelfQuery,setShelfQuery]=useState(()=>{try{return localStorage.getItem('shiqu-shelf-query')||'';}catch{return '';}}),[shelfGrouping,setShelfGrouping]=useState<ShelfGrouping>(()=>{
-  try{const saved=localStorage.getItem('shiqu-shelf-grouping');return shelfGroupings.find(option=>option.value===saved)?.value||'book';}catch{return 'book';}
+  try{const saved=localStorage.getItem('shiqu-shelf-grouping');return shelfGroupings.find(option=>option.value===saved)?.value||'none';}catch{return 'none';}
  });
  const [shelfRefreshing,setShelfRefreshing]=useState(false);
  const [tab,setTab]=useState<string>(()=>{
@@ -98,6 +100,8 @@ export default function Reader(){
  const [imageIssues,setImageIssues]=useState<Record<string,string>>({}),[imageReloads,setImageReloads]=useState<Record<string,number>>({});
  const [reviewHistoryId,setReviewHistoryId]=useState<string|null>(null);
  const [publicationTarget,setPublicationTarget]=useState<Story|null>(null),[publicationDefaultsOpen,setPublicationDefaultsOpen]=useState(false);
+ const [providerAllowed,setProviderAllowed]=useState(false),[providerOpen,setProviderOpen]=useState(0);
+ useEffect(()=>{const open=()=>{if(location.hash==='#provider-settings'){setTab('me');setProviderOpen(n=>n+1);}};open();window.addEventListener('hashchange',open);return()=>window.removeEventListener('hashchange',open);},[]);
  const [providerRuntime,setProviderRuntime]=useState<ProviderSettingsView['runtime']|null>(null);
  const [sceneList,setSceneList]=useState(false);
  const [selection,setSelection]=useState<Selection>(initialReaderSelection),[largeText,setLargeText]=useState(false),[motion,setMotion]=useState('forward'),[creating,setCreating]=useState(false);
@@ -397,10 +401,12 @@ export default function Reader(){
  const shelf=activeProgress.flatMap(p=>{const s=allStories.find(s=>s.id===p.storyId);return s&&s.pages[0]?.image?[s]:[];});
 
  const shelfCount=shelf.length+pendingStories.length;
+ const libraryLoading=loading||gen.libraryLoading;
  const progressById=new Map(activeProgress.map(p=>[p.storyId,p]));
  const favoriteCount=shelf.filter(s=>progressById.get(s.id)?.saved).length+pendingStories.filter(s=>progressById.get(s.id)?.saved??s.saved).length;
 
  return <div className={'yu-world'+(story?' yu-reading-world':'')}><div className={'yu-app'+(story?' yu-immersive':'')}>
+ <ProviderSettings onRuntime={setProviderRuntime} onAvailability={setProviderAllowed} openRequest={providerOpen} showEntry={false} showPrompt={!story}/>
  {story?<main className={'yu-reader'+(!metadataVisible&&!ended?' yu-metadata-hidden':'')} ref={readerRef} aria-label={"Read "+story.title}>
  {!ended&&<StoryFilmstrip pages={story.pages} page={page} drag={drag} reloads={imageReloads} onImageError={onFrameError} onImageLoad={onFrameLoad}/>}
  {ended&&<div className="yu-scene-shade"/>}
@@ -417,7 +423,7 @@ export default function Reader(){
  <main className="yu-home">
  {tab==='discover'?<>
  <section className="yu-intro"><div><p className="yu-kicker">Make time for a good story</p><h1>What story will you<br/>discover <span>today?</span></h1></div><span className="yu-stamp">Classic tales<br/>reimagined</span></section>
- <RecentStories key={heroes.map(h=>h.story.id).join('|')} items={heroes} loading={loading||gen.libraryLoading} bookName={bookName} onOpen={open}/>
+ <RecentStories key={heroes.map(h=>h.story.id).join('|')} items={heroes} loading={libraryLoading} bookName={bookName} onOpen={open}/>
  <button className="yu-new-story-link" onClick={()=>choose()}><Sparkles size={16}/><span>Create my story</span><ArrowRight size={16}/></button>
  <section className="yu-section"><div className="yu-section-title"><h2>Begin with a book</h2><span>Familiar classics, new encounters</span></div><div className="yu-books">{choices.map((b,i)=><button key={b.id} onClick={()=>choose(b.id)} aria-label={"Choose "+b.title}><span className={'yu-book-cover book-'+(i%3)}><span className="yu-book-border"/><small>{b.era} · {b.author}</small><strong className={b.title.length>5?'yu-book-title-long':undefined}>{b.title}</strong><i>{b.genre}</i><span className="yu-book-ornament">{i===0?<Moon size={44} strokeWidth={.7}/>:i===1?<Leaf size={52} strokeWidth={.7}/>:<Feather size={48} strokeWidth={.7}/>}</span></span><strong>{b.title}</strong><small>{b.note}</small></button>)}</div></section>
  <section className="yu-section yu-theme-section"><div className="yu-section-title"><h2>Or follow your curiosity</h2><Sparkles size={17}/></div><div className="yu-moods">{moods.map((m,i)=><button key={m} className={selection.theme===m?'selected':''} onClick={()=>{choose(selection.bookId,m);}}>{i===0&&<Sparkles size={13}/>} {themeLabel(m)}</button>)}</div></section>
@@ -426,15 +432,15 @@ export default function Reader(){
  {loading?<p className="yu-inline-status" role="status">Opening the book…</p>:loadError?<div className="yu-inline-status" role="alert">{loadError}<button onClick={()=>location.reload()}>Reload</button></div>:null}
  </>:tab==='shelf'?<ReaderShelf onControl={gen.control} controlBusy={gen.controlBusy} stories={shelf} pending={pendingStories} sessions={gen.sessions} progress={activeProgress} refreshing={shelfRefreshing||gen.libraryRefreshing} onRefresh={()=>{void refreshShelf();}} loading={loading||gen.libraryLoading} error={loadError||gen.libraryError} tab={shelfTab} onTab={changeShelfTab} query={shelfQuery} onQuery={changeShelfQuery} grouping={shelfGrouping} onGrouping={changeShelfGrouping} bookName={bookName} onOpen={open} onResume={session=>openWorkflow(session.id)} onRetry={session=>{setWorkflowTarget(session.id);setWorkflowError('');setStory(null);gen.retrySession(session.id).catch(e=>setWorkflowError(e.message));}} onDelete={askDelete} onFavorite={favoriteFromShelf} favoriteBusy={favoriteBusy} onCreate={()=>choose()} onDiscover={()=>setTab('discover')}/>:<section className="yu-profile" aria-label="My space">
   <section className="yu-profile-group" aria-labelledby="profile-overview"><h2 id="profile-overview">Story overview</h2>
-  <div className="yu-profile-stats"><div><strong>{shelfCount}</strong><span>Stories on your shelf</span></div><div><strong>{favoriteCount}</strong><span>Favorites</span></div><div><strong>{deletedStories.length}</strong><span>Deleted</span></div></div>
+  <div className="yu-profile-stats" aria-busy={libraryLoading}>{[[shelfCount,'Stories on your shelf'],[favoriteCount,'Favorites'],[deletedStories.length,'Deleted']].map(([count,label])=><div key={label}><strong>{libraryLoading?<span className="yu-profile-stat-loading" aria-label="Counting stories">—</span>:count}</strong><span>{label}</span></div>)}</div>
   </section>
   <section className="yu-profile-group" aria-labelledby="profile-stories"><h2 id="profile-stories">Manage stories</h2><div className="yu-preferences">
    <button onClick={()=>setPublicationDefaultsOpen(true)}><Feather size={20}/>Credits and reuse<ChevronRight size={18}/></button>
    <button onClick={()=>{setRecoveryOpen(true);void loadDeletedStories();}}><Trash2 size={20}/>Deleted stories<ChevronRight size={18}/></button>
   </div></section>
   <section className="yu-profile-group" aria-labelledby="profile-preferences"><h2 id="profile-preferences">Preferences and services</h2><div className="yu-preferences">
-   <button onClick={()=>setSettings(true)}><Settings2 size={20}/>Reading preferences<ChevronRight size={18}/></button>
-   <ProviderSettings onRuntime={setProviderRuntime}/>
+   <button onClick={()=>setSettings(true)}><BookOpenText size={20}/>Reading preferences<ChevronRight size={18}/></button>
+   {providerAllowed&&<button type="button" onClick={()=>setProviderOpen(n=>n+1)}><Settings2 size={20}/>Generation service and models<ChevronRight size={18}/></button>}
   </div></section>
   <ProviderRuntimeSummary runtime={providerRuntime}/>
  </section>}

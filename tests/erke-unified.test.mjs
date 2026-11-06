@@ -1,17 +1,19 @@
-// Verify the forty licensed Wiki volumes, nine-act finale, exact glyphs and immutable receipts.
+// 验证四十卷原著、九折结尾、原字与出处凭据，故障测试仅复制当前书籍。
+import {copyBookLibrary} from './fixtures/book-library.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import os from 'node:os';
-import {readFile,mkdtemp,cp,rm,writeFile,unlink,symlink,access} from 'node:fs/promises';
+import {readFile,mkdtemp,rm,writeFile,unlink,symlink,access} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 import {LocalBooks} from '../server/local-books.ts';
 import {readWikiBody} from '../server/local-book-html.ts';
 import {bookInputs} from '../server/local-book-inputs.ts';
+import {books} from './fixtures/test-tier.mjs';
 const selection={bookId:'二刻拍案惊奇',theme:'聪明与糊涂',length:8},library=new LocalBooks(process.cwd()),catalog=JSON.parse(await readFile('data/library/catalog.json','utf8')),entry=catalog.books.find(b=>b.id===selection.bookId),directory=path.join('data/library',entry.originalFile);
 const reference=(book,section,first,last=first)=>({edition:book.edition,sectionId:section.id,firstUnit:section.units[first].id,lastUnit:section.units[last].id});
 
-test('forty Wiki volumes retain every parsed body glyph and the complete nine-act finale',async()=>{
+test('forty Wiki volumes retain every parsed body glyph and the complete nine-act finale',books,async()=>{
  const book=await library.book(selection),parts=bookInputs(book),seen=new Set(parts.flatMap(part=>[...part.visible]));assert.equal(book.sections.length,40);assert.equal(entry.originalFiles.length,41);assert.deepEqual(entry.supplements,[]);
  const bodies=[];
  for(const [index,item] of entry.originalFiles.slice(0,40).entries()){
@@ -34,7 +36,7 @@ test('final-play receipts resolve exact Wiki glyphs and reject old editions or i
 });
 
 test('missing, damaged, reordered or escaped original collections fail closed',async t=>{
- const root=await mkdtemp(path.join(os.tmpdir(),'shiqu-erke-'));t.after(()=>rm(root,{recursive:true,force:true}));await cp('data/library',path.join(root,'data/library'),{recursive:true});const file=path.join(root,directory,'040.html'),bytes=await readFile(file);
+ const root=await mkdtemp(path.join(os.tmpdir(),'shiqu-erke-'));t.after(()=>rm(root,{recursive:true,force:true}));await copyBookLibrary(root,[selection.bookId]);assert.ok(await new LocalBooks(root).book(selection));const file=path.join(root,directory,'040.html'),bytes=await readFile(file);
  await writeFile(file,'broken');await assert.rejects(new LocalBooks(root).book(selection),e=>e.status===503);
  await unlink(file);await assert.rejects(new LocalBooks(root).book(selection),e=>e.status===503);
  const outside=path.join(root,'outside.html');await writeFile(outside,bytes);await symlink(outside,file);await assert.rejects(new LocalBooks(root).book(selection),e=>e.status===503);await unlink(file);await writeFile(file,bytes);

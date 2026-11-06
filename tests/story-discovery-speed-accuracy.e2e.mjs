@@ -16,7 +16,7 @@ test('persistent bad stories do not block later originals; exhausted results dis
  const s=await discoveryService(t,16);let bad=0;
  s.library.provider.matchStories=async(_theme,input)=>{if(input.some(story=>story.title==='故事0')){bad++;throw new DiscoveryFailure('refused');}return {matches:input.map(story=>({id:story.id,verdict:story.title==='故事15'?'yes':'no',reason:'受控完整原文判断。'}))};};
  const first=await create(s);assert.equal(first.intake.batches[0].stories[0].title,'故事15');assert.equal(bad,2);
- const next=await more(s,first.id);assert.deepEqual(next.intake.batches.at(-1).stories,[]);assert.match(next.intake.batches.at(-1).note,/未能判断/);assert.equal(bad,2);assert.equal((await s.cache.read(key(s),z.any())).stories.length,16);
+ const next=await more(s,first.id);assert.deepEqual(next.intake.batches.at(-1).stories,[]);assert.match(next.intake.batches.at(-1).note,/could not be assessed/);assert.equal(bad,2);assert.equal((await s.cache.read(key(s),z.any())).stories.length,16);
 });
 test('eight isolation calls span automatic rounds, viewer departures and a restart; manual retry starts a new cycle',async t=>{
  const s=await discoveryService(t,40);s.library.provider.matchStories=async(_theme,input)=>{if(input.some(story=>Number(story.title.slice(2))%4===0))throw new DiscoveryFailure('refused');return {matches:input.map(story=>({id:story.id,verdict:'yes',reason:'受控原文判断。'}))};};

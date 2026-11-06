@@ -21,9 +21,20 @@ export async function storyBrowser(t,caseId){
  let api,vite,browser,capture;
  t.after(async()=>{try{await capture?.();}finally{await browser?.close();await vite?.close();if(api)await new Promise(resolve=>{api.closeAllConnections();api.close(resolve);});await f.stop();}});
  f.control.autoLength=3;f.control.hold=false;
+ // Translate only the two fixed source passages, preserving source IDs and complete chapter context.
+ const englishPassages=[
+  'A fisherman returns a stranded turtle to the water. When a flood later sweeps him away, the turtle carries the fisherman safely back to shore.',
+  'A warrior confronts a mountain tiger to protect the villagers. He drives the tiger away and returns safely to the village.',
+ ];
+ f.control.translateSource=({text})=>{
+  for(const [index,unit]of library.book.sections[0].units.entries())text=text.replaceAll(unit.text,englishPassages[index]);
+  for(const [original,english]of [['篇章','Chapter'],['第一章','Chapter 1'],['测试原典','Controlled source']])text=text.replaceAll(original,english);
+  assert.doesNotMatch(text,/[\p{Script=Han}]/u,'The controlled source translation must cover every supplied sentence');
+  return {title:'The selected source passage',text};
+ };
  f.control.beforeText=async(kind,payload)=>{
-  if(kind==='recommend')return {storySummary:library.stories.find(story=>payload.verifiedOriginal.text.includes(library.book.sections[0].units.find(unit=>unit.id===story.source.firstUnit).text))?.summary||library.stories[0].summary,storyMatchReason:'原文中的完整行动和结果支持本次故事。'};
-  if(kind==='review')return {issues:[],...(payload.acceptancePrompt?{acceptanceResults:payload.acceptancePrompt.split('\n').filter(line=>line.trim()).map((_,i)=>({criterion:i+1,status:'passed',pages:[1],evidence:'受控回执：第一幅包含该动作。'}))}:{})};
+  if(kind==='recommend')return {storySummary:englishPassages[payload.chosenStory===library.stories[1].title?1:0],storyMatchReason:'The complete source describes the decisive action and its later outcome.'};
+  if(kind==='review')return {issues:[],...(payload.acceptanceCriteria?.length?{acceptanceResults:payload.acceptanceCriteria.map((_,i)=>({criterion:i+1,status:'passed',pages:[1],evidence:'The controlled storyboard includes the required visible action.'}))}:{})};
  };
  f.generation.suggestions=async(...args)=>{
   const result=await library.provider.suggestions(...args),target=args[2].scan?.targetStoryTitle;

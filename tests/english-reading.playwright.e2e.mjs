@@ -30,7 +30,7 @@ test('English comic and saved source remain English across reading and reload',{
   await page.getByRole('button',{name:'Source',exact:true}).click();
   const source=page.getByRole('dialog',{name:'Story source',exact:true});
   await source.locator('.yu-original').waitFor();
-  assert.match(await source.innerText(),/controlled English translation/);
+  assert.match(await source.innerText(),/A fisherman returns a stranded turtle to the water/);
   assert.doesNotMatch(await source.innerText(),/[\p{Script=Han}]/u);
   await b.screenshot('english-source');
   const reads=f.control.recommendations.length;

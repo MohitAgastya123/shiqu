@@ -12,8 +12,9 @@ import {configuredImageWorkers,ReaderProductionCoordinator} from '../server/read
 import {readerImageAsset,referenceImageKey} from '../lib/reader-image-assets.ts';
 import {DatabaseSync} from 'node:sqlite';
 import path from 'node:path';
+import {flowProviders} from './fixtures/test-tier.mjs';
 
-for(const provider of ['codex','gemini'])test(`${provider}: early demand, single anchor, rolling refill, individual visibility and moving lookahead`,async t=>{
+for(const provider of flowProviders(['codex','gemini']))test(`${provider}: early demand, single anchor, rolling refill, individual visibility and moving lookahead`,async t=>{
  const f=await productionFixture(t,provider),id=await f.createLegacyReader(),viewer=crypto.randomUUID();
  const response=await f.request(`sessions/${id}/production`,'POST',{viewerId:viewer,page:0});assert.equal(response.status,202);assert.equal(f.control.calls.length,0);
  await until(()=>f.control.calls.length===1);assert.equal(f.control.calls[0].page,0);await turn();assert.equal(f.control.calls.length,1);
@@ -154,7 +155,7 @@ test('reference validation accepts reordered same-story assets and rejects malfo
  assert.equal(referenceImageKey('story','/api/reader/media/other/1.png'),null);
 });
 
-for(const provider of ['codex','gemini'])test(`${provider}: reordered story resumes at page 11 after restart without regenerating ten saved images`,async t=>{
+for(const provider of flowProviders(['codex','gemini']))test(`${provider}: reordered story resumes at page 11 after restart without regenerating ten saved images`,async t=>{
  const f=await productionFixture(t,provider,{SHIQU_IMAGE_WORKERS:'1'}),id=await f.createLegacyReader(30);
  const images=Array(30).fill(''),bytes=Buffer.from(encoded,'base64');
  // The original first image moved to page 7; the new first image retains its original filename.
@@ -179,7 +180,7 @@ for(const provider of ['codex','gemini'])test(`${provider}: reordered story resu
  assert.deepEqual(JSON.parse(stored.document).usage.map(u=>u.step),['image:10']);
 });
 
-for(const provider of ['codex','gemini'])test(`${provider}: immutable attempts and exact same-story anchor validation protect replacement bytes`,async t=>{
+for(const provider of flowProviders(['codex','gemini']))test(`${provider}: immutable attempts and exact same-story anchor validation protect replacement bytes`,async t=>{
  const f=await productionFixture(t,provider),id=await f.createLegacyReader(),original=f.app.services.production;
  await f.demand(id);await until(()=>f.control.calls.length===1);original.stop();
  // Simulate a crashed owner's expired claims while its remote result arrives late.
@@ -217,7 +218,7 @@ test('publication must own its job token as well as the session token',async t=>
  await f.app.services.database.prepare('UPDATE production_jobs SET lease_until=1 WHERE id=?').bind(job.id).run();
 });
 
-for(const provider of ['codex','gemini'])test(`${provider}: legacy numeric confirmation gates paid script/images before planning`,async t=>{
+for(const provider of flowProviders(['codex','gemini']))test(`${provider}: legacy numeric confirmation gates paid script/images before planning`,async t=>{
  const f=await productionFixture(t,provider);f.control.hold=false;
  for(const initial of [7,9]){
   const id=await f.createLegacyReader(initial,{narrativeDetail:'balanced'}),viewer=crypto.randomUUID(),plans=f.control.plans.length,images=f.control.calls.length,recommendations=f.control.recommendations.length;

@@ -1,0 +1,3891 @@
+{
+  "version": 1,
+  "groups": [
+    "safety",
+    "books",
+    "discovery",
+    "preparation",
+    "review",
+    "production",
+    "reader",
+    "storage",
+    "startup",
+    "providers",
+    "media",
+    "desktop",
+    "tooling"
+  ],
+  "tests": [
+    {
+      "file": "src-tauri/src/config.rs",
+      "groups": [
+        "startup",
+        "providers",
+        "desktop"
+      ],
+      "level": "native",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "win32"
+      ],
+      "suite": "native",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "lib/system-settings.ts",
+        "server/system-settings.ts"
+      ]
+    },
+    {
+      "file": "src-tauri/src/lib.rs",
+      "groups": [
+        "desktop"
+      ],
+      "level": "native",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "win32"
+      ],
+      "suite": "native",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "server/desktop.ts"
+      ]
+    },
+    {
+      "file": "src-tauri/src/library.rs",
+      "groups": [
+        "storage",
+        "desktop"
+      ],
+      "level": "native",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "win32"
+      ],
+      "suite": "native",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "db/library-format.json",
+        "server/library-schema.ts",
+        "server/library-upgrade.ts"
+      ]
+    },
+    {
+      "file": "src-tauri/src/runtime.rs",
+      "groups": [
+        "desktop"
+      ],
+      "level": "native",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "win32"
+      ],
+      "suite": "native",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        ".nvmrc",
+        "scripts/desktop-node.mjs",
+        "scripts/desktop-resources.mjs"
+      ]
+    },
+    {
+      "file": "tests/adaptive-storyboard-review.e2e.mjs",
+      "groups": [
+        "review"
+      ],
+      "level": "service-e2e",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "e2e",
+      "pr": "affected",
+      "gates": [
+        "extended"
+      ],
+      "covers": [
+        "lib/reader-review.ts",
+        "lib/reader-structure.ts"
+      ]
+    },
+    {
+      "file": "tests/adaptive-storyboard-review.test.mjs",
+      "groups": [
+        "review"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "lib/reader-editorial.ts",
+        "lib/reader-review.ts",
+        "lib/reader-revision-images.ts",
+        "lib/reader-revision.ts",
+        "lib/reader-structure.ts",
+        "server/generation.ts"
+      ]
+    },
+    {
+      "file": "tests/art-recommendation.test.mjs",
+      "groups": [
+        "preparation"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "lib/reader-art-recommendation.ts",
+        "lib/reader-generation-contract.ts",
+        "lib/reader-local-contract.ts",
+        "lib/reader-model.ts",
+        "lib/reader-styles.ts",
+        "lib/reader-suggestions.ts",
+        "server/generation.ts",
+        "server/local-generation.ts"
+      ]
+    },
+    {
+      "file": "tests/background-generation.test.mjs",
+      "groups": [
+        "production"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "lib/reader-engine.ts",
+        "lib/reader-repository.ts",
+        "server/database.ts",
+        "server/reader-production.ts"
+      ]
+    },
+    {
+      "file": "tests/blocked-revision-recovery.test.mjs",
+      "groups": [
+        "production"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "server/library-backup.ts",
+        "server/library-upgrade.ts"
+      ]
+    },
+    {
+      "file": "tests/book-integrity-smoke.test.mjs",
+      "groups": [
+        "safety"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "always",
+      "gates": [],
+      "covers": [
+        "server/local-books.ts"
+      ]
+    },
+    {
+      "file": "tests/book-reading-plans.test.mjs",
+      "groups": [
+        "books"
+      ],
+      "level": "integration",
+      "cost": "heavy",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "books",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "lib/reader-local-contract.ts",
+        "server/local-books.ts",
+        "server/local-story-discovery.ts",
+        "server/story-discovery-cache.ts",
+        "server/story-discovery-legacy.ts",
+        "server/story-reading-inputs.ts"
+      ]
+    },
+    {
+      "file": "tests/book-reference-star.e2e.mjs",
+      "groups": [
+        "books",
+        "media",
+        "review"
+      ],
+      "level": "service-e2e",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "e2e",
+      "pr": "affected",
+      "gates": [
+        "extended"
+      ],
+      "covers": []
+    },
+    {
+      "file": "tests/book-reference-star.test.mjs",
+      "groups": [
+        "books",
+        "media",
+        "review"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "server/book-image-reference.ts",
+        "server/generation.ts"
+      ]
+    },
+    {
+      "file": "tests/browser-provider-settings.e2e.mjs",
+      "groups": [
+        "startup",
+        "providers",
+        "desktop"
+      ],
+      "level": "service-e2e",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "e2e",
+      "pr": "affected",
+      "gates": [
+        "user-flows"
+      ],
+      "covers": [
+        "lib/provider-settings.ts"
+      ]
+    },
+    {
+      "file": "tests/browser-provider-settings.test.mjs",
+      "groups": [
+        "startup",
+        "providers",
+        "desktop"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "lib/provider-settings.ts",
+        "lib/system-settings.ts",
+        "scripts/development-server.mjs",
+        "server/app.ts",
+        "server/browser-provider-settings.ts",
+        "server/cli-setup.ts",
+        "server/desktop.ts",
+        "server/http.ts"
+      ]
+    },
+    {
+      "file": "tests/chapter-main-stories.test.mjs",
+      "groups": [
+        "discovery"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "lib/reader-local-contract.ts",
+        "lib/reader-model.ts",
+        "server/generation.ts",
+        "server/local-book-contents.ts",
+        "server/local-books.ts",
+        "server/local-generation.ts",
+        "server/local-story-discovery.ts",
+        "server/story-discovery-cache.ts",
+        "server/story-reading-inputs.ts"
+      ]
+    },
+    {
+      "file": "tests/character-continuity-edits.e2e.mjs",
+      "groups": [
+        "review"
+      ],
+      "level": "service-e2e",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "e2e",
+      "pr": "affected",
+      "gates": [
+        "extended"
+      ],
+      "covers": []
+    },
+    {
+      "file": "tests/character-continuity-edits.test.mjs",
+      "groups": [
+        "review"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "lib/reader-review.ts",
+        "lib/reader-revision-images.ts",
+        "lib/reader-structure.ts",
+        "server/generation.ts"
+      ]
+    },
+    {
+      "file": "tests/ci-scope.test.mjs",
+      "groups": [
+        "safety"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "scripts/ci-scope.mjs",
+        "scripts/test-metadata.mjs",
+        "scripts/test-plan.mjs"
+      ]
+    },
+    {
+      "file": "tests/claude-provider-flow.test.mjs",
+      "groups": [
+        "providers",
+        "production"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "server/headless-cli.ts",
+        "server/local-generation.ts"
+      ]
+    },
+    {
+      "file": "tests/claude-provider.test.mjs",
+      "groups": [
+        "providers"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "lib/system-settings.ts",
+        "server/claude-runner.ts",
+        "server/cli-setup.ts",
+        "server/diagnostics.ts",
+        "server/generation.ts"
+      ]
+    },
+    {
+      "file": "tests/clean-three-originals.test.mjs",
+      "groups": [
+        "books"
+      ],
+      "level": "integration",
+      "cost": "heavy",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "books",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "server/local-book-html.ts",
+        "server/local-book-inputs.ts",
+        "server/local-books.ts"
+      ]
+    },
+    {
+      "file": "tests/cli-library.test.mjs",
+      "groups": [
+        "startup"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "lib/system-settings.ts",
+        "server/cli-options.ts",
+        "server/database.ts",
+        "server/desktop-owner.ts",
+        "server/desktop.ts",
+        "server/library-directory.ts",
+        "server/media.ts",
+        "server/system-settings.ts"
+      ]
+    },
+    {
+      "file": "tests/cli-skill.test.mjs",
+      "groups": [
+        "tooling"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [
+        "user-flows"
+      ],
+      "covers": [
+        "server/headless-cli.ts"
+      ]
+    },
+    {
+      "file": "tests/codex-provider.test.mjs",
+      "groups": [
+        "providers"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "lib/reader-model.ts",
+        "server/app.ts",
+        "server/codex-runner.ts",
+        "server/desktop.ts",
+        "server/generation.ts"
+      ]
+    },
+    {
+      "file": "tests/continuous-story-discovery.test.mjs",
+      "groups": [
+        "discovery"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "lib/reader-production-client.ts",
+        "server/generation.ts",
+        "server/local-generation.ts"
+      ]
+    },
+    {
+      "file": "tests/deepseek-provider-flow.test.mjs",
+      "groups": [
+        "providers",
+        "production"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "server/headless-cli.ts",
+        "server/local-generation.ts"
+      ]
+    },
+    {
+      "file": "tests/deepseek-provider.test.mjs",
+      "groups": [
+        "providers"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "server/generation.ts"
+      ]
+    },
+    {
+      "file": "tests/deepseek-response-diagnostics.test.mjs",
+      "groups": [
+        "providers"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "lib/reader-responses-diagnostics.ts",
+        "server/diagnostics.ts",
+        "server/generation.ts"
+      ]
+    },
+    {
+      "file": "tests/desktop-console.test.mjs",
+      "groups": [
+        "desktop"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "lib/system-settings.ts"
+      ]
+    },
+    {
+      "file": "tests/desktop-internet.test.mjs",
+      "groups": [
+        "desktop"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "server/database.ts",
+        "server/desktop-remote.ts",
+        "server/desktop-tunnel.ts",
+        "server/desktop.ts"
+      ]
+    },
+    {
+      "file": "tests/desktop-node.test.mjs",
+      "groups": [
+        "desktop"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "scripts/desktop-node.mjs"
+      ]
+    },
+    {
+      "file": "tests/desktop-runtime.test.mjs",
+      "groups": [
+        "desktop"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "server/database.ts",
+        "server/desktop-access.ts",
+        "server/desktop-owner.ts",
+        "server/desktop.ts"
+      ]
+    },
+    {
+      "file": "tests/desktop-service-console.playwright.e2e.mjs",
+      "groups": [
+        "desktop"
+      ],
+      "level": "browser-e2e",
+      "cost": "heavy",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "e2e",
+      "pr": "affected",
+      "gates": [
+        "user-flows"
+      ],
+      "covers": [
+        "lib/system-settings.ts",
+        "server/desktop.ts",
+        "server/system-settings.ts"
+      ]
+    },
+    {
+      "file": "tests/desktop-service-console.test.mjs",
+      "groups": [
+        "desktop"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "lib/provider-settings.ts",
+        "server/browser-provider-settings.ts",
+        "server/cli-setup.ts",
+        "server/database.ts",
+        "server/desktop-remote.ts",
+        "server/desktop.ts",
+        "server/library-backup.ts",
+        "server/provider-runtime.ts",
+        "server/system-settings.ts"
+      ]
+    },
+    {
+      "file": "tests/desktop-vite.test.mjs",
+      "groups": [
+        "desktop"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": []
+    },
+    {
+      "file": "tests/development-access.test.mjs",
+      "groups": [
+        "tooling"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "scripts/development-server.mjs",
+        "server/development-access.ts",
+        "server/http.ts"
+      ]
+    },
+    {
+      "file": "tests/development-cache.test.mjs",
+      "groups": [
+        "tooling"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": []
+    },
+    {
+      "file": "tests/development-local.e2e.mjs",
+      "groups": [
+        "tooling"
+      ],
+      "level": "service-e2e",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "e2e",
+      "pr": "affected",
+      "gates": [
+        "user-flows"
+      ],
+      "covers": []
+    },
+    {
+      "file": "tests/development-local.test.mjs",
+      "groups": [
+        "tooling"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "scripts/development-server.mjs"
+      ]
+    },
+    {
+      "file": "tests/diagnostics.test.mjs",
+      "groups": [
+        "storage"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [
+        "user-flows"
+      ],
+      "covers": [
+        "lib/system-settings.ts",
+        "server/desktop.ts",
+        "server/diagnostics.ts",
+        "server/generation.ts"
+      ]
+    },
+    {
+      "file": "tests/discovery-conditions.test.mjs",
+      "groups": [
+        "discovery"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "server/local-book-contents.ts"
+      ]
+    },
+    {
+      "file": "tests/editable-extraction-title.test.mjs",
+      "groups": [
+        "discovery"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "server/local-generation.ts"
+      ]
+    },
+    {
+      "file": "tests/empty-library.test.mjs",
+      "groups": [
+        "reader"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "lib/reader-books.ts",
+        "lib/reader-home.ts",
+        "server/app.ts"
+      ]
+    },
+    {
+      "file": "tests/english-app.test.mjs",
+      "groups": [
+        "preparation",
+        "production",
+        "reader",
+        "storage",
+        "media"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "lib/reader-source-english.ts",
+        "lib/reader-source-types.ts",
+        "lib/reader-model.ts",
+        "lib/reader-storyboard.ts",
+        "lib/reader-frame-recommendation.ts",
+        "lib/reader-language.ts",
+        "lib/reader-api.ts",
+        "server/reader-production.ts"
+      ]
+    },
+    {
+      "file": "tests/english-discovery-cache.test.mjs",
+      "groups": [
+        "discovery",
+        "books"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "server/story-discovery-legacy.ts",
+        "server/story-theme-matching.ts",
+        "lib/reader-theme-match.ts",
+        "server/local-generation.ts",
+        "server/story-discovery-cache.ts"
+      ]
+    },
+    {
+      "file": "tests/english-reading.playwright.e2e.mjs",
+      "groups": [
+        "reader",
+        "preparation",
+        "production"
+      ],
+      "level": "browser-e2e",
+      "cost": "heavy",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "e2e",
+      "pr": "affected",
+      "gates": [
+        "user-flows"
+      ],
+      "covers": [
+        "client/ui/Reader.tsx",
+        "client/ui/StoryCreationSetup.tsx",
+        "lib/reader-api.ts",
+        "lib/reader-source-english.ts",
+        "server/reader-production.ts"
+      ]
+    },
+    {
+      "file": "tests/english-ui.test.mjs",
+      "groups": [
+        "reader"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "client/ui/StoryDiscoveryForm.tsx",
+        "client/ui/StorySceneList.tsx",
+        "client/ui/StoryReviewHistory.tsx",
+        "client/ui/StoryRevisionEditor.tsx",
+        "client/english-labels.ts",
+        "lib/reader-language.ts",
+        "client/ui/ReaderShelf.tsx",
+        "client/ui/ProviderSettings.tsx",
+        "lib/shelf-browser.ts",
+        "lib/shelf-generation.ts"
+      ]
+    },
+    {
+      "file": "tests/erke-unified.test.mjs",
+      "groups": [
+        "books"
+      ],
+      "level": "integration",
+      "cost": "heavy",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "books",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "server/local-book-html.ts",
+        "server/local-book-inputs.ts",
+        "server/local-books.ts"
+      ]
+    },
+    {
+      "file": "tests/export-story.test.mjs",
+      "groups": [
+        "media"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "lib/reader-zip-content.ts",
+        "lib/story-webp-metadata.ts",
+        "scripts/export-story.mjs"
+      ]
+    },
+    {
+      "file": "tests/fast-first-story.test.mjs",
+      "groups": [
+        "discovery"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "lib/reader-art-recommendation.ts",
+        "lib/reader-suggestions.ts",
+        "server/app.ts",
+        "server/generation.ts",
+        "server/local-books.ts",
+        "server/local-generation.ts",
+        "server/local-story-discovery.ts",
+        "server/story-discovery-cache.ts",
+        "server/story-reading-inputs.ts"
+      ]
+    },
+    {
+      "file": "tests/frame-count-continuation.test.mjs",
+      "groups": [
+        "review"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "lib/reader-review.ts",
+        "scripts/storyboard-evaluation.mjs"
+      ]
+    },
+    {
+      "file": "tests/frame-count-gate.e2e.mjs",
+      "groups": [
+        "review"
+      ],
+      "level": "service-e2e",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "e2e",
+      "pr": "affected",
+      "gates": [
+        "extended"
+      ],
+      "covers": [
+        "lib/reader-engine.ts",
+        "lib/reader-model.ts",
+        "lib/reader-repository.ts",
+        "lib/reader-review.ts",
+        "scripts/storyboard-evaluation.mjs",
+        "server/database.ts"
+      ]
+    },
+    {
+      "file": "tests/frame-count-gate.test.mjs",
+      "groups": [
+        "review"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "lib/reader-engine.ts",
+        "lib/reader-model.ts",
+        "lib/reader-repository.ts",
+        "lib/reader-review.ts",
+        "scripts/storyboard-evaluation.mjs"
+      ]
+    },
+    {
+      "file": "tests/frame-count-replay.test.mjs",
+      "groups": [
+        "review"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "scripts/storyboard-evaluation.mjs"
+      ]
+    },
+    {
+      "file": "tests/frame-count-review.test.mjs",
+      "groups": [
+        "review"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "lib/reader-editorial.ts",
+        "lib/reader-prompts.ts",
+        "lib/reader-review.ts",
+        "server/generation.ts",
+        "server/local-generation.ts"
+      ]
+    },
+    {
+      "file": "tests/gemini-argon-budget.test.mjs",
+      "groups": [
+        "providers"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "server/generation.ts"
+      ]
+    },
+    {
+      "file": "tests/gemini-discovery-schema.test.mjs",
+      "groups": [
+        "providers"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "lib/reader-local-contract.ts",
+        "server/generation.ts"
+      ]
+    },
+    {
+      "file": "tests/gemini-response-diagnostics.test.mjs",
+      "groups": [
+        "providers"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "lib/reader-gemini-diagnostics.ts",
+        "server/diagnostics.ts",
+        "server/generation.ts"
+      ]
+    },
+    {
+      "file": "tests/gemini-review-evidence.test.mjs",
+      "groups": [
+        "providers"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "lib/reader-editorial.ts",
+        "lib/reader-gemini-evidence.ts",
+        "lib/reader-structure.ts",
+        "server/generation.ts"
+      ]
+    },
+    {
+      "file": "tests/gemini-review-schema.test.mjs",
+      "groups": [
+        "providers"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "lib/reader-acceptance.ts",
+        "lib/reader-editorial.ts",
+        "lib/reader-review.ts",
+        "server/generation.ts"
+      ]
+    },
+    {
+      "file": "tests/gemini-stage-schema-flow.test.mjs",
+      "groups": [
+        "providers",
+        "production",
+        "discovery",
+        "preparation",
+        "review",
+        "media"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "server/generation.ts",
+        "server/headless-cli.ts",
+        "server/local-generation.ts"
+      ]
+    },
+    {
+      "file": "tests/gemini-stage-schema.test.mjs",
+      "groups": [
+        "providers"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "server/generation.ts"
+      ]
+    },
+    {
+      "file": "tests/gemini-structure-schema.test.mjs",
+      "groups": [
+        "providers"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "lib/reader-limits.ts",
+        "lib/reader-structure.ts",
+        "server/generation.ts"
+      ]
+    },
+    {
+      "file": "tests/gemini-timeouts.test.mjs",
+      "groups": [
+        "providers"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "lib/codex-settings.ts",
+        "lib/reader-limits.ts",
+        "server/generation.ts"
+      ]
+    },
+    {
+      "file": "tests/generation-progress.test.mjs",
+      "groups": [
+        "production"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "lib/generation-progress.ts",
+        "lib/production-timing.ts"
+      ]
+    },
+    {
+      "file": "tests/headless-cli.test.mjs",
+      "groups": [
+        "startup"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [
+        "user-flows",
+        "release",
+        "npm"
+      ],
+      "covers": [
+        "lib/reader-zip-content.ts",
+        "lib/story-publication.ts",
+        "lib/story-webp-metadata.ts",
+        "server/app.ts",
+        "server/headless-cli.ts",
+        "server/local-generation.ts"
+      ]
+    },
+    {
+      "file": "tests/image-dimensions.test.mjs",
+      "groups": [
+        "media"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "lib/reader-image-dimensions.ts",
+        "server/generation.ts"
+      ]
+    },
+    {
+      "file": "tests/incremental-story-library.e2e.mjs",
+      "groups": [
+        "discovery"
+      ],
+      "level": "service-e2e",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "e2e",
+      "pr": "affected",
+      "gates": [
+        "extended"
+      ],
+      "covers": [
+        "lib/reader-engine.ts",
+        "lib/reader-local-contract.ts",
+        "lib/reader-repository.ts",
+        "server/local-book-contents.ts",
+        "server/local-books.ts",
+        "server/local-generation.ts",
+        "server/local-story-discovery.ts",
+        "server/story-discovery-cache.ts",
+        "server/story-discovery-legacy.ts",
+        "server/production-queue.ts",
+        "server/reader-production.ts"
+      ]
+    },
+    {
+      "file": "tests/incremental-story-library.test.mjs",
+      "groups": [
+        "discovery"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "lib/reader-local-contract.ts",
+        "lib/reader-theme-match.ts",
+        "server/local-story-discovery.ts",
+        "server/story-discovery-cache.ts",
+        "server/story-discovery-legacy.ts",
+        "server/story-theme-matching.ts",
+        "server/story-token-budget.ts"
+      ]
+    },
+    {
+      "file": "tests/library-directory.test.mjs",
+      "groups": [
+        "storage"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "server/library-directory.ts"
+      ]
+    },
+    {
+      "file": "tests/library-maintenance.test.mjs",
+      "groups": [
+        "storage"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [
+        "user-flows"
+      ],
+      "covers": [
+        "server/app.ts",
+        "server/database.ts",
+        "server/desktop-owner.ts",
+        "server/library-backup.ts"
+      ]
+    },
+    {
+      "file": "tests/library-recovery.test.mjs",
+      "groups": [
+        "storage"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": []
+    },
+    {
+      "file": "tests/licensed-books.test.mjs",
+      "groups": [
+        "books"
+      ],
+      "level": "integration",
+      "cost": "heavy",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "books",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "lib/reader-source.ts",
+        "server/local-book-licensed.ts",
+        "server/local-books.ts",
+        "server/local-source-quality.ts"
+      ]
+    },
+    {
+      "file": "tests/local-book-corrections.test.mjs",
+      "groups": [
+        "books"
+      ],
+      "level": "integration",
+      "cost": "heavy",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "books",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "server/local-book-corrections.ts",
+        "server/local-books.ts",
+        "server/local-generation.ts"
+      ]
+    },
+    {
+      "file": "tests/local-books.test.mjs",
+      "groups": [
+        "books"
+      ],
+      "level": "integration",
+      "cost": "heavy",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "books",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "lib/reader-engine.ts",
+        "lib/reader-model.ts",
+        "lib/reader-repository.ts",
+        "lib/reader-suggestions.ts",
+        "server/app.ts",
+        "server/database.ts",
+        "server/generation.ts",
+        "server/local-book-inputs.ts",
+        "server/local-books.ts",
+        "server/local-generation.ts",
+        "server/media.ts",
+        "server/story-reading-inputs.ts",
+        "server/story-token-budget.ts"
+      ]
+    },
+    {
+      "file": "tests/local-image-batches.test.mjs",
+      "groups": [
+        "media"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "lib/reader-model.ts",
+        "lib/reader-repository.ts"
+      ]
+    },
+    {
+      "file": "tests/local-library-all-books.test.mjs",
+      "groups": [
+        "books"
+      ],
+      "level": "integration",
+      "cost": "heavy",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "books",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "server/app.ts",
+        "server/local-book-inputs.ts",
+        "server/local-books.ts",
+        "server/local-generation.ts",
+        "server/media.ts"
+      ]
+    },
+    {
+      "file": "tests/local-server.test.mjs",
+      "groups": [
+        "storage",
+        "production",
+        "media"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "lib/reader-repository.ts",
+        "server/app.ts",
+        "server/database.ts",
+        "server/http.ts",
+        "server/import-legacy.ts",
+        "server/local-books.ts",
+        "server/media.ts"
+      ]
+    },
+    {
+      "file": "tests/local-source-quality.test.mjs",
+      "groups": [
+        "books"
+      ],
+      "level": "integration",
+      "cost": "heavy",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "books",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "lib/reader-engine.ts",
+        "lib/reader-repository.ts",
+        "server/database.ts",
+        "server/local-books.ts",
+        "server/local-generation.ts",
+        "server/local-source-quality.ts",
+        "server/media.ts"
+      ]
+    },
+    {
+      "file": "tests/manual-extraction-start.test.mjs",
+      "groups": [
+        "discovery"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "lib/reader-production-client.ts"
+      ]
+    },
+    {
+      "file": "tests/npm-cli.test.mjs",
+      "groups": [
+        "startup"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [
+        "release",
+        "npm"
+      ],
+      "covers": [
+        "server/cli-options.ts",
+        "server/cli.ts",
+        "server/library-directory.ts",
+        "server/phone-access.ts"
+      ]
+    },
+    {
+      "file": "tests/npm-publish.test.mjs",
+      "groups": [
+        "tooling"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [
+        "release",
+        "npm"
+      ],
+      "covers": [
+        "scripts/publish-npm.mjs"
+      ]
+    },
+    {
+      "file": "tests/openai-provider.test.mjs",
+      "groups": [
+        "providers"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "server/app.ts",
+        "server/desktop.ts",
+        "server/generation.ts",
+        "server/media.ts",
+        "server/openai-provider.ts"
+      ]
+    },
+    {
+      "file": "tests/paused-editing-versions.test.mjs",
+      "groups": [
+        "production"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "lib/reader-revision.ts",
+        "lib/reader-versions.ts"
+      ]
+    },
+    {
+      "file": "tests/priority-wiki-originals.test.mjs",
+      "groups": [
+        "books"
+      ],
+      "level": "integration",
+      "cost": "heavy",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "books",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "lib/reader-local-contract.ts",
+        "server/local-book-html.ts",
+        "server/local-book-inputs.ts",
+        "server/local-book-wiki-stories.ts",
+        "server/local-books.ts",
+        "server/local-generation.ts",
+        "server/local-source-quality.ts"
+      ]
+    },
+    {
+      "file": "tests/production-queue-hardening.test.mjs",
+      "groups": [
+        "production"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "lib/reader-api.ts",
+        "lib/reader-model.ts",
+        "lib/reader-repository.ts",
+        "lib/reader-review.ts",
+        "lib/reader-revision.ts",
+        "server/reader-production.ts",
+        "server/reader-revisions.ts"
+      ]
+    },
+    {
+      "file": "tests/production-queue.test.mjs",
+      "groups": [
+        "production"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "server/production-queue.ts"
+      ]
+    },
+    {
+      "file": "tests/production-stages.test.mjs",
+      "groups": [
+        "production"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "lib/production-stages.ts"
+      ]
+    },
+    {
+      "file": "tests/prompt-contracts.test.mjs",
+      "groups": [
+        "providers"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "lib/reader-legacy-prompts.ts",
+        "lib/reader-local-contract.ts",
+        "lib/reader-model.ts",
+        "lib/reader-prompts.ts",
+        "server/generation.ts"
+      ]
+    },
+    {
+      "file": "tests/queue-image-recovery.test.mjs",
+      "groups": [
+        "production"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "lib/reader-generation.ts"
+      ]
+    },
+    {
+      "file": "tests/queue-image-versions.test.mjs",
+      "groups": [
+        "production"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "lib/reader-image-assets.ts",
+        "lib/reader-model.ts"
+      ]
+    },
+    {
+      "file": "tests/queue-interruption.test.mjs",
+      "groups": [
+        "production"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "lib/reader-limits.ts",
+        "lib/reader-model.ts"
+      ]
+    },
+    {
+      "file": "tests/reader-generation.test.mjs",
+      "groups": [
+        "reader"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "lib/reader-engine.ts",
+        "lib/reader-gemini.ts",
+        "lib/reader-generation.ts",
+        "lib/reader-model.ts",
+        "lib/reader-repository.ts",
+        "server/reader-intake.ts"
+      ]
+    },
+    {
+      "file": "tests/reader-image-health.test.mjs",
+      "groups": [
+        "reader"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "lib/reader-image-dimensions.ts",
+        "server/reader-image-health.ts"
+      ]
+    },
+    {
+      "file": "tests/reader-intake.test.mjs",
+      "groups": [
+        "preparation"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "lib/generation-progress.ts",
+        "lib/reader-production-client.ts",
+        "lib/reader-source-storage.ts",
+        "lib/shelf-generation.ts"
+      ]
+    },
+    {
+      "file": "tests/reader-interaction.test.mjs",
+      "groups": [
+        "reader"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "lib/reader-home.ts",
+        "lib/reader-navigation.ts",
+        "lib/reader-pdf.ts",
+        "lib/reader-prompts.ts",
+        "lib/reader-suggestions.ts"
+      ]
+    },
+    {
+      "file": "tests/reader-png.test.mjs",
+      "groups": [
+        "media"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "lib/reader-png.ts",
+        "lib/reader-pdf.ts"
+      ]
+    },
+    {
+      "file": "tests/reader-production-client.test.mjs",
+      "groups": [
+        "reader"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "lib/reader-production-client.ts"
+      ]
+    },
+    {
+      "file": "tests/reader-production.test.mjs",
+      "groups": [
+        "production"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "lib/generation-progress.ts",
+        "lib/reader-engine.ts",
+        "lib/reader-image-assets.ts",
+        "lib/reader-repository.ts",
+        "server/local-books.ts",
+        "server/local-generation.ts",
+        "server/reader-production.ts"
+      ]
+    },
+    {
+      "file": "tests/reader-prompt-format.test.mjs",
+      "groups": [
+        "reader"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "lib/reader-art-recommendation.ts",
+        "lib/reader-frame-recommendation.ts",
+        "lib/reader-generation-contract.ts",
+        "lib/reader-local-contract.ts",
+        "lib/reader-prompt-format.ts",
+        "lib/reader-prompt-records.ts",
+        "lib/reader-prompts.ts",
+        "lib/reader-review.ts",
+        "lib/reader-storyboard.ts",
+        "lib/reader-theme-match.ts"
+      ]
+    },
+    {
+      "file": "tests/reader-request.test.mjs",
+      "groups": [
+        "reader"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "lib/reader-request.ts"
+      ]
+    },
+    {
+      "file": "tests/reader-revisions.test.mjs",
+      "groups": [
+        "production"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "lib/reader-repository.ts",
+        "lib/reader-revision.ts",
+        "server/reader-revisions.ts"
+      ]
+    },
+    {
+      "file": "tests/reader-snapshots.test.mjs",
+      "groups": [
+        "reader"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "lib/reader-snapshots.ts"
+      ]
+    },
+    {
+      "file": "tests/reader-source-runtime.test.mjs",
+      "groups": [
+        "reader"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "lib/reader-source.ts"
+      ]
+    },
+    {
+      "file": "tests/reader-source.test.mjs",
+      "groups": [
+        "reader"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "lib/reader-source-storage.ts",
+        "lib/reader-source.ts"
+      ]
+    },
+    {
+      "file": "tests/reader-startup.e2e.mjs",
+      "groups": [
+        "reader"
+      ],
+      "level": "browser-e2e",
+      "cost": "heavy",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "e2e",
+      "pr": "affected",
+      "gates": [
+        "user-flows"
+      ],
+      "covers": []
+    },
+    {
+      "file": "tests/reader-suggestion-request.test.mjs",
+      "groups": [
+        "discovery"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "lib/reader-suggestion-request.ts",
+        "lib/reader-suggestions.ts",
+        "server/app.ts",
+        "server/http.ts"
+      ]
+    },
+    {
+      "file": "tests/reader-zip.test.mjs",
+      "groups": [
+        "media"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "lib/reader-model.ts",
+        "lib/reader-prompt-records.ts",
+        "lib/reader-zip.ts",
+        "lib/story-webp-metadata.ts",
+        "scripts/export-story.mjs",
+        "lib/reader-language.ts",
+        "lib/story-publication.ts"
+      ]
+    },
+    {
+      "file": "tests/reading-cache.test.mjs",
+      "groups": [
+        "reader"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "client/reading-cache.ts"
+      ]
+    },
+    {
+      "file": "tests/recent-stories-ui.test.mjs",
+      "groups": [
+        "reader"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "lib/reader-home.ts"
+      ]
+    },
+    {
+      "file": "tests/release-pre-push.test.mjs",
+      "groups": [
+        "tooling"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [
+        "release"
+      ],
+      "covers": [
+        "scripts/test-metadata.mjs",
+        "scripts/test-story-e2e.mjs"
+      ]
+    },
+    {
+      "file": "tests/release-smoke.playwright.e2e.mjs",
+      "groups": [
+        "production",
+        "reader",
+        "preparation",
+        "review",
+        "media",
+        "discovery"
+      ],
+      "level": "browser-e2e",
+      "cost": "heavy",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "e2e",
+      "pr": "affected",
+      "gates": [
+        "release",
+        "npm"
+      ],
+      "covers": []
+    },
+    {
+      "file": "tests/review-history-api.test.mjs",
+      "groups": [
+        "review"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "lib/reader-model.ts",
+        "lib/reader-repository.ts",
+        "lib/reader-review.ts"
+      ]
+    },
+    {
+      "file": "tests/review-history-flow.test.mjs",
+      "groups": [
+        "review"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "lib/reader-model.ts",
+        "lib/reader-repository.ts",
+        "lib/reader-review.ts"
+      ]
+    },
+    {
+      "file": "tests/review-history-ui.test.mjs",
+      "groups": [
+        "reader"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": []
+    },
+    {
+      "file": "tests/review-history.test.mjs",
+      "groups": [
+        "review"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "lib/reader-review-history.ts",
+        "lib/reader-review.ts"
+      ]
+    },
+    {
+      "file": "tests/selected-chapter-extraction.test.mjs",
+      "groups": [
+        "discovery"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "lib/reader-model.ts",
+        "server/local-book-contents.ts",
+        "server/local-books.ts",
+        "server/local-generation.ts"
+      ]
+    },
+    {
+      "file": "tests/separate-providers-flow.test.mjs",
+      "groups": [
+        "providers",
+        "production"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": []
+    },
+    {
+      "file": "tests/separate-providers.test.mjs",
+      "groups": [
+        "providers"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "lib/codex-settings.ts",
+        "lib/reader-limits.ts",
+        "lib/system-settings.ts",
+        "server/cli-setup.ts",
+        "server/desktop.ts",
+        "server/generation.ts",
+        "server/local-books.ts",
+        "server/local-generation.ts",
+        "server/system-settings.ts"
+      ]
+    },
+    {
+      "file": "tests/settings-faults.test.mjs",
+      "groups": [
+        "startup",
+        "providers",
+        "desktop"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [
+        "user-flows",
+        "release",
+        "npm"
+      ],
+      "covers": [
+        "lib/system-settings.ts",
+        "server/system-settings.ts"
+      ]
+    },
+    {
+      "file": "tests/shared-library.test.mjs",
+      "groups": [
+        "production"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "server/app.ts",
+        "server/desktop-access.ts"
+      ]
+    },
+    {
+      "file": "tests/shelf-art-style.test.mjs",
+      "groups": [
+        "reader"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": []
+    },
+    {
+      "file": "tests/shelf-browser.test.mjs",
+      "groups": [
+        "reader"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "lib/shelf-browser.ts"
+      ]
+    },
+    {
+      "file": "tests/shelf-favorites.test.mjs",
+      "groups": [
+        "reader"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": []
+    },
+    {
+      "file": "tests/shelf-generation.test.mjs",
+      "groups": [
+        "reader"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "lib/reader-production-client.ts",
+        "lib/shelf-generation.ts"
+      ]
+    },
+    {
+      "file": "tests/shelf-layout-ui.test.mjs",
+      "groups": [
+        "reader"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": []
+    },
+    {
+      "file": "tests/shelf-retry-ui.test.mjs",
+      "groups": [
+        "reader"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": []
+    },
+    {
+      "file": "tests/startup-cli-flow.test.mjs",
+      "groups": [
+        "startup"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": []
+    },
+    {
+      "file": "tests/startup-matrix.test.mjs",
+      "groups": [
+        "startup"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "server/cli-options.ts",
+        "server/cli-setup.ts"
+      ]
+    },
+    {
+      "file": "tests/startup-pty.test.mjs",
+      "groups": [
+        "startup"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": []
+    },
+    {
+      "file": "tests/story-brief.test.mjs",
+      "groups": [
+        "preparation"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "lib/reader-prompts.ts",
+        "lib/reader-theme-match.ts",
+        "server/generation.ts",
+        "server/story-theme-matching.ts"
+      ]
+    },
+    {
+      "file": "tests/story-chapter-context.test.mjs",
+      "groups": [
+        "discovery"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "lib/reader-local-contract.ts",
+        "lib/reader-model.ts",
+        "server/local-book-contents.ts",
+        "server/local-books.ts",
+        "server/local-generation.ts"
+      ]
+    },
+    {
+      "file": "tests/story-chapter-picker.test.mjs",
+      "groups": [
+        "discovery"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "lib/reader-contents.ts",
+        "lib/reader-model.ts",
+        "server/local-book-contents.ts",
+        "server/local-books.ts"
+      ]
+    },
+    {
+      "file": "tests/story-completeness.test.mjs",
+      "groups": [
+        "review"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "lib/reader-engine.ts",
+        "lib/reader-repository.ts",
+        "lib/reader-review.ts"
+      ]
+    },
+    {
+      "file": "tests/story-continuation-overlap.test.mjs",
+      "groups": [
+        "discovery"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "lib/reader-local-contract.ts",
+        "server/local-books.ts",
+        "server/local-story-discovery.ts",
+        "server/story-discovery-cache.ts"
+      ]
+    },
+    {
+      "file": "tests/story-discovery-cache.test.mjs",
+      "groups": [
+        "discovery"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "lib/reader-local-contract.ts",
+        "server/app.ts",
+        "server/local-books.ts",
+        "server/local-generation.ts",
+        "server/local-story-discovery.ts",
+        "server/media.ts",
+        "server/story-discovery-cache.ts",
+        "server/story-reading-inputs.ts"
+      ]
+    },
+    {
+      "file": "tests/story-discovery-eval.test.mjs",
+      "groups": [
+        "discovery"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "scripts/eval-story-discovery.mjs",
+        "server/local-books.ts",
+        "server/local-source-ranges.ts"
+      ]
+    },
+    {
+      "file": "tests/story-discovery-metrics.test.mjs",
+      "groups": [
+        "discovery"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "lib/reader-discovery-call.ts",
+        "server/generation.ts",
+        "server/story-discovery-cache.ts",
+        "server/story-discovery-metrics.ts"
+      ]
+    },
+    {
+      "file": "tests/story-discovery-modes.e2e.mjs",
+      "groups": [
+        "discovery"
+      ],
+      "level": "browser-e2e",
+      "cost": "heavy",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "e2e",
+      "pr": "affected",
+      "gates": [
+        "user-flows"
+      ],
+      "covers": [
+        "server/http.ts",
+        "server/local-books.ts",
+        "server/local-generation.ts"
+      ]
+    },
+    {
+      "file": "tests/story-discovery-modes.test.mjs",
+      "groups": [
+        "discovery"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "lib/reader-local-contract.ts",
+        "lib/reader-model.ts",
+        "server/generation.ts",
+        "server/local-book-contents.ts",
+        "server/local-books.ts",
+        "server/local-generation.ts"
+      ]
+    },
+    {
+      "file": "tests/story-discovery-speed-accuracy.e2e.mjs",
+      "groups": [
+        "discovery"
+      ],
+      "level": "service-e2e",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "e2e",
+      "pr": "affected",
+      "gates": [
+        "extended"
+      ],
+      "covers": [
+        "lib/reader-discovery-call.ts",
+        "server/local-story-discovery.ts"
+      ]
+    },
+    {
+      "file": "tests/story-discovery-speed-accuracy.test.mjs",
+      "groups": [
+        "discovery"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "lib/reader-discovery-call.ts",
+        "server/local-story-discovery.ts",
+        "server/story-discovery-cache.ts",
+        "server/story-discovery-legacy.ts",
+        "server/story-theme-matching.ts"
+      ]
+    },
+    {
+      "file": "tests/story-editorial.test.mjs",
+      "groups": [
+        "preparation"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "lib/reader-prompts.ts"
+      ]
+    },
+    {
+      "file": "tests/story-flow-control.test.mjs",
+      "groups": [
+        "production"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [
+        "user-flows"
+      ],
+      "covers": [
+        "lib/generation-progress.ts",
+        "lib/reader-production-client.ts",
+        "lib/shelf-generation.ts"
+      ]
+    },
+    {
+      "file": "tests/story-generation-membership.test.mjs",
+      "groups": [
+        "production"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": []
+    },
+    {
+      "file": "tests/story-generation-state-machine-client.test.mjs",
+      "groups": [
+        "production"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": []
+    },
+    {
+      "file": "tests/story-generation-state-machine-commands.test.mjs",
+      "groups": [
+        "production"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "lib/reader-model.ts",
+        "server/database.ts",
+        "server/production-queue.ts",
+        "server/reader-commands.ts"
+      ]
+    },
+    {
+      "file": "tests/story-generation-state-machine-flow.test.mjs",
+      "groups": [
+        "production"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [
+        "user-flows"
+      ],
+      "covers": []
+    },
+    {
+      "file": "tests/story-generation-state-machine-reselection.test.mjs",
+      "groups": [
+        "production"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [
+        "user-flows"
+      ],
+      "covers": []
+    },
+    {
+      "file": "tests/story-generation-state-machine.e2e.mjs",
+      "groups": [
+        "production"
+      ],
+      "level": "service-e2e",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "e2e",
+      "pr": "affected",
+      "gates": [
+        "user-flows",
+        "release",
+        "npm"
+      ],
+      "covers": []
+    },
+    {
+      "file": "tests/story-lifecycle.playwright.e2e.mjs",
+      "groups": [
+        "production",
+        "reader",
+        "preparation",
+        "review",
+        "media",
+        "discovery"
+      ],
+      "level": "browser-e2e",
+      "cost": "heavy",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "e2e",
+      "pr": "affected",
+      "gates": [
+        "user-flows"
+      ],
+      "covers": []
+    },
+    {
+      "file": "tests/story-matching-models.test.mjs",
+      "groups": [
+        "discovery"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "server/generation.ts"
+      ]
+    },
+    {
+      "file": "tests/story-publication-defaults.test.mjs",
+      "groups": [
+        "media"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "lib/reader-repository.ts",
+        "lib/story-publication.ts",
+        "server/database.ts"
+      ]
+    },
+    {
+      "file": "tests/story-publication-ui.test.mjs",
+      "groups": [
+        "reader"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "lib/story-publication.ts"
+      ]
+    },
+    {
+      "file": "tests/story-publication.test.mjs",
+      "groups": [
+        "media"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "lib/reader-repository.ts",
+        "lib/story-publication.ts"
+      ]
+    },
+    {
+      "file": "tests/story-reflection-candidates.test.mjs",
+      "groups": [
+        "preparation"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "lib/reader-model.ts",
+        "lib/reader-review.ts",
+        "lib/reader-source-types.ts"
+      ]
+    },
+    {
+      "file": "tests/story-reflection.test.mjs",
+      "groups": [
+        "preparation"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "lib/generation-progress.ts",
+        "lib/reader-engine.ts",
+        "lib/reader-repository.ts",
+        "lib/reader-review.ts",
+        "lib/reader-source-types.ts",
+        "lib/reader-model.ts"
+      ]
+    },
+    {
+      "file": "tests/story-requirements-ui.test.mjs",
+      "groups": [
+        "reader"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": []
+    },
+    {
+      "file": "tests/story-requirements.test.mjs",
+      "groups": [
+        "preparation"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "lib/reader-acceptance.ts",
+        "lib/reader-model.ts",
+        "lib/reader-review.ts",
+        "lib/reader-revision.ts"
+      ]
+    },
+    {
+      "file": "tests/story-revision-flow.test.mjs",
+      "groups": [
+        "production"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": []
+    },
+    {
+      "file": "tests/story-specific-requirements.test.mjs",
+      "groups": [
+        "preparation"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "lib/reader-generation-contract.ts",
+        "lib/reader-prompts.ts",
+        "lib/reader-requirements.ts"
+      ]
+    },
+    {
+      "file": "tests/story-stage-feedback.test.mjs",
+      "groups": [
+        "reader"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "lib/generation-progress.ts"
+      ]
+    },
+    {
+      "file": "tests/story-storage-consolidation.e2e.mjs",
+      "groups": [
+        "storage"
+      ],
+      "level": "browser-e2e",
+      "cost": "heavy",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "e2e",
+      "pr": "affected",
+      "gates": [
+        "user-flows"
+      ],
+      "covers": []
+    },
+    {
+      "file": "tests/story-storage-consolidation.test.mjs",
+      "groups": [
+        "storage"
+      ],
+      "level": "integration",
+      "cost": "heavy",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "server/app.ts",
+        "server/database.ts",
+        "server/desktop-owner.ts",
+        "server/library-backup.ts",
+        "server/library-schema.ts",
+        "server/library-upgrade.ts",
+        "server/story-export.ts"
+      ]
+    },
+    {
+      "file": "tests/story-summary.test.mjs",
+      "groups": [
+        "preparation"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "lib/reader-model.ts",
+        "server/app.ts",
+        "server/database.ts",
+        "server/production-queue.ts",
+        "server/story-summary-migration.ts"
+      ]
+    },
+    {
+      "file": "tests/story-title-ui.test.mjs",
+      "groups": [
+        "reader"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": []
+    },
+    {
+      "file": "tests/story-title.test.mjs",
+      "groups": [
+        "preparation"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": []
+    },
+    {
+      "file": "tests/story-webp-metadata.test.mjs",
+      "groups": [
+        "media"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "lib/reader-image-dimensions.ts",
+        "lib/story-publication.ts",
+        "lib/story-watermark.ts",
+        "lib/story-webp-metadata.ts"
+      ]
+    },
+    {
+      "file": "tests/storyboard-batches.test.mjs",
+      "groups": [
+        "review"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "lib/generation-progress.ts",
+        "lib/reader-engine.ts",
+        "lib/reader-prompts.ts",
+        "lib/reader-repository.ts"
+      ]
+    },
+    {
+      "file": "tests/storyboard-review.test.mjs",
+      "groups": [
+        "review"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "lib/reader-engine.ts",
+        "lib/reader-generation.ts",
+        "lib/reader-repository.ts"
+      ]
+    },
+    {
+      "file": "tests/storyboard-ui.test.mjs",
+      "groups": [
+        "reader"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "lib/reader-prompts.ts",
+        "lib/reader-revision.ts"
+      ]
+    },
+    {
+      "file": "tests/system-settings.test.mjs",
+      "groups": [
+        "startup",
+        "providers",
+        "desktop"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [
+        "user-flows",
+        "release",
+        "npm"
+      ],
+      "covers": [
+        "lib/system-settings.ts",
+        "server/cli-setup.ts",
+        "server/system-settings.ts"
+      ]
+    },
+    {
+      "file": "tests/taiping-wyg.test.mjs",
+      "groups": [
+        "books"
+      ],
+      "level": "integration",
+      "cost": "heavy",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "books",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "server/local-book-inputs.ts",
+        "server/local-book-wyg.ts",
+        "server/local-books.ts"
+      ]
+    },
+    {
+      "file": "tests/task-reasoning-flow.test.mjs",
+      "groups": [
+        "providers",
+        "production"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": []
+    },
+    {
+      "file": "tests/task-reasoning.test.mjs",
+      "groups": [
+        "providers"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "lib/reader-reasoning.ts",
+        "server/desktop.ts",
+        "server/generation.ts",
+        "server/local-generation.ts"
+      ]
+    },
+    {
+      "file": "tests/test-pr.test.mjs",
+      "groups": [
+        "safety",
+        "tooling"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "scripts/test-metadata.mjs",
+        "scripts/test-plan.mjs",
+        "scripts/test-pr.mjs",
+        "scripts/test-source.mjs"
+      ]
+    },
+    {
+      "file": "tests/test-tiers.test.mjs",
+      "groups": [
+        "safety"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": [
+        "scripts/test-metadata.mjs",
+        "scripts/test-plan.mjs",
+        "scripts/test-tiers.mjs"
+      ]
+    },
+    {
+      "file": "tests/unified-story-review.e2e.mjs",
+      "groups": [
+        "review"
+      ],
+      "level": "service-e2e",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "e2e",
+      "pr": "affected",
+      "gates": [
+        "user-flows"
+      ],
+      "covers": [
+        "lib/generation-progress.ts",
+        "lib/reader-image-assets.ts",
+        "lib/reader-model.ts",
+        "lib/reader-repository.ts",
+        "lib/reader-review.ts",
+        "server/production-queue.ts"
+      ]
+    },
+    {
+      "file": "tests/unified-story-setup-ui.test.mjs",
+      "groups": [
+        "reader"
+      ],
+      "level": "contract",
+      "cost": "fast",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "code",
+      "gates": [],
+      "covers": []
+    }
+  ]
+}

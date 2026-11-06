@@ -14,6 +14,8 @@ Choose a library directory and AI provider, then open the printed address. Keep 
 
 Choose Codex subscription mode (macOS/Linux, separate signed-in Codex CLI required), OpenAI API, Gemini, or read-only mode. API keys are billed separately and stored as plaintext in the local settings database, protected by OS permissions. Use `--configure` to change provider settings; restart the running service to apply them.
 
+Text and image services may be selected separately; **Same as text** uses one provider for both. This English fork is a source customization. Published upstream packages and installers do not automatically contain its changes; run the fork checkout with `pnpm dev` for the English experience described here.
+
 The app includes 24 books and 15 art styles. New story titles, summaries, captions, character descriptions, reviews, and endings are English. Production preparation saves an English source translation while preserving verified original evidence internally. A story contains 1–80 illustrated frames.
 
 ## Desktop and Codex

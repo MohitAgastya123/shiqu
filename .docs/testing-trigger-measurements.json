@@ -1,0 +1,79 @@
+{
+  "sourceBase": "75a1331d3594edb140b13125d3fd278c12a164a5",
+  "node": "24.22.1",
+  "pnpm": "11.25.0",
+  "platform": "Darwin",
+  "arch": "arm64",
+  "dependencies": "same installed node_modules, no install in benchmark",
+  "sourceProjectionMatchesFinal": true,
+  "sourceFilesCompared": 34,
+  "measurements": {
+    "oldFast": {
+      "seconds": 22.5,
+      "log": "/tmp/shiqu-routing-benchmark-old-unit.log",
+      "command": "node scripts/run-tests.mjs"
+    },
+    "oldBooks": {
+      "seconds": 36.97,
+      "log": "/tmp/shiqu-routing-benchmark-old-books.log",
+      "command": "node scripts/test-books.mjs"
+    },
+    "newFast": {
+      "seconds": 15.71,
+      "log": "/tmp/shiqu-routing-benchmark-final-unit.log",
+      "command": "node scripts/run-tests.mjs"
+    },
+    "newProviderPR": {
+      "seconds": 26.09,
+      "log": "/tmp/shiqu-routing-benchmark-final-provider.log",
+      "command": "node scripts/test-pr.mjs --files server/claude-runner.ts"
+    }
+  },
+  "comparison": {
+    "providerOldSeconds": 59.47,
+    "providerNewSeconds": 26.09,
+    "providerTestTimeReductionPercent": 56.1,
+    "fastTimeReductionPercent": 30.2
+  },
+  "hostedEstimate": {
+    "reportedExistingFixedSeconds": 58,
+    "reportedExistingFastSeconds": 120,
+    "estimatedFastSeconds": 84,
+    "estimatedFixedPlusFastSeconds": 142,
+    "warning": "Illustrative ratio only; add extra aggregator-job startup/scheduling. Does not include affected E2E/native additions, browser download or hosted scheduling."
+  },
+  "verification": {
+    "fullSource": {
+      "tests": 1422,
+      "passedInitially": 1419,
+      "failedInitially": 3,
+      "log": "/tmp/shiqu-routing-candidate-full.log",
+      "resolution": "Existing lifecycle receipt/synchronization failures corrected; complete affected browser files rerun 11/11 passing. New ownership/runner guards separately passed."
+    },
+    "routingOwnershipRunnerGuards": {
+      "passed": 24,
+      "log": "/tmp/shiqu-routing-ownership-final.log"
+    },
+    "affectedBrowserFiles": {
+      "passed": 11,
+      "log": "/tmp/shiqu-routing-lifecycle-final.log"
+    },
+    "nativeCleanSource": {
+      "passed": 24,
+      "filtered": 1,
+      "log": "/tmp/shiqu-routing-native-clean-source-fixed.log"
+    },
+    "developmentProxyIsolation": {
+      "passed": 2,
+      "log": "/tmp/shiqu-development-access-fixed.log"
+    },
+    "typecheck": "/tmp/shiqu-routing-typecheck-final.log",
+    "lint": "/tmp/shiqu-routing-lint-final.log"
+  },
+  "limits": [
+    "No hosted CI timing measured",
+    "Windows source jobs configured and statically reviewed; not executed locally",
+    "No desktop preparation or packaging performed",
+    "Affected test reruns reused unchanged passing portions of the full-source run"
+  ]
+}

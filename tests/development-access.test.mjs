@@ -29,9 +29,9 @@ test('development LAN proxy allows direct access and protects preserved/private 
  let protectedApi=async()=>new Response('not ready',{status:503});
  backend=createHttpServer(request=>protectedApi(request));backend.listen(0,'127.0.0.1');await once(backend,'listening');
  const apiPort=backend.address().port;
- const requestedPort=await freeStartupPort();
- frontend=await createServer({configFile:false,root,logLevel:'silent',plugins:[protectDevelopmentLibrary(library)],server:developmentServerOptions({port:requestedPort,apiPort,library})});await frontend.listen();
- const port=frontend.httpServer.address().port,origin=`http://127.0.0.1:${port}`;
+ const frontendPort=await freeStartupPort();
+ frontend=await createServer({configFile:false,root,logLevel:'silent',plugins:[protectDevelopmentLibrary(library)],server:developmentServerOptions({port:frontendPort,apiPort,library})});await frontend.listen();
+ const port=frontend.httpServer.address().port,origin=`http://127.0.0.1:${port}`;assert.equal(port,frontendPort);
  protectedApi=developmentAccess(async()=>Response.json({privateStory:true}),{SHIQU_DEV_FRONTEND_PORT:String(port)},apiPort);
  assert.equal(frontend.httpServer.address().address,'0.0.0.0');
  const response=await fetch(origin+'/api/reader/sessions');assert.equal(response.status,200);assert.equal(response.headers.get('set-cookie'),null);

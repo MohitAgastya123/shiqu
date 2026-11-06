@@ -31,8 +31,8 @@ test('startup inventory removes retired offline payloads and retains hidden curr
  await page.route('**/api/reader/deletions?inventory=1',async route=>{const response=await route.fetch();arrived();await pending;await route.fulfill({response});});
  const requests=[];page.on('request',r=>requests.push(new URL(r.url()).pathname));
  await page.goto(url,{waitUntil:'domcontentloaded'});await started;await page.evaluate(()=>window.cacheSetup);
- await page.getByRole('button',{name:'发现',exact:true}).click();await page.getByText('正在打开故事…',{exact:true}).waitFor();release();
- await page.getByRole('button',{name:'继续阅读'+story.title,exact:true}).waitFor();
+ await page.getByRole('button',{name:'Discover',exact:true}).click();await page.getByText('Opening story…',{exact:true}).waitFor();release();
+ await page.getByRole('button',{name:'Continue reading '+story.title,exact:true}).waitFor();
  const cache=await page.evaluate(async()=>({reading:JSON.parse(localStorage.getItem('yiyu-reading')),last:localStorage.getItem('shiqu-last-read'),keys:(await(await caches.open('yiyu-offline-v1')).keys()).map(r=>new URL(r.url).pathname)}));
  for(const id of [story.id,...hidden]){assert.ok(cache.keys.includes('/offline-data/'+id));assert.ok(cache.reading.some(row=>row.storyId===id));}
  for(const id of ['zhongli','dongguo','retired',foreign])assert.equal(cache.keys.includes('/offline-data/'+id),false);

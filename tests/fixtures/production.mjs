@@ -19,17 +19,18 @@ export async function until(predicate,timeoutMs=5000){const end=Date.now()+timeo
 function deferred(){let resolve,reject;const promise=new Promise((yes,no)=>{resolve=yes;reject=no;});return {promise,resolve,reject};}
 export async function productionFixture(t,provider='codex',variables={},storage={}){
  // Browser runs may retain their own fresh checkout-local database; ordinary tests remain disposable.
+ // Translation overrides exercise the same provider adapter and saved production checkpoints as live inference.
  const parent=storage.parentDirectory||os.tmpdir();await mkdir(parent,{recursive:true});
  const root=await mkdtemp(path.join(parent,'shiqu production ')),dataDirectory=path.join(root,'data');
  await cp('drizzle',path.join(root,'drizzle'),{recursive:true});await mkdir(path.join(root,'docker'));await cp('docker/seed.sql',path.join(root,'docker/seed.sql'));
- const control={calls:[],plans:[],outlines:[],batches:[],reflections:[],reflectionRepairs:[],frameReviews:[],reviews:[],structures:[],repairs:[],recommendations:[],hold:true,autoLength:8,active:0,maxActive:0,beforeText:null};
- async function image(prompt,reference){
-  const page=Number(prompt.match(/Scene (\d+):/)[1])-1,gate=deferred(),call={page,reference,prompt,...gate,done:false,bytes:encoded};
+ const control={textVia:new Set(),calls:[],plans:[],outlines:[],batches:[],reflections:[],reflectionRepairs:[],frameReviews:[],reviews:[],structures:[],repairs:[],recommendations:[],hold:true,autoLength:8,active:0,maxActive:0,beforeText:null,translateSource:null};
+ async function image(prompt,reference,via){
+  const page=Number(prompt.match(/Scene (\d+):/)[1])-1,gate=deferred(),call={page,reference,prompt,via,...gate,done:false,bytes:encoded};
   control.calls.push(call);control.active++;control.maxActive=Math.max(control.maxActive,control.active);
   try{if(control.hold)await gate.promise;return call.bytes;}finally{call.done=true;control.active--;}
  }
  async function planned(prompt,schema){
-  const payload=JSON.parse(prompt);if(schema.properties.text&&schema.properties.title){return {title:'The selected source passage',text:'In this controlled English translation, the characters act and respond, and the story reaches its original outcome.'};}if(schema.properties.artStyle)return {artStyle:'ink-pencil',reason:'与本篇人物动作及叙事相符。'};
+  const payload=JSON.parse(prompt);if(schema.properties.text&&schema.properties.title){return await control.translateSource?.(payload,schema)??{title:'The selected source passage',text:'In this controlled English translation, the characters act and respond, and the story reaches its original outcome.'};}if(schema.properties.artStyle)return {artStyle:'ink-pencil',reason:'与本篇人物动作及叙事相符。'};
   if(schema.properties.count){control.recommendations.push(payload);return {count:7,reason:'保留完整因果和关键转折。',...(schema.properties.requirements?{requirements:makeRequirements(payload.chosenStory||'所选故事')}:{ }),...(schema.properties.storySummary?{storySummary:['尚未准备完整摘要，请依据已核原文生成。','A complete summary has not been prepared. Write it from the verified source.'].includes(payload.storyBrief.summary)?makePlan(1).summary:payload.storyBrief.summary,storyMatchReason:payload.storyBrief.matchReason,...await control.beforeText?.('recommend',payload,schema)}:{})};}
   if(schema.properties.requirements){control.frameReviews.push(payload);return await control.beforeText?.('frames',payload,schema)??{frameCountReview:{decision:'keep',proposedCount:payload.plan.pages.length,reason:'受控任务已有空间。'},requirements:[]};}
   if(schema.properties.issues){control.reviews.push(payload);return {coverage:[{quote:payload.verifiedOriginal.text.slice(0,30),task:'受控原文与分镜核对',pages:[1],assessment:'adequate',reason:'受控回执，不代表真实语义审核。',issuePage:0}],titleReview:{title:payload.plan.title,reason:'标题准确对应当前故事。'},...(payload.reflectionCandidates?{reflectionChoice:{index:1,reason:'保留原文支持的认识，表达简洁。'}}:{}),...await control.beforeText?.('review',payload,schema)??{issues:[],...(payload.acceptanceCriteria?.length?{acceptanceResults:payload.acceptanceCriteria.map((_,index)=>({criterion:index+1,status:'passed',pages:[1],evidence:'受控分镜已包含要求中的关键行动与结果。'}))}:{})}};}
@@ -56,12 +57,15 @@ export async function productionFixture(t,provider='codex',variables={},storage=
   assert.match(String(url),/^https:\/\/generativelanguage.googleapis.com\//,'No external source/inference request');
   const body=JSON.parse(options.body),parts=body.contents[0].parts;
   const schema=body.generationConfig.responseFormat?.text.schema;
-  const output=body.generationConfig.responseModalities?{inlineData:{mimeType:'image/png',data:await image(parts.find(p=>p.text).text,parts.find(p=>p.inlineData)?.inlineData.data)}}:{text:JSON.stringify(geminiEvidenceAnswer(await planned(parts[0].text,schema),JSON.parse(parts[0].text),schema))};
+  if(!body.generationConfig.responseModalities)control.textVia.add('gemini');
+  const output=body.generationConfig.responseModalities?{inlineData:{mimeType:'image/png',data:await image(parts.find(p=>p.text).text,parts.find(p=>p.inlineData)?.inlineData.data,'gemini')}}:{text:JSON.stringify(geminiEvidenceAnswer(await planned(parts[0].text,schema),JSON.parse(parts[0].text),schema))};
   return Response.json({candidates:[{finishReason:'STOP',content:{parts:[output]}}],responseId:'controlled',usageMetadata:{calls:1}});
  };
- const runner={async status(){return {configured:true};},async run(job){return {text:job.generateImage?'':JSON.stringify(await planned(job.prompt,job.schema)),image:job.generateImage?await image(job.prompt,job.image&&Buffer.from(job.image.bytes).toString('base64')):null,model:'controlled',requestId:'controlled',usage:{calls:1}};}};
+ const runner={async status(){return {configured:true};},async run(job){if(!job.generateImage)control.textVia.add('codex');return {text:job.generateImage?'':JSON.stringify(await planned(job.prompt,job.schema)),image:job.generateImage?await image(job.prompt,job.image&&Buffer.from(job.image.bytes).toString('base64'),'codex'):null,model:'controlled',requestId:'controlled',usage:{calls:1}};}};
  const media=new FileMedia(path.join(dataDirectory,'media'));
- const generation=createReaderProvider({SHIQU_AI_PROVIDER:provider,...(provider==='gemini'?{GEMINI_API_KEY:'controlled'}:provider==='deepseek'?{DEEPSEEK_API_KEY:'controlled'}:{})},media,transport,runner);
+ // storage.imageProvider exercises the production composition with a separate drawing provider.
+ const keys={gemini:{GEMINI_API_KEY:'controlled'},deepseek:{DEEPSEEK_API_KEY:'controlled'}};
+ const generation=createReaderProvider({SHIQU_AI_PROVIDER:provider,...(storage.imageProvider?{SHIQU_IMAGE_PROVIDER:storage.imageProvider}:{}),...keys[provider],...keys[storage.imageProvider]},media,transport,runner);
  const options={root,dataDirectory,generation,transport,variables};let app=createApplication(options);
  async function stop(){control.hold=false;for(const call of control.calls)call.resolve();await app.close();}
  const coordinators=[];

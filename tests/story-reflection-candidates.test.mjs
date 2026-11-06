@@ -6,12 +6,13 @@ import assert from 'node:assert/strict';
 import {productionFixture,until,makePlan} from './fixtures/production.mjs';
 import {reflectionCandidatesSchema} from '../lib/reader-model.ts';
 import {reviewReportSchema} from '../lib/reader-review.ts';
+import {flowProviders} from './fixtures/test-tier.mjs';
 
 const candidates=['梦中的自在，也能照见醒时的拘束。','醒来之后，梦中的自在仍值得回味。','梦与醒的分界，也未必是心境的分界。'];
 const choice=index=>({index,reason:'保留梦醒后的对照，避免重复情节，语气有分寸。'});
 const document=async(f,id)=>JSON.parse((await f.app.services.database.prepare('SELECT document FROM stories WHERE id=?').bind(id).first()).document);
 
-for(const provider of ['codex','gemini'])for(const index of [2,3])test(`${provider}: audit selects candidate ${index} exactly and persists its evidence before drawing`,async t=>{
+for(const provider of flowProviders(['codex','gemini']))for(const index of [2,3])test(`${provider}: audit selects candidate ${index} exactly and persists its evidence before drawing`,async t=>{
  const f=await productionFixture(t,provider),id=await f.createLegacyReader();let frames;
  f.control.beforeText=async(kind,payload,schema)=>{
   if(kind==='reflection')return {candidates};
@@ -87,7 +88,7 @@ test('candidate and choice schemas preserve the old single-ending report contrac
  assert.deepEqual(reviewReportSchema(8,candidates).parse({issues:[],titleReview,reflectionChoice:choice(3)}).reflectionChoice,choice(3));
 });
 
-for(const provider of ['codex','gemini'])test(`${provider}: editorial theme guides review and scene repair, with original facts and authored requirements intact`,async t=>{
+for(const provider of flowProviders(['codex','gemini']))test(`${provider}: editorial theme guides review and scene repair, with original facts and authored requirements intact`,async t=>{
  const f=await productionFixture(t,provider),g=f.generation.generator();
  const selection={bookId:'zhuangzi',storyTitle:'庄周梦蝶',theme:'放下执念',length:8,artStyle:'ink-pencil',voice:false,productionPrompt:'用简洁旁白讲述，保留原文事实。'};
  const plan=makePlan(8),original={title:'《庄子·齐物论》',text:'昔者庄周梦为胡蝶。',url:'https://example.org',kind:'passage',provider:'controlled',retrievedAt:'2026-10-31T00:00:00Z'};

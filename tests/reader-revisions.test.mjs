@@ -2,9 +2,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {productionFixture,until,makePlan,selection} from './fixtures/production.mjs';
-import {revisionImpact,reusableRevisionImages} from '../lib/reader-revision.ts';
+import {revisionImpact,reusableRevisionImages,checkedRevision} from '../lib/reader-revision.ts';
 import {forkRevision} from '../server/reader-revisions.ts';
 import {ReaderRepository} from '../lib/reader-repository.ts';
+import {flowProviders} from './fixtures/test-tier.mjs';
 const owner='docker-local-owner';
 async function completed(t,provider='codex'){
  const f=await productionFixture(t,provider);f.control.hold=false;const id=await f.create();await until(async()=>(await f.read(id)).state==='completed');return {f,id};
@@ -33,7 +34,54 @@ test('image dependencies exclude narration, include scene/anchor/global inputs, 
  assert.equal(revisionImpact(base,{productionPrompt:'new',plan:caption}).conflict,true);
 });
 
-for(const provider of ['codex','gemini'])test(`${provider}: caption-only revision reuses every copied image, original and deleted-parent independence`,async t=>{
+test('image-only redraw validates page selection and cannot conceal content edits',()=>{
+ const plan=makePlan(4),base={selection,plan,images:['a','b','c','d']};
+ assert.deepEqual(revisionImpact(base,{redrawPages:[1,3]}),{changed:true,replan:false,preserveScript:false,review:false,reused:2,redraw:2,total:4,reusePending:false,conflict:false});
+ assert.deepEqual(checkedRevision(base,{redrawPages:[1,3]}).plan,plan);
+ for(const redrawPages of [[],[0],[5],[1,1],[1.5]])assert.throws(()=>checkedRevision(base,{redrawPages}));
+ assert.throws(()=>checkedRevision(base,{redrawPages:[1],plan}),/cannot also/);
+ assert.throws(()=>checkedRevision({...base,plan:null},{redrawPages:[1]}),/complete storyboard/);
+});
+
+for(const provider of flowProviders(['codex','gemini']))test(`${provider}: image-only redraw replaces selected pages including anchor without review or touching other images`,async t=>{
+ const {f,id}=await completed(t,provider),base=await snapshot(f,id),old=await f.read(id);
+ const readDoc=async storyId=>JSON.parse((await f.app.services.database.prepare('SELECT document FROM stories WHERE id=?').bind(storyId).first()).document);
+ const original=await readDoc(id),before=f.control.calls.length,reviews=f.control.reviews.length,frameReviews=f.control.frameReviews.length,plans=f.control.plans.length;
+ const requestId=crypto.randomUUID(),payload={requestId,token:base.token,changes:{redrawPages:[1,2,4]},paused:true};
+ const child=await f.json(`sessions/${id}/revisions`,'POST',payload);
+ assert.equal(child.generationControl,'paused');assert.equal(child.ready,5);assert.equal(f.control.calls.length,before);
+ await f.restart();
+ assert.equal((await f.read(child.id)).generationControl,'paused');
+ await f.json(`sessions/${child.id}/production-control`,'POST',{requestId:crypto.randomUUID(),action:'resume'});
+ await until(async()=>(await f.read(child.id)).state==='completed');
+ const saved=await f.read(child.id),doc=await readDoc(child.id);
+ assert.deepEqual(f.control.calls.slice(before).map(call=>call.page).sort((a,b)=>a-b),[0,1,3]);
+ assert.ok(!f.control.calls[before].reference);assert.ok(f.control.calls.slice(before+1).every(call=>call.reference));
+ assert.equal(f.control.reviews.length,reviews);assert.equal(f.control.frameReviews.length,frameReviews);assert.equal(f.control.plans.length,plans);
+ assert.deepEqual(doc.plan,original.plan);assert.deepEqual(doc.visualReview,original.visualReview);assert.deepEqual(doc.original,original.original);
+ for(const page of [2,4,5,6,7]){
+  const a=new Uint8Array(await(await f.request(old.story.pages[page].image.replace('/api/reader/',''))).arrayBuffer());
+  const b=new Uint8Array(await(await f.request(saved.story.pages[page].image.replace('/api/reader/',''))).arrayBuffer());assert.deepEqual(a,b);
+ }
+ assert.deepEqual((await f.read(id)).story,old.story);
+ const calls=f.control.calls.length,replay=await f.json(`sessions/${id}/revisions`,'POST',payload);
+ assert.equal(replay.id,child.id);assert.equal(f.control.calls.length,calls);
+ assert.equal((await f.request(`sessions/${id}/revisions`,'POST',{...payload,changes:{redrawPages:[2]}})).status,409);
+});
+
+test('image-only redraw refuses an unreviewed story and missing unselected media without starting work',async t=>{
+ const {f,id}=await completed(t),base=await snapshot(f,id),before=f.control.calls.length;
+ await f.app.services.database.prepare("UPDATE stories SET document=json_set(document,'$.visualReview.status','pending') WHERE id=?").bind(id).run();
+ const send=()=>f.request(`sessions/${id}/revisions`,'POST',{requestId:crypto.randomUUID(),token:base.token,changes:{redrawPages:[1]}});
+ assert.equal((await send()).status,409);assert.equal(f.control.calls.length,before);
+ await f.app.services.database.prepare("UPDATE stories SET document=json_set(document,'$.visualReview.status','passed') WHERE id=?").bind(id).run();
+ const get=f.app.services.media.get.bind(f.app.services.media),lost=base.images[3].replace('/api/reader/media/','reader/');
+ f.app.services.media.get=async key=>key===lost?null:get(key);
+ assert.equal((await send()).status,409);assert.equal(f.control.calls.length,before);
+ const children=await f.app.services.database.prepare("SELECT id FROM stories WHERE json_extract(document,'$.revision.parentId')=?").bind(id).all();assert.equal(children.results.length,0);
+});
+
+for(const provider of flowProviders(['codex','gemini']))test(`${provider}: caption-only revision reuses every copied image, original and deleted-parent independence`,async t=>{
  const {f,id}=await completed(t,provider),old=await f.read(id),base=await snapshot(f,id),plan=structuredClone(base.plan);
  plan.pages[3].caption='庄周醒来，看着窗外，仍记得梦中自在飞翔的感觉。';
  const before=f.control.calls.length,plans=f.control.plans.length,reviews=f.control.reviews.length;
@@ -108,7 +156,7 @@ for(const kind of ['missing','corrupt','transient'])test(`reusable ${kind} asset
  assert.equal((await f.read(id)).ready,8,'The original keeps what it has');
 });
 
-for(const provider of ['codex','gemini'])test(`${provider}: style changes preserve planning and review; requirements and counts re-audit`,async t=>{
+for(const provider of flowProviders(['codex','gemini']))test(`${provider}: style changes preserve planning and review; requirements and counts re-audit`,async t=>{
  const {f,id}=await completed(t,provider);let before=f.control.calls.length,plans=f.control.plans.length,reviews=f.control.reviews.length,frameReviews=f.control.frameReviews.length;
  const readDoc=async storyId=>JSON.parse((await f.app.services.database.prepare('SELECT document FROM stories WHERE id=?').bind(storyId).first()).document);
  const old=await readDoc(id);

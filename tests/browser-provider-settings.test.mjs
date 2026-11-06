@@ -13,7 +13,7 @@ import {createApplication} from '../server/app.ts';
 import {startDesktop} from '../server/desktop.ts';
 import {defaultSystemSettings} from '../lib/system-settings.ts';
 import {protectLocalProviderSettings} from '../scripts/development-server.mjs';
-import {providerSettingsPath,providerSettingsProofHeader,loopbackAddress} from '../lib/provider-settings.ts';
+import {providerSettingsPath,providerSettingsProofHeader,loopbackAddress,imageKeyDraftForProviderChange} from '../lib/provider-settings.ts';
 import {startupFixture,startFixtureCli,freeStartupPort,savedStartupState} from './fixtures/startup.mjs';
 
 const origin='http://127.0.0.1:3456',peer={remoteAddress:'127.0.0.1'};
@@ -169,3 +169,56 @@ test('generic reader and native desktop listeners do not expose browser credenti
  const base=`http://127.0.0.1:${port}`;assert.equal((await fetch(base+providerSettingsPath)).status,404);
  assert.equal((await fetch(base+providerSettingsPath,{method:'POST',headers:{Origin:base,'Content-Type':'application/json'},body:'{}'})).status,404);
 });
+
+test('separate image provider saves its own key, clears with null and reports both runtime sides',async t=>{
+ const f=await fixture(t,{SHIQU_IMAGE_PROVIDER:'openai'});let current=await f.view();
+ assert.equal(current.runtime.provider,'gemini');assert.equal(current.runtime.imageProvider,'openai');assert.equal(current.runtime.models.image,'saved-openai-image');assert.equal(current.runtime.models.text,'saved-google-text');assert.ok(current.overrides.includes('SHIQU_IMAGE_PROVIDER'));
+ let response=await f.save(body(current,{...current.settings,provider:'codex',imageProvider:'openai'},{imageKeyAction:'replace',imageKey:'replacement-secret'}));assert.equal(response.status,200);current=await safeJson(response);
+ assert.equal(current.settings.imageProvider,'openai');assert.equal(f.settingsStore.key('openai'),'replacement-secret');assert.equal(f.settingsStore.key('gemini'),googleKey);
+ // A key action for an image provider that is not separate is refused without changes.
+ const revision=current.revision;response=await f.save(body(current,{...current.settings,imageProvider:null},{imageKeyAction:'remove'}));assert.equal(response.status,400);await safeJson(response);assert.equal(f.settingsStore.revision(),revision);
+ f.settingsStore.save({},{provider:'openai',value:null});
+ response=await f.save(body(await f.view()));assert.equal(response.status,400);assert.match((await safeJson(response)).error,/image provider/i);
+ current=await f.view();response=await f.save(body(current,{...current.settings,imageProvider:null}));assert.equal(response.status,200);current=await safeJson(response);
+ assert.equal(current.settings.imageProvider,undefined);assert.ok(!JSON.stringify(f.settingsStore.settings()).includes('imageProvider'));assert.equal(f.settingsStore.settings().provider,'codex');
+});
+
+test('image key drafts survive only while the same separate API provider remains active',()=>{
+ const selections=['gemini','openai','codex','readonly'].flatMap(provider=>[undefined,'gemini','openai','codex'].map(imageProvider=>({provider,imageProvider})));
+ const owner=settings=>settings.provider!=='readonly'&&['gemini','openai'].includes(settings.imageProvider)&&settings.imageProvider!==settings.provider?settings.imageProvider:null;
+ for(const current of selections)for(const next of selections)for(const action of ['keep','replace','remove']){
+  const draft={imageKeyAction:action,imageKey:action==='replace'?'replacement-secret':''};
+  const expected=owner(current)&&owner(current)===owner(next)?draft:{imageKeyAction:'keep',imageKey:''};
+  assert.deepEqual(imageKeyDraftForProviderChange(current,next,draft),expected,JSON.stringify({current,next,action}));
+ }
+});
+
+for(const image of ['gemini','openai'])for(const imageKeyAction of ['replace','remove']){
+ test(`switching text to ${image} clears the hidden image ${imageKeyAction} draft and saves safely`,async t=>{
+  const f=await fixture(t),other=image==='gemini'?'openai':'gemini';
+  f.settingsStore.save({provider:other,imageProvider:image});
+  const current=await f.view(),settings={...current.settings,provider:image,imageProvider:undefined};
+  const draft={imageKeyAction,imageKey:imageKeyAction==='replace'?'replacement-secret':''};
+  // A hidden independent key draft is rejected without partially changing saved configuration.
+  const before=await savedStartupState(f);
+  let response=await f.save(body(current,{...settings,imageProvider:null},draft));
+  assert.equal(response.status,400);assert.match((await safeJson(response)).error,/same as the text provider/i);assert.deepEqual(await savedStartupState(f),before);
+  const cleared=imageKeyDraftForProviderChange(current.settings,settings,draft);
+  assert.deepEqual(cleared,{imageKeyAction:'keep',imageKey:''});
+  response=await f.save(body(current,{...settings,imageProvider:null},cleared));assert.equal(response.status,200);
+  const saved=await safeJson(response);assert.equal(saved.settings.provider,image);assert.equal(saved.settings.imageProvider,undefined);
+  assert.equal(saved.revision,current.revision+1);assert.equal(f.settingsStore.key('gemini'),googleKey);assert.equal(f.settingsStore.key('openai'),openaiKey);
+  // Switching back cannot resurrect a discarded replace/remove key action.
+  assert.deepEqual(imageKeyDraftForProviderChange(settings,current.settings,cleared),cleared);
+ });
+ test(`switching text without changing separate ${image} preserves its pending ${imageKeyAction} action`,async t=>{
+  const f=await fixture(t),other=image==='gemini'?'openai':'gemini';
+  f.settingsStore.save({provider:'codex',imageProvider:image});
+  const current=await f.view(),settings={...current.settings,provider:other};
+  const draft={imageKeyAction,imageKey:imageKeyAction==='replace'?'replacement-secret':''};
+  const retained=imageKeyDraftForProviderChange(current.settings,settings,draft);assert.deepEqual(retained,draft);
+  const response=await f.save(body(current,settings,retained));assert.equal(response.status,200);await safeJson(response);
+  assert.equal(f.settingsStore.key(image),imageKeyAction==='replace'?'replacement-secret':'');
+  assert.equal(f.settingsStore.key(other),other==='gemini'?googleKey:openaiKey);
+ });
+}

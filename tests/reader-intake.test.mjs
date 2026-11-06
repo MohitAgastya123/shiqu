@@ -5,6 +5,7 @@ import {productionFixture,until,selection} from './fixtures/production.mjs';
 import {saveStoryOriginal} from '../lib/reader-source-storage.ts';
 import {observeStoryGeneration} from '../lib/reader-production-client.ts';
 import {shelfGenerationStatus} from '../lib/shelf-generation.ts';
+import {heavy} from './fixtures/test-tier.mjs';
 const batch={stories:[{title:'庄周梦蝶',description:'梦醒后的庄周思考自己的经历。',artRecommendation:{artStyle:'paper-cut',reason:'层次适合梦境。'}},{title:'大葫芦',description:'惠子与庄子谈论大葫芦的用处。'}],note:''};
 async function fixture(t){const f=await productionFixture(t);f.control.hold=false;f.discoveries=[];f.generation.suggestions=async(s,excluded,_local,reading)=>{f.discoveries.push({s,excluded});reading?.onProgress({completed:1,total:1,completedChars:100,totalChars:100,stage:'selecting'});return structuredClone(batch);};return f;}
 async function create(f,requestId=crypto.randomUUID(),overrides={}) {const s=await f.json('sessions','POST',{requestId,intake:true,selection:{...selection,storyTitle:undefined,length:'auto',narrativeDetail:'balanced',...overrides}});if(s.intake.search.state==='idle'&&!s.intake.batches.length)await f.startDiscovery(s.id);await f.demand(s.id);return s.id;}
@@ -90,15 +91,6 @@ test('choosing a new candidate can carry unsaved manual preferences in the same 
  await setup(f,id,{action:'choose',batch:0,index:1,settings:{artStyle:'watercolor',productionPrompt:'Do not discard my edits.',narrativeDetail:'detailed'}});await until(async()=>(await f.read(id)).intake.phase==='confirming');const s=await f.read(id);assert.equal(s.selection.productionPrompt,'Do not discard my edits.');assert.equal(s.selection.artStyle,'watercolor');assert.equal(s.selection.narrativeDetail,'detailed');
 });
 
-test('native/preview shared summary follows intake gates and ignores obsolete job failures without exposing content',async t=>{
- const {readLibrarySummary}=await import('../desktop/library-preview.ts'),{productionSteps}=await import('../lib/production-stages.ts');
- const f=await fixture(t),id=await create(f);await until(async()=>(await f.read(id)).intake.phase==='choosing');
- await f.app.services.production.queue.enqueue({id:crypto.randomUUID(),sessionId:id,ownerId:'docker-local-owner',kind:'discover',pool:'search',version:'old',dependencies:[],payload:{setupGeneration:-1},priority:-100});
- await f.app.services.database.prepare("UPDATE production_jobs SET state='failed',error='private old failure' WHERE version='old'").run();
- let summary=readLibrarySummary(f.dataDirectory).stories.find(s=>s.id===id);assert.equal(summary.failed,0);assert.equal(summary.production.phase,'story-choice');assert.equal(summary.production.intakePhase,'choosing');assert.equal(productionSteps({...summary.production,total:null,ready:0})[1].label,'Production confirmation');
- await setup(f,id,{action:'choose',batch:0,index:0});await until(async()=>(await f.read(id)).intake.phase==='confirming');summary=readLibrarySummary(f.dataDirectory).stories.find(s=>s.id===id);assert.equal(summary.production.phase,'production-confirmation');assert.equal(summary.failed,0);assert.doesNotMatch(JSON.stringify(summary),/quiet narration|private old failure|梦为胡蝶/);
-});
-
 test('reselecting remote candidates prepares distinct originals through the real source cache, while returning to one reuses its text',async t=>{
  const f=await fixture(t),titles=['第一篇','第二篇'];
  f.generation.suggestions=async()=>({stories:titles.map(title=>({title,description:'来自所选古籍的独立故事。'})),note:''});
@@ -131,7 +123,7 @@ test('finding another batch leaves the prepared story in place and observes unti
  assert.equal(polls,2);assert.deepEqual(observed,['searching','idle']);assert.equal(shelfGenerationStatus(await f.read(id)).group,'Confirm production');assert.equal(f.control.recommendations.length,1);assert.equal(f.control.plans.length,0);assert.equal(f.control.calls.length,0);
 });
 
-test('confirmed intake draws eighty frames once across four storyboard batches',async t=>{
+test('confirmed intake draws eighty frames once across four storyboard batches',heavy,async t=>{
  const f=await fixture(t),id=await create(f);await until(async()=>(await f.read(id)).intake.phase==='choosing');
  await setup(f,id,{action:'choose',batch:0,index:0});await until(async()=>(await f.read(id)).intake.phase==='confirming');
  await setup(f,id,{action:'confirm',settings:{artStyle:'paper-cut',productionPrompt:'Complete causality without repeated scenes.',narrativeDetail:'detailed',length:80}});
@@ -143,14 +135,12 @@ test('confirmed intake draws eighty frames once across four storyboard batches',
 
 
 test('legacy prepared choice receipts read as confirming without writes or paid work, and can confirm directly',async t=>{
- const {readLibrarySummary}=await import('../desktop/library-preview.ts');
  const f=await fixture(t),id=await create(f);await until(async()=>(await f.read(id)).intake.phase==='choosing');
  await setup(f,id,{action:'choose',batch:0,index:0});await until(async()=>(await f.read(id)).intake.phase==='confirming');
  await f.app.services.production.queue.settle();await f.app.services.production.tick();
  await f.app.services.database.prepare("UPDATE stories SET document=json_set(document,'$.intake.phase','choosing') WHERE id=?").bind(id).run();
  const before=await f.app.services.database.prepare('SELECT document FROM stories WHERE id=?').bind(id).first();
  const s=await f.read(id);assert.equal(s.intake.phase,'confirming');assert.equal(s.generationProgress.phase,'production-confirmation');assert.equal(shelfGenerationStatus(s).group,'Confirm production');
- const summary=readLibrarySummary(f.dataDirectory).stories.find(s=>s.id===id);assert.equal(summary.production.intakePhase,'confirming');assert.equal(summary.production.phase,'production-confirmation');
  assert.equal((await f.app.services.database.prepare('SELECT document FROM stories WHERE id=?').bind(id).first()).document,before.document,'Reading normalizes the view, never the stored record');
  assert.equal(f.control.recommendations.length,1);assert.equal(f.control.plans.length,0);assert.equal(f.control.calls.length,0);
  await setup(f,id,{action:'confirm',settings:{artStyle:s.selection.artStyle,productionPrompt:s.selection.productionPrompt,narrativeDetail:'balanced',length:4}},s);
@@ -158,7 +148,6 @@ test('legacy prepared choice receipts read as confirming without writes or paid 
 });
 
 test('phase recovery compares local source ranges canonically and rejects partial or mismatched checkpoints',async t=>{
- const {readLibrarySummary}=await import('../desktop/library-preview.ts');
  const f=await fixture(t),id=await create(f);await until(async()=>(await f.read(id)).intake.phase==='choosing');
  await setup(f,id,{action:'choose',batch:0,index:0});await until(async()=>(await f.read(id)).intake.phase==='confirming');await f.app.services.production.queue.settle();await f.app.services.production.tick();
  const row=await f.app.services.database.prepare('SELECT document,selection FROM stories WHERE id=?').bind(id).first(),base=JSON.parse(row.document),selected=JSON.parse(row.selection);
@@ -175,7 +164,6 @@ test('phase recovery compares local source ranges canonically and rejects partia
  ]){
   const doc=structuredClone(base);mutate(doc);await f.app.services.database.prepare('UPDATE stories SET document=?,selection=? WHERE id=?').bind(JSON.stringify(doc),JSON.stringify(selected),id).run();
   assert.equal((await f.read(id)).intake.phase,phase);
-  const summary=readLibrarySummary(f.dataDirectory).stories.find(s=>s.id===id);assert.equal(summary.production.intakePhase,phase);
  }
  assert.equal(f.control.recommendations.length,1);assert.equal(f.control.plans.length,0);assert.equal(f.control.calls.length,0);
 });

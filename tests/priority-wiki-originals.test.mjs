@@ -1,6 +1,7 @@
-// Verify English prompt rules without changing canonical source glyph checks.
-// Verify the two adopted editions, exact original glyphs, reviewed exceptions and source-integrity failures.
-import test from'node:test';import assert from'node:assert/strict';import{readFile,writeFile,readdir,mkdtemp,cp,rm,symlink}from'node:fs/promises';import path from'node:path';import os from'node:os';import{createHash}from'node:crypto';
+// Verify source editions, original glyphs, exceptions and integrity; isolated libraries copy only the required books.
+import {copyBookLibrary} from './fixtures/book-library.mjs';
+import test from'node:test';import assert from'node:assert/strict';import{readFile,writeFile,readdir,mkdtemp,rm,symlink}from'node:fs/promises';import path from'node:path';import os from'node:os';import{createHash}from'node:crypto';
+import {books} from './fixtures/test-tier.mjs';
 import{LocalBooks}from'../server/local-books.ts';import{parseWikiStories}from'../server/local-book-wiki-stories.ts';import{readWikiBody}from'../server/local-book-html.ts';import{hasSourceAnomaly,hasBlockingSourceAnomaly}from'../server/local-source-quality.ts';import{bookInputs}from'../server/local-book-inputs.ts';import{withLocalBooks}from'../server/local-generation.ts';
 import{localReadingPrompt}from'../lib/reader-local-contract.ts';
 const catalog=JSON.parse(await readFile('data/library/catalog.json')),library=new LocalBooks(process.cwd()),ids=['红楼梦','喻世明言'],selection=bookId=>({bookId,theme:'理解与体谅',length:8,voice:false,artStyle:'ink-pencil'}),entry=id=>catalog.books.find(b=>b.id===id),squash=s=>s.replace(/\s/g,''),parts=async id=>Promise.all(entry(id).originalFiles.map(async item=>({item,raw:await readFile(path.join('data/library',entry(id).originalFile,item.file),'utf8')})));
@@ -12,7 +13,7 @@ test('legacy numeric chapter labels still locate the pinned original, and every 
  for(const purpose of [undefined,'scan']){const prompt=localReadingPrompt({title:'红楼梦',edition:b.edition,text:'原文',purpose});assert.match(prompt,/chapter 58/);assert.match(prompt,/volume 37/);assert.match(prompt,/complete context is absent/);}
 });
 
-test('all 120/40 chapters preserve every reading glyph, source heading and final verse from pinned originals',async()=>{
+test('all 120/40 chapters preserve every reading glyph, source heading and final verse from pinned originals',books,async()=>{
  for(const id of ids){const e=entry(id),b=await library.book(selection(id)),raw=await parts(id),honglou=id==='红楼梦';assert.equal(b.sections.length,honglou?120:40);assert.equal(raw.length,honglou?13:41);assert.equal(b.edition,e.source.sha256);
   assert.deepEqual(await readdir(path.join('data/library',e.originalFile)),e.originalFiles.map(f=>f.file));
   for(const p of raw)assert.equal(createHash('sha256').update(await readFile(path.join('data/library',e.originalFile,p.item.file))).digest('hex'),p.item.sha256);
@@ -47,7 +48,8 @@ test('page identities, chapter sequence, index order and pinned revision cannot 
 });
 
 test('missing, altered, extra and escaped original members fail before a book is exposed',async t=>{
- const root=await mkdtemp(path.join(os.tmpdir(),'shiqu-priority-'));t.after(()=>rm(root,{recursive:true,force:true}));const directory=path.join(root,'data/library');await cp('data/library',directory,{recursive:true});
+ const root=await mkdtemp(path.join(os.tmpdir(),'shiqu-priority-'));t.after(()=>rm(root,{recursive:true,force:true}));const directory=path.join(root,'data/library');await copyBookLibrary(root,ids);
+ for(const id of ids)assert.ok(await new LocalBooks(root).book(selection(id)));
  for(const id of ids){const e=entry(id),folder=path.join(directory,e.originalFile),target=path.join(folder,'001.html'),bytes=await readFile(target);await writeFile(target,'tampered');await assert.rejects(new LocalBooks(root).book(selection(id)),e=>e.status===503);await writeFile(target,bytes);
   const index=path.join(folder,'index.html'),indexBytes=await readFile(index);await rm(index);await assert.rejects(new LocalBooks(root).book(selection(id)),e=>e.status===503);await writeFile(index,indexBytes);
   await writeFile(path.join(folder,'extra.txt'),'extra');await assert.rejects(new LocalBooks(root).book(selection(id)),e=>e.status===503);await rm(path.join(folder,'extra.txt'));

@@ -39,7 +39,7 @@ test('a valid book reference can serve a later frame without loading its unused 
 
 test('missing snapshot blocks the model but cancellation is still possible',async t=>{
  const f=await productionFixture(t),source=await savedStory(f),selected=(await star(f,source.id)).reference,row=await f.app.services.database.prepare('SELECT asset_key FROM book_image_references').first();await rm(path.join(f.dataDirectory,'media',row.asset_key));
- const id=await target(f,{length:2});await f.demand(id);await until(async()=>(await f.read(id)).state==='failed');assert.equal(f.control.calls.length,0);assert.match((await f.read(id)).error,/参考图不可用/);assert.equal((await unstar(f,source.id,selected)).reference,null);
+ const id=await target(f,{length:2});await f.demand(id);await until(async()=>(await f.read(id)).state==='failed');assert.equal(f.control.calls.length,0);assert.match((await f.read(id)).error,/book reference image is unavailable/);assert.equal((await unstar(f,source.id,selected)).reference,null);
 });
 
 test('current stories may reference previously uploaded local pictures; deleted sources cannot',async t=>{

@@ -9,15 +9,15 @@ import {productionFixture,until,turn} from './fixtures/production.mjs';
 import {ReaderProductionCoordinator} from '../server/reader-production.ts';
 import {advanceStory} from '../lib/reader-engine.ts';
 import {ReaderRepository} from '../lib/reader-repository.ts';
-import {setLibraryStoryDeleted} from '../desktop/library-preview.ts';
+import {flowProviders} from './fixtures/test-tier.mjs';
 const owner='docker-local-owner';
 const control=(f,id,action)=>f.json(`sessions/${id}/production-control`,'POST',{action});
 
-for(const provider of ['codex','gemini'])test(`${provider}: new stories generate every page without a viewer or a mode request`,async t=>{
+for(const provider of flowProviders(['codex','gemini']))test(`${provider}: new stories generate every page without a viewer or a mode request`,async t=>{
  const f=await productionFixture(t,provider),id=await f.create(10);
  const initial=await f.read(id);assert.equal(initial.generationMode,'background');assert.equal(initial.generationControl,'active');
  // The create response already carries durable intent; no mode request or viewer is involved.
- f.control.hold=false;await until(async()=>(await f.read(id)).state==='completed');
+ f.control.hold=false;await until(async()=>(await f.read(id)).state==='completed',20000);
  assert.equal(f.control.calls.length,10);assert.equal(f.control.plans.length,1);assert.ok(f.control.maxActive<=3);
  assert.equal((await f.app.services.database.prepare('SELECT COUNT(*) AS n FROM production_demand').first()).n,0);
  assert.equal((await f.read(id)).generationMode,'background');
@@ -69,7 +69,7 @@ test('leaving a new story keeps it generating; a manual pause still survives res
  await control(f,id,'resume');await until(async()=>(await f.read(id)).state==='completed');assert.equal(f.control.calls.length,10);
 });
 
-for(const provider of ['codex','gemini'])test(`${provider}: shutdown drains saved images; startup resumes only the missing background pages`,async t=>{
+for(const provider of flowProviders(['codex','gemini']))test(`${provider}: shutdown drains saved images; startup resumes only the missing background pages`,async t=>{
  const f=await productionFixture(t,provider),id=await f.create(10);await control(f,id,'background');
  await until(()=>f.control.calls.length===1);f.control.calls[0].resolve();await until(()=>f.control.calls.length===4);
  f.app.stopGeneration();for(const call of f.control.calls)call.resolve();await until(async()=>(await f.read(id)).ready===4&&(await f.app.services.database.prepare('SELECT state FROM stories WHERE id=?').bind(id).first()).state!=='running');
@@ -111,9 +111,9 @@ test('background provider failures stay failed after restart until explicit retr
  await f.demand(id,crypto.randomUUID(),0,true);await until(async()=>(await f.read(id)).state==='completed');assert.equal(f.control.calls.length,11);
 });
 
-for(const desktop of [false,true])test(`${desktop?'desktop':'reader'} deletion disarms background work; restore cannot restart it`,async t=>{
+test('reader deletion disarms background work; restore cannot restart it',async t=>{
  const f=await productionFixture(t),id=await f.create(10);await control(f,id,'background');await until(()=>f.control.calls.length===1);
- if(desktop)setLibraryStoryDeleted(f.dataDirectory,id,true);else await f.json(`library/${id}`,'DELETE');
+ await f.json(`library/${id}`,'DELETE');
  f.control.calls[0].resolve();await until(async()=>{const row=await f.app.services.database.prepare('SELECT document FROM stories WHERE id=?').bind(id).first();return JSON.parse(row.document).images.filter(Boolean).length===1;});
  await f.json(`library/${id}/restore`,'POST');await f.restart();await f.app.services.production.tick();
  assert.equal((await f.read(id)).generationControl,'stopped');assert.equal(f.control.calls.length,1);
@@ -146,7 +146,7 @@ test('controls validate owner, origin, body and completed sessions; pause does n
  const paused=await f.create();f.generation.status=async()=>({configured:false});assert.equal((await f.request(`sessions/${paused}/production-control`,'POST',{action:'pause'})).status,200);
 });
 
-for(const provider of ['codex','gemini'])test(`${provider}: an expired missing remote result resumes automatically but saved images do not repeat`,async t=>{
+for(const provider of flowProviders(['codex','gemini']))test(`${provider}: an expired missing remote result resumes automatically but saved images do not repeat`,async t=>{
  const f=await productionFixture(t,provider),id=await f.createLegacyReader(10);f.control.hold=false;await f.demand(id);await until(async()=>(await f.read(id)).ready===7);await f.stop();
  const db=new DatabaseSync(path.join(f.dataDirectory,'shiqu.sqlite'));
  db.prepare("UPDATE stories SET generation_mode='background',document=json_set(document,'$.images[6]',''),state='running',lock_token='crashed',lock_until=1 WHERE id=?").run(id);

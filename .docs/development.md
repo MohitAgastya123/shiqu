@@ -32,13 +32,15 @@ Use `SHIQU_API_PORT=3003 pnpm dev --port 3001` for another pair of ports. Stop t
 SHIQU_DATA_DIR=/tmp/shiqu-development VITE_DESKTOP_READER_URL=http://127.0.0.1:3000 pnpm desktop:preview
 ```
 
-Open port 1420 in the in-app browser. Preview uses the real read-only library summary and cannot control native services or credentials. Use this for normal desktop UI work. Prepare, build or package the native application only when explicitly requested.
+Open the printed preview address in the in-app browser. The preview shows the service console without native service controls and does not read a personal library. Use this for normal desktop UI work. Prepare, build or package the native application only when explicitly requested. Existing browser test fixtures may bundle the reader into isolated temporary output; they do not prepare desktop resources or installers.
 
 ## Production architecture
 
 `server/app.ts` opens the library through `ensureLibraryReady()`, creates local book access and the selected generation provider, and attaches the durable production coordinator. The reader API and direct CLI commands use that same core. `lib/reader-engine.ts` advances a saved story by one checkpoint, and `server/reader-production.ts` schedules search, text, image and local publication jobs with dependencies and leases.
 
 The creation sequence is discovery, source preparation, confirmation, storyboard, title/ending, review, targeted repair/recheck, then illustration. Automatic stories use 1–80 frames, with storyboard batches of up to 20. Image generation establishes its first reference before parallel later frames. Saved results survive interruption; explicit recovery identifies the current fault and command, so a refresh cannot authorize duplicate paid work.
+
+`server/generation.ts` composes independent text and image services. `SHIQU_AI_PROVIDER` selects text; `SHIQU_IMAGE_PROVIDER=gemini|openai|codex` overrides drawing only. An absent or matching image choice follows text. Saved `imageProvider` is optional, and explicit environment choices affect only that invocation. `server/provider-runtime.ts` centralizes effective status and connection checks. Source translation stays on the text generator; image failure messages come from the image service.
 
 ## English production and source translation
 
@@ -51,12 +53,17 @@ Machine identifiers, migration SQL, original source hashes, historical prompt re
 ## Verification
 
 ```bash
+pnpm test:changed --plan
+pnpm test:changed
 pnpm typecheck
 pnpm lint
-pnpm test
 pnpm exec playwright install chromium --only-shell
 pnpm test:e2e --gate=release
 ```
+
+The impact planner reads `tests/manifest.json`; register every new test and its covered production sources. Shared schemas, infrastructure and unknown paths deliberately select full source qualification. `test:changed` includes staged, unstaged and untracked work. In a shared checkout, preview first and use `pnpm test:pr --files <all task paths>` for a complete scoped task. Selected files, execution modes, timing and exits are saved under `.data/test-plans/`.
+
+`pnpm test` runs fast contracts; `pnpm test:books`, `pnpm test:flows`, `pnpm test:e2e:extended`, `pnpm test:providers`, and `pnpm test:full` select the documented larger suites. Main/release CI retains full qualification. A plan with `native: true` also requires applicable Rust source checks; JS results do not establish native coverage. See [test triggers](testing-triggers.md).
 
 Tests use isolated libraries/settings and controlled provider responses. Do not use real credentials or the user's library for migration or generation tests. Focused English coverage lives in `tests/english-app.test.mjs`, `tests/english-ui.test.mjs` and `tests/english-reading.playwright.e2e.mjs`.
 

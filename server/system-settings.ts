@@ -1,15 +1,16 @@
-// English product messages; source evidence and machine identifiers remain stable.
-// Own the shared private settings database, compatible with the native v2 store.
-// Transactions migrate old rows and patch the latest settings; no raw key reaches public views or errors.
+// Share the native v2 settings store with transactional merges and revision checks; saved keys never enter public views.
+// Desktop HTTP opens only the existing store and refuses missing or corrupt settings without replacing them.
 import {DatabaseSync} from 'node:sqlite';
 import {existsSync,mkdirSync,lstatSync,openSync,closeSync,chmodSync,constants,readFileSync} from 'node:fs';
 import path from 'node:path';
-import {defaultSystemSettings,systemSettingsSchema,validApiKey,resetProviderSettings} from '../lib/system-settings.ts';
-import type {SystemSettings,ProviderName} from '../lib/system-settings.ts';
-const failure='The shared settings database could not be read or saved. Check permissions or use a compatible version. Existing settings will not be recreated automatically.';
+import {defaultSystemSettings,systemSettingsSchema,validApiKey,resetProviderSettings,effectiveImageProvider} from '../lib/system-settings.ts';
+import type {SystemSettings,ProviderName,ApiProviderName} from '../lib/system-settings.ts';
+export type KeyChange={provider:ApiProviderName;value:string|null};
+const failure='The shared settings database could not be read or saved. Check permissions or use a compatible version; existing settings will not be rebuilt.';
 export class SystemSettingsStore{
  private db:DatabaseSync;
- constructor(filename:string,library:string){
+ constructor(filename:string,library:string,options:{existingOnly?:boolean}={}){
+  if(options.existingOnly&&(!existsSync(filename)||!lstatSync(filename).isFile()))throw Error(failure);
   const folder=path.dirname(filename);mkdirSync(folder,{recursive:true,mode:0o700});
   if(!lstatSync(folder).isDirectory())throw Error(failure);
   if(!existsSync(filename)){
@@ -23,6 +24,7 @@ export class SystemSettingsStore{
    this.db.exec('PRAGMA busy_timeout=2000; PRAGMA secure_delete=ON; PRAGMA temp_store=MEMORY; BEGIN IMMEDIATE');
    const version=this.db.prepare('PRAGMA user_version').get()!.user_version;
    if(version===0){
+    if(options.existingOnly)throw Error(failure);
     if(this.db.prepare("SELECT count(*) AS n FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'").get()!.n!==0)throw Error();
     const legacy=path.join(folder,'settings.json');
     const settings=existsSync(legacy)?this.validate(JSON.parse(readFileSync(legacy,'utf8'))):defaultSystemSettings(library);
@@ -43,8 +45,11 @@ export class SystemSettingsStore{
  private validate(value:unknown){
   const settings=systemSettingsSchema.parse(value);
   if(!path.isAbsolute(settings.dataDirectory)||settings.cloudflaredPath&&!path.isAbsolute(settings.cloudflaredPath))throw Error();
-  if(process.platform==='win32'&&settings.provider==='codex')throw Error('Codex does not support native Windows. Choose OpenAI API, Gemini, or read-only mode.');
-  const {lanEnabled:_,...saved}=settings;void _;return saved;
+  if(process.platform==='win32'&&(settings.provider==='codex'||effectiveImageProvider(settings)==='codex'))throw Error('Codex does not support native Windows. Choose OpenAI API, Gemini or read-only mode.');
+  const {lanEnabled:_,...saved}=settings;void _;
+  // "Same as text" is stored as unset so older builds can still read the settings.
+  if(saved.imageProvider===saved.provider)delete saved.imageProvider;
+  return saved;
  }
  settings():SystemSettings{
   try{return this.validate(JSON.parse(this.db.prepare('SELECT value FROM desktop_settings WHERE id=1').get()!.value as string));}
@@ -59,26 +64,31 @@ export class SystemSettingsStore{
   if(provider!=='gemini'&&provider!=='openai')return '';
   return (this.db.prepare('SELECT value FROM desktop_credentials WHERE name=?').get(provider)?.value as string|undefined)||'';
  }
- save(patch:Partial<SystemSettings>,key?:{provider:'gemini'|'openai';value:string|null},expectedRevision?:number){
+ // Key changes may target the text provider or a separate image provider, never an unused provider.
+ save(patch:Partial<SystemSettings>,key?:KeyChange|KeyChange[],expectedRevision?:number){
   this.db.exec('BEGIN IMMEDIATE');
   try{
    if(expectedRevision!==undefined&&this.revision()!==expectedRevision)throw Error('SETTINGS_CHANGED');
-   const settings=this.validate({...this.settings(),...patch});
-   if(key){
-    if(key.provider!==settings.provider)throw Error();
-    if(key.value===null)this.db.prepare('DELETE FROM desktop_credentials WHERE name=?').run(key.provider);
-    else this.db.prepare('INSERT INTO desktop_credentials VALUES(?,?) ON CONFLICT(name) DO UPDATE SET value=excluded.value').run(key.provider,validApiKey(key.value));
+   const settings=this.validate({...this.settings(),...patch}),changes=key?Array.isArray(key)?key:[key]:[];
+   const active=new Set([settings.provider,effectiveImageProvider(settings)]);
+   if(changes.some(change=>!active.has(change.provider))||new Set(changes.map(change=>change.provider)).size!==changes.length)throw Error();
+   for(const change of changes){
+    if(change.value===null)this.db.prepare('DELETE FROM desktop_credentials WHERE name=?').run(change.provider);
+    else this.db.prepare('INSERT INTO desktop_credentials VALUES(?,?) ON CONFLICT(name) DO UPDATE SET value=excluded.value').run(change.provider,validApiKey(change.value));
    }
    this.db.prepare('UPDATE desktop_settings SET value=?,revision=revision+1 WHERE id=1').run(JSON.stringify(settings));
    this.db.exec('COMMIT');return settings;
   }catch(error){this.db.exec('ROLLBACK');throw Error((error as Error).message==='SETTINGS_CHANGED'?'Settings were changed elsewhere. Reload them before saving.':failure);}
  }
- resetProviders(){
+ resetProviders(expectedRevision?:number,preservePaths=false){
   this.db.exec('BEGIN IMMEDIATE');
   try{
-   const settings=resetProviderSettings(this.settings());this.db.exec('DELETE FROM desktop_credentials');
+   if(expectedRevision!==undefined&&this.revision()!==expectedRevision)throw Error('SETTINGS_CHANGED');
+   const current=this.settings(),settings=resetProviderSettings(current);
+   if(preservePaths){settings.codexPath=current.codexPath;settings.codexHome=current.codexHome;}
+   this.db.exec('DELETE FROM desktop_credentials');
    this.db.prepare('UPDATE desktop_settings SET value=?,revision=revision+1 WHERE id=1').run(JSON.stringify(settings));this.db.exec('COMMIT');
-  }catch{this.db.exec('ROLLBACK');throw Error(failure);}
+  }catch(error){this.db.exec('ROLLBACK');throw Error((error as Error).message==='SETTINGS_CHANGED'?'Settings were changed elsewhere. Reload them before saving.':failure);}
  }
  close(){this.db.close();}
 }

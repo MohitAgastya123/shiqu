@@ -40,7 +40,7 @@ export function shelfView(session:SessionView):SessionView{
 async function body(req:Request,maxLength=4096){const s=await req.text();if(s.length>maxLength)throw new ReaderError(413,'The request is too long.');try{return JSON.parse(s);}catch{throw new ReaderError(400,'Invalid request format.');}}
 export function createReaderApi(services:Services){
 const provider=services.generation;
-async function requireProvider(){if(services.commandOnly)return;const status=await provider.status();if(!status.configured)throw new ReaderError(503,status.message||'Generation is unavailable. Check your provider settings.');}
+async function requireProvider(){if(services.commandOnly)return;const status=await provider.status();if(!status.configured)throw new ReaderError(503,status.message||'Configure a generation provider first. Open My space → Generation service and models on the computer running Shiqu.');}
 return async function readerApi(req:Request,path:string[]):Promise<Response>{
  try{
   if(path.join('/')==='status'&&req.method==='GET')return json(await provider.status());

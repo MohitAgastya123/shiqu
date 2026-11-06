@@ -1,17 +1,20 @@
-// Verify English messages without changing credential, process, or source fixtures.
-// Verify DeepSeek's dedicated credentials, Responses transport and unchanged production review gates.
+// Controlled adapter and settings contracts; separate flow files exercise production startup and generation.
 import test from 'node:test';
+
 import assert from 'node:assert/strict';
+
 import {createReaderProvider} from '../server/generation.ts';
-import {executeHeadless} from '../server/headless-cli.ts';
-import {withLocalBooks} from '../server/local-generation.ts';
-import {productionFixture,makePlan,selection as legacy} from './fixtures/production.mjs';
-import {libraryFixture} from './fixtures/story-library.mjs';
+
+import {makePlan,selection as legacy} from './fixtures/production.mjs';
+
 import {geminiEvidenceAnswer} from './fixtures/gemini-evidence.mjs';
 
 const selection={...legacy,length:'auto'},plan=makePlan(3),{pages,reflection:_,...metadata}=plan;
+
 const outline={...metadata,beats:pages.map(()=> '庄周醒来，核对梦与醒的处境。')};
+
 const original={title:'原文',text:'庄周梦为蝴蝶，醒来又是庄周。',url:'',kind:'passage',provider:'fixture',retrievedAt:'2026-11-05'};
+
 const completed=value=>Response.json({status:'completed',model:'deepseek-flash',id:'controlled',usage:{input_tokens:12,output_tokens:34},output:[{type:'message',content:[{type:'output_text',text:JSON.stringify(value)}]}]});
 
 test('DeepSeek cannot use OpenAI/Gemini keys or invoke image generation',async()=>{
@@ -66,16 +69,4 @@ test('DeepSeek reports safe failures without leaking keys, provider bodies or fa
   await assert.rejects(provider.generator().outline(selection,'fixture',original),error=>{assert.match(provider.safeError(error),/DeepSeek/);return error.status===status;});assert.equal(calls,1);
  }}finally{console.error=saved;}
  assert.doesNotMatch(captured.join('\n'),/private provider|private-deepseek-key/);
-});
-
-test('DeepSeek runs the public production CLI through 20/20/1 scene batches and both review gates without images',{timeout:30000},async t=>{
- const f=await productionFixture(t,'deepseek');await f.stop();const library=libraryFixture();f.control.autoLength=41;
- f.control.beforeText=async kind=>kind==='recommend'?{storySummary:library.stories[0].summary,storyMatchReason:'原文的行动和结果支持本篇故事。'}:undefined;
- const context={generation:withLocalBooks(f.generation,library.books,f.media),localBooks:library.books,variables:{}};
- const call=(args,input={})=>executeHeadless(process.cwd(),[...args,'--data-dir',f.dataDirectory],{...context,input});
- const created=await call(['stories','create'],{requestId:crypto.randomUUID(),intake:false,selection:{...selection,narrativeDetail:'balanced',theme:'原典故事',storyTitle:library.stories[0].title,source:library.stories[0].source}});
- const result=await call(['run',created.session.id,'--until','reviewed','--timeout','15']);assert.equal(result.reason,'reviewed',JSON.stringify(result.session));
- assert.equal(result.session.generationProgress.reviewStatus,'passed');assert.equal(result.session.generationProgress.reviewOverridden,false);assert.equal(result.session.story.pages.length,41);assert.equal(result.session.ready,0);
- assert.deepEqual(f.control.batches.map(p=>p.batch),[{first:1,last:20},{first:21,last:40},{first:41,last:41}]);assert.ok(f.control.frameReviews.length);assert.ok(f.control.reviews.length);assert.equal(f.control.calls.length,0);
- assert.ok(result.session.story.generationModels.every(entry=>entry.model==='deepseek-flash'));
 });

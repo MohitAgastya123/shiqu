@@ -1,5 +1,4 @@
-// Verify English messages without changing credential, process, or source fixtures.
-// Exercise public authentication and helper lifecycle with disposable libraries and no AI requests.
+// Verify internet authentication and helper lifecycle in a temporary library without AI requests.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,mkdir,cp,readFile,writeFile,rm,access,symlink} from 'node:fs/promises';
@@ -99,10 +98,16 @@ test('helper receives isolated config/environment, handles split output and stop
 test('helper missing, timeout and startup cancellation leave no process or config',nativeOnly,async t=>{
  await assert.rejects(startDesktopTunnel('http://127.0.0.1:12345','/missing/cloudflared'),/cloudflared was not found/);
  const f=await fake(t,{ready:false});
+ // Trigger the production timeout after the helper records startup, exercising cleanup without an idle five-second delay.
+ const schedule=globalThis.setTimeout;let expire;
+ const clock=t.mock.method(globalThis,'setTimeout',(callback,delay,...args)=>{
+  if(delay===5000){assert.equal(expire,undefined);expire=callback;}
+  return schedule(callback,delay,...args);
+ });
  const timedOut=assert.rejects(startDesktopTunnel('http://127.0.0.1:12345',f.binary,{timeoutMs:5000}),/could not connect/);
- let info=await f.info();await timedOut;assert.equal(alive(info.pid),false);await assert.rejects(access(info.args[info.args.indexOf('--config')+1]));
+ let info=await f.info();assert.equal(typeof expire,'function');expire();await timedOut;clock.mock.restore();assert.equal(alive(info.pid),false);await assert.rejects(access(info.args[info.args.indexOf('--config')+1]));
  const second=await fake(t,{ready:false}),abort=new AbortController();
- const starting=startDesktopTunnel('http://127.0.0.1:12345',second.binary,{signal:abort.signal});const rejected=assert.rejects(starting,/canceled/);
+ const starting=startDesktopTunnel('http://127.0.0.1:12345',second.binary,{signal:abort.signal});const rejected=assert.rejects(starting,/[Cc]ancel/);
  info=await second.info();abort.abort();await rejected;assert.equal(alive(info.pid),false);
  await assert.rejects(access(info.args[info.args.indexOf('--config')+1]));
 });
@@ -129,8 +134,8 @@ test('tunnel entry pairs safely and helper exit clears public access while LAN s
  const Cookie=paired.headers.get('set-cookie').split(';')[0];
  const stories=await (await tunnelRequest(target+'/api/reader/sessions',{headers:{...headers,Cookie}})).json();assert.equal(stories.length,1);
  const changed=await tunnelRequest(target+'/api/reader/sessions/'+stories[0].id+'/progress',{method:'POST',headers:{...headers,Cookie,'Content-Type':'application/json'},body:JSON.stringify({storyId:stories[0].id,page:2,saved:true})});assert.equal(changed.status,200);
- process.kill(info.pid,'SIGTERM');await until(()=>updates.length);
- assert.equal(runtime.status.publicUrl,'');assert.match(updates[0].internetError,/LAN access remain available/);
+ process.kill(info.pid,'SIGTERM');await until(()=>updates.some(status=>status.internetError));
+ assert.equal(runtime.status.publicUrl,'');assert.match(updates.find(status=>status.internetError).internetError,/Local and LAN access remain available/);
  assert.equal((await fetch(runtime.status.url+'/api/reader/sessions')).status,200);
  await until(async()=>{try{await fetch(target);return false;}catch{return true;}});
  await runtime.stop();await assert.rejects(fetch(runtime.status.url));
@@ -151,7 +156,7 @@ test('missing helper leaves direct local/LAN access running without pairing',nat
  assert.equal((await fetch(origin+'/api/reader/sessions/'+stories[0].id+'/progress',{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({storyId:stories[0].id,page:2,saved:true})})).status,200);
  await runtime.stop();await assert.rejects(fetch(origin));
  runtime=await startDesktop({...f.settings,internetEnabled:false},'',f.root);assert.equal((await fetch(runtime.status.url)).status,200);
- assert.match(desktopFailure(new Error('raw-private-data')),/service failed to start/);
+ assert.match(desktopFailure(new Error('raw-private-data')),/Service startup failed/);
 });
 test('helper exiting before readiness closes only the remote entry and retains LAN',nativeOnly,async t=>{
  const f=await fixture(t),helper=await fake(t,{ready:false});
@@ -179,10 +184,10 @@ test('native JSON protocol reports tunnel disconnect and EOF stops the remaining
  await symlink(path.resolve('node_modules'),path.join(f.root,'node_modules'),'junction');await writeFile(path.join(f.root,'package.json'),'{"type":"module"}');
  const child=spawn(process.execPath,[entry],{cwd:f.root,stdio:['pipe','pipe','pipe']});child.stderr.resume();
  t.after(()=>{if(child.exitCode===null)child.kill('SIGTERM');});
- const lines=createInterface({input:child.stdout}),ready=once(lines,'line');child.stdin.write(JSON.stringify({action:'start',settings:{...f.settings,cloudflaredPath:helper.binary},key:''})+'\n');
+ const lines=createInterface({input:child.stdout}),ready=new Promise(resolve=>lines.on('line',line=>{if(JSON.parse(line).publicUrl)resolve([line]);}));child.stdin.write(JSON.stringify({action:'start',settings:{...f.settings,cloudflaredPath:helper.binary},key:''})+'\n');
  const initial=JSON.parse((await ready)[0]);assert.ok(initial.publicUrl.startsWith(publicOrigin+'/connect#'));
- const info=await helper.info(),changed=once(lines,'line');process.kill(info.pid,'SIGTERM');const status=JSON.parse((await changed)[0]);
- assert.equal(status.publicUrl,'');assert.equal(status.running,true);assert.equal(status.url,initial.url);assert.match(status.internetError,/LAN/);
+ const info=await helper.info(),changed=new Promise(resolve=>lines.on('line',line=>{if(JSON.parse(line).internetError)resolve([line]);}));process.kill(info.pid,'SIGTERM');const status=JSON.parse((await changed)[0]);
+ assert.equal(status.publicUrl,'');assert.equal(status.running,true);assert.equal(status.url,initial.url);assert.match(status.internetError,/LAN|local network/);
  assert.equal((await fetch(status.url+'/api/reader/sessions')).status,200);
  const exited=once(child,'exit');child.stdin.end();await exited;assert.equal(alive(info.pid),false);await assert.rejects(fetch(status.url));
 });

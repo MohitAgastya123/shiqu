@@ -6,11 +6,29 @@ New stories are written in English. During preparation, the production workflow 
 
 [Read the community collection](https://yysun.github.io/awesome-shiqu/) · [User guide](.docs/user-guide.md) · [Development](.docs/development.md)
 
+This English fork is maintained at [MohitAgastya123/shiqu](https://github.com/MohitAgastya123/shiqu). Run this checkout with `pnpm dev` to use its English changes. Published packages and installers linked below are upstream releases; they do not automatically include this fork's customizations.
+
+The `english-app` branch preserves the original English conversion. `english-upstream` combines it with upstream 0.9.0. The `upstream` Git remote points to the original project so future updates can be fetched, reviewed, merged and tested.
+
 ## Start creating
 
 Choose a generation provider: a signed-in Codex CLI, OpenAI API, or Gemini. API providers use their own keys and billing. Codex subscription mode requires macOS or Linux and a separately installed Codex CLI. Read-only mode needs no AI credentials.
 
-### Command line
+Text and image providers can be selected independently. The text service handles discovery, English source preparation, storyboarding and review; the image service draws illustrations. **Same as text** uses the text provider for both. Each API service requires its own configured credentials.
+
+### English fork from source
+
+From this checkout, use the pinned Node and pnpm versions:
+
+```bash
+nvm use
+pnpm install --frozen-lockfile
+pnpm dev
+```
+
+Open the printed local address and keep the terminal running. Provider changes take effect after restarting the service.
+
+### Upstream command-line package
 
 Install Node 24, then run:
 
@@ -28,7 +46,7 @@ The desktop app includes Node. It supports Apple Silicon Macs with macOS 13.5+ a
 
 [macOS download](https://github.com/yysun/shiqu/releases/latest/download/shiqu-standard-macos-arm64.dmg) · [Windows download](https://github.com/yysun/shiqu/releases/latest/download/shiqu-standard-windows-x64-setup.exe) · [Releases and checksums](https://github.com/yysun/shiqu/releases/latest)
 
-Open Settings, choose a provider, save, and start the service. Open the reader in your browser to create and read stories. See the [desktop guide](desktop/README.md) for installation and development details. Published installers are separate release artifacts; changes in this source folder do not update them automatically.
+The desktop app is a service console with local and phone links, service controls, and advanced connection options. Open the reader in your browser; **My space → Generation service and models** manages text/image providers and saved credentials. See the [desktop guide](desktop/README.md) for installation and development details. Published installers are separate release artifacts; changes in this source folder do not update them automatically.
 
 ### Codex skill
 
@@ -54,6 +72,8 @@ The skill uses the same production core through CLI commands, without starting t
 Choose a book, optional chapters and theme, then select a story. Preparation saves verified source evidence, an English translation, a checked English summary, and production recommendations. Confirm the art style, narrative detail, instructions, and acceptance criteria before starting.
 
 The production core creates a storyboard, reviews it against the original, makes targeted revisions, and checks it again before drawing. Each story supports 1–80 illustrated frames. The first illustration normally becomes the reference for later frames; a starred reference from the same book can be used instead. Stories can be paused, revised, resumed, and recovered without discarding completed work.
+
+The redesigned shelf separates active production from readable stories. A selective image redraw creates a revision that preserves reviewed text and redraws only the explicitly chosen frames.
 
 ## Export and share
 

@@ -41,7 +41,7 @@ const commands=[
  ['run / stories run','Run only one current story to candidates, prepared, reviewed or completed; never resumes a pause/fault implicitly.','run ID --until reviewed --timeout 900'],
  ['stories copy','Copy saved text and review from an offline library without inference. --draft explicitly preserves unreviewed text as a paused copy without images; default requires passed review.','stories copy ID --from-data-dir SOURCE --request-id UUID'],
  ['stories copy-images','Attach source images to an existing paused text copy without inference or prompts. Safe to repeat; retains text and review.','stories copy-images TARGET_ID --from-data-dir SOURCE --input source.json'],
- ['stories edit','Commit a revision using production token/changes validation; does not generate.','stories edit ID --input revision.json --request-id UUID'],
+ ['stories edit','Commit a revision using production token/changes validation; changes.redrawPages uses 1-based pages to replace only selected artwork without re-review. Does not generate.','stories edit ID --input revision.json --request-id UUID'],
  ['stories pause|resume|stop|retry|override','Control or explicitly recover the current fault; input faultId is required for retry/override.','stories retry ID --input recovery.json --request-id UUID'],
  ['stories rename|delete|restore|favorite|reference','Shared library actions; reference input is {page,starred,token?}.','stories rename ID --title New title'],
  ['stories revisions|prompts|review-history|source','Read saved production checkpoints and history.','stories review-history ID'],
@@ -64,9 +64,10 @@ const inputs={
  setup:{note:'stories setup ID accepts an action; requestId defaults to a new UUID; generation is required from stories get ID. Keep both fixed for replay.',examples:[{action:'conditions',conditions:{bookId:'zhuangzi',theme:'Kindness and misunderstanding',productionPrompt:''}},{action:'more'},{action:'draft',settings:{artStyle:'ink-pencil',productionPrompt:'',acceptancePrompt:'',narrativeDetail:'balanced',length:'auto'}}]},
  confirm:{settings:{productionPrompt:'Preserve key actions.',acceptancePrompt:'Show character responses through visible actions.'}},
  retry:{faultId:'current fault UUID from stories get'},favorite:{saved:true},reference:{page:0,starred:true},replace:{batch:0,index:0},
+ redraw:{command:'stories edit ID --input redraw.json --request-id UUID',input:{token:'from stories revisions ID',paused:true,changes:{redrawPages:[1,2,28]}},note:'Completed stories only. Pages are 1-based. Preserves script, review and unselected images, including when page 1 is redrawn. Only run performs generation using its configured image provider.'},
  publication:{get:'api GET reader/publication-defaults',set:'api POST reader/publication-defaults --input publication.json',input:{publication:{...emptyPublication,author:'Your name',watermarkFontSize:24},expected:'Use the exact publication object (or null) returned by GET.'}},
  frameCount:{command:'api POST reader/sessions/ID/frame-count --input count.json',input:{count:8}},
- config:{command:'config set --input settings.json',input:{settings:{provider:'codex',providerConfigured:true},expectedRevision:'from config get'},key:'For API providers only: key:{provider:"openai"|"gemini",value:"secret"|null}; never pass a key in argv.'},
+ config:{command:'config set --input settings.json',input:{settings:{provider:'codex',providerConfigured:true,imageProvider:'gemini'},expectedRevision:'from config get'},imageProvider:'Optional drawing provider (gemini|openai|codex); null or omitted follows provider.',key:'For API providers only: key:{provider:"openai"|"gemini",value:"secret"|null}, or a list for separate text/image providers; never pass a key in argv.'},
 };
 type Context={cwd?:string;home?:string;generation?:ReaderProvider;localBooks?:LocalBooks;variables?:Record<string,string|undefined>;input?:unknown;signal?:AbortSignal;skill?:{transport?:typeof fetch;now?:()=>number}};
 function parse(args:string[]){return parseArgs({args,allowPositionals:true,strict:true,options:Object.fromEntries([

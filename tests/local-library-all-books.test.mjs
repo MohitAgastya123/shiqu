@@ -1,15 +1,16 @@
-// Verify saved original glyphs independently of the English reader source projection.
-// Exercise every shipped book through exhaustive reading and source-before-plan HTTP checkpoints.
+// Check all books through production reading and HTTP generation; per-book fault cases copy only the required source.
+import {copyBookLibrary} from './fixtures/book-library.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import os from 'node:os';
-import {readFile,mkdtemp,rm,writeFile,cp} from 'node:fs/promises';
+import {readFile,mkdtemp,rm,writeFile} from 'node:fs/promises';
 import {LocalBooks} from '../server/local-books.ts';
 import {bookInputs} from '../server/local-book-inputs.ts';
 import {withLocalBooks} from '../server/local-generation.ts';
 import {createApplication} from '../server/app.ts';
 import {FileMedia} from '../server/media.ts';
+import {books} from './fixtures/test-tier.mjs';
 const root=process.cwd(),library=new LocalBooks(root),catalog=JSON.parse(await readFile('data/library/catalog.json','utf8'));
 const counts=[12,33,36,101,120,120,120,56,18,8,20,25,24,30,500,10,40,40,40,40,40,130,501,4];
 const memory=()=>{const values=new Map();return {get:async key=>{const bytes=values.get(key);return bytes?{arrayBuffer:async()=>bytes.slice().buffer}:null;},put:async(key,bytes)=>{values.set(key,new Uint8Array(bytes));}};};
@@ -26,7 +27,7 @@ function candidate(book,visible,offset=0){
 function fake(onPlan=async()=>{}){return {matchStories:async(_theme,stories)=>({matches:stories.map(story=>({id:story.id,verdict:'yes',reason:'原文事件与结果支持本次选题。'}))}),status:async()=>({configured:true,provider:'gemini',voiceEnabled:false,models:{text:'mock',image:'mock'}}),safeError:()=> '模拟错误',async suggestions(s,excluded,input){assert.ok(input);const book=await library.book(s),visible=new Set([...input.text.matchAll(/\[([a-z]+-\d+-\d+)\]/g)].map(m=>m[1]));return {stories:candidate(book,visible).slice(0,input.scan.maxStories),note:'',scan:{blockComplete:false,pendingEvents:[],resolvedEventIds:[]}};},generator:()=>({translateSource:async()=>({value:{title:'Verified English source',text:'The characters act and respond, and the event reaches its recorded outcome.'},model:'mock-translation',requestId:'translation',usage:null}),recommend:async()=>({value:{count:8,reason:'按完整因果展开。',storySummary:plan.summary,storyMatchReason:'按原文实际事件展开。'},model:'mock',requestId:'mock',usage:null}),reflection:async()=>({value:plan.reflection,model:'mock',requestId:'mock',usage:null}),reflectionCandidates:async()=>({value:{title:plan.title,candidates:[plan.reflection,'醒来之后，梦中的自在仍值得回味。','梦与醒的分界，也未必是心境的分界。']},model:'mock',requestId:'mock',usage:null}),review:async(_s,_p,_o,_outline,candidates)=>({value:{coverage:[{quote:_o.text.slice(0,30),task:'受控原文核对',pages:[1],assessment:'adequate',reason:'受控记录，不代表语义质量。',issuePage:0}],issues:[],titleReview:{title:_p.title,reason:'标题准确对应当前故事。'},...(candidates?{reflectionChoice:{index:1,reason:'保留原文支持的认识。'}}:{})},model:'mock',requestId:'mock',usage:null}),async plan(s,id,original){await onPlan(s,id,original);return {value:structuredClone(plan),model:'mock',requestId:'mock',usage:null};},original:async()=>assert.fail('No public book API'),image:async()=>assert.fail('No images'),audio:async()=>assert.fail('No audio'),safeError:()=> '模拟错误'})};}
 async function temp(t){const d=await mkdtemp(path.join(os.tmpdir(),'shiqu-library-'));t.after(()=>rm(d,{recursive:true,force:true}));return d;}
 
-test('all 24 catalogs load verified originals with complete chapters and exhaustive bounded inputs',async()=>{
+test('all 24 catalogs load verified originals with complete chapters and exhaustive bounded inputs',books,async()=>{
  for(const [index,entry] of catalog.books.entries()){
   assert.equal(entry.localGeneration,true);const book=await library.book(select(entry.id));assert.ok(book,entry.id);assert.equal(book.sections.length,counts[index],entry.id);
   const inputs=bookInputs(book),seen=new Set();
@@ -45,18 +46,18 @@ test('all 24 catalogs load verified originals with complete chapters and exhaust
  assert.doesNotMatch((await library.book(select('浮生六记'))).input.text,/卷五|卷六|\(佚\)/);
 });
 
-test('all catalogs use originals without cross-source supplements; Erke final play has a pinned Wiki source',async()=>{
+test('all catalogs use originals without cross-source supplements; Erke final play has a pinned Wiki source',books,async()=>{
  assert.ok(catalog.books.every(entry=>entry.supplements.length===0));
  const erke=await library.book(select('二刻拍案惊奇')),section=erke.sections.at(-1),story=candidate({...erke,sections:[section]})[0],original=library.resolve(erke,story.source);
  assert.match(section.title,/杂剧/);assert.match(section.units.map(u=>u.text).join(''),/宋公明|宋三郎/);assert.equal(new URL(original.url).hostname,'zh.wikisource.org');assert.equal(new URL(original.url).searchParams.get('title'),'二刻拍案驚奇/40');assert.match(original.provider,/维基文库/);
 });
 
 test('original corruption and unreadable source ranges fail closed',async t=>{
- const folder=await temp(t);await cp('data/library',path.join(folder,'data/library'),{recursive:true});const erkeEntry=catalog.books.find(entry=>entry.id==='二刻拍案惊奇');await writeFile(path.join(folder,'data/library',erkeEntry.originalFile,erkeEntry.originalFiles.at(-1).file),'broken');await assert.rejects(new LocalBooks(folder).book(select('二刻拍案惊奇')),e=>e.status===503);
+ const folder=await temp(t);await copyBookLibrary(folder,['二刻拍案惊奇']);assert.ok(await new LocalBooks(folder).book(select('二刻拍案惊奇')));const erkeEntry=catalog.books.find(entry=>entry.id==='二刻拍案惊奇');await writeFile(path.join(folder,'data/library',erkeEntry.originalFile,erkeEntry.originalFiles.at(-1).file),'broken');await assert.rejects(new LocalBooks(folder).book(select('二刻拍案惊奇')),e=>e.status===503);
  const shanhai=await library.book(select('山海经'));const section=shanhai.sections[0],unit=section.units.find(unit=>unit.narrative);const corrupted={...shanhai,sections:[{...section,units:[{...unit,text:'有獸焉，其狀如【上鹿下旨】，讀不出其原字，不可猜補。'}]}]};assert.throws(()=>library.resolve(corrupted,{edition:shanhai.edition,sectionId:section.id,firstUnit:unit.id,lastUnit:unit.id}),e=>e.status===400);
 });
 
-test('all 24 books complete HTTP selection and persist original glyphs before storyboard generation',async t=>{
+test('all 24 books complete HTTP selection and persist original glyphs before storyboard generation',books,async t=>{
  const data=await temp(t),media=new FileMedia(path.join(data,'media'));let app,plans=0;
  const base=fake(async(s,id,original)=>{plans++;assert.ok(original.localSource);const row=app.services.database.prepare('SELECT document FROM stories WHERE id=?').bind(id);const stored=await row.first();assert.equal(JSON.parse(stored.document).original.text,original.text);assert.ok(await media.get(`reader/${id}/source.json`));});
  const generator=base.generator.bind(base);base.generator=()=>{const g=generator();return {...g,reflectionCandidates:async(...args)=>{const result=await g.reflectionCandidates(...args);await app.services.database.prepare("UPDATE stories SET generation_control='paused' WHERE id=?").bind(currentId).run();return result;}};};let currentId;

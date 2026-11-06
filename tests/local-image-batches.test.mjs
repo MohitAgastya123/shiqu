@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import {productionFixture,until,turn,makePlan,encoded} from './fixtures/production.mjs';
 import {ReaderRepository} from '../lib/reader-repository.ts';
 import {selectionSchema} from '../lib/reader-model.ts';
+import {flowProviders,heavy,fullTier} from './fixtures/test-tier.mjs';
 const owner='docker-local-owner';
 const control=(f,id,action)=>f.json(`sessions/${id}/production-control`,'POST',{action});
 async function finish(f,id,page=0){await f.demand(id,crypto.randomUUID(),page);await until(async()=>(await f.read(id)).state==='completed',60000);return f.read(id);}
@@ -16,10 +17,12 @@ test('auto is the count default; invalid counts never create a production story'
  for(const length of [0,81,1.5,null,'30'])assert.equal((await f.request('sessions','POST',{requestId:crypto.randomUUID(),selection:{bookId:'zhuangzi',theme:'测试',length}})).status,400);
  assert.equal((await f.json('sessions')).length,0);
 });
-for(const provider of ['gemini','codex']){
- test(`${provider}: auto count 1/30 and exact 1/8/10/12/30/60/80 use durable production checkpoints`,async t=>{
+for(const provider of flowProviders(['gemini','codex'])){
+ // Fast runs keep the smallest, a typical and the automatic count; the full tier sweeps up to 80 frames.
+ const lengths=fullTier?[1,8,10,12,30,60,80,'auto']:[1,8,'auto'];
+ test(`${provider}: auto count 1/30 and exact ${lengths.filter(length=>length!=='auto').join('/')} use durable production checkpoints`,async t=>{
   const f=await productionFixture(t,provider);f.control.hold=false;
-  for(const length of [1,8,10,12,30,60,80,'auto']){
+  for(const length of lengths){
    if(length==='auto')f.control.autoLength=30;
    const before=f.control.calls.length,id=await f.create(length),saved=await finish(f,id);
    const count=length==='auto'?30:length;assert.equal(saved.story.pages.length,count);assert.equal(saved.ready,count);
@@ -34,8 +37,9 @@ for(const provider of ['gemini','codex']){
  test(`${provider}: invalid exact outline fails before images; only explicit fault recovery proceeds`,async t=>{
   const f=await productionFixture(t,provider);f.control.hold=false;
   f.control.beforeText=async kind=>kind==='outline'?{...makePlan(1),beats:['只有一幅。']}:undefined;
-  const id=await f.create(60);await until(async()=>(await f.read(id)).state==='failed');assert.equal(f.control.calls.length,0);
-  f.control.beforeText=null;await f.demand(id,crypto.randomUUID(),0,true);await until(async()=>(await f.read(id)).state==='completed',60000);assert.equal((await f.read(id)).ready,60);
+  // Outlines exist only for batched stories (over 20 frames); 21 is the smallest, the full tier uses a long story.
+  const length=fullTier?60:21,id=await f.create(length);await until(async()=>(await f.read(id)).state==='failed');assert.equal(f.control.calls.length,0);
+  f.control.beforeText=null;await f.demand(id,crypto.randomUUID(),0,true);await until(async()=>(await f.read(id)).state==='completed',60000);assert.equal((await f.read(id)).ready,length);
  });
  test(`${provider}: anchor runs alone, later scenes publish out of order under one session lease`,async t=>{
   const f=await productionFixture(t,provider),id=await f.create(8);await until(()=>f.control.calls.length===1);assert.equal(f.control.calls[0].page,0);
@@ -51,8 +55,8 @@ for(const provider of ['gemini','codex']){
    const recs=f.control.recommendations.length,images=f.control.calls.length,id=await f.create(8,{narrativeDetail});const prepared=await waiting(f,id);
    assert.equal(prepared.awaitingFrameCount,true);assert.equal(prepared.story,null);assert.equal(f.control.calls.length,images);assert.equal(prepared.retryAllowed,false);
    await f.restart();await f.app.services.production.tick();assert.equal(f.control.recommendations.length,recs+1);
-   const count=i===1?60:1,responses=await Promise.all([f.request(`sessions/${id}/frame-count`,'POST',{count}),f.request(`sessions/${id}/frame-count`,'POST',{count})]);assert.ok(responses.every(r=>r.status===200));
-   assert.equal((await f.request(`sessions/${id}/frame-count`,'POST',{count:count===1?60:1})).status,409);
+   const large=fullTier?60:8,count=i===1?large:1,responses=await Promise.all([f.request(`sessions/${id}/frame-count`,'POST',{count}),f.request(`sessions/${id}/frame-count`,'POST',{count})]);assert.ok(responses.every(r=>r.status===200));
+   assert.equal((await f.request(`sessions/${id}/frame-count`,'POST',{count:count===1?large:1})).status,409);
    await finish(f,id);assert.equal((await f.read(id)).ready,count);assert.equal(f.control.recommendations.length,recs+1);
   }
  });
@@ -66,7 +70,7 @@ for(const provider of ['gemini','codex']){
   f.control.beforeText=null;await f.demand(last,crypto.randomUUID(),0,true);assert.equal((await waiting(f,last)).awaitingFrameCount,true);
  });
 }
-test('frame 80 media, events and saved progress remain owner scoped and survive restart',async t=>{
+test('frame 80 media, events and saved progress remain owner scoped and survive restart',heavy,async t=>{
  const f=await productionFixture(t);f.control.hold=false;const id=await f.create(80),saved=await finish(f,id);
  assert.equal((await f.request(saved.story.pages[79].image.replace('/api/reader/',''))).status,200);
  assert.equal((await f.json(`sessions/${id}/progress`,'POST',{page:79,saved:true})).page,79);

@@ -3,14 +3,15 @@
 // family epochs serialize competing drafts without altering originals. Only content a draft was
 // written against can conflict with it: saved images and progress never do. A file that is gone
 // cannot be reused and is redrawn; one that cannot be read right now stops the submission.
+// Image-only redraws require a completed story and preserve review and all unselected artwork.
 // Style-only revisions inherit review checkpoints, including unresolved or overridden reviews.
 import {createHash} from 'node:crypto';
-import {ReaderError,selectionSchema} from '../lib/reader-model.ts';
+import {ReaderError,selectionSchema,reviewPassed} from '../lib/reader-model.ts';
 import type {Document,SessionRow} from '../lib/reader-model.ts';
 import type {ReaderRepository} from '../lib/reader-repository.ts';
 import {familyRoot,familyNumber,supersededSql} from '../lib/reader-repository.ts';
 import type {MediaStore} from '../lib/services.ts';
-import {checkedRevision,reusableRevisionImages} from '../lib/reader-revision.ts';
+import {checkedRevision,syncRevisionImages} from '../lib/reader-revision.ts';
 import type {RevisionChanges,RevisionSnapshot} from '../lib/reader-revision.ts';
 import {readableImage} from './reader-image-health.ts';
 import {commandReceipt} from './reader-commands.ts';
@@ -53,6 +54,7 @@ export async function forkRevision(repo:ReaderRepository,media:MediaStore,ownerI
  if(current!==token)throw new ReaderError(409,'The story or revision has changed. Reload before editing.');
  const original={selection:selectionSchema.parse(JSON.parse(row.selection)),plan:doc.plan,images:doc.images,savedFrameCount:savedFrameCount(doc),...(doc.frameRecommendation?{frameRecommendation:doc.frameRecommendation}:{})};
  const {selection,plan,impact}=checkedRevision(original,changes);
+ if(changes.redrawPages&&(row.state!=='completed'||!reviewPassed(doc)))throw new ReaderError(409,'Image-only redraw requires a completed story with a valid review checkpoint.');
  const images:string[]=original.plan?.pages.map(()=> '')||[],lostPages:number[]=[];
  // Global image preferences cannot reuse old artwork. Other edits may reuse after planning.
  if(selection.artStyle===original.selection.artStyle&&selection.productionPrompt===original.selection.productionPrompt){
@@ -69,7 +71,11 @@ export async function forkRevision(repo:ReaderRepository,media:MediaStore,ownerI
  }
  const base={...original,images};
  const document:Document={setupRequirements:doc.setupRequirements,publication:doc.publication,plan,original:doc.original,frameRecommendation:doc.frameRecommendation,frameCountConfirmed:true,visualReview:impact.review?newReview():doc.visualReview,images:[],audio:[],usage:(doc.usage||[]).map(item=>({...item,originId:item.originId||parentId})),revision:{parentId,rootId,number:epoch+1,baseToken:token,requestHash,base,...(impact.replan?{}:{previewedRedraw:impact.redraw}),...(lostPages.length?{lostPages}:{})}};
- if(plan)document.images=reusableRevisionImages(base,selection,plan);
+ if(changes.redrawPages){
+  if(lostPages.length||original.images.length!==plan!.pages.length||original.images.some(image=>!image))throw new ReaderError(409,'The original images are incomplete. Restore missing images before creating an image-only revision.');
+  document.revision!.redrawPages=[...changes.redrawPages];
+ }
+ if(plan)syncRevisionImages(document,selection);
  if(!impact.review)document.reflectionCandidates=doc.reflectionCandidates;
  if(impact.preserveScript){document.storyboard=doc.storyboard;document.draft=doc.draft;}
  const blocked=!impact.review&&doc.visualReview?.status==='blocked';

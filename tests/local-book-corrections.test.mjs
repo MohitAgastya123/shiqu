@@ -7,9 +7,10 @@ import {createHash} from 'node:crypto';
 import {LocalBooks,parseLocalSections,originalBody} from '../server/local-books.ts';
 import {correctShishuo,shishuoOriginalEdition,shishuoCorrectionUrl} from '../server/local-book-corrections.ts';
 import {withLocalBooks} from '../server/local-generation.ts';
+import {books} from './fixtures/test-tier.mjs';
 
 const selection={bookId:'shishuo',storyTitle:'绝妙好辞（杨修解曹操碑字）',theme:'给我一个反转',length:12};
-test('only two missing characters change, with unit-level provenance and a stable derived edition',async()=>{
+test('only two missing characters change, with unit-level provenance and a stable derived edition',books,async()=>{
  const raw=await readFile('data/library/originals/03-世说新语.txt');
  assert.equal(createHash('sha256').update(raw).digest('hex'),shishuoOriginalEdition);
  const before=parseLocalSections('shishuo',originalBody(raw.toString('utf8'),'Project Gutenberg'));

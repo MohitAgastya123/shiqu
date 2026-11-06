@@ -1,23 +1,27 @@
-// English interface: labels, accessibility text, and workflow messages use English.
-// Present service actions first, keeping runtime and storage details available on demand.
-// Native lifecycle and clipboard operations remain owned by the desktop controller.
-import {ChevronRight,Copy,ExternalLink,Server,Square} from 'lucide-react';
-import type {ServiceState} from './library-summary';
-
-type Props={state:ServiceState;running:boolean;busy:string;native:boolean;configured:boolean;toggleDisabled:boolean;url?:string;nodeVersion?:string;nodeError:string;directory:string;error:string;onToggle:()=>void;onOpen:()=>void;onCopy:()=>void};
-const stateLabels:Record<ServiceState,string>={running:"Running",stopped:"Stopped",loading:"Loading",unavailable:"Status unknown",preview:''};
-
-export function ServiceCard({state,running,busy,native,configured,toggleDisabled,url,nodeVersion,nodeError,directory,error,onToggle,onOpen,onCopy}:Props){
- const toggleLabel=busy?busy+'…':!native?"Start service":!configured?"Complete setup first":running?"Stop service":"Start service";
- return <section className="runtime-card" aria-labelledby="runtime-title">
-  <div className="runtime-heading"><span className="runtime-icon" aria-hidden="true"><Server size={19} strokeWidth={1.5}/></span><h2 id="runtime-title">Local service</h2>{state!=='preview'&&<span className={'runtime-state is-'+state} role="status"><i aria-hidden="true"/>{stateLabels[state]}</span>}</div>
-  {error&&!busy&&<p className="runtime-error" role="alert">{error}</p>}
-  <div className="runtime-actions">
-   {state==='running'&&<button className="runtime-browser" type="button" disabled={!!busy} onClick={onOpen}>Open in browser<ExternalLink size={14} aria-hidden="true"/></button>}
-   <button id="desktop-service-toggle" className={'runtime-toggle'+(state==='running'?' is-stop':'')} type="button" disabled={toggleDisabled} onClick={onToggle}>{state==='running'&&<Square size={12} aria-hidden="true"/>}{toggleLabel}</button>
+// The controller supplies service state, lifecycle actions, and read-only provider summaries without querying stories.
+import type {ServiceState,Status} from './console-state';
+import {stateLabels} from './console-state';
+import type {ProviderSettingsView} from '../lib/provider-settings';
+const labels:Record<string,string>={readonly:'Read only',gemini:'Gemini',openai:'OpenAI API',codex:'Codex',claude:'Claude Code',deepseek:'DeepSeek'};
+type Props={state:ServiceState;status:Status;native:boolean;busy:string;provider:ProviderSettingsView['runtime'];nodeVersion?:string;nodeError:string;onStart:()=>void;onStop:()=>void;onRestart:()=>void;onOpen:()=>void;onSettings:()=>void;previewUrl:string|null};
+export function ServiceCard({state,status,native,busy,provider,nodeVersion,nodeError,onStart,onStop,onRestart,onOpen,onSettings,previewUrl}:Props){
+ const pending=state==='starting'||state==='upgrading',locked=!native||!!busy||pending||state==='loading'||state==='unavailable';
+ return <section className="service-card" aria-label="Local service">
+  <div className="service-label"><i className={status.running?'status-dot live':'status-dot'}/><span role="status">{stateLabels[state]}</span><span className="runtime-badge">{nodeVersion?`Node ${nodeVersion}`:nodeError?"Runtime unavailable":"Bundled runtime"}</span></div>
+  <h2>Stories in your browser.<br/>Service controls here.</h2><p>Start the service, then open Shiqu on your computer or phone.</p>
+  {(status.error||status.settingsError||nodeError)&&<p className="service-error" role="alert">{status.error||status.settingsError||nodeError}</p>}
+  <div className="service-actions">
+   <button className="primary" disabled={locked||status.running} onClick={onStart}>{pending?stateLabels[state]+'…':"Start service"}</button>
+   <button className="secondary" disabled={locked||!status.running} onClick={onStop}>Stop</button>
+   <button className="secondary" disabled={locked||!status.running} onClick={onRestart}>Restart service</button>
   </div>
-  {state==='running'&&url&&<div className="runtime-address"><span title={new URL(url).origin}>{new URL(url).origin}</span><button type="button" disabled={!!busy} aria-label="Copy local access address" title="Copy local access address" onClick={onCopy}><Copy size={13} aria-hidden="true"/></button></div>}
-  <details className="runtime-details"><summary><span>Runtime and storage</span>{nodeError&&<span className="runtime-details-error">Runtime unavailable</span>}<ChevronRight size={14} aria-hidden="true"/></summary><dl className="runtime-facts"><div><dt>Runtime</dt><dd>{!native?'—':nodeVersion?`Node ${nodeVersion} · Ready`:nodeError?"Runtime unavailable":"Checking…"}</dd></div><div><dt>Story directory</dt><dd className="runtime-path">{native?directory:'—'}</dd></div></dl></details>
-  <p className="runtime-foot">Closing the window keeps the app in the tray. Quitting stops it.</p>
+  {native?<button className="browser-link" disabled={locked||!status.running} onClick={onOpen}>Open in browser ↗</button>:previewUrl?<a className="browser-link" href={previewUrl} target="_blank" rel="noopener noreferrer">Open in browser ↗</a>:<p>The reader is not connected. Start the Shiqu service first.</p>}
+  {status.running&&status.url&&<p className="service-address">{status.url}</p>}
+  {pending&&<p role="status">{state==='upgrading'?"Startup continues when the upgrade or recovery finishes. Keep the app open.":"Starting the local service. Please wait."}</p>}
+  {status.backup&&<p className="backup-path">Verified upgrade backup: {status.backup}</p>}
+  <div className="provider-summary" aria-label={status.running?'Active configuration':"Saved configuration"}><div><strong>{status.running?'Currently running':"Saved configuration"} · {provider.provider==='readonly'?'Read only':provider.configured===false?"Generation is not configured":labels[provider.provider]||provider.provider}</strong>{status.restartRequired&&<span>Restart required</span>}</div>
+   {provider.provider!=='readonly'&&provider.configured!==false&&<p>Text: {labels[provider.provider]} · {provider.models.text}<br/>Images: {labels[provider.imageProvider||provider.provider]} · {provider.models.image}</p>}
+   <button className="text-button" disabled={locked||!status.running} onClick={onSettings}>Generation service and models ↗</button><p>Configure in a browser on this computer. Restart the service after saving.</p>
+  </div>
  </section>;
 }

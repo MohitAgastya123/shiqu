@@ -1,5 +1,4 @@
-// English native controls and diagnostics; persisted identifiers and source data are unchanged.
-// Keep desktop privileges in local-only native commands; reader/phone pages never load this bridge.
+// The native console manages only local service, paths, and networking; browsers and phones never load this privileged bridge.
 mod config;
 mod library;
 mod runtime;
@@ -22,6 +21,8 @@ use tauri_plugin_opener::OpenerExt;
 struct Control {
     runtime: Option<runtime::Runtime>,
     last_error: Option<String>,
+    starting: bool,
+    progress: Arc<Mutex<Value>>,
 }
 #[derive(Clone, Default)]
 struct DesktopState(Arc<Mutex<Control>>);
@@ -46,30 +47,49 @@ fn resource_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 fn settings_view(app: &tauri::AppHandle, control: &mut Control) -> Result<Value, String> {
     let store = open_store(app, control)?;
     let (settings, revision, gemini, openai) = store.settings_snapshot()?;
-    let key_present = match settings.provider.as_str() {
+    let present = |provider: &str| match provider {
         "gemini" => gemini,
         "openai" => openai,
         _ => false,
     };
+    let key_present = present(&settings.provider);
+    let image_key_present = present(settings.effective_image_provider());
     Ok(
-        json!({"settings":settings,"revision":revision,"keyPresent":key_present,"providerKeys":{"gemini":gemini,"openai":openai},"runtimeConfigured":provider_configuration(&store).map(|(settings,key)| settings.provider=="codex" || settings.provider=="readonly" || !key.is_empty()).unwrap_or(false),"credentialError":null,"platform":std::env::consts::OS}),
+        json!({"settings":settings,"revision":revision,"keyPresent":key_present,"imageKeyPresent":image_key_present,"providerKeys":{"gemini":gemini,"openai":openai},"runtimeConfigured":provider_configuration(&store).map(|(settings,key,image_key)| provider_ready(&settings,&key,&image_key)).unwrap_or(false),"credentialError":null,"platform":std::env::consts::OS}),
     )
 }
-fn open_store(app: &tauri::AppHandle, _control: &mut Control) -> Result<config::Store, String> {
+fn open_store(app: &tauri::AppHandle, control: &mut Control) -> Result<config::Store, String> {
     let (file, data) = config::directories(app)?;
+    if (control.runtime.is_some() || control.starting) && !file.is_file() {
+        return Err("The shared settings database is unavailable. Keep the existing configuration and try again.".into());
+    }
     config::Store::open(&file, &data)
 }
+// Read-only needs nothing; each active API provider needs its own credential.
+fn provider_ready(settings: &Settings, key: &str, image_key: &str) -> bool {
+    let api = |name: &str| ["gemini", "openai"].contains(&name);
+    let image = settings.effective_image_provider();
+    settings.provider == "readonly"
+        || (!(api(&settings.provider) && key.is_empty())
+            && !(image != settings.provider && api(image) && image_key.is_empty()))
+}
 // Invocation overrides never mutate the saved settings or import environment credentials.
-fn provider_configuration(store: &config::Store) -> Result<(Settings, String), String> {
+fn provider_configuration(store: &config::Store) -> Result<(Settings, String, String), String> {
     provider_configuration_with(store, |name| std::env::var(name).ok())
 }
 fn provider_configuration_with(
     store: &config::Store,
     read: impl Fn(&str) -> Option<String>,
-) -> Result<(Settings, String), String> {
+) -> Result<(Settings, String, String), String> {
     let mut settings = store.settings()?;
     if let Some(value) = read("SHIQU_AI_PROVIDER") {
         settings.provider = value;
+    }
+    // Blank keeps the saved image choice; read-only ignores the image side, matching the CLI.
+    if let Some(value) = read("SHIQU_IMAGE_PROVIDER").filter(|value| !value.trim().is_empty()) {
+        if settings.provider != "readonly" {
+            settings.image_provider = value.trim().into();
+        }
     }
     for (name, target) in [
         ("GEMINI_TEXT_MODEL", &mut settings.text_model),
@@ -88,8 +108,8 @@ fn provider_configuration_with(
             *target = value;
         }
     }
-    let mut efforts =
-        serde_json::to_value(&settings.task_reasoning_efforts).map_err(|_| "Invalid task reasoning settings.")?;
+    let mut efforts = serde_json::to_value(&settings.task_reasoning_efforts)
+        .map_err(|_| "Invalid task reasoning settings.")?;
     for task in [
         "suggest", "art", "frames", "outline", "plan", "review", "repair",
     ] {
@@ -100,16 +120,25 @@ fn provider_configuration_with(
     settings.task_reasoning_efforts =
         serde_json::from_value(efforts).map_err(|_| "Invalid task reasoning settings.")?;
     settings.validate()?;
-    let name = match settings.provider.as_str() {
-        "openai" => Some("OPENAI_API_KEY"),
-        "gemini" => Some("GEMINI_API_KEY"),
-        _ => None,
+    let credential = |provider: &str| -> Result<String, String> {
+        let name = match provider {
+            "openai" => Some("OPENAI_API_KEY"),
+            "gemini" => Some("GEMINI_API_KEY"),
+            _ => None,
+        };
+        match name.and_then(&read) {
+            Some(value) => config::validate_key(&value),
+            None => store.key_for(provider),
+        }
     };
-    let key = match name.and_then(&read) {
-        Some(value) => config::validate_key(&value)?,
-        None => store.key_for(&settings.provider)?,
+    let key = credential(&settings.provider)?;
+    let image = settings.effective_image_provider();
+    let image_key = if image == settings.provider {
+        String::new()
+    } else {
+        credential(image)?
     };
-    Ok((settings, key))
+    Ok((settings, key, image_key))
 }
 
 #[tauri::command]
@@ -119,44 +148,10 @@ async fn get_settings(
 ) -> Result<Value, String> {
     let shared = state.0.clone();
     blocking(move || {
-        let mut control = shared.lock().map_err(|_| "The service controller is unavailable.")?;
+        let mut control = shared
+            .lock()
+            .map_err(|_| "The service controller is unavailable.")?;
         settings_view(&app, &mut control)
-    })
-    .await
-}
-
-#[tauri::command]
-async fn library_summary(
-    app: tauri::AppHandle,
-    state: tauri::State<'_, DesktopState>,
-) -> Result<Value, String> {
-    let shared = state.0.clone();
-    blocking(move || {
-        let settings = {
-            let mut control = shared.lock().map_err(|_| "The service controller is unavailable.")?;
-            open_store(&app, &mut control)?.settings()?
-        };
-        runtime::ensure_library(&settings, &resource_root(&app)?)?;
-        library::summary(std::path::Path::new(&settings.data_directory))
-    })
-    .await
-}
-
-#[tauri::command]
-async fn set_library_story_deleted(
-    app: tauri::AppHandle,
-    state: tauri::State<'_, DesktopState>,
-    id: String,
-    deleted: bool,
-) -> Result<(), String> {
-    let shared = state.0.clone();
-    blocking(move || {
-        let settings = {
-            let mut control = shared.lock().map_err(|_| "The service controller is unavailable.")?;
-            open_store(&app, &mut control)?.settings()?
-        };
-        runtime::ensure_library(&settings, &resource_root(&app)?)?;
-        library::set_deleted(std::path::Path::new(&settings.data_directory), &id, deleted)
     })
     .await
 }
@@ -165,60 +160,21 @@ async fn set_library_story_deleted(
 async fn save_settings(
     app: tauri::AppHandle,
     state: tauri::State<'_, DesktopState>,
-    mut settings: Settings,
-    expected_revision: Option<i64>,
-    key_action: String,
-    key: String,
+    settings: config::NativeSettings,
+    expected_revision: i64,
 ) -> Result<Value, String> {
     let shared = state.0.clone();
     blocking(move || {
-        let mut guard = shared.lock().map_err(|_| "The service controller is unavailable.")?;
-        if guard.runtime.is_some() {
-            return Err("Stop the service before changing settings or keys.".into());
+        let mut control = shared
+            .lock()
+            .map_err(|_| "The service controller is unavailable.")?;
+        if control.starting || control.runtime.is_some() {
+            return Err("Stop the service before changing local settings.".into());
         }
-        let replacement;
-        let change = match key_action.as_str() {
-            "keep" => config::KeyChange::Keep,
-            "replace" => {
-                replacement = config::validate_key(&key)?;
-                config::KeyChange::Set(&replacement)
-            }
-            "delete" => config::KeyChange::Delete,
-            _ => return Err("Invalid key operation.".into()),
-        };
-        let mut store = open_store(&app, &mut guard)?;
-        settings.library_configured = true;
-        settings.provider_configured = match settings.provider.as_str() {
-            "gemini" | "openai" => {
-                if key_action == "replace" {
-                    true
-                } else if key_action == "delete" {
-                    false
-                } else {
-                    !store.key_for(&settings.provider)?.is_empty()
-                }
-            }
-            _ => true,
-        };
-        store.save_at(&settings, change, expected_revision)?;
+        let mut store = open_store(&app, &mut control)?;
+        let merged = settings.merge(store.settings()?);
+        store.save_at(&merged, config::KeyChange::Keep, Some(expected_revision))?;
         drop(store);
-        settings_view(&app, &mut guard)
-    })
-    .await
-}
-
-#[tauri::command]
-async fn reset_providers(
-    app: tauri::AppHandle,
-    state: tauri::State<'_, DesktopState>,
-) -> Result<Value, String> {
-    let shared = state.0.clone();
-    blocking(move || {
-        let mut control = shared.lock().map_err(|_| "The service controller is unavailable.")?;
-        if control.runtime.is_some() {
-            return Err("Stop the service before resetting configuration.".into());
-        }
-        open_store(&app, &mut control)?.reset_providers()?;
         settings_view(&app, &mut control)
     })
     .await
@@ -237,7 +193,7 @@ async fn choose_path(app: tauri::AppHandle, kind: String) -> Result<Option<Strin
     blocking(move || {
         let dialog = app.dialog().file();
         let chosen = match kind.as_str() {
-            "codex" => dialog.blocking_pick_file(),
+            "codex" | "cloudflared" => dialog.blocking_pick_file(),
             "data" | "codexHome" => dialog.blocking_pick_folder(),
             _ => return Err("Invalid file selection type.".into()),
         };
@@ -259,16 +215,40 @@ async fn start_server(
 ) -> Result<Value, String> {
     let shared = state.0.clone();
     blocking(move || {
-        let mut control = shared.lock().map_err(|_| "The service controller is unavailable.")?;
+        let mut control = shared
+            .lock()
+            .map_err(|_| "The service controller is unavailable.")?;
         if let Some(runtime) = &mut control.runtime {
             return Ok(runtime.snapshot());
         }
-        let store = open_store(&app, &mut control)?;
-        let (settings, key) = provider_configuration(&store)?;
-        if !["readonly", "codex"].contains(&settings.provider.as_str()) && key.is_empty() {
-            return Err("Configure a generation provider first, or choose read-only mode.".into());
+        if control.starting {
+            return Err(
+                "The service is starting or upgrading the library. Wait for it to finish.".into(),
+            );
         }
-        match runtime::start(&settings, &key, &resource_root(&app)?) {
+        let store = open_store(&app, &mut control)?;
+        let settings = store.settings()?;
+        let (settings_file, _) = config::directories(&app)?;
+        let root = resource_root(&app)?;
+        control.starting = true;
+        *control
+            .progress
+            .lock()
+            .map_err(|_| "Service status is unavailable.")? =
+            json!({"running":false,"phoneUrls":[],"state":"starting"});
+        let progress = control.progress.clone();
+        drop(store);
+        drop(control);
+        let result = runtime::start(&settings, &settings_file, &root, move |value| {
+            if let Ok(mut current) = progress.lock() {
+                *current = value;
+            }
+        });
+        let mut control = shared
+            .lock()
+            .map_err(|_| "The service controller is unavailable.")?;
+        control.starting = false;
+        match result {
             Ok(runtime) => {
                 let result = runtime.status.clone();
                 control.runtime = Some(runtime);
@@ -285,15 +265,33 @@ async fn start_server(
 }
 
 fn stop_control(state: &DesktopState) {
-    if let Ok(mut control) = state.0.lock() {
+    // Tray, window exit, and native commands share this boundary; wait without holding the lock during upgrades and do not interrupt the child process.
+    loop {
+        let Ok(mut control) = state.0.lock() else {
+            return;
+        };
+        if control.starting {
+            drop(control);
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            continue;
+        }
         drop(control.runtime.take());
         control.last_error = None;
+        return;
     }
 }
 #[tauri::command]
 async fn stop_server(state: tauri::State<'_, DesktopState>) -> Result<Value, String> {
     let state = state.inner().clone();
     blocking(move || {
+        if state
+            .0
+            .lock()
+            .map_err(|_| "The service controller is unavailable.")?
+            .starting
+        {
+            return Err("The library upgrade or startup is still in progress. Please wait.".into());
+        }
         stop_control(&state);
         Ok(json!({"running":false,"phoneUrls":[]}))
     })
@@ -304,6 +302,7 @@ async fn server_status(state: tauri::State<'_, DesktopState>) -> Result<Value, S
     let shared = state.0.clone();
     blocking(move || {
         let mut control = shared.lock().map_err(|_| "The service controller is unavailable.")?;
+        if control.starting { return Ok(control.progress.lock().map_err(|_| "Service status is unavailable.")?.clone()); }
         if let Some(runtime) = &mut control.runtime {
             match runtime.child.try_wait() {
                 Ok(None) => return Ok(runtime.snapshot()),
@@ -313,54 +312,51 @@ async fn server_status(state: tauri::State<'_, DesktopState>) -> Result<Value, S
                 }
             }
         }
-        Ok(json!({"running":false,"phoneUrls":[],"error":control.last_error}))
+        Ok(json!({"running":false,"state":if control.last_error.is_some(){"failed"}else{"stopped"},"phoneUrls":[],"error":control.last_error}))
     })
     .await
 }
 
-#[tauri::command]
-async fn test_provider(
-    app: tauri::AppHandle,
-    state: tauri::State<'_, DesktopState>,
-) -> Result<Value, String> {
-    let shared = state.0.clone();
-    blocking(move || {
-        let mut guard = shared.lock().map_err(|_| "The service controller is unavailable.")?;
-        if guard.runtime.is_some() {
-            return Err("Stop the service before testing configuration.".into());
-        }
-        let store = open_store(&app, &mut guard)?;
-        let (settings, credential) = provider_configuration(&store)?;
-        let (mut child, result, _updates) =
-            runtime::launch(&settings, &credential, &resource_root(&app)?, "test")?;
-        drop(child.stdin.take());
-        let _ = child.wait();
-        Ok(result)
-    })
-    .await
-}
-
-#[tauri::command]
-fn open_reader(app: tauri::AppHandle, state: tauri::State<'_, DesktopState>) -> Result<(), String> {
-    let control = state.0.lock().map_err(|_| "The service controller is unavailable.")?;
-    let url = control
-        .runtime
-        .as_ref()
-        .and_then(|runtime| runtime.status["url"].as_str())
-        .ok_or("Start the service first.")?;
-    let parsed = tauri::Url::parse(url).map_err(|_| "Invalid service address.")?;
+// Allow only the service root and a fixed generation settings link, never arbitrary paths, queries, or fragments.
+fn reader_url(url: &str, generation_settings: bool) -> Result<tauri::Url, String> {
+    let mut parsed = tauri::Url::parse(url).map_err(|_| "Invalid service address.")?;
     if parsed.scheme() != "http"
         || parsed.host_str() != Some("127.0.0.1")
-        || parsed.path() != "/"
-        || parsed.query().is_some()
-        || parsed.fragment().is_some()
-        || !parsed.username().is_empty()
-        || parsed.password().is_some()
+        || parsed.as_str() != format!("{}/", parsed.origin().ascii_serialization())
+        || (url != parsed.origin().ascii_serialization()
+            && url != format!("{}/", parsed.origin().ascii_serialization()))
     {
         return Err("Invalid service address.".into());
     }
+    if generation_settings {
+        parsed.set_fragment(Some("provider-settings"));
+    }
+    Ok(parsed)
+}
+#[tauri::command]
+fn open_reader(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, DesktopState>,
+    generation_settings: Option<bool>,
+) -> Result<(), String> {
+    let mut control = state
+        .0
+        .lock()
+        .map_err(|_| "The service controller is unavailable.")?;
+    let status = control
+        .runtime
+        .as_mut()
+        .ok_or("Start the service first.")?
+        .snapshot();
+    if status["running"] != true {
+        return Err("Start the service first.".into());
+    }
+    let parsed = reader_url(
+        status["url"].as_str().ok_or("Invalid service address.")?,
+        generation_settings.unwrap_or(false),
+    )?;
     app.opener()
-        .open_url(url, None::<&str>)
+        .open_url(parsed.as_str(), None::<&str>)
         .map_err(|_| "The default browser could not be opened. Copy the local link.".into())
 }
 #[tauri::command]
@@ -392,21 +388,18 @@ pub fn run() {
         .manage(DesktopState::default())
         .invoke_handler(tauri::generate_handler![
             get_settings,
-            library_summary,
-            set_library_story_deleted,
             save_settings,
-            reset_providers,
             detect_node,
             choose_path,
             start_server,
             stop_server,
             server_status,
-            test_provider,
             open_reader,
             quit_app
         ])
         .setup(|app| {
-            let show_item = MenuItem::with_id(app, "show", "Open Shiqu settings", true, None::<&str>)?;
+            let show_item =
+                MenuItem::with_id(app, "show", "Open Shiqu console", true, None::<&str>)?;
             let stop_item = MenuItem::with_id(app, "stop", "Stop service", true, None::<&str>)?;
             let quit_item = MenuItem::with_id(app, "quit", "Quit Shiqu", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show_item, &stop_item, &quit_item])?;
@@ -456,6 +449,49 @@ fn thread_stop(app: tauri::AppHandle, quit: bool) {
 mod tests {
     use super::*;
     #[test]
+    fn stop_and_exit_wait_for_startup_without_holding_the_controller_lock() {
+        let state = DesktopState::default();
+        state.0.lock().unwrap().starting = true;
+        let stopping = state.clone();
+        let (send, receive) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            stop_control(&stopping);
+            send.send(()).unwrap();
+        });
+        assert!(receive
+            .recv_timeout(std::time::Duration::from_millis(20))
+            .is_err());
+        state.0.lock().unwrap().starting = false;
+        receive
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .unwrap();
+    }
+    #[test]
+    fn browser_opener_accepts_only_root_and_fixed_settings_fragment() {
+        assert_eq!(
+            reader_url("http://127.0.0.1:3000", false).unwrap().as_str(),
+            "http://127.0.0.1:3000/"
+        );
+        assert_eq!(
+            reader_url("http://127.0.0.1:3000/", true).unwrap().as_str(),
+            "http://127.0.0.1:3000/#provider-settings"
+        );
+        for url in [
+            "https://127.0.0.1:3000/",
+            "http://localhost:3000/",
+            "http://user:secret@127.0.0.1:3000/",
+            "http://127.0.0.1:3000/read",
+            "http://127.0.0.1:3000/?",
+            "http://127.0.0.1:3000/#",
+            "http://127.0.0.1:3000/#other",
+            "http://127.0.0.1:3000/read/..",
+            "http://127.0.0.1:3000/%2e",
+            "http://127.1:3000/",
+        ] {
+            assert!(reader_url(url, true).is_err(), "{}", url);
+        }
+    }
+    #[test]
     fn provider_commands_only_use_committed_database_configuration() {
         let folder =
             std::env::temp_dir().join(format!("shiqu-command-config-{}", std::process::id()));
@@ -468,7 +504,7 @@ mod tests {
             .unwrap();
         drop(store);
         let mut store = config::Store::open(&file, &folder).unwrap();
-        let (loaded, key) = provider_configuration_with(&store, |_| None).unwrap();
+        let (loaded, key, _) = provider_configuration_with(&store, |_| None).unwrap();
         assert_eq!(loaded.text_model, "saved-model");
         assert_eq!(key, "disposable-command-key");
         store.save(&settings, config::KeyChange::Delete).unwrap();
@@ -499,7 +535,7 @@ mod tests {
             .save(&settings, config::KeyChange::Set("saved-gemini"))
             .unwrap();
         let revision = store.revision().unwrap();
-        let (effective, key) = provider_configuration_with(&store, |name| match name {
+        let (effective, key, _) = provider_configuration_with(&store, |name| match name {
             "SHIQU_AI_PROVIDER" => Some("openai".into()),
             "OPENAI_API_KEY" => Some("env-only-key".into()),
             "OPENAI_TEXT_MODEL" => Some("env-model".into()),
@@ -520,6 +556,76 @@ mod tests {
             })
             .is_err()
         );
+        drop(store);
+        std::fs::remove_dir_all(folder).unwrap();
+    }
+    #[test]
+    fn separate_image_provider_uses_its_own_credential_and_readiness() {
+        let folder =
+            std::env::temp_dir().join(format!("shiqu-image-provider-{}", std::process::id()));
+        let file = folder.join("desktop.sqlite");
+        let mut store = config::Store::open(&file, &folder).unwrap();
+        let mut settings = store.settings().unwrap();
+        settings.provider = "openai".into();
+        settings.image_provider = "gemini".into();
+        store
+            .save_keys_at(
+                &settings,
+                &[
+                    ("openai", config::KeyChange::Set("text-only-key")),
+                    ("gemini", config::KeyChange::Keep),
+                ],
+                None,
+            )
+            .unwrap();
+        let (loaded, key, image_key) = provider_configuration_with(&store, |_| None).unwrap();
+        assert_eq!(loaded.image_provider, "gemini");
+        assert_eq!((key.as_str(), image_key.as_str()), ("text-only-key", ""));
+        assert!(!provider_ready(&loaded, &key, &image_key));
+        store
+            .save_keys_at(
+                &settings,
+                &[("gemini", config::KeyChange::Set("image-only-key"))],
+                None,
+            )
+            .unwrap();
+        let (loaded, key, image_key) = provider_configuration_with(&store, |_| None).unwrap();
+        assert_eq!(image_key, "image-only-key");
+        assert!(provider_ready(&loaded, &key, &image_key));
+        // The image override is invocation-only; an unused provider's key is never read.
+        let (effective, _, image_key) = provider_configuration_with(&store, |name| match name {
+            "SHIQU_IMAGE_PROVIDER" => Some("openai".into()),
+            _ => None,
+        })
+        .unwrap();
+        assert_eq!(effective.effective_image_provider(), "openai");
+        assert!(image_key.is_empty());
+        assert_eq!(store.settings().unwrap().image_provider, "gemini");
+        // Blank keeps the saved choice; read-only ignores an invalid image override.
+        let blank = provider_configuration_with(&store, |name| {
+            (name == "SHIQU_IMAGE_PROVIDER").then(|| " ".into())
+        })
+        .unwrap();
+        assert_eq!(blank.0.image_provider, "gemini");
+        assert!(provider_configuration_with(&store, |name| match name {
+            "SHIQU_AI_PROVIDER" => Some("readonly".into()),
+            "SHIQU_IMAGE_PROVIDER" => Some("invalid".into()),
+            _ => None,
+        })
+        .is_ok());
+        settings.provider = "readonly".into();
+        assert!(store
+            .save_keys_at(&settings, &[("gemini", config::KeyChange::Delete)], None)
+            .is_err());
+        assert_eq!(store.key_for("gemini").unwrap(), "image-only-key");
+        settings.provider = "openai".into();
+        settings.image_provider.clear();
+        assert!(store
+            .save_keys_at(&settings, &[("gemini", config::KeyChange::Delete)], None)
+            .is_err());
+        store.save(&settings, config::KeyChange::Keep).unwrap();
+        let saved: serde_json::Value = serde_json::to_value(store.settings().unwrap()).unwrap();
+        assert!(saved.get("imageProvider").is_none());
         drop(store);
         std::fs::remove_dir_all(folder).unwrap();
     }

@@ -1,12 +1,10 @@
-// English interface: labels, accessibility text, and workflow messages use English.
-// Lead with phone access; keep optional tunnel setup behind a disclosure without hiding access scope.
-// Link selection, QR generation, settings persistence and clipboard actions stay in the controller.
+// Phone access keeps local networking and an optional tunnel; the controller manages links, QR codes, and saving.
 import {ChevronRight,Copy,Globe,Smartphone,Wifi} from 'lucide-react';
-import type {ServiceState} from './library-summary';
+import type {ServiceState} from './console-state';
 
-type Props={state:ServiceState;running:boolean;busy:boolean;locked:boolean;links:string[];phone:string;publicUrl?:string;qr:string;internetEnabled:boolean;cloudflaredPath:string;internetError?:string;onChoose:(url:string)=>void;onInternetChange:(enabled:boolean)=>void;onCloudflaredChange:(path:string)=>void;onCopy:()=>void};
+type Props={state:ServiceState;running:boolean;busy:boolean;locked:boolean;links:string[];phone:string;publicUrl?:string;qr:string;internetEnabled:boolean;cloudflaredPath:string;internetError?:string;onChoose:(url:string)=>void;onInternetChange:(enabled:boolean)=>void;onCloudflaredChange:(path:string)=>void;onCopy:()=>void;onBrowseCloudflared?:()=>void};
 
-export function PhoneAccessCard({state,running,busy,locked,links,phone,publicUrl,qr,internetEnabled,cloudflaredPath,internetError,onChoose,onInternetChange,onCloudflaredChange,onCopy}:Props){
+export function PhoneAccessCard({state,running,busy,locked,links,phone,publicUrl,qr,internetEnabled,cloudflaredPath,internetError,onChoose,onInternetChange,onCloudflaredChange,onCopy,onBrowseCloudflared}:Props){
  const internet=!!phone&&phone===publicUrl,connected=state==='running'&&!!phone;
  const ModeIcon=internet?Globe:Wifi;
  const placeholder=state==='loading'?"Reading service status…":state==='unavailable'?"Service status unavailable. The QR code appears when it recovers.":state==='running'?"No usable access address found.":"Start the local service, then scan to continue on your phone.";
@@ -23,7 +21,7 @@ export function PhoneAccessCard({state,running,busy,locked,links,phone,publicUrl
   <details className="phone-settings"><summary><span>Connection settings</span><span className="phone-settings-mode">{internetEnabled?"Local network + Internet":"Local network only"}</span><ChevronRight size={14} aria-hidden="true"/></summary>
    <fieldset disabled={locked}><legend className="sr-only">Phone access settings</legend>
     <label className="switch-row"><input type="checkbox" checked={internetEnabled} onChange={e=>onInternetChange(e.target.checked)}/><span><strong>Allow internet access</strong><small>{running?"Stop the service before changing internet access.":"Connect from another Wi-Fi or mobile network without an account or domain."}</small></span></label>
-    {internetEnabled&&<><label>cloudflared executable<input value={cloudflaredPath} placeholder="Leave blank to find automatically, or enter an absolute path" onChange={e=>onCloudflaredChange(e.target.value)} spellCheck={false}/></label><p className="help">Install cloudflared separately. On macOS: brew install cloudflared.</p></>}
+    {internetEnabled&&<><label>cloudflared executable<input value={cloudflaredPath} placeholder="Leave blank to find automatically, or enter an absolute path" onChange={e=>onCloudflaredChange(e.target.value)} spellCheck={false}/></label>{onBrowseCloudflared&&<button className="secondary" type="button" onClick={onBrowseCloudflared}>Choose cloudflared executable</button>}<p className="help">Install cloudflared separately. On macOS: brew install cloudflared.</p></>}
    </fieldset>
    <p className="phone-setting-note">Local network access is always enabled over HTTP, with no pairing ID. Connected devices share shelf and generation permissions.</p>
    {internetEnabled&&<p className="phone-setting-note">Internet access uses a free temporary Cloudflare HTTPS tunnel. Pairing lasts 12 hours and ends when the service stops. Scan again after restarting. Addresses change and availability is not guaranteed.</p>}

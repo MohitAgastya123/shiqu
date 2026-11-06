@@ -2,12 +2,27 @@
 
 ## Package Manager
 
-- Use pnpm for dependency management, scripts, and documentation examples.
+- Use pnpm for source dependency management, scripts, and documentation examples. Honor the user's explicitly selected launcher for installed packages and skills.
 - Follow the pnpm version pinned in `package.json` (`packageManager`) and the Node version in `.nvmrc`.
 - Use `pnpm install --frozen-lockfile` for reproducible installs, and `pnpm add` / `pnpm remove` to change dependencies.
 - Run scripts with `pnpm run <script>` (for example, `pnpm run codex:login`) or shorthand such as `pnpm dev` and `pnpm test`.
-- Use `pnpm exec` for installed command-line tools instead of `npx`.
+- Use `pnpm exec` for installed development tools; use the selected pinned pnpm entry for package and skill invocation.
 - Keep `pnpm-lock.yaml` in sync with dependency changes. Do not introduce npm or Yarn lockfiles.
+
+## Agent Test Selection
+
+- After code changes, use `pnpm test:changed` for working-tree impact checks. Preview with `pnpm test:changed --plan` (or `--json`). It includes staged, unstaged and untracked paths, always keeps small contracts, and runs affected suites with full provider/heavy flags.
+- In a shared checkout, inspect the preview first. Use `pnpm test:pr --files <your changed paths...>` to scope verification to your own work; do not modify or include concurrent work merely to make a check pass.
+- Register new test files and their covered production sources (`covers`) in `tests/manifest.json`. Unknown paths, shared schemas, dependencies, Node/toolchain changes and failed/empty change detection select full source coverage. Do not bypass that fallback to save time.
+- Run `pnpm typecheck` and `pnpm lint` for code changes. Run applicable native source checks when the plan reports `native: true`; JS runner results alone do not prove native coverage. Main/release CI retains full qualification.
+
+## CLI and Skill Consistency
+
+- When changing CLI commands, inputs, behavior, or workflow rules, update `skills/shiqu/SKILL.md` and affected examples in the same change so they match actual help and production behavior.
+
+## Code Comments
+
+- Write added or modified code comments in English, following the user's English application requirement.
 
 ## Desktop Development
 

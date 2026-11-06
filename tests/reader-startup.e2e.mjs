@@ -23,12 +23,12 @@ for(const delayed of ['sessions','deletions'])test(`startup waits for ${delayed}
   const response=await route.fetch();arrived();await pending;await route.fulfill({response});
  });
  await page.goto(url,{waitUntil:'domcontentloaded',timeout:30000});await started;
- await page.getByRole('button',{name:'发现',exact:true}).click();
- await page.getByText('正在打开故事…',{exact:true}).waitFor();
- assert.equal(await page.getByRole('button',{name:'继续阅读'+story.title,exact:true}).count(),0);
- assert.equal(await page.getByText('把下一篇故事留在这里',{exact:true}).count(),0);
+ await page.getByRole('button',{name:'Discover',exact:true}).click();
+ await page.getByText('Opening story…',{exact:true}).waitFor();
+ assert.equal(await page.getByRole('button',{name:'Continue reading '+story.title,exact:true}).count(),0);
+ assert.equal(await page.getByText('Make room for your next story',{exact:true}).count(),0);
  release();
- await page.getByRole('button',{name:'继续阅读'+story.title,exact:true}).waitFor();
+ await page.getByRole('button',{name:'Continue reading '+story.title,exact:true}).waitFor();
  assert.equal(requests.filter(path=>path==='/api/reader/sessions').length,1);
  assert.equal(requests.filter(path=>path==='/api/reader/deletions').length,1);
  assert.equal(requests.filter(path=>/^\/api\/(admin|stories|books|me|events)(?:\/|$)/.test(path)).length,0);
@@ -37,20 +37,20 @@ for(const delayed of ['sessions','deletions'])test(`startup waits for ${delayed}
  assert.equal(f.control.calls.length,0);
 
  if(delayed==='sessions'){
-  await page.getByRole('button',{name:'继续阅读'+story.title,exact:true}).click();
-  await page.getByRole('button',{name:'下一页',exact:true}).click();
+  await page.getByRole('button',{name:'Continue reading '+story.title,exact:true}).click();
+  await page.getByRole('button',{name:'Next page',exact:true}).click();
   await until(async()=>(await f.read(story.id)).page===1);
-  await page.getByRole('button',{name:'收藏故事',exact:true}).click();
+  await page.getByRole('button',{name:'Favorite story',exact:true}).click();
   await until(async()=>(await f.read(story.id)).saved===true);
   await page.reload();
-  await page.getByRole('button',{name:'取消收藏',exact:true}).waitFor();
+  await page.getByRole('button',{name:'Remove from favorites',exact:true}).waitFor();
   assert.equal((await f.read(story.id)).page,1);
-  await page.getByRole('button',{name:'返回发现',exact:true}).click();
-  await page.getByRole('button',{name:'书架',exact:true}).click();
-  await page.getByRole('button',{name:'删除《'+story.title+'》',exact:true}).click();
-  await page.getByRole('dialog',{name:'删除这篇故事？',exact:true}).getByRole('button',{name:'删除故事',exact:true}).click();
-  await page.getByRole('button',{name:'撤销删除',exact:true}).click();
-  await page.getByRole('button',{name:'继续阅读《'+story.title+'》',exact:true}).waitFor();
+  await page.getByRole('button',{name:'Back to Discover',exact:true}).click();
+  await page.getByRole('button',{name:'Shelf',exact:true}).click();
+  await page.getByRole('button',{name:'Delete “'+story.title+'”',exact:true}).click();
+  await page.getByRole('dialog',{name:'Delete this story?',exact:true}).getByRole('button',{name:'Delete story',exact:true}).click();
+  await page.getByRole('button',{name:'Undo deletion',exact:true}).click();
+  await page.getByRole('button',{name:'Continue reading “'+story.title+'”',exact:true}).waitFor();
   const restored=await f.read(story.id);assert.equal(restored.page,1);assert.equal(restored.saved,true);
   assert.equal(f.control.calls.length,0);assert.equal(f.control.plans.length,0);
  }

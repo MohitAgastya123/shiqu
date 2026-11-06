@@ -168,6 +168,10 @@ class StartupTerminalTests(unittest.TestCase):
     def choose(self, child, provider, key=None, models=("", "")):
         child.expect("Enter a number or name")
         child.send(provider + "\n")
+        if provider != "readonly":
+            child.expect("Choose image provider")
+            child.expect("Enter a number or name")
+            child.send("\n")
         if provider in ["openai", "gemini"]:
             child.expect("API key (hidden input")
             child.send((key or "") + "\n")
@@ -251,6 +255,8 @@ class StartupTerminalTests(unittest.TestCase):
                 child = self.start("--configure")
                 child.expect("Enter a number or name")
                 child.send("gemini\n")
+                child.expect("Choose image provider")
+                child.send("\n")
                 child.expect("API key (hidden input")
                 child.send("test-only-discarded" + cancel)
                 child.expect("Provider setup canceled")
@@ -260,6 +266,8 @@ class StartupTerminalTests(unittest.TestCase):
         child = self.start("--configure")
         child.expect("Enter a number or name")
         child.send("gemini\n")
+        child.expect("Choose image provider")
+        child.send("\n")
         child.expect("API key (hidden input")
         child.send("test-only-discarded\n")
         child.expect("Text model")
@@ -302,6 +310,8 @@ class StartupTerminalTests(unittest.TestCase):
         child.send("invalid-provider\n")
         child.expect("Enter a number or name")
         child.send("openai\n")
+        child.expect("Choose image provider")
+        child.send("\n")
         child.expect("API key (hidden input")
         child.send("\n")
         child.expect("No API key was entered")

@@ -108,7 +108,7 @@ test('parent EOF kills active detached Codex groups before releasing the data di
  const child=spawn(process.execPath,['--no-warnings',file],{cwd:f.root,env:{PATH:path.dirname(process.execPath)+path.delimiter+process.env.PATH,HOME:os.homedir()},stdio:['pipe','pipe','pipe']});
  t.after(()=>{if(child.exitCode===null)child.kill('SIGTERM');});
  const lines=createInterface({input:child.stdout});let diagnostics='';child.stderr.on('data',chunk=>diagnostics+=chunk);
- const ready=Promise.race([once(lines,'line'),once(child,'exit').then(([code])=>{throw Error('Desktop fixture exited '+code+': '+diagnostics.slice(0,1000));})]);child.stdin.write(JSON.stringify({action:'start',settings:{...f.settings,provider:'codex',codexPath:fake},key:''})+'\n');
+ const ready=Promise.race([new Promise(resolve=>lines.on('line',line=>{if(JSON.parse(line).running)resolve([line]);})),once(child,'exit').then(([code])=>{throw Error('Desktop fixture exited '+code+': '+diagnostics.slice(0,1000));})]);child.stdin.write(JSON.stringify({action:'start',settings:{...f.settings,provider:'codex',codexPath:fake},key:''})+'\n');
  const [line]=await ready;const status=JSON.parse(line);assert.equal(status.running,true);
  const url=new URL(status.url);assert.equal(status.url,url.origin);
  const request=fetch(url.origin+'/api/reader/status').catch(()=>null);

@@ -7,6 +7,7 @@ import {acceptanceCriteria,acceptancePromptSchema} from '../lib/reader-acceptanc
 import {selectionSchema} from '../lib/reader-model.ts';
 import {reviewReportSchema} from '../lib/reader-review.ts';
 import {checkedRevision,revisionImpact} from '../lib/reader-revision.ts';
+import {flowProviders} from './fixtures/test-tier.mjs';
 const criteria='关键反应落实到画面。\n保留对白的条件。';
 const results=status=>[{criterion:1,status,pages:status==='unknown'?[]:[2],evidence:status==='unknown'?'无法从文字分镜判断生成图中的手指数量。':'第二幅的手部反应与配文提供依据。'},{criterion:2,status:'passed',pages:[1],evidence:'第一幅配文保留了条件。'}];
 const titleReview={title:'庄周梦蝶',reason:'标题符合原文。'};
@@ -24,7 +25,7 @@ test('missing, duplicate, out-of-range and unactionable failed criterion results
  for(const acceptanceResults of [undefined,[],[results('passed')[0],results('passed')[0]],[{...results('passed')[0],criterion:3},results('passed')[1]],results('failed'),[{...results('passed')[0],pages:[4]},results('passed')[1]]])assert.equal(schema.safeParse({...report,acceptanceResults}).success,false);
  assert.equal(schema.safeParse({...report,acceptanceResults:results('unknown')}).success,true);
 });
-for(const provider of ['codex','gemini'])test(`${provider}: saved per-story requirements, actual prompts and acceptance-only revisions survive restart without redrawing`,async t=>{
+for(const provider of flowProviders(['codex','gemini']))test(`${provider}: saved per-story requirements, actual prompts and acceptance-only revisions survive restart without redrawing`,async t=>{
  const f=await productionFixture(t,provider);f.control.hold=false;
  f.control.beforeText=async kind=>kind==='review'?{issues:[],acceptanceResults:results('passed')}:undefined;
  const id=await f.create(3,{acceptancePrompt:criteria});await until(async()=>(await f.read(id)).state==='completed');

@@ -22,7 +22,7 @@ test('an unchanged global repair is blocked without drawing',async t=>{
 test('legacy numeric scripts retain their global-replan stop rather than silently changing mode',async t=>{
  const f=await productionFixture(t);f.control.beforeText=async kind=>kind==='review'?{issues:[issue]}:undefined;
  const id=await f.createLegacyReader(3);await f.demand(id);await until(async()=>(await f.read(id)).state==='failed');
- const row=await f.read(id);assert.equal(row.selection.length,3);assert.match(row.error,/全局人物连续性/);assert.equal(f.control.structures.length,0);assert.equal(f.control.calls.length,0);
+ const row=await f.read(id);assert.equal(row.selection.length,3);assert.match(row.error,/Character continuity needs revision/);assert.equal(f.control.structures.length,0);assert.equal(f.control.calls.length,0);
 });
 test('global continuity repairs share the existing twenty-repair ceiling',async t=>{
  const f=await productionFixture(t);f.control.autoLength=3;f.control.beforeText=async(kind,payload)=>kind==='review'?{issues:[issue]}:kind==='structure'?{edits:[],characters:payload.plan.characters+' revised'}:undefined;

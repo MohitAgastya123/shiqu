@@ -1,5 +1,4 @@
-// English native controls and diagnostics; persisted identifiers and source data are unchanged.
-// Verify bundled Node on every desktop launch, then supervise the runtime over private stdin.
+// Verify bundled Node before startup and supervise the service through private stdin; upgrade progress is not interrupted by the startup timeout.
 use crate::config::Settings;
 use fs2::FileExt;
 use serde::{Deserialize, Serialize};
@@ -41,7 +40,8 @@ struct BundleManifest {
 }
 
 fn digest(file: &Path) -> Result<String, String> {
-    let mut input = File::open(file).map_err(|_| "Bundled Node resources are missing. Reinstall Shiqu.")?;
+    let mut input =
+        File::open(file).map_err(|_| "Bundled Node resources are missing. Reinstall Shiqu.")?;
     let mut hash = Sha256::new();
     let mut buffer = [0u8; 65536];
     loop {
@@ -57,7 +57,10 @@ fn digest(file: &Path) -> Result<String, String> {
 }
 
 pub fn node_info(_explicit: &str, root: &Path) -> Result<NodeInfo, String> {
-    let directory = root.parent().ok_or("Invalid app resources directory.")?.join("node");
+    let directory = root
+        .parent()
+        .ok_or("Invalid app resources directory.")?
+        .join("node");
     let manifest: BundleManifest = serde_json::from_slice(
         &fs::read(directory.join("manifest.json"))
             .map_err(|_| "The bundled Node manifest is missing. Reinstall Shiqu.")?,
@@ -82,7 +85,9 @@ pub fn node_info(_explicit: &str, root: &Path) -> Result<NodeInfo, String> {
         || manifest.arch != arch
         || manifest.binary != binary
     {
-        return Err("Bundled Node does not match the app version or platform. Reinstall Shiqu.".into());
+        return Err(
+            "Bundled Node does not match the app version or platform. Reinstall Shiqu.".into(),
+        );
     }
     let executable = directory.join(binary);
     if digest(&executable)? != manifest.sha256
@@ -92,7 +97,9 @@ pub fn node_info(_explicit: &str, root: &Path) -> Result<NodeInfo, String> {
     }
     let info = probe(&executable).map_err(|_| "Bundled Node could not run. Reinstall Shiqu.")?;
     if info.version != version || info.platform != platform || info.arch != arch {
-        return Err("The bundled Node version or architecture is incompatible. Reinstall Shiqu.".into());
+        return Err(
+            "The bundled Node version or architecture is incompatible. Reinstall Shiqu.".into(),
+        );
     }
     Ok(info)
 }
@@ -207,7 +214,7 @@ fn lock(directory: &Path) -> Result<File, String> {
     Ok(file)
 }
 
-// Read bounded status frames for both readiness and later tunnel disconnects.
+// Bounded status frames carry upgrade progress, startup results, and tunnel changes.
 fn stream_status(output: impl Read, send: mpsc::Sender<Value>) {
     let mut reader = BufReader::new(output);
     loop {
@@ -220,7 +227,10 @@ fn stream_status(output: impl Read, send: mpsc::Sender<Value>) {
                     // Fatal diagnostics precede asynchronous Node cleanup. Keep the
                     // React status contract valid while that process is still alive.
                     if value.get("error").and_then(Value::as_str).is_some() {
-                        value = json!({"running":false,"phoneUrls":[],"publicUrl":"","error":value["error"]});
+                        value["running"] = json!(false);
+                        value["state"] = json!("failed");
+                        value["phoneUrls"] = json!([]);
+                        value["publicUrl"] = json!("");
                     }
                     if send.send(value).is_err() {
                         break;
@@ -260,9 +270,9 @@ impl Drop for Runtime {
 
 pub fn launch(
     settings: &Settings,
-    key: &str,
+    settings_file: &Path,
     root: &Path,
-    action: &str,
+    on_status: impl Fn(Value),
 ) -> Result<(Child, Value, mpsc::Receiver<Value>), String> {
     settings.validate()?;
     let node = node_info(&settings.node_path, root)?;
@@ -279,7 +289,33 @@ pub fn launch(
         .stderr(Stdio::null())
         .spawn()
         .map_err(|_| "The Node service could not be started.")?;
-    let input = json!({"action":action,"settings":settings,"key":key});
+    let mut overrides = serde_json::Map::new();
+    for name in [
+        "SHIQU_AI_PROVIDER",
+        "SHIQU_IMAGE_PROVIDER",
+        "GEMINI_API_KEY",
+        "GEMINI_TEXT_MODEL",
+        "GEMINI_IMAGE_MODEL",
+        "OPENAI_API_KEY",
+        "OPENAI_TEXT_MODEL",
+        "OPENAI_IMAGE_MODEL",
+        "CODEX_BIN",
+        "CODEX_MODEL",
+        "SHIQU_CODEX_HOME",
+        "CODEX_REASONING_EFFORT",
+        "SHIQU_REASONING_SUGGEST",
+        "SHIQU_REASONING_ART",
+        "SHIQU_REASONING_FRAMES",
+        "SHIQU_REASONING_OUTLINE",
+        "SHIQU_REASONING_PLAN",
+        "SHIQU_REASONING_REVIEW",
+        "SHIQU_REASONING_REPAIR",
+    ] {
+        if let Ok(value) = std::env::var(name) {
+            overrides.insert(name.into(), json!(value));
+        }
+    }
+    let input = json!({"action":"start","settings":settings,"settingsFile":settings_file,"overrides":overrides});
     let wrote = child
         .stdin
         .as_mut()
@@ -290,24 +326,22 @@ pub fn launch(
         let _ = child.wait();
         return Err("The service configuration could not be sent.".into());
     }
-    let output = child.stdout.take().ok_or("The service status stream could not be opened.")?;
+    let output = child
+        .stdout
+        .take()
+        .ok_or("The service status stream could not be opened.")?;
     let (send, receive) = mpsc::channel();
     thread::spawn(move || {
         stream_status(output, send);
     });
-    let response = receive
-        .recv_timeout(Duration::from_secs(if action == "test" {
-            30
-        } else if action == "upgrade" {
-            600
-        } else {
-            60
-        }))
-        .ok();
+    let response = startup_response(&receive, Duration::from_secs(60), on_status);
     let Some(response) = response else {
         drop(child.stdin.take());
         let _ = wait(&mut child, Duration::from_secs(8));
-        return Err("The service did not start in time. Check Node 24, the port, and the data directory.".into());
+        return Err(
+            "The service did not start in time. Check Node 24, the port, and the data directory."
+                .into(),
+        );
     };
     if let Some(message) = response.get("error").and_then(Value::as_str) {
         drop(child.stdin.take());
@@ -318,24 +352,36 @@ pub fn launch(
     Ok((child, response, receive))
 }
 
-pub fn ensure_library(settings: &Settings, root: &Path) -> Result<(), String> {
-    if !crate::library::needs_upgrade(Path::new(&settings.data_directory))? {
-        return Ok(());
+// Suspend the startup deadline during upgrades; restore it after starting, and fail immediately if the status stream closes.
+fn startup_response(
+    receive: &mpsc::Receiver<Value>,
+    timeout: Duration,
+    on_status: impl Fn(Value),
+) -> Option<Value> {
+    let mut upgrading = false;
+    loop {
+        let value = if upgrading {
+            receive.recv().ok()?
+        } else {
+            receive.recv_timeout(timeout).ok()?
+        };
+        on_status(value.clone());
+        if value["running"] == true || value["error"].is_string() {
+            return Some(value);
+        }
+        upgrading = value["state"] == "upgrading";
     }
-    // Do not hold the short SQLite gate while Node acquires it for migration/recovery.
-    let (mut child, response, _) = launch(settings, "", root, "upgrade")?;
-    drop(child.stdin.take());
-    wait(&mut child, Duration::from_secs(8))?;
-    if response["upgraded"] != true {
-        return Err("The library upgrade is incomplete.".into());
-    }
-    Ok(())
 }
 
-pub fn start(settings: &Settings, key: &str, root: &Path) -> Result<Runtime, String> {
+pub fn start(
+    settings: &Settings,
+    settings_file: &Path,
+    root: &Path,
+    on_status: impl Fn(Value),
+) -> Result<Runtime, String> {
     crate::library::needs_upgrade(Path::new(&settings.data_directory))?;
     let ownership = lock(Path::new(&settings.data_directory))?;
-    let (child, status, updates) = launch(settings, key, root, "start")?;
+    let (child, status, updates) = launch(settings, settings_file, root, on_status)?;
     Ok(Runtime {
         child,
         status,
@@ -347,6 +393,23 @@ pub fn start(settings: &Settings, key: &str, root: &Path) -> Result<Runtime, Str
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn upgrade_wait_outlives_startup_timeout_and_preserves_backup() {
+        let (send, receive) = mpsc::channel();
+        send.send(json!({"state":"upgrading"})).unwrap();
+        thread::spawn(move || {
+            thread::sleep(Duration::from_millis(50));
+            send.send(json!({"state":"starting","backup":"/isolated/verified-backup"}))
+                .unwrap();
+            send.send(json!({"running":true,"backup":"/isolated/verified-backup"}))
+                .unwrap();
+        });
+        let result = startup_response(&receive, Duration::from_millis(10), |_| {}).unwrap();
+        assert_eq!(result["backup"], "/isolated/verified-backup");
+        let (send, receive) = mpsc::channel();
+        drop(send);
+        assert!(startup_response(&receive, Duration::from_millis(1), |_| {}).is_none());
+    }
     #[test]
     fn desktop_uses_verified_bundle_and_ignores_saved_system_path() {
         let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../desktop/resources/runtime");
@@ -415,7 +478,7 @@ mod tests {
         assert_eq!(receive.recv().unwrap(), initial);
         assert_eq!(
             receive.recv().unwrap(),
-            json!({"running":false,"phoneUrls":[],"publicUrl":"","error":"fatal"})
+            json!({"running":false,"state":"failed","phoneUrls":[],"publicUrl":"","error":"fatal"})
         );
         assert!(receive.recv().is_err());
     }

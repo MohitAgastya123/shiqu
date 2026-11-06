@@ -1,18 +1,30 @@
-// Verify task routing at provider request boundaries, including overrides and unsupported Gemini levels.
+// Controlled adapter and settings contracts; separate flow files exercise production startup and generation.
 import test from 'node:test';
+
 import assert from 'node:assert/strict';
+
 import {createReaderProvider} from '../server/generation.ts';
+
 import {configuredTaskReasoning,taskReasoningDefaults,reasoningTasks} from '../lib/reader-reasoning.ts';
+
 import {desktopSettings,desktopVariables} from '../server/desktop.ts';
+
 import {withLocalBooks} from '../server/local-generation.ts';
-import {makePlan,makeReflectionCandidates,selection as baseSelection,productionFixture,until} from './fixtures/production.mjs';
+
+import {makePlan,makeReflectionCandidates,selection as baseSelection} from './fixtures/production.mjs';
+
 import {geminiEvidenceAnswer} from './fixtures/gemini-evidence.mjs';
 
 const selection={...baseSelection,length:8},plan=makePlan(8),{pages,...metadata}=plan;
+
 const outline={...metadata,beats:pages.map((_,i)=>`第${i+1}幅的动作。`)};
+
 const original={title:'已核原文',text:'庄周梦为胡蝶。',url:'https://example.org',localSource:{edition:'a'.repeat(64),sectionId:'s',firstUnit:'u',lastUnit:'u'}};
+
 const issue={page:2,category:'caption',problem:'机械重复转述。',instruction:'只修配文。'};
+
 const override={suggest:'high',art:'medium',frames:'low',outline:'medium',plan:'low',review:'medium',repair:'low'};
+
 function output(payload,schema){
  if(schema.properties.matches)return {matches:payload.stories.map(story=>({id:story.id,verdict:'yes',reason:'原文事件与结果支持本次选题。'}))};
  if(schema.properties.candidates)return {title:payload.draft.title,candidates:makeReflectionCandidates(plan.reflection)};
@@ -25,6 +37,7 @@ function output(payload,schema){
  if(payload.batch)return {pages:plan.pages.slice(payload.batch.first-1,payload.batch.last)};
  return plan;
 }
+
 for(const name of ['codex','gemini'])for(const custom of [false,true])test(`${name}: all text tasks use ${custom?'explicit overrides':'recommended defaults'}, not the old global effort`,async()=>{
  const calls=[],efforts=custom?override:taskReasoningDefaults;
  const variables={SHIQU_AI_PROVIDER:name,CODEX_REASONING_EFFORT:'max',...(custom?Object.fromEntries(reasoningTasks.map(task=>['SHIQU_REASONING_'+task.toUpperCase(),efforts[task]])):{})};
@@ -62,14 +75,6 @@ test('old desktop settings acquire defaults, partial overrides persist, and Gemi
  const vars=desktopVariables(saved,'');assert.equal(vars.SHIQU_REASONING_REVIEW,'xhigh');assert.equal(vars.SHIQU_REASONING_PLAN,'high');
  assert.throws(()=>desktopSettings.parse({...saved,provider:'gemini'}));
  assert.throws(()=>desktopSettings.parse({...old,taskReasoningEfforts:{unknown:'high'}}));
-});
-
-test('Gemini task effort survives real queued review checkpoints alongside existing usage',async t=>{
- const f=await productionFixture(t,'gemini'),id=await f.createLegacyReader();
- await f.demand(id);await until(()=>f.control.calls.length===1);
- const row=await f.app.services.database.prepare('SELECT document FROM stories WHERE id=?').bind(id).first();
- const doc=JSON.parse(row.document),review=doc.usage.find(entry=>entry.step==='review:0');
- assert.equal(review.reasoningEffort,'high');assert.deepEqual(review.usage,{calls:1});
 });
 
 test('art effort isolates recommendations while review effort changes reuse the same recommendation',async()=>{

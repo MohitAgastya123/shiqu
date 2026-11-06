@@ -1,6 +1,5 @@
-// English product messages; source evidence and machine identifiers remain stable.
-// Authenticate the tunnel's separate loopback listener before any reader/API/media route.
-// Pairing secrets stay in URL fragments; all remote responses forbid shared caching.
+// Authenticate the separate tunnel listener first; always deny local settings routes even for a loopback source socket.
+// Pairing keys remain in fragments and remote responses forbid shared caching.
 import {randomBytes,timingSafeEqual} from 'node:crypto';
 
 const cookieName='__Host-shiqu-remote',lifetime=12*60*60;
@@ -30,6 +29,7 @@ else fetch('/connect',{method:'POST',headers:{'Content-Type':'application/json'}
   revoke(){origin='';pairing=secret();session=secret();expires=0;},
   async handle(request:Request){
    const incoming=new URL(request.url);
+   if(incoming.pathname==='/api/local/provider-settings')return denied(403);
    if(!origin||incoming.host!==new URL(origin).host)return denied(403);
    const requestOrigin=request.headers.get('origin');
    if((requestOrigin&&requestOrigin!==origin)||(!['GET','HEAD'].includes(request.method)&&requestOrigin!==origin))return denied(403);

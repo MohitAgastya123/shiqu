@@ -53,10 +53,41 @@ export function safeClaudeError(error:unknown){
  if(code==='UNSAFE_CONFIGURATION'||code==='UNEXPECTED_TOOL')return 'Claude Code tool isolation is unavailable. This call has been stopped.';
  return 'Claude Code could not complete this step. Check sign-in, model access, and subscription usage. Progress has been retained.';
 }
+// Text work stays on SHIQU_AI_PROVIDER; an optional SHIQU_IMAGE_PROVIDER draws through the same production workflow.
 export function createReaderProvider(variables:Record<string,string|undefined>,media:MediaStore,transport:typeof fetch,runner?:CodexRunner):ReaderProvider{
- const name=variables.SHIQU_AI_PROVIDER?.trim()||'gemini';
+ const name=variables.SHIQU_AI_PROVIDER?.trim()||'gemini',imageName=variables.SHIQU_IMAGE_PROVIDER?.trim()||'';
+ const text=createSingleProvider(name,variables,media,transport,runner);
+ // Read-only has no image side, so its image setting is ignored rather than validated.
+ if(name==='readonly'||!imageName||imageName===name)return text;
+ if(!['gemini','codex','openai'].includes(imageName))throw Error('SHIQU_IMAGE_PROVIDER must be gemini, codex or openai');
+ return withImageProvider(text,createSingleProvider(imageName,variables,media,transport,runner));
+}
+// Compose one provider from separate text and image providers. Image errors keep the image provider's safe messages.
+export function withImageProvider(text:ReaderProvider,image:ReaderProvider):ReaderProvider{
+ const imageErrors=new WeakSet<object>();
+ const safeError=(error:unknown)=>error&&typeof error==='object'&&imageErrors.has(error)?image.safeError(error):text.safeError(error);
+ return {
+  ...text,
+  generationTimeoutMs:phase=>(phase==='image'?image:text).generationTimeoutMs?.(phase)??null,
+  async status(){
+   const [textStatus,imageStatus]=await Promise.all([text.status(),image.status()]);
+   const imageMessage=!imageStatus.configured?'Image provider: '+(imageStatus.message||'Not configured. Check the image provider API key or sign-in status.'):undefined;
+   const message=!textStatus.configured?textStatus.message:imageMessage,reason=!textStatus.configured?textStatus.reason:imageStatus.reason;
+   return {...textStatus,configured:textStatus.configured&&imageStatus.configured,...(reason?{reason}:{}),imageProvider:imageStatus.provider as NonNullable<ProviderStatus['imageProvider']>,models:{text:textStatus.models.text,image:imageStatus.models.image},...(message?{message}:{})};
+  },
+  generator(){
+   const generator=text.generator(),drawing=image.generator();
+   return {...generator,safeError,async image(...args){
+    try{return await drawing.image(...args);}
+    catch(error){if(error&&typeof error==='object')imageErrors.add(error);throw error;}
+   }};
+  },
+  safeError,
+ };
+}
+function createSingleProvider(name:string,variables:Record<string,string|undefined>,media:MediaStore,transport:typeof fetch,runner?:CodexRunner):ReaderProvider{
  if(name==='readonly'){
-  const unavailable=()=>{throw new ReaderError(503,'Read-only mode is active. Configure a generation provider with --configure or desktop settings.');};
+  const unavailable=()=>{throw new ReaderError(503,'Read-only mode is active. Open My space → Generation service and models on the computer running Shiqu.');};
   return {async status(){return {configured:false,provider:'readonly',models:{text:'',image:''},voiceEnabled:false};},suggestions:async()=>unavailable(),generator:()=>({plan:async()=>unavailable(),original:async()=>unavailable(),image:async()=>unavailable(),audio:async()=>unavailable(),reflection:async()=>unavailable(),reflectionCandidates:async()=>unavailable(),safeError:()=> 'Read-only mode is active. Configure a generation provider first.'}),safeError:()=> 'Read-only mode is active. Configure a generation provider first.'};
  }
  if(name==='openai')return createOpenAIProvider(variables,media,transport);

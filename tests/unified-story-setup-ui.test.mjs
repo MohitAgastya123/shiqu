@@ -116,6 +116,7 @@ test('discovery stays in the picker and selection opens one continuous story flo
  const changedReview=renderToStaticMarkup(createElement(Editor,{editor:{...targetEditor,changes:{plan:{...targetedPlan,pages:targetedPlan.pages.map((p,i)=>i===17?{...p,caption:'手改后的第十八幅旁白。'}:p)}}},reviewIssues}));
  assert.match(changedReview,/缺少第18幅的关键动作/);assert.match(changedReview,/手改后的第十八幅旁白/);
  // Review corrections submit immediately even from settings or a paused editor with onDone.
+ // A manual frame correction requires review (lib/reader-revision.ts), unlike a style-only change.
  for(const resuming of [false,true]){
   const saving=renderToStaticMarkup(createElement(Editor,{editor:{...targetEditor,impact:{...targetEditor.impact,changed:true,review:true}},reviewIssues,onDone:noop,resuming}));
   assert.match(saving,resuming?/>Apply changes and resume<\/button>/:/>Save and review again<\/button>/);assert.match(saving,/Drawing follows approval/);assert.doesNotMatch(saving,/>Done editing<\/button>|>Resume generation<\/a>|>Start production<\/(?:button|a)>/);
@@ -154,7 +155,7 @@ test('discovery stays in the picker and selection opens one continuous story flo
  for(const id of ['plan','review','repair','recheck','image'])assert.equal(draftSteps.find(s=>s.id===id).state,'pending',id);
  const savedPlan={pages:Array(5).fill({caption:'已保存的旁白。',prompt:'Saved scene.'})};
  const styleSteps=revisionDraftSteps({...draftEditor.base,plan:savedPlan,reviewStatus:'passed'},{artStyle:'ink-pencil'});
- assert.equal(styleSteps.find(s=>s.id==='plan').state,'done');assert.equal(styleSteps.find(s=>s.id==='review').state,'done');assert.equal(styleSteps.find(s=>s.id==='image').state,'current');
+ assert.equal(styleSteps.find(s=>s.id==='plan').state,'done');assert.equal(styleSteps.find(s=>s.id==='review').state,'done');assert.equal(styleSteps.find(s=>s.id==='review').detail,'Keep existing review progress');assert.equal(styleSteps.find(s=>s.id==='image').state,'current');
  const manualSteps=revisionDraftSteps({...draftEditor.base,plan:savedPlan},{plan:{...savedPlan,reflection:'手改余味。'}});
  assert.equal(manualSteps.find(s=>s.id==='plan').detail,"Storyboard edited · Awaiting review");
 

@@ -174,6 +174,16 @@ test('non-interactive fresh CLI fails without creating configuration or business
  await assert.rejects(access(locations.library));
 });
 
+// A killed orphan can remain a zombie where the container's PID 1 does not reap children; it no longer runs.
+async function terminated(pid,timeoutMs=2000){
+ const deadline=Date.now()+timeoutMs;
+ while(true){
+  try{process.kill(pid,0);}catch(error){if(error.code==='ESRCH')return true;throw error;}
+  if(process.platform==='linux'){try{if((await readFile(`/proc/${pid}/stat`,'utf8')).split(') ').at(-1)?.[0]==='Z')return true;}catch{return true;}}
+  if(Date.now()>=deadline)return false;
+  await new Promise(resolve=>setTimeout(resolve,20));
+ }
+}
 test('CLI signal stops a hanging Codex request before draining HTTP and releasing the library', {skip:process.platform==='win32',timeout:15000},async t=>{
  const context=await fixture(t),root=await processFixture(t),directory=path.join(context.home,'shelf'),marker=path.join(root,'provider-pids.json'),fake=path.join(root,'fake codex');
  await writeFile(fake,`#!/usr/bin/env node\nimport {writeFileSync} from 'node:fs';import {spawn} from 'node:child_process';const descendant=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore'});writeFileSync(${JSON.stringify(marker)},JSON.stringify({parent:process.pid,descendant:descendant.pid}));setInterval(()=>{},1000);`,{mode:0o755});
@@ -189,7 +199,7 @@ test('CLI signal stops a hanging Codex request before draining HTTP and releasin
  try{const [code,signal]=await stopped;assert.equal(code,0,'CLI must finish graceful shutdown rather than wait for provider timeout');assert.equal(signal,null);}
  finally{clearTimeout(timer);}
  await pending;
- for(const pid of [pids.parent,pids.descendant])assert.throws(()=>process.kill(pid,0),{code:'ESRCH'});
+ for(const pid of [pids.parent,pids.descendant])assert.equal(await terminated(pid),true,`provider process ${pid} must be stopped`);
  const release=await ownDesktopData(directory);await release();
 });
 

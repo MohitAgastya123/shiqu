@@ -3,7 +3,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {productionFixture,until} from './fixtures/production.mjs';
-import {readLibrarySummary} from '../desktop/library-preview.ts';
 
 const owner='docker-local-owner';
 const row=(f,id)=>f.app.services.database.prepare('SELECT * FROM stories WHERE id=?').bind(id).first();
@@ -22,7 +21,7 @@ test('renaming persists across restart without changing source, script, media, p
  assert.equal(after.last_read_at,before.last_read_at);assert.equal(after.generation_control,before.generation_control);
  assert.deepEqual(JSON.parse(after.selection),{...JSON.parse(before.selection),displayTitle:'梦蝶新名'});
  assert.equal((await f.json('sessions')).find(s=>s.id===id).story.title,'梦蝶新名');
- assert.equal(readLibrarySummary(f.dataDirectory).stories.find(s=>s.id===id).title,'梦蝶新名');
+
  assert.deepEqual(await f.app.services.database.prepare('SELECT * FROM production_jobs').all(),jobs);
  assert.deepEqual([f.control.calls.length,f.control.plans.length,f.control.reviews.length],calls);
  await f.json(`library/${id}`,'DELETE');

@@ -6,8 +6,8 @@ import {storyBrowser} from './story-browser.mjs';
 import {until} from './production.mjs';
 const dialog=(page,name)=>page.getByRole('dialog',{name,exact:true});
 async function oneCard(f,id){assert.deepEqual((await f.json('sessions')).map(s=>s.id),[id]);}
-export async function creationLifecycle(t){
- const b=await storyBrowser(t,'C001');await b.execute(async()=>{
+export async function creationLifecycle(t,caseId='C001'){
+ const b=await storyBrowser(t,caseId);await b.execute(async()=>{
   const {f,page,library}=b,initial=await b.create({prepare:false,theme:'知恩图报'});
   const picker=dialog(page,"Story settings");await picker.getByRole('button',{name:"Enter title",exact:true}).click();await picker.getByLabel("Story title",{exact:true}).fill('乌龟报恩');
   assert.equal(library.calls.catalog.length,0);await b.screenshot('before-start');

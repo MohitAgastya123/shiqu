@@ -68,7 +68,7 @@ test('explicit draw-anyway remains marked, paused and idempotent when bypassing 
  const f=await productionFixture(t),s=await seed(f);f.control.beforeText=async(kind,payload)=>kind==='frames'?reduction:kind==='structure'?{edits:[{from:2,to:2,pages:[payload.plan.pages[1]]}]}:undefined;
  await s.resume();await until(async()=>(await f.read(s.id)).generationProgress.reviewStopReason==='unchanged');await s.pause();
  const skip=()=>f.json(`sessions/${s.id}/review-override`,'POST',{});await skip();await skip();await f.app.services.production.tick();assert.equal(f.control.calls.length,0);assert.equal(f.control.reviews.length,0);
- const paused=await f.read(s.id);assert.equal(paused.generationControl,'paused');assert.equal(paused.generationProgress.reviewOverridden,true);assert.match(generationProgress(paused,0).steps.find(x=>x.id==='review').detail,/确认跳过/);
+ const paused=await f.read(s.id);assert.equal(paused.generationControl,'paused');assert.equal(paused.generationProgress.reviewOverridden,true);assert.match(generationProgress(paused,0).steps.find(x=>x.id==='review').detail,/explicitly skipped/);
  f.control.hold=false;await s.resume();await until(async()=>(await f.read(s.id)).state==='completed');await skip();assert.equal(f.control.calls.length,4);assert.equal(f.control.reviews.length,0);
 });
 for(const legacyReview of ['passed','absent'])test(`opening an old automatic plan with ${legacyReview} review does not add either audit`,async t=>{

@@ -17,6 +17,7 @@ Use Shiqu's existing production entry points for all reads, mutations, inference
 - Subcommands return one JSON envelope: success `{schemaVersion:1,ok:true,data:...}` or failure `{schemaVersion:1,ok:false,error:{code,message,details?}}`; logs go to stderr. `skill show` is Markdown unless `--json` is given. Preserve failure envelopes and do not confuse exit code 0 or `ok:true` with completed production.
 - Commands are noninteractive. Handle conversation checkpoints yourself; do not send terminal keystrokes or wait for CLI prompts.
 - Reuse the saved provider/model. Inspect current `config` help if setup is missing. Credentials enter only through existing environment, private files, or stdin, never argv, chat, reports, or logs. Never switch billing/provider implicitly.
+- Text and drawing may use different saved services. Source translation, discovery, storyboard and review belong to the text service; only drawing uses the image service. Preserve this composition and each provider's own credentials.
 
 ## Data contracts
 
@@ -53,6 +54,7 @@ New production is English, including source translations saved during preparatio
 | Run | `run ID --until candidates\|prepared\|reviewed\|completed`; inspect the actual reason/session before continuing. `reviewed` stops after approval and before drawing. |
 | Explain a stop | `choice` needs selection; `frame_count_required` is a legacy confirmation gate; `already_prepared/already_selected` means move to the next applicable stage; paused stays paused; blocked needs fault inspection; superseded needs current. Never spin on the same boundary. |
 | Edit/control | `stories edit` uses token/changes; rename affects only display. pause/resume/stop control intent; retry/override target current faults. reselect/replace/cancel-reselection follow saved draft contracts. |
+| Selected redraw | For a completed, passed story, `stories edit` accepts `{token,paused:true,changes:{redrawPages:[1,3]}}` with one-based frames. Do not mix this with other edits. Text, style, review and unselected images remain; only explicit `run` redraws. |
 | Copy | `stories copy SOURCE_ID --from-data-dir SOURCE --data-dir TARGET` normally copies approved text/review as a paused independent story. `stories copy-images TARGET_ID` with input `{sourceId:"SOURCE_ID"}` adds images to that same copy. Do not copy old images with a changed style. |
 | Preview/export | preview writes standalone offline HTML; export supports zip/pdf/png/json/md through shared production serialization, encoding, watermark, and metadata helpers. Never rebuild the artwork archive yourself. |
 | Maintain | backup creates a private full snapshot; verify-backup verifies; restore writes only to a new explicit data-dir without changing defaults; diagnostics writes redacted metadata. |
@@ -65,6 +67,8 @@ The skill chooses the next stage; the CLI executes an explicit action. Text and 
 - For a copy, first copy text without images and record source library/ID, target library/ID, original creation UUID and input. Verify text and review records, report that text is copied, and ask whether to copy existing images, including available/total counts. A prior explicit request to include images remains sufficient authorization.
 - After image-copy approval, call `copy-images` for that same target with the same source. Do not alter the original creation request or copy text again. If no approval arrives, keep the text and wait.
 - If the source has no images or the style changes, explain why images cannot be reused. New drawing requires the intended style/scope and proceeds through target recovery/run. Copying text/images does not re-review or call a model. Partial image-copy failure retains text and retries the same target/source input; stop on input conflict.
+- With explicit draft-copy approval, use `stories copy --draft` and preserve complete saved source, storyboard and actual review state as a paused draft. Copy no images, do not mark review passed, and do not run review or drawing without the requested scope.
+- For image-only redraw, save a paused revision from the current token and selected one-based frame list, then run only when drawing was authorized. Preserve every unselected saved image even when frame 1 changes. Record the new revision rather than mutating the original completed version.
 
 ## Acceptance and delivery
 

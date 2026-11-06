@@ -7,6 +7,7 @@ import {withLocalBooks} from '../server/local-generation.ts';
 import {selectionSchema,view} from '../lib/reader-model.ts';
 import {sourceRanges} from '../lib/reader-local-contract.ts';
 import {productionFixture,makePlan} from './fixtures/production.mjs';
+import {flowProviders} from './fixtures/test-tier.mjs';
 
 const library=new LocalBooks(process.cwd());
 async function honglou(){
@@ -58,7 +59,7 @@ test('isolated Liaozhai and Shishuo stories keep their exact source without neig
  }
 });
 
-for(const provider of ['codex','gemini'])test(`${provider}: complete chapters survive persistence and reach pacing, outline, scenes, ending, review and repair`,async t=>{
+for(const provider of flowProviders(['codex','gemini']))test(`${provider}: complete chapters survive persistence and reach pacing, outline, scenes, ending, review and repair`,async t=>{
  const f=await productionFixture(t,provider),{selection}=await honglou();
  const g=withLocalBooks(f.generation,library,f.media).generator(),original=await g.prepareOriginal(selection,'chapter-context');
  const saved=JSON.parse(Buffer.from(await(await f.media.get('reader/chapter-context/source.json')).arrayBuffer()).toString());

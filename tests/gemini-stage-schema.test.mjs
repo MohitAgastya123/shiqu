@@ -1,16 +1,18 @@
-// English production expectations; original evidence and historical hashes remain unchanged.
-// Verify every production Gemini request path and its local output guards without paid calls.
+// Controlled adapter and settings contracts; separate flow files exercise production startup and generation.
 import test from 'node:test';
+
 import assert from 'node:assert/strict';
+
 import {createReaderProvider} from '../server/generation.ts';
-import {makePlan,selection as legacy,productionFixture} from './fixtures/production.mjs';
-import {executeHeadless} from '../server/headless-cli.ts';
-import {withLocalBooks} from '../server/local-generation.ts';
-import {libraryFixture} from './fixtures/story-library.mjs';
+
+import {makePlan,selection as legacy} from './fixtures/production.mjs';
 
 const original={title:'原文',text:'甲赠物，乙未接，后来二人相知相爱。',url:'',kind:'passage',provider:'fixture',retrievedAt:'2026-11-05',localSource:{edition:'a'.repeat(64),sectionId:'s',firstUnit:'u',lastUnit:'u'}};
+
 const issue={page:2,category:'progression',problem:'回应缺失',instruction:'保留回应',requiresReplan:true};
+
 const local=(purpose,maxStories=32)=>({title:'聊斋志异',edition:'a'.repeat(64),text:'[u]甲赠物，乙未接，后来二人相知相爱。',purpose,scan:{maxStories,excludedSources:[],pendingEvents:[],contextText:''}});
+
 function stages(provider,length='auto'){
  const selection={...legacy,length,acceptancePrompt:'保留原文结局。'},plan=makePlan(80),{pages,...metadata}=plan,gen=provider.generator();
  return [
@@ -26,6 +28,7 @@ function stages(provider,length='auto'){
   ['repair',()=>gen.repair(selection,plan,original,[{...issue,requiresReplan:false}])],['image',()=>gen.image(plan,0,'fixture','')],
  ];
 }
+
 function checkGrammar(schema){
  if(!schema||typeof schema!=='object')return;
  for(const [key,value] of Object.entries(schema)){
@@ -33,6 +36,7 @@ function checkGrammar(schema){
   checkGrammar(value);
  }
 }
+
 for(const model of ['gemini-3.8-flash','gemini-4-argon'])for(const length of ['auto',80])test(`${model}: all ${length} production stages avoid counted grammar and preserve request contracts`,async()=>{
  let stage,seen=0;const captured=new Error('request captured');
  const provider=createReaderProvider({SHIQU_AI_PROVIDER:'gemini',GEMINI_API_KEY:'controlled',GEMINI_TEXT_MODEL:model},{},async(url,options)=>{
@@ -97,35 +101,4 @@ test('relaxed wire counts never relax production counts, exact page sets or save
  answer={count:3,reason:'根据原文估算。'};
  const recommendation=await gen.recommend(selection,'fixture',original);assert.deepEqual(recommendation.promptRecord.schema,sent);
  answer=makePlan(3);const result=await gen.plan(selection,'fixture',original);assert.deepEqual(result.promptRecord.schema,sent);
-});
-
-test('Gemini production completes discovery after the 1-to-32 transition, preparation, reviews and images', {timeout:30000},async t=>{
- const f=await productionFixture(t,'gemini');await f.stop();
- const library=libraryFixture(),counts=[];f.control.autoLength=3;f.control.hold=false;
- const discovery=createReaderProvider({SHIQU_AI_PROVIDER:'gemini',GEMINI_API_KEY:'controlled'},f.media,async(_url,options)=>{
-  const body=JSON.parse(options.body),schema=body.generationConfig.responseFormat.text.schema,payload=JSON.parse(body.contents[0].parts[0].text);
-  // Model the API grammar rejection that used to occur on the second extraction request.
-  if(schema.properties.stories?.maxItems===32)return Response.json({error:{status:'INVALID_ARGUMENT',message:'The input schema has too many states for serving.'}},{status:400});
-  let value;
-  if(payload.localBook){
-   const scan=payload.localBook.scan;counts.push(scan.maxStories);
-   const remaining=library.stories.filter(story=>!scan.excludedSources.some(source=>source.firstUnit===story.source.firstUnit));
-   value={stories:remaining.slice(0,scan.maxStories).map(({summary,source,...story})=>{void summary;const {edition,...range}=source;void edition;return {...story,source:{...range,continuations:[]}};}),note:'',scan:{blockComplete:remaining.length<scan.maxStories,pendingEvents:[],resolvedEventIds:[]}};
-  }else value={matches:payload.stories.map(story=>({id:story.id,verdict:story.title==='勇士护民'?'yes':'no',reason:story.title==='勇士护民'?'勇士主动保护村民。':'本篇主题是报恩。'}))};
-  return Response.json({candidates:[{finishReason:'STOP',content:{parts:[{text:JSON.stringify(value)}]}}]});
- });
- f.control.beforeText=async kind=>kind==='recommend'?{storySummary:library.stories[1].summary,storyMatchReason:'勇士面对猛虎保护村民，最终平安。'}:undefined;
- const generation=withLocalBooks({...f.generation,suggestions:discovery.suggestions,matchStories:discovery.matchStories},library.books,f.media);
- const call=(args,input={})=>executeHeadless(process.cwd(),[...args,'--data-dir',f.dataDirectory],{generation,localBooks:library.books,variables:{},input});
- const {session}=await call(['stories','create'],{bookId:'zhuangzi',theme:'勇气',narrativeDetail:'balanced'}),id=session.id;
- await call(['stories','search',id],{generation:session.intake.generation});
- const candidates=await call(['run',id,'--until','candidates','--timeout','10']);
- assert.equal(candidates.reason,'candidates');assert.equal(candidates.session.intake.batches[0].stories[0].title,'勇士护民');assert.deepEqual(counts,[1,32]);
- await call(['stories','choose',id],{generation:candidates.session.intake.generation,batch:0,index:0});
- const prepared=await call(['run',id,'--until','prepared','--timeout','10']);assert.equal(prepared.reason,'prepared');
- await call(['stories','confirm',id],{generation:prepared.session.intake.generation});
- const reviewed=await call(['run',id,'--until','reviewed','--timeout','10']);assert.equal(reviewed.reason,'reviewed');assert.equal(f.control.calls.length,0);
- const completed=await call(['run',id,'--until','completed','--timeout','10']);assert.equal(completed.reason,'completed');
- assert.equal(completed.session.story.pages.length,3);assert.ok(completed.session.story.pages.every(page=>page.image));
- assert.ok(f.control.outlines.length);assert.ok(f.control.batches.length);assert.ok(f.control.frameReviews.length);assert.ok(f.control.reviews.length);assert.equal(f.control.calls.length,3);
 });

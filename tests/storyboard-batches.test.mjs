@@ -6,10 +6,11 @@ import {productionFixture,until,makePlan} from './fixtures/production.mjs';
 import {ReaderRepository} from '../lib/reader-repository.ts';
 import {advanceStory} from '../lib/reader-engine.ts';
 import {generationProgress} from '../lib/generation-progress.ts';
+import {flowProviders,heavy} from './fixtures/test-tier.mjs';
 
 const owner='docker-local-owner';
 const document=async(f,id)=>JSON.parse((await f.app.services.database.prepare('SELECT document FROM stories WHERE id=?').bind(id).first()).document);
-for(const provider of ['codex','gemini'])test(`${provider}: outline and 20/20/5 checkpoints precede every image`,async t=>{
+for(const provider of flowProviders(['codex','gemini']))test(`${provider}: outline and 20/20/5 checkpoints precede every image`,async t=>{
  const f=await productionFixture(t,provider),id=await f.createLegacyReader(45),observed=[];
  f.control.beforeText=async(kind,payload,schema)=>{
   if(kind==='review'||kind==='reflection'||kind==='recommend')return;
@@ -33,7 +34,8 @@ for(const provider of ['codex','gemini'])test(`${provider}: outline and 20/20/5 
  const jobs=await f.app.services.production.queue.jobs(id,owner);assert.ok(jobs.filter(j=>j.kind==='image').every(j=>JSON.parse(j.dependencies).some(parent=>jobs.some(p=>p.id===parent&&p.kind==='script'&&p.state==='succeeded'))));
 });
 
-for(const provider of ['codex','gemini'])test(`${provider}: 80 frames complete four batches and background drawing reaches frame 80`,async t=>{
+// Batching itself stays in fast runs (20/20/5, 1–60 sizes, second-batch failures, pauses); the 80-frame maximum is a full-tier case.
+for(const provider of flowProviders(['codex','gemini']))test(`${provider}: 80 frames complete four batches and background drawing reaches frame 80`,heavy,async t=>{
  const f=await productionFixture(t,provider),id=await f.createLegacyReader(80);f.control.hold=false;
  await f.json(`sessions/${id}/production-control`,'POST',{action:'background'});
  // Eighty durable image/prompt receipts need headroom while the full suite shares the CI runner.
@@ -53,7 +55,7 @@ for(const length of [1,20,21,40,60])test(`${length} frames use a single short pl
  if(length>20)assert.equal(f.control.batches.at(-1).batch.last,length);
 });
 
-for(const provider of ['codex','gemini'])for(const failure of ['outage','short','long','invalid'])test(`${provider}: ${failure} in the second batch keeps the first batch and retries only missing work`,async t=>{
+for(const provider of flowProviders(['codex','gemini']))for(const failure of ['outage','short','long','invalid'])test(`${provider}: ${failure} in the second batch keeps the first batch and retries only missing work`,async t=>{
  const f=await productionFixture(t,provider),id=await f.createLegacyReader(45);let blocked=true;
  f.control.beforeText=async(kind,payload)=>{
   if(kind!=='batch'||payload.batch.first!==21||!blocked)return;
@@ -106,7 +108,7 @@ test('concurrent batch advances and replayed queue receipts do not repeat saved 
  nextRelease();await until(()=>f.control.calls.length===1);assert.equal((await document(f,id)).plan.pages.length,45);
 });
 
-for(const provider of ['codex','gemini'])test(`${provider}: selected-story stages retain theme context without restoring legacy automatic scene prescriptions`,async t=>{
+for(const provider of flowProviders(['codex','gemini']))test(`${provider}: selected-story stages retain theme context without restoring legacy automatic scene prescriptions`,async t=>{
  const f=await productionFixture(t,provider),generator=f.generation.generator();
  const {defaultProductionPrompt}=await import('../lib/reader-prompts.ts');
  const faithful=defaultProductionPrompt(),shared='完整讲清原文主事件的起因、关键行动与结果，首幅自然介绍人物与处境。按事件顺序展开，保留关键对白、反应和停顿；每幅一个静态可见瞬间，相邻幅各有任务。配文自然明白，画面动作与关系可读。结语在独立结束页提炼一层有据的认识，不复述情节、不虚构动机或扩大因果。';

@@ -23,6 +23,8 @@ pnpm dlx @apprun/shiqu --configure
 
 Codex subscription mode requires a separately installed and signed-in Codex CLI on macOS/Linux. OpenAI API and Gemini use their own keys and separate billing. Read-only mode requires no credentials. The app and skill share saved provider profiles and library location. Explicit environment overrides apply only to that invocation.
 
+Text and image services can be selected independently in saved settings. Source preparation, English translation and review use the text service; drawing uses the selected image service. Skill installation copies instructions and a version record, rather than globally installing the Shiqu executable; preserve the matching pinned package version when invoking it.
+
 ## Start with a candidate checkpoint
 
 ```text
@@ -75,6 +77,24 @@ Show me the text result and available image count before copying images.
 ```
 
 Copying text and copying existing images are separate actions unless you explicitly requested both. Codex first records the new target ID, then attaches images to that same copy after your decision. It must not recreate the text copy, substitute image generation, or reuse old images after changing style. Unreviewed text can be copied only through explicit draft mode and cannot receive copied images until formal review passes.
+
+## Copy an unreviewed draft
+
+```text
+$shiqu Copy the current text version of STORY_ID from /absolute/source-library
+to /absolute/target-library using explicit draft mode. Preserve its complete
+saved source, storyboard and actual review status. Copy no images, keep it
+paused, and show a text preview without running review or generation.
+```
+
+## Redraw selected images
+
+```text
+$shiqu Redraw only frames 1 and 3 of the current completed STORY_ID. Preserve
+its text, style and passed review, create a new revision, and complete drawing
+those two frames. Keep every other saved image even when frame 1 changes.
+Show an offline preview; stop and explain any missing original or fault.
+```
 
 ## Inspect and organize without generation
 

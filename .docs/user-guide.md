@@ -28,7 +28,7 @@ Desktop releases include Node for Apple Silicon macOS 13.5+ and Windows 10/11 x6
 | Gemini | A Gemini API key and access to the selected models; also supports webpage URL discovery |
 | Read-only | No credentials; read and organize an existing library without AI generation |
 
-Provider selection is explicit. Subscription mode does not fall back to API billing, and API providers do not borrow another provider's key. Claude Code and DeepSeek text-only adapters are available through explicit environment configuration for supported CLI workflows; stop after storyboard review when using text-only providers.
+Provider selection is explicit. Subscription mode does not fall back to API billing, and API providers do not borrow another provider's key. Text and image services can be configured separately. The text service handles discovery, English source translation, storyboards and review; an optional image service handles drawing. **Same as text** keeps them together. Claude Code and DeepSeek text-only adapters are available through explicit environment configuration; choose a supported image service before drawing, or stop after storyboard review.
 
 The desktop app, browser CLI, source development service, and direct CLI share saved provider profiles. A running service keeps its startup configuration; restart it after changing settings. Explicit environment variables or `--config` apply to that invocation and are not automatically saved.
 
@@ -51,11 +51,11 @@ An explicit `--data-dir` takes precedence over `SHIQU_DATA_DIR`, then the saved 
 
 A library can be owned by only one running service or direct CLI process at a time. Stop the current service before switching entry points, even if you plan to use a different port. Use matching app versions.
 
-On the local loopback address, **My account → Generation service and models** edits the shared provider settings. The page distinguishes saved settings from the running configuration and startup overrides. Existing keys are never returned to the browser. Credential editing is not exposed to LAN or internet readers. Native desktop services use the native Settings screen instead.
+On the local loopback address, **My space → Generation service and models** edits shared text/image provider settings for both CLI and desktop services. The page distinguishes saved settings from the running configuration and startup overrides, checks saved connections, and can reset provider settings. Switching providers discards hidden unsaved key drafts. Existing keys are never returned to the browser. Credential editing is not exposed to LAN or internet readers. Restart the running service after saving changes.
 
 ## Desktop setup
 
-Install the appropriate release, open Settings, choose a provider and library directory, save, and start the service. Choose **Open in browser** to create or read stories. The desktop console has Overview, Generation queue, and Settings. Closing its window keeps the app in the system tray; Stop service or Quit ends the backend and generation subprocesses.
+Install the appropriate release, choose a library directory and start the service from the single desktop service console. Choose **Open in browser** to create or read stories and configure providers through **My space**. The console shows service status, local/phone access and optional internet access; advanced settings include Codex executable and home paths. Closing its window keeps the app in the system tray; Stop service or Quit ends the backend and generation subprocesses. The old Overview, Generation queue and Settings tabs have been replaced by this console.
 
 Release installers are unsigned. Windows may display a SmartScreen prompt; macOS may require allowing the app in Privacy & Security. Only open a release you trust, and compare its published SHA-256 checksums if needed. The bundled Node runtime is verified and never silently replaced with a system executable.
 
@@ -104,9 +104,11 @@ Rename changes the displayed title without new AI generation. Editing production
 
 Replace story opens a draft without adding another bookshelf card. Selecting and applying a different story switches the current revision in the same family and preserves prior results as history. Canceling a draft does not roll back a newer revision. A replacement preserves the current paused/stopped control state and still requires production confirmation after preparation.
 
+Selective image redraw accepts one-based frame numbers through `stories edit`: `{token,paused:true,changes:{redrawPages:[1,3]}}`. It requires a completed story with passed review and cannot be combined with text or settings edits. It preserves the source, storyboard, art style and review; only the listed images are regenerated after an explicit `run`. Unselected saved images remain even when frame 1 is redrawn.
+
 ## Reading and organization
 
-The bookshelf contains current revisions, favorites, recent reading, and generation status. Reading progress is saved locally and shared by browsers connected to that library. You can inspect English source text, storyboard, production notes, review history, and revision history. Deleted stories can be restored.
+The bookshelf separates active production from readable stories and contains current revisions, favorites, recent reading, and generation status. Reading progress is saved locally and shared by browsers connected to that library. You can inspect English source text, storyboard, production notes, review history, and revision history. Deleted stories can be restored.
 
 Star a suitable illustration as the reference for its source book. Later image tasks use that reference, including the first frame of another story from the same book. Existing images are not redrawn automatically. Removing the source story removes its reference selection.
 
@@ -178,7 +180,7 @@ Stop all services before a backup. Restore only to a new directory; select that 
 
 Library upgrades create and verify a whole-library safety backup before modification. Keep the reported backup path. Pending upgrade recovery completes before library access. Never restore an older backup over an active library.
 
-Consolidated libraries require desktop and CLI 0.8.0 or later. Older 0.2–0.7 applications are incompatible and seed protection can return `BACKUP_APP_TOO_OLD`. Rolling back requires the pre-upgrade backup and its matching app version restored to a new directory. Later migrations retain the same backup protection. Keep desktop, CLI, and installed skill versions compatible. Current package version is 0.8.6; this English conversion does not by itself publish a new installer or npm release.
+Consolidated libraries require desktop and CLI 0.8.0 or later. Older 0.2–0.7 applications are incompatible and seed protection can return `BACKUP_APP_TOO_OLD`. Rolling back requires the pre-upgrade backup and its matching app version restored to a new directory. Later migrations retain the same backup protection. Keep desktop, CLI, and installed skill versions compatible. This branch integrates upstream 0.9.0 and English recovery migration 0021; it does not publish a new installer or npm release. Use the English fork's source checkout for its customizations.
 
 ## Troubleshooting
 

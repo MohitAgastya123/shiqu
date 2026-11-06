@@ -7,9 +7,10 @@ import {mkdtemp,rm} from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import {fileURLToPath} from 'node:url';
+import {heavy} from './fixtures/test-tier.mjs';
 
 test('real CLI PTY onboarding, cancellation, configure and reset',{
- skip:process.platform==='win32'?'POSIX PTYs run on Linux/macOS; Windows runs the non-TTY startup matrix':false,timeout:120000,
+ skip:process.platform==='win32'?'POSIX PTYs run on Linux/macOS; Windows runs the non-TTY startup matrix':heavy.skip||false,timeout:120000,
 },async t=>{
  const home=await mkdtemp(path.join(os.tmpdir(),'shiqu-pty-launcher-'));
  const env={PATH:process.env.PATH,HOME:home,USERPROFILE:home,XDG_CONFIG_HOME:path.join(home,'config'),XDG_DATA_HOME:path.join(home,'data'),LANG:'en_US.UTF-8'};
