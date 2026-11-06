@@ -5,6 +5,7 @@
 // Stop-time and persistence errors recover as interruptions, never as job failures.
 // Finished jobs re-run only through an explicit rerun, which the caller must have consent for.
 // Scoped step timing is saved atomically with receipts, under the same attempt token.
+// Optional SQL dispatch fences are repeated in the atomic claim so parent series pauses cannot race a start.
 import {createHash,randomUUID} from 'node:crypto';
 import {persistenceError} from '../lib/reader-repository.ts';
 import type {Database} from '../lib/reader-repository.ts';
@@ -13,10 +14,10 @@ export type JobSpec={id:string;sessionId:string;ownerId:string;kind:string;pool:
 export type ProductionJob={id:string;session_id:string;owner_id:string;kind:string;pool:string;version:string;dependencies:string;payload:string;result:string|null;state:'queued'|'running'|'succeeded'|'failed';priority:number;attempts:number;lease_token:string|null;lease_until:number;error:string|null;interrupted:number;failure_id?:string|null;recovery_id?:string|null;created_at:number;updated_at:number};
 export type JobContext={outputs:Record<string,unknown>;isCurrent:()=>Promise<boolean>};
 export type JobHandler={pool:string;drain?:boolean;run:(job:ProductionJob,context:JobContext)=>Promise<unknown>};
-type Options={targetSessionId?:string;limits:Record<string,number>;handlers:Record<string,JobHandler>;candidateFilter?:string;skipCandidate?:(job:ProductionJob)=>boolean;canRun?:(job:ProductionJob)=>Promise<boolean>;onSettled?:()=>void;resumeInterrupted?:(job:ProductionJob)=>Promise<boolean>;safeError?:(error:unknown,job:ProductionJob)=>string;terminal?:(error:unknown,job:ProductionJob)=>boolean;now?:()=>number;leaseMs?:number};
+type Options={targetSessionId?:string;limits:Record<string,number>;handlers:Record<string,JobHandler>;candidateFilter?:string;claimGuard?:string;skipCandidate?:(job:ProductionJob)=>boolean;canRun?:(job:ProductionJob)=>Promise<boolean>;onSettled?:()=>void;resumeInterrupted?:(job:ProductionJob)=>Promise<boolean>;safeError?:(error:unknown,job:ProductionJob)=>string;terminal?:(error:unknown,job:ProductionJob)=>boolean;now?:()=>number;leaseMs?:number};
 const interruptedMessage='Previous generation was interrupted. Saved results have been retained. Retry to continue.';
 // A handler that stopped without spending an attempt: the job waits in the queue for its next turn.
-export class JobYield extends Error{}
+export class JobYield extends Error{readonly productionYield=true;}
 export function inputVersion(input:unknown){return createHash('sha256').update(JSON.stringify(input)).digest('hex');}
 export function productionJobId(scope:string,kind:string,version:string,key=''){return inputVersion([scope,kind,version,key]);}
 const dependencyCache=new WeakMap<ProductionJob,string[]>();
@@ -93,7 +94,7 @@ export class ProductionQueue{
     if(running!.n>=limit||this.tasks.has(job.id)||this.options.canRun&&!await this.options.canRun(job))continue;
     const token=randomUUID(),now=this.clock();
     const claimed=await this.database.prepare(`UPDATE production_jobs AS j SET state='running',lease_token=?,lease_until=?,attempts=attempts+1,error=NULL,interrupted=0,updated_at=?
-     WHERE id=? AND state='queued' AND ${ready} AND (SELECT COUNT(*) FROM production_jobs WHERE pool=? AND state='running' AND lease_until>?)<?`)
+     WHERE id=? AND state='queued' AND ${ready}${this.options.claimGuard?` AND (${this.options.claimGuard})`:''} AND (SELECT COUNT(*) FROM production_jobs WHERE pool=? AND state='running' AND lease_until>?)<?`)
      .bind(token,now+this.leaseMs,now,job.id,job.pool,now,limit).run();
     if(!claimed.meta.changes)continue;
     const task=this.execute({...job,state:'running',lease_token:token,lease_until:now+this.leaseMs,attempts:job.attempts+1,updated_at:now},handler)

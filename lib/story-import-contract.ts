@@ -1,0 +1,30 @@
+// Share local-document, automatic-part and series contracts without exposing uploaded bytes or file paths.
+// Confirmed series use ordinary story sessions; only their reserved roots grant active membership.
+import {z} from 'zod';
+import {artStyleIds} from './reader-styles.ts';
+import {acceptancePromptSchema} from './reader-acceptance.ts';
+export const storyImportLimits={fileBytes:10*1024*1024,pdfPages:500,textCharacters:2_000_000,parts:200,sourceUnitTarget:700,sourceUnitHard:1200,partUnits:24,coverageUnits:24,extractionTimeoutMs:30_000,extractionWorkers:2} as const;
+export const storyImportPartBudgets={brief:{target:16000,hard:20000},balanced:{target:10000,hard:14000},detailed:{target:6500,hard:10000}} as const;
+export const storyImportSettingsSchema=z.object({artStyle:z.enum(artStyleIds),narrativeDetail:z.enum(['brief','balanced','detailed']),productionPrompt:z.string().max(1200),acceptancePrompt:acceptancePromptSchema.optional()}).strict();
+export type StoryImportSettings=z.infer<typeof storyImportSettingsSchema>;
+export const defaultStoryImportSettings:StoryImportSettings={artStyle:'ink-pencil',narrativeDetail:'balanced',productionPrompt:'',acceptancePrompt:''};
+export const storyImportTitleSchema=z.string().trim().min(1,'Enter a story title.').max(140,'Use a title of at most 140 characters.').regex(/^[^\r\n]+$/,'Write the story title on one line.');
+export type StoryImportFormat='docx'|'pdf';
+export type ImportSourceUnit={id:string;start:number;end:number;page?:number;heading?:string};
+export type ExtractedStoryImport={format:StoryImportFormat;text:string;units:ImportSourceUnit[];pageCount:number|null;warnings:string[]};
+export type ImportTextSource={text:string;units:ImportSourceUnit[]};
+export type ImportPartPlan={number:number;title:string;firstUnit:string;lastUnit:string;start:number;end:number;sourceCharacters:number;wordCount:number};
+export type ImportedSourceMetadata={id:string;fileName:string;format:StoryImportFormat;fileSha256:string;textSha256:string;characters:number;wordCount:number;pageCount:number|null;warnings:string[]};
+export type ImportedSourceView=ImportedSourceMetadata&{preview:{text:string;start:number;end:number;total:number;hasMore:boolean}};
+export type StoryImportPlan={sourceId:string;title:string;settings:StoryImportSettings;parts:ImportPartPlan[];sourceCharacters:number;wordCount:number};
+export type StoryImportResult={source:ImportedSourceView;plan:StoryImportPlan|null;planningError?:string};
+export type ImportedPartContinuity={characters:string;previousSummary:string;previousEnding:string};
+export type ImportedPartProvenance={sourceId:string;fileName:string;format:StoryImportFormat;fileSha256:string;textSha256:string;start:number;end:number;unitIds:string[];seriesId:string;seriesTitle:string;partRootId:string;partNumber:number;partCount:number;activated?:boolean;continuity?:ImportedPartContinuity};
+export type StorySeriesMembership={id:string;title:string;part:number;parts:number};
+export type StorySeriesPartView=ImportPartPlan&{rootId:string;sessionId:string|null;state:'waiting'|'running'|'paused'|'failed'|'completed';ready:number;total:number|null;stage:string;error:string|null};
+export type StorySeriesView={id:string;title:string;source:ImportedSourceMetadata;settings:StoryImportSettings;version:number;state:'active'|'paused'|'stopped'|'completed'|'needs-attention';parts:StorySeriesPartView[];completedParts:number;totalParts:number;error:string|null;createdAt:string;updatedAt:string};
+export const storyImportPlanInputSchema=z.object({title:storyImportTitleSchema,settings:storyImportSettingsSchema}).strict();
+export const storySeriesCreateSchema=storyImportPlanInputSchema.extend({sourceId:z.string().uuid(),requestId:z.string().uuid()}).strict();
+export const storySeriesControlSchema=z.object({requestId:z.string().uuid(),version:z.number().int().min(0),action:z.enum(['pause','resume','stop'])}).strict();
+export type StorySeriesCreate=z.infer<typeof storySeriesCreateSchema>;
+export type StorySeriesControl=z.infer<typeof storySeriesControlSchema>;

@@ -67,3 +67,7 @@ pnpm test:changed
 ```
 
 When the pinned Rust toolchain and platform dependencies are available, source/native tests can be run with `pnpm desktop:test`. Browser IPC fixtures do not establish native window, tray, packaging, or operating-system integration correctness. Do not run desktop preparation, build, bundle, or installer commands unless explicitly requested.
+
+## Local document stories
+
+The fork reader includes **Upload a story** for Word `.docx` and selectable-text PDF files. Extraction runs in a bounded local worker; its parser dependencies and worker ship with the runtime, without requiring Microsoft Word or a separate PDF utility. Review the automatic part plan and choose **Create all parts**. The source, series checkpoints and current comic revisions stay in the selected library and verified backups. New series use additive migration `0022_story_import_series.sql`; normal startup applies it after a verified safety backup. This source feature does not itself publish a new installer.

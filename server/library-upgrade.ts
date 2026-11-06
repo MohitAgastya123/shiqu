@@ -3,6 +3,7 @@
 // survives every destructive step; recovery restores files in place so service/gate lock inodes stay stable.
 // Consolidated libraries take later migrations in place after their own verified backup. Restores report
 // the caller's source backup instead of keeping a second snapshot beside the staging directory.
+// After consolidation, local SQL always runs from the app journal, never an obsolete D1 receipt.
 import {DatabaseSync} from 'node:sqlite';
 import {existsSync,mkdirSync,readFileSync,writeFileSync,renameSync,rmSync,readdirSync,lstatSync,openSync,closeSync,fsyncSync} from 'node:fs';
 import path from 'node:path';
@@ -208,7 +209,7 @@ export function ensureLibraryReady(directory:string,root:string,options:{onStep?
     for(let i=0;i<durableTables.length;i++)if(!isDeepStrictEqual(values[i],sqlite.prepare(`SELECT * FROM ${durableTables[i]} ORDER BY rowid`).all()))throw Error('LIBRARY_QUEUE_PRESERVATION_FAILED');
     if(sqlite.prepare("SELECT name FROM sqlite_schema WHERE type='trigger' AND sql LIKE '%reader_sessions%'").get())throw Error('LIBRARY_TRIGGER_RENAME_FAILED');
     // Later migrations join the same staged publication, after preservation is proven on the consolidated shape.
-    migrate(sqlite,root,work);sqlite.exec(readFileSync(path.join(root,'docker/seed.sql'),'utf8'));
+    migrate(sqlite,root,work,undefined,consolidationMigration);sqlite.exec(readFileSync(path.join(root,'docker/seed.sql'),'utf8'));
     if(sqlite.prepare('PRAGMA integrity_check').get()!.integrity_check!=='ok')throw Error('LIBRARY_DATABASE_CORRUPT');
     sqlite.exec('PRAGMA wal_checkpoint(TRUNCATE)');
    }finally{sqlite.close();}

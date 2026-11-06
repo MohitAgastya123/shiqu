@@ -81,7 +81,7 @@ Speech balloons have oval bodies with short attached tails; thought clouds use a
 
 Automatic placement follows the planned characters and scene composition. It does not inspect faces in the final image pixels. If you want to refine a result, open the storyboard revision editor: balloon controls are optional. Reading an old story does not generate or add balloons automatically.
 
-Choose **Other** to enter a different book title or a public webpage URL. URL discovery requires Gemini. External source verification is limited; entering a title or URL does not guarantee a complete production. PDF/EPUB/Word/TXT uploads and a general pasted-story input are not currently available.
+Choose **Other** to enter a different book title or a public webpage URL. URL discovery requires Gemini. External source verification is limited; entering a title or URL does not guarantee a complete production. Use **Upload a story** for a local Word `.docx` or text-based PDF instead. EPUB/TXT uploads and a general pasted-story input are not currently available.
 
 ## Production and acceptance requirements
 
@@ -109,6 +109,18 @@ Rename changes the displayed title without new AI generation. Editing production
 Replace story opens a draft without adding another bookshelf card. Selecting and applying a different story switches the current revision in the same family and preserves prior results as history. Canceling a draft does not roll back a newer revision. A replacement preserves the current paused/stopped control state and still requires production confirmation after preparation.
 
 Selective image redraw accepts one-based frame numbers through `stories edit`: `{token,paused:true,changes:{redrawPages:[1,3]}}`. It requires a completed story with passed review and cannot be combined with text or settings edits. It preserves the source, storyboard, art style and review; only the listed images are regenerated after an explicit `run`. Unselected saved images remain even when frame 1 is redrawn.
+
+## Upload your own story
+
+Choose **Upload a story** on the home screen or in **New story**, then select a `.docx` or a PDF with selectable text. The file is read locally. Check the title, word/page count and extracted-text preview; use **Read more source** for later sections. Source previews are paged for reading, while generation always uses the full saved source.
+
+The app automatically divides long stories near chapter, paragraph or sentence boundaries. The number of parts follows the source and selected detail level; four is an example, not a fixed target. Every source unit belongs to one part in order, including the ending. A short story produces one ordinary comic. Choose the shared art style and narrative detail, review the proposed parts, then click **Create all parts** once.
+
+The series overview lists `Title — Part 1`, `Title — Part 2`, and later parts in numeric order. Only the next eligible part starts. Each part receives ordinary recommendation, storyboard, source review, repair and image generation, with no separate setup wizard. Independent review must account for every required source segment before drawing. Prior character descriptions, relevant previous state and a series-specific reference image guide continuity without supplying later events.
+
+Use **Retry preparation** if the overview reports a local problem preparing the next part. Use **Pause series** to stop new work, **Resume series** to continue a pause, and the existing **Open part** workflow to recover a failed part explicitly. Already dispatched work may finish saving after a pause. Completed parts are retained through retry/restart, and future parts wait for earlier current revisions to finish. Reading a series or following a next-part link does not commission or resume work. Each finished part supports the usual PDF, PNG and ZIP exports, with its own part title and source attribution.
+
+Supported limits are **10 MiB per file**, **500 PDF pages**, **2 million extracted characters** and **200 parts**. Brief detail can combine more text per part; Detailed uses smaller parts. A plan exceeding the part limit retains its preview and settings: choose Brief to try fewer parts without uploading again. The app never changes your chosen detail level silently. Old `.doc`, password-protected files, scanned/image-only PDF pages, damaged text and extreme documents are rejected clearly. Save a modern unlocked `.docx` or selectable-text PDF; this version does not perform OCR. The original upload and complete extracted text stay private in the library and its backups. Document formatting is not rendered as comic content.
 
 ## Reading and organization
 
@@ -190,7 +202,7 @@ Stop all services before a backup. Restore only to a new directory; select that 
 
 Library upgrades create and verify a whole-library safety backup before modification. Keep the reported backup path. Pending upgrade recovery completes before library access. Never restore an older backup over an active library.
 
-Consolidated libraries require desktop and CLI 0.8.0 or later. Older 0.2–0.7 applications are incompatible and seed protection can return `BACKUP_APP_TOO_OLD`. Rolling back requires the pre-upgrade backup and its matching app version restored to a new directory. Later migrations retain the same backup protection. Keep desktop, CLI, and installed skill versions compatible. This branch integrates upstream 0.9.0 and English recovery migration 0021; it does not publish a new installer or npm release. Use the English fork's source checkout for its customizations.
+Consolidated libraries require desktop and CLI 0.8.0 or later. Older 0.2–0.7 applications are incompatible and seed protection can return `BACKUP_APP_TOO_OLD`. Rolling back requires the pre-upgrade backup and its matching app version restored to a new directory. Later migrations retain the same backup protection. Keep desktop, CLI, and installed skill versions compatible. This branch integrates upstream 0.9.0 and English recovery migration 0021 and uploaded-story series migration 0022; it does not publish a new installer or npm release. Use the English fork's source checkout for its customizations.
 
 ## Troubleshooting
 

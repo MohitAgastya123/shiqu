@@ -8,6 +8,7 @@
 // Default to an ungrouped shelf unless a saved grouping preference exists.
 // Show count placeholders while the initial library load is pending.
 // Finished comic sheets share panel geometry with exports; progress still records original source frames.
+// Local documents enter a complete automatic series; reading a part never commissions or retries its production.
 
 import {themeLabel} from '../english-labels';
 import {pruneReadingCaches,type LibraryInventory} from '../reading-cache.ts';
@@ -25,6 +26,10 @@ import type {Story} from '@/lib/content';
 import type {GeneratedStory,Selection,SessionView} from '@/lib/reader-model';
 import {readerBooks,type ReaderBook} from '@/lib/reader-books';
 import {useStoryGeneration} from './useStoryGeneration';
+import {useStorySeries} from './useStorySeries';
+import StoryImportSetup from './StoryImportSetup';
+import StorySeriesOverview from './StorySeriesOverview';
+import type {StorySeriesPartView} from '@/lib/story-import-contract';
 const isGenerated=(s:Story|null):s is GeneratedStory=>!!s&&'generated'in s&&s.generated===true;
 import {getArtStyle} from '@/lib/reader-styles';
 import StoryRevisionEditor,{StoryRevisionActions,revisionDraftSteps} from './StoryRevisionEditor';
@@ -83,6 +88,7 @@ function initialReaderSelection():Selection{
 }
 
 
+const initialSourceRoute=(name:string)=>{try{return !!new URLSearchParams(location.search).get(name);}catch{return false;}};
 export default function Reader(){
  const [progress,setProgress]=useState<Progress[]>([]);
  const startupDeletions=useRef<Promise<LibraryInventory>|null>(null);
@@ -99,6 +105,8 @@ export default function Reader(){
  const [workflowTarget,setWorkflowTarget]=useState<string|null>(null),[workflowError,setWorkflowError]=useState('');
  const [script,setScript]=useState(false),[requirements,setRequirements]=useState(false);
  const [discoveryTarget,setDiscoveryTarget]=useState<string|null>(null);
+ const [importOpen,setImportOpen]=useState(()=>initialSourceRoute('import')),[seriesOpen,setSeriesOpen]=useState(()=>initialSourceRoute('series')),[partOpening,setPartOpening]=useState(false);
+ const imported=useStorySeries(seriesOpen||tab==='shelf'&&!story);
  const [reselectTarget,setReselectTarget]=useState<string|null>(null);
  const [imageIssues,setImageIssues]=useState<Record<string,string>>({}),[imageReloads,setImageReloads]=useState<Record<string,number>>({});
  const [reviewHistoryId,setReviewHistoryId]=useState<string|null>(null);
@@ -169,6 +177,17 @@ export default function Reader(){
  const visitor=useRef(''),session=useRef(''),seen=useRef(new Set<number>()),noticeTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
  const notify=(text:string)=>{setToast(text);if(noticeTimer.current)clearTimeout(noticeTimer.current);noticeTimer.current=setTimeout(()=>setToast(''),4000);};
  const bookReference=useBookReference(story?.id,page,story?.pages[page]?.image,notify);
+ function openImport(){setConfigure(false);setImportOpen(true);setSeriesOpen(false);setWorkflowTarget(null);setSettings(false);gen.leave();setStory(null);imported.clearError();try{history.replaceState(null,'',imported.source?'/?import='+imported.source.id:'/');}catch{}}
+ function closeImport(){if(imported.busy)return;setImportOpen(false);try{history.replaceState(null,'',story?'/read?id='+story.id:'/');}catch{}}
+ function openSeries(id:string){setSeriesOpen(true);setImportOpen(false);setConfigure(false);setWorkflowTarget(null);if(!story)gen.leave();void imported.openSeries(id);try{history.replaceState(null,'','/?series='+id);}catch{}}
+ function closeSeries(){if(imported.busy)return;setSeriesOpen(false);imported.closeSeries();try{history.replaceState(null,'',story?'/read?id='+story.id:'/');}catch{}}
+ async function createImportedSeries(){const value=await imported.create();if(!value)return;setImportOpen(false);setSeriesOpen(true);setTab('shelf');setStory(null);setWorkflowTarget(null);setSettings(false);gen.leave();try{history.replaceState(null,'','/?series='+value.id);}catch{}void gen.refreshLibrary().catch(()=>{});}
+ async function openSeriesPart(part:StorySeriesPartView){
+  if(!part.sessionId||partOpening)return;setPartOpening(true);
+  try{const next:SessionView=await request('reader/sessions/'+encodeURIComponent(part.sessionId));setSeriesOpen(false);imported.closeSeries();setImportOpen(false);setSettings(false);setSource(false);setRequirements(false);setScript(false);setComicZoom(false);setComicTranscript(false);setEnded(false);setDrag(0);setMotion('forward');setStory(null);setPage(next.page);setSaved(!!next.saved);seen.current=new Set();session.current=randomId();setWorkflowTarget(next.story?.pages[0]?.image?null:next.id);gen.adopt(next,true,next.page);}
+  catch(error){notify(error instanceof Error?error.message:'Could not open this part. Refresh the series and try again.');}
+  finally{setPartOpening(false);}
+ }
  function changeShelfQuery(query:string){
   setShelfQuery(query);
   try{localStorage.setItem('shiqu-shelf-query',query);}catch{}
@@ -184,7 +203,7 @@ export default function Reader(){
  async function refreshShelf(){
   if(shelfRefreshing)return;setShelfRefreshing(true);
   try{
-   await gen.refreshLibrary();setLoadError('');
+   await Promise.all([gen.refreshLibrary(),imported.refresh().catch(()=>{})]);setLoadError('');
   }catch(error){notify(error instanceof Error?error.message:"Could not refresh the shelf. Try again.");}
   finally{setShelfRefreshing(false);}
  }
@@ -371,6 +390,9 @@ export default function Reader(){
  const heroes=recentHeroes(allStories,deletedIds.includes(lastReadId)?'':lastReadId,progress.filter(p=>!deletedIds.includes(p.storyId)));
  const bookName=(s:Pick<Story,'id'|'bookId'>)=>(s.bookId==='other'?gen.sessions.find(session=>session.id===s.id)?.selection.customBook:'')||choices.find(b=>b.id===s.bookId)?.title||s.bookId;
  const current=story?.pages[page];
+ const readingSeries=story?.series?(imported.items.find(item=>item.id===story.series!.id)||(imported.active?.id===story.series.id?imported.active:null)):null;
+ const previousPart=story?.series?readingSeries?.parts.find(part=>part.number===story.series!.part-1):undefined,nextPart=story?.series?readingSeries?.parts.find(part=>part.number===story.series!.part+1):undefined;
+ const importedSession=(value:SessionView)=>!!value.story?.series||imported.items.some(item=>item.parts.some(part=>part.sessionId===value.id));
  const activeProgress=mergeReadingProgress(progress,gen.sessions.map(s=>({storyId:s.id,page:s.page,saved:s.saved?1:0,updatedAt:s.lastReadAt||s.createdAt}))).filter(p=>!deletedIds.includes(p.storyId)&&latestIds.has(p.storyId));
  const readingSession=story?(gen.active?.id===story.id?gen.active:gen.sessions.find(session=>session.id===story.id)):undefined;
  const workflowSession=workflowTarget?(gen.active?.id===workflowTarget?gen.active:null):settings?readingSession:!story?gen.active:null;
@@ -390,14 +412,14 @@ export default function Reader(){
     {gen.error&&<p className="yu-batch-error" role="alert">{gen.error}</p>}
    </>:<GenerationSurface
     session={workflowSession} busy={gen.busy} controlBusy={!!gen.controlBusy||creating} onControl={gen.control} error={workflowError||gen.error} onRetry={retryWorkflow} onBack={backToShelf} hideBack showSummary={false}
-    navigation={{source:{onClick:()=>setSource(true),disabled:!workflowSession.generationProgress?.sourceReady},reselect:{label:"Replace story selection",onClick:()=>void reselectStory(),disabled:creating||revision.busy||!!gen.controlBusy,title:"Replace the selected story, keep one shelf card, and preserve previous results in history"},reselecting:creating}}
+    navigation={{source:{onClick:()=>setSource(true),disabled:!workflowSession.generationProgress?.sourceReady},reselect:importedSession(workflowSession)?undefined:{label:"Replace story selection",onClick:()=>void reselectStory(),disabled:creating||revision.busy||!!gen.controlBusy,title:"Replace the selected story, keep one shelf card, and preserve previous results in history"},reselecting:creating}}
     onAcceptance={()=>revision.open('acceptance')} onHistory={()=>setReviewHistoryId(workflowSession.id)}
     timeline={!revisionResuming?{
      links:{source:[{label:"Production instructions",onClick:()=>revision.open('requirements')},{label:"Acceptance criteria",onClick:()=>revision.open('acceptance')}]},
      detailActions:{source:{label:"Change art style",onClick:()=>revision.open('style')}},
      actions:{count:{label:"Change narrative detail",onClick:()=>revision.open('count')},...(workflowSession.story?{plan:{label:"View storyboard",onClick:()=>setScript(true)}}:{})}
     }:undefined}
-    stages={revisionPending&&revision.base&&!revisionResuming?revisionDraftSteps(revision.base,revision.changes):undefined} editor={revision} onReselect={()=>void reselectStory()}
+    stages={revisionPending&&revision.base&&!revisionResuming?revisionDraftSteps(revision.base,revision.changes):undefined} editor={revision} onReselect={importedSession(workflowSession)?undefined:()=>void reselectStory()}
     reviewTools={!revisionPending&&<StoryReviewTools onReplan={()=>revision.open('requirements')} session={workflowSession} busy={gen.busy||!!gen.controlBusy} error={gen.controlError} onScript={()=>setScript(true)} onEdit={page=>revision.open('script',page)} onRetry={()=>void retryWorkflow(workflowSession.faults?.find(f=>f.stage==='review')?.id)} onDrawAnyway={()=>void gen.drawAnyway(workflowSession.id)}/>}
    />}
    {revisionPending&&!revisionResuming&&<StoryRevisionActions editor={revision} link/>}
@@ -421,7 +443,7 @@ export default function Reader(){
  {!!readingSession?.reviewIssues?.length&&!settings&&<button type="button" className="yu-reader-review-notice" onClick={()=>openWorkflow(story.id)}>Review has {readingSession.reviewIssues.length}  issues remaining. Drawing has stopped. View and resolve them</button>}
  {!ended&&!comicCurrent&&!comicPlan.error&&!current?.image&&<div className="yu-drawing" role="status"><div className="yu-drawing-orbit"><Feather size={35} strokeWidth={1}/></div><span>{gen.error?"Drawing is paused":"This scene is unfolding"}</span><small>{gen.error||gen.active?.stage||"Drawing your illustration"}</small>{gen.error&&gen.active&&<StoryRetry session={gen.active} busy={gen.busy} onRetry={gen.retryStep}/>}</div>}
  <header className="yu-reader-top"><div className="yu-progress" aria-label={`Comic page ${comicIndex+1} of ${comicPlan.pages.length}`}>{comicPlan.pages.map((_,i)=><span key={i} className={i<=comicIndex?'read':''}/>)}</div><div className="yu-reader-heading"><button className="yu-glass" onClick={home} aria-label="Back to Discover"><ArrowLeft size={21}/></button><div className="yu-reader-title"><div><strong>{story.title}</strong><span>{bookName(story)}{isGenerated(story)?" · AI generated":''}</span></div><div className="yu-style-label" aria-label="Story theme and art style">{story.theme&&<span>{themeLabel(story.theme)}</span>}<span>{isGenerated(story)?(story.artStyleLabel||"Art style not recorded"):"Art style not recorded"}</span></div></div>{!ended&&<BookReferenceStar selected={bookReference.selected} disabled={bookReference.disabled} busy={bookReference.busy} onClick={bookReference.toggle}/>}<button className="yu-glass" onClick={bookmark} aria-label={saved?"Remove from favorites":"Favorite story"}><Bookmark size={20} fill={saved?'currentColor':'none'}/></button><button className="yu-glass" onClick={()=>openStorySettings(story)} aria-label="Story settings"><Settings2 size={19}/></button></div></header>
- {ended?<StoryEndingSurface surfaceRef={endingRef} onTurn={turn} onDrag={setDrag} drag={drag}><div className="yu-ending-mark"><Leaf size={32} strokeWidth={1.3}/></div><p className="yu-kicker">The story ends. The reflection is yours.</p><h1>{story.reflection}</h1><div className="yu-end-line"/><p>Some stories find their final page<br/>in your own life.</p><button className="yu-primary" onClick={()=>open(story,true)}><RotateCcw size={18}/>Read again<ArrowRight size={19}/></button><div className="yu-ending-navigation"><button onClick={()=>turn(-1)}><ChevronLeft size={17}/>Previous illustration</button><button onClick={()=>{home();setTab('shelf');window.scrollTo({top:0,behavior:'instant'});}}><BookOpen size={16}/>Shelf</button><button onClick={()=>{home();choose();}}><Sparkles size={16}/>Start another story</button></div><section className="yu-ending-downloads" aria-label="Download story"><h2>Take the story with you</h2><div className="yu-ending-formats">{exportControl('pdf','yu-ending-download')}{exportControl('png','yu-ending-download')}{exportControl('zip','yu-ending-download yu-download-zip')}</div>{exportStatus()}</section><StoryPublicationDetails story={story}/><button className="yu-end-source" onClick={()=>setSource(true)}>Read the source <ChevronRight size={13}/></button></StoryEndingSurface>:<>
+ {ended?<StoryEndingSurface surfaceRef={endingRef} onTurn={turn} onDrag={setDrag} drag={drag}><div className="yu-ending-mark"><Leaf size={32} strokeWidth={1.3}/></div><p className="yu-kicker">The story ends. The reflection is yours.</p><h1>{story.reflection}</h1><div className="yu-end-line"/><p>Some stories find their final page<br/>in your own life.</p><button className="yu-primary" onClick={()=>open(story,true)}><RotateCcw size={18}/>Read again<ArrowRight size={19}/></button><div className="yu-ending-navigation"><button onClick={()=>turn(-1)}><ChevronLeft size={17}/>Previous illustration</button><button onClick={()=>{home();setTab('shelf');window.scrollTo({top:0,behavior:'instant'});}}><BookOpen size={16}/>Shelf</button><button onClick={()=>{home();choose();}}><Sparkles size={16}/>Start another story</button></div>{story.series&&<section className="yu-series-reading-links" aria-label="Series reading order"><p>Part {story.series?.part} of {story.series?.parts} · {story.series?.title}</p>{previousPart&&<button type="button" disabled={partOpening||!previousPart.sessionId} onClick={()=>void openSeriesPart(previousPart)}>Previous part</button>}<button type="button" onClick={()=>openSeries(story.series!.id)}>View series</button>{nextPart&&<button type="button" disabled={partOpening||!nextPart.sessionId} onClick={()=>void openSeriesPart(nextPart)}>Next part</button>}</section>}<section className="yu-ending-downloads" aria-label="Download story"><h2>Take the story with you</h2><div className="yu-ending-formats">{exportControl('pdf','yu-ending-download')}{exportControl('png','yu-ending-download')}{exportControl('zip','yu-ending-download yu-download-zip')}</div>{exportStatus()}</section><StoryPublicationDetails story={story}/><button className="yu-end-source" onClick={()=>setSource(true)}>Read the source <ChevronRight size={13}/></button></StoryEndingSurface>:<>
  <StoryPageSurface onTurn={turn} onDrag={setDrag} onToggleMetadata={()=>setMetadataVisible(visible=>!visible)}/>
  {comicPlan.error&&<p className="yu-reader-page-error" role="alert">{comicPlan.error}</p>}
  {current?.image&&(gen.error||imageIssues[current.image]||!!readingSession?.faults?.length)&&<div className="yu-reader-page-error">{gen.error||imageIssues[current.image]}{isGenerated(story)&&imageIssues[current.image]&&<button type="button" onClick={()=>void inspectImage(story.id,page,current.image,true)}>Recheck image</button>}{readingSession&&<StoryRetry session={readingSession} busy={gen.busy} onRetry={gen.retryStep}/>}</div>}
@@ -435,12 +457,13 @@ export default function Reader(){
  <section className="yu-intro"><div><p className="yu-kicker">Make time for a good story</p><h1>What story will you<br/>discover <span>today?</span></h1></div><span className="yu-stamp">Classic tales<br/>reimagined</span></section>
  <RecentStories key={heroes.map(h=>h.story.id).join('|')} items={heroes} loading={libraryLoading} bookName={bookName} onOpen={open}/>
  <button className="yu-new-story-link" onClick={()=>choose()}><Sparkles size={16}/><span>Create my story</span><ArrowRight size={16}/></button>
+ <button type="button" className="yu-upload-story-entry" onClick={openImport}><FileDown size={18}/><span>Upload a story · Word or PDF</span><ArrowRight size={16}/></button>
  <section className="yu-section"><div className="yu-section-title"><h2>Begin with a book</h2><span>Familiar classics, new encounters</span></div><div className="yu-books">{choices.map((b,i)=><button key={b.id} onClick={()=>choose(b.id)} aria-label={"Choose "+b.title}><span className={'yu-book-cover book-'+(i%3)}><span className="yu-book-border"/><small>{b.era} · {b.author}</small><strong className={b.title.length>5?'yu-book-title-long':undefined}>{b.title}</strong><i>{b.genre}</i><span className="yu-book-ornament">{i===0?<Moon size={44} strokeWidth={.7}/>:i===1?<Leaf size={52} strokeWidth={.7}/>:<Feather size={48} strokeWidth={.7}/>}</span></span><strong>{b.title}</strong><small>{b.note}</small></button>)}</div></section>
  <section className="yu-section yu-theme-section"><div className="yu-section-title"><h2>Or follow your curiosity</h2><Sparkles size={17}/></div><div className="yu-moods">{moods.map((m,i)=><button key={m} className={selection.theme===m?'selected':''} onClick={()=>{choose(selection.bookId,m);}}>{i===0&&<Sparkles size={13}/>} {themeLabel(m)}</button>)}</div></section>
  <button className="yu-surprise" onClick={()=>{const b=choices[Math.floor(Math.random()*(choices.length-1))];choose(b.id,moods[Math.floor(Math.random()*(moods.length-1))]);}}><span><Feather size={24}/></span><div><strong>Surprise me with a story</strong><small>Let chance turn the first page</small></div><ArrowRight size={19}/></button>
  <div className="yu-generation-note"><Sparkles size={13}/><p>Stories, illustrations, and words are generated by AI for your reading.</p></div>
  {loading?<p className="yu-inline-status" role="status">Opening the book…</p>:loadError?<div className="yu-inline-status" role="alert">{loadError}<button onClick={()=>location.reload()}>Reload</button></div>:null}
- </>:tab==='shelf'?<ReaderShelf onControl={gen.control} controlBusy={gen.controlBusy} stories={shelf} pending={pendingStories} sessions={gen.sessions} progress={activeProgress} refreshing={shelfRefreshing||gen.libraryRefreshing} onRefresh={()=>{void refreshShelf();}} loading={loading||gen.libraryLoading} error={loadError||gen.libraryError} tab={shelfTab} onTab={changeShelfTab} query={shelfQuery} onQuery={changeShelfQuery} grouping={shelfGrouping} onGrouping={changeShelfGrouping} bookName={bookName} onOpen={open} onResume={session=>openWorkflow(session.id)} onRetry={session=>{setWorkflowTarget(session.id);setWorkflowError('');setStory(null);gen.retrySession(session.id).catch(e=>setWorkflowError(e.message));}} onDelete={askDelete} onFavorite={favoriteFromShelf} favoriteBusy={favoriteBusy} onCreate={()=>choose()} onDiscover={()=>setTab('discover')}/>:<section className="yu-profile" aria-label="My space">
+ </>:tab==='shelf'?<ReaderShelf series={imported.items} onOpenSeries={openSeries} seriesError={imported.listError} onControl={gen.control} controlBusy={gen.controlBusy} stories={shelf} pending={pendingStories} sessions={gen.sessions} progress={activeProgress} refreshing={shelfRefreshing||gen.libraryRefreshing} onRefresh={()=>{void refreshShelf();}} loading={loading||gen.libraryLoading} error={loadError||gen.libraryError} tab={shelfTab} onTab={changeShelfTab} query={shelfQuery} onQuery={changeShelfQuery} grouping={shelfGrouping} onGrouping={changeShelfGrouping} bookName={bookName} onOpen={open} onResume={session=>openWorkflow(session.id)} onRetry={session=>{setWorkflowTarget(session.id);setWorkflowError('');setStory(null);gen.retrySession(session.id).catch(e=>setWorkflowError(e.message));}} onDelete={askDelete} onFavorite={favoriteFromShelf} favoriteBusy={favoriteBusy} onCreate={()=>choose()} onDiscover={()=>setTab('discover')}/>:<section className="yu-profile" aria-label="My space">
   <section className="yu-profile-group" aria-labelledby="profile-overview"><h2 id="profile-overview">Story overview</h2>
   <div className="yu-profile-stats" aria-busy={libraryLoading}>{[[shelfCount,'Stories on your shelf'],[favoriteCount,'Favorites'],[deletedStories.length,'Deleted']].map(([count,label])=><div key={label}><strong>{libraryLoading?<span className="yu-profile-stat-loading" aria-label="Counting stories">—</span>:count}</strong><span>{label}</span></div>)}</div>
   </section>
@@ -457,7 +480,7 @@ export default function Reader(){
  </main>
  <nav className="yu-tabbar" aria-label="Main navigation">{[{id:'discover',title:"Discover",Icon:Compass},{id:'shelf',title:"Shelf",Icon:BookOpen},{id:'me',title:"My space",Icon:UserRound}].map(({id,title,Icon})=><button key={id} className={tab===id?'active':''} aria-current={tab===id?'page':undefined} onClick={()=>{setTab(id);window.scrollTo({top:0,behavior:'instant'});}}><Icon size={22} strokeWidth={tab===id?2:1.6}/><span>{title}</span>{tab===id&&<i/>}</button>)}</nav>
  </>}
- {configure&&<Sheet title="How would you like to read this story?" busy={creating} onClose={()=>{setConfigure(false);setDiscoveryTarget(null);}}><StoryDiscoveryForm selection={selection} books={choices} busy={creating} error={unavailable} onBookChange={bookId=>setSelection(old=>({...old,bookId,storyTitle:undefined,source:undefined,discoverySources:undefined}))} onSubmit={generate}/></Sheet>}
+ {configure&&<Sheet title="How would you like to read this story?" busy={creating} onClose={()=>{setConfigure(false);setDiscoveryTarget(null);}}><button type="button" className="yu-upload-story-entry" disabled={creating} onClick={openImport}><FileDown size={18}/>Upload a Word or PDF story<ArrowRight size={16}/></button><StoryDiscoveryForm selection={selection} books={choices} busy={creating} error={unavailable} onBookChange={bookId=>setSelection(old=>({...old,bookId,storyTitle:undefined,source:undefined,discoverySources:undefined}))} onSubmit={generate}/></Sheet>}
 
  {reselectTarget&&<StoryReselection key={reselectTarget} parentId={reselectTarget} onSubmitted={next=>finishReselection(next)} onCancelled={(next,error)=>{if(next)finishReselection(next,true);else{reselectLock.current=false;setReselectTarget(null);backToShelf();void gen.refreshLibrary().catch(()=>{});if(error)notify(error);}}}/>}
  {panelOpen&&!configure&&<StorySettingsPanel
@@ -471,6 +494,8 @@ export default function Reader(){
 
  {reviewHistoryId&&<Sheet title="Review history" onClose={()=>setReviewHistoryId(null)}><StoryReviewHistory key={reviewHistoryId} sessionId={reviewHistoryId}/></Sheet>}
  {source&&(story||gen.active)&&<Sheet title="Story source" onClose={()=>setSource(false)}>{story?<><StorySource key={story.id} story={story} book={bookName(story)}/><StoryPublicationDetails story={story}/></>:<StorySource key={gen.active!.id} sessionId={gen.active!.id} book={bookName({id:gen.active!.id,bookId:gen.active!.selection.bookId})}/>}</Sheet>}
+ {importOpen&&<Sheet title="Upload a story" busy={!!imported.busy} onClose={closeImport}><StoryImportSetup source={imported.source} plan={imported.plan} title={imported.title} settings={imported.settings} busy={imported.busy} error={imported.error} planning={imported.planning} previewBusy={imported.previewBusy} planReady={imported.planReady} connected={gen.connected} onUpload={imported.upload} onTitle={imported.setTitle} onSettings={imported.setSettings} onCreate={createImportedSeries} onMoreSource={imported.moreSource} onRetryPlan={imported.retryPlan} onConfigure={()=>{setImportOpen(false);setProviderOpen(n=>n+1);}}/></Sheet>}
+ {seriesOpen&&<Sheet title="Comic series" busy={!!imported.busy||partOpening} onClose={closeSeries}><StorySeriesOverview series={imported.active} busy={partOpening?'Opening part':imported.busy} error={imported.error} onControl={imported.control} onOpenPart={part=>void openSeriesPart(part)} onRefresh={()=>imported.openSeries(imported.selectedId)}/></Sheet>}
  {comicZoom&&story&&comicCurrent&&<StoryComicZoom initialScale={largeText?1.25:1} frames={story.pages} layout={comicCurrent} selectedFrame={page} images={comicImages} reloads={imageReloads} onImageError={onFrameError} onImageLoad={onFrameLoad} onClose={()=>setComicZoom(false)}/>}
  {comicTranscript&&story&&comicCurrent&&<Sheet title={`Comic page ${comicIndex+1} transcript`} onClose={()=>setComicTranscript(false)}><ComicPageTranscript frames={story.pages} layout={comicCurrent}/></Sheet>}
  {sceneList&&story&&<Sheet title="Scene list" onClose={()=>setSceneList(false)}><StorySceneList story={story} page={page} comicPages={comicPlan.pages} onSelect={index=>{goToPage(index);setSceneList(false);}}/></Sheet>}

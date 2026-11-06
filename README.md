@@ -1,6 +1,6 @@
 # Shiqu
 
-Turn Chinese classics into your own illustrated comic books in English. Shiqu includes 24 source books and 15 art styles, supports computer and phone reading, and exports PDF, PNG overview images, and ZIP archives. Stories, images, and reading progress are saved on your computer.
+Turn your own stories and Chinese classics into illustrated comic books in English. Shiqu includes 24 source books and 15 art styles, supports computer and phone reading, and exports PDF, PNG overview images, and ZIP archives. Stories, images, and reading progress are saved on your computer.
 
 New stories are written in English. During preparation, the production workflow translates the selected source passage and its chapter context into English. The verified Chinese originals remain internal evidence for source checks; they are not rewritten. Previously saved content is not silently translated or regenerated.
 
@@ -70,6 +70,12 @@ The skill uses the same production core through CLI commands, without starting t
 ## Create, review, and read
 
 Choose a book, optional chapters and theme, then select a story. Preparation saves verified source evidence, an English translation, a checked English summary, and production recommendations. Confirm the art style, narrative detail, instructions, and acceptance criteria before starting.
+
+Choose **Upload a story** to use a Word `.docx` or a PDF with selectable text. The app reads the file locally, shows the extracted story and automatically plans natural parts when it is long. Review the shared style/detail settings, then choose **Create all parts** once. Comics appear as `Title — Part 1`, `Title — Part 2`, and so on; short stories stay one comic. No manual splitting or balloon placement is required.
+
+Every extracted section belongs to exactly one part. Each part goes through the existing source review before drawing, and later parts inherit character context and the series reference image. The series overview keeps parts in numeric order and supports pause, resume and targeted recovery without discarding completed work. Open a finished part to read or export it normally.
+
+Uploads are limited to 10 MiB, 500 PDF pages, 2 million extracted characters and 200 automatically planned parts. Legacy `.doc`, password-protected PDFs and scanned/image-only pages need a readable `.docx` or text-PDF copy. Limits and extraction problems are reported; later text is never silently discarded. Uploading and reviewing the local part plan do not contact an AI service; **Create all parts** authorizes the configured production provider.
 
 The production core creates a storyboard, reviews it against the original, makes targeted revisions, and checks it again before drawing. Each story supports 1–80 illustrated frames. The first illustration normally becomes the reference for later frames; a starred reference from the same book can be used instead. Stories can be paused, revised, resumed, and recovered without discarding completed work.
 

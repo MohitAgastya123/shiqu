@@ -1,2 +1,4 @@
 # Source receipts hash exact bytes; checkout must preserve downloaded line endings.
 data/library/** -text
+# Encrypted document fixtures must preserve PDF bytes and use binary diffs.
+tests/fixtures/import-*.pdf binary

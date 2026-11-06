@@ -1950,6 +1950,8 @@
         "server/database.ts",
         "server/http.ts",
         "server/import-legacy.ts",
+        "server/database-migrations.ts",
+        "server/library-upgrade.ts",
         "server/local-books.ts",
         "server/media.ts"
       ]
@@ -4151,6 +4153,168 @@
         "lib/comic-page-layout.ts",
         "lib/comic-bubble-font.ts",
         "lib/comic-bubble-palette.ts"
+      ]
+    },
+    {
+      "file": "tests/story-import-text.test.mjs",
+      "groups": [
+        "preparation",
+        "production"
+      ],
+      "level": "contract",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "lib/story-import-text.ts"
+      ]
+    },
+    {
+      "file": "tests/story-import-extract.test.mjs",
+      "groups": [
+        "preparation",
+        "production",
+        "storage"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "server/story-import-extract.ts",
+        "lib/story-import-text.ts",
+        "scripts/desktop-resources.mjs"
+      ]
+    },
+    {
+      "file": "tests/story-import-production.test.mjs",
+      "groups": [
+        "preparation",
+        "production",
+        "review",
+        "reader"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "lib/reader-source-types.ts",
+        "lib/reader-editorial.ts",
+        "lib/reader-review.ts",
+        "lib/story-import-text.ts",
+        "lib/reader-prompts.ts",
+        "lib/reader-repository.ts",
+        "lib/reader-engine.ts",
+        "lib/reader-model.ts",
+        "lib/reader-zip-content.ts",
+        "lib/reader-pdf.ts",
+        "lib/reader-png.ts",
+        "lib/reader-zip.ts",
+        "lib/public-story-zip.mjs",
+        "server/story-export.ts"
+      ]
+    },
+    {
+      "file": "tests/story-import-ui.test.mjs",
+      "groups": [
+        "preparation",
+        "reader"
+      ],
+      "level": "contract",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "unit",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "lib/story-import-contract.ts",
+        "client/ui/StoryImportSetup.tsx",
+        "client/ui/StorySeriesOverview.tsx",
+        "client/ui/ReaderShelf.tsx"
+      ]
+    },
+    {
+      "file": "tests/story-import-series.playwright.e2e.mjs",
+      "groups": [
+        "preparation",
+        "production",
+        "reader",
+        "storage"
+      ],
+      "level": "browser-e2e",
+      "cost": "heavy",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "e2e",
+      "pr": "affected",
+      "gates": [
+        "user-flows"
+      ],
+      "covers": [
+        "client/ui/Reader.tsx",
+        "client/ui/ReaderShelf.tsx",
+        "client/ui/StoryPausedEditing.tsx",
+        "client/ui/StoryImportSetup.tsx",
+        "client/ui/StorySeriesOverview.tsx",
+        "client/ui/useStorySeries.ts",
+        "lib/story-import-contract.ts"
+      ]
+    },
+    {
+      "file": "tests/story-import-backend.test.mjs",
+      "groups": [
+        "preparation",
+        "production",
+        "storage",
+        "reader"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "server/story-series.ts",
+        "server/story-series-membership.ts",
+        "lib/reader-image-assets.ts",
+        "server/production-queue.ts",
+        "server/book-image-reference.ts",
+        "server/database.ts",
+        "server/library-upgrade.ts",
+        "server/library-backup.ts",
+        "lib/reader-repository.ts",
+        "lib/story-import-contract.ts"
       ]
     }
   ]

@@ -1,5 +1,6 @@
 // English product messages; source evidence and machine identifiers remain stable.
 // Serve the production API and public assets; saved media uses the API's media routes.
+// Private source imports and local series synchronization use the normal initialized library.
 import path from 'node:path';
 import {readFile,realpath,stat} from 'node:fs/promises';
 import {currentMediaKeys} from './library-upgrade.ts';
@@ -14,6 +15,7 @@ import {LocalBooks} from './local-books.ts';
 import {withLocalBooks} from './local-generation.ts';
 import {ReaderProductionCoordinator,configuredImageWorkers} from './reader-production.ts';
 import type {ProductionOptions} from './reader-production.ts';
+import {StorySeries} from './story-series.ts';
 
 const types:Record<string,string>={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json','.webmanifest':'application/manifest+json','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp','.woff':'font/woff','.woff2':'font/woff2','.ico':'image/x-icon'};
 export function createApplication(options:{root:string;dataDirectory:string;variables?:Record<string,string|undefined>;transport?:typeof fetch;generation?:ReaderProvider;production?:ProductionOptions;commandOnly?:boolean}){
@@ -23,9 +25,11 @@ export function createApplication(options:{root:string;dataDirectory:string;vari
  const imageWorkers=configuredImageWorkers(options.variables?.SHIQU_IMAGE_WORKERS);
  const local=openDatabase(options.dataDirectory,options.root);
  let retainedLegacyArt:Set<string>|undefined;
- const production=new ReaderProductionCoordinator(local.database,generation,media,{imageWorkers,...options.production});
+ const series=new StorySeries(local.database,media,options.root);
+ const production=new ReaderProductionCoordinator(local.database,generation,media,{imageWorkers,...options.production,series});
+ series.connectProduction(production);
  if(options.variables?.SHIQU_AI_PROVIDER==='readonly'&&options.production?.autoStart!==false)production.stop();
- const services:Services={db:local.db,database:local.database,media,variables:options.variables||{},ownerId:localOwnerId,localBooks,transport:options.transport||fetch,generation,production,commandOnly:options.commandOnly};
+ const services:Services={db:local.db,database:local.database,media,variables:options.variables||{},ownerId:localOwnerId,localBooks,transport:options.transport||fetch,generation,production,series,commandOnly:options.commandOnly};
  const api=createApi(services),publicDirectory=path.resolve(options.root,'dist/client');
  let closed=false,closing:Promise<void>|undefined;
  return {services,get generating(){return production.busy;},startGeneration:()=>production.start(),stopGeneration:()=>production.stop(),close(){

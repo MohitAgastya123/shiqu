@@ -1,6 +1,7 @@
 // English shelf: keep production tasks separate from readable stories, preserve priority and saved filters.
 // Pending style tags follow saved setup drafts; finished stories restart at page one.
 // Stateful groups are child components so the shelf remains directly testable without hooks.
+// Imported series retain explicit numeric reading order beside ordinary shelf grouping.
 import {useState,type ReactNode} from 'react';
 import {themeLabel} from '../english-labels';
 import {ArrowRight,Bookmark,BookOpen,ChevronDown,ChevronRight,Feather,Plus,RefreshCw,RotateCcw,Search,Trash2,X} from 'lucide-react';
@@ -12,6 +13,8 @@ import {getArtStyle} from '@/lib/reader-styles';
 import {groupShelfItems,matchesShelfSearch,shelfGroupings,type ShelfGrouping} from '@/lib/shelf-browser';
 import {shelfGenerationStatus,shelfNeedsUserGroups,sortShelfProductions} from '@/lib/shelf-generation';
 import './ReaderShelf.css';
+import type {StorySeriesView} from '@/lib/story-import-contract';
+import {StorySeriesShelf} from './StorySeriesOverview';
 
 const productionLimit=5;
 // Remember group expansion across filters, reading and refreshes.
@@ -36,8 +39,8 @@ function ProductionGroup({needs,limit,children}:{needs:number;limit:number|null;
 }
 
 type ShelfItem={processingStatus:string;id:string;title:string;book:string;theme:string;artStyleLabel:string;story:Story|null;session?:SessionView;page:number;saved:boolean};
-type Props={onControl:(id:string,action:ProductionAction)=>Promise<void>;controlBusy:string;stories:Story[];pending:SessionView[];sessions:SessionView[];progress:ReadingProgress[];loading:boolean;refreshing:boolean;onRefresh:()=>void;error:string;tab:string;onTab:(tab:string)=>void;query:string;onQuery:(query:string)=>void;grouping:ShelfGrouping;onGrouping:(grouping:ShelfGrouping)=>void;bookName:(story:Pick<Story,'id'|'bookId'>)=>string;onOpen:(story:Story,restart?:boolean)=>void;onResume:(session:SessionView)=>void;onRetry:(session:SessionView)=>void;onDelete:(id:string,title:string)=>void;onFavorite:(id:string,saved:boolean)=>void;favoriteBusy:string;onCreate:()=>void;onDiscover:()=>void};
-export default function ReaderShelf({onControl,controlBusy,stories,pending,sessions,progress,loading,refreshing,onRefresh,error,tab,onTab,query,onQuery,grouping,onGrouping,bookName,onOpen,onResume,onRetry,onDelete,onFavorite,favoriteBusy,onCreate,onDiscover}:Props){
+type Props={series?:StorySeriesView[];onOpenSeries?:(id:string)=>void;seriesError?:string;onControl:(id:string,action:ProductionAction)=>Promise<void>;controlBusy:string;stories:Story[];pending:SessionView[];sessions:SessionView[];progress:ReadingProgress[];loading:boolean;refreshing:boolean;onRefresh:()=>void;error:string;tab:string;onTab:(tab:string)=>void;query:string;onQuery:(query:string)=>void;grouping:ShelfGrouping;onGrouping:(grouping:ShelfGrouping)=>void;bookName:(story:Pick<Story,'id'|'bookId'>)=>string;onOpen:(story:Story,restart?:boolean)=>void;onResume:(session:SessionView)=>void;onRetry:(session:SessionView)=>void;onDelete:(id:string,title:string)=>void;onFavorite:(id:string,saved:boolean)=>void;favoriteBusy:string;onCreate:()=>void;onDiscover:()=>void};
+export default function ReaderShelf({series=[],onOpenSeries,seriesError,onControl,controlBusy,stories,pending,sessions,progress,loading,refreshing,onRefresh,error,tab,onTab,query,onQuery,grouping,onGrouping,bookName,onOpen,onResume,onRetry,onDelete,onFavorite,favoriteBusy,onCreate,onDiscover}:Props){
  const progressById=new Map(progress.map(row=>[row.storyId,row]));
  const sessionById=new Map(sessions.map(session=>[session.id,session]));
  const processingStatus=(story:Story)=>{const session=sessionById.get(story.id);return session?shelfGenerationStatus(session).group:story.pages.every(page=>!!page.image)?'Complete':'Paused';};
@@ -48,6 +51,7 @@ export default function ReaderShelf({onControl,controlBusy,stories,pending,sessi
  const visible=items.filter(item=>(tab!=='saved'||item.saved)&&matchesShelfSearch(item,query));
  const productions=sortShelfProductions(visible.filter(item=>!item.story),item=>item.processingStatus),readable=visible.filter(item=>item.story);
  const needs=productions.filter(item=>(shelfNeedsUserGroups as readonly string[]).includes(item.processingStatus)).length;
+ const visibleSeries=series.filter(item=>(tab!=='saved'||item.parts.some(part=>part.sessionId&&!!(progressById.get(part.sessionId)?.saved??sessionById.get(part.sessionId)?.saved)))&&matchesShelfSearch({title:item.title+' '+item.parts.map(part=>part.title).join(' '),book:item.source.fileName,theme:'',artStyleLabel:getArtStyle(item.settings.artStyle).label},query));
  const filtered=!!query.trim()||tab==='saved',busyAny=refreshing||!!favoriteBusy;
  function resetFilters(){onQuery('');onTab('recent');}
  function edition(item:ShelfItem,session?:SessionView){
@@ -104,9 +108,11 @@ export default function ReaderShelf({onControl,controlBusy,stories,pending,sessi
   <div className="yu-shelf-tabs"><button className={tab==='recent'?'active':''} aria-pressed={tab==='recent'} onClick={()=>onTab('recent')}>All stories <span>{items.length}</span></button><button className={tab==='saved'?'active':''} aria-pressed={tab==='saved'} onClick={()=>onTab('saved')}>My favorites <span>{savedCount}</span></button><button type="button" className="yu-shelf-create" onClick={onCreate}><Plus size={15} aria-hidden="true"/>New story</button></div>
   <div className="yu-shelf-view"><div className="yu-shelf-result"><span role="status" aria-live="polite">{filtered?`Found ${visible.length} / ${items.length} stories`:`Total: ${items.length} stories`}</span>{filtered&&<button type="button" onClick={resetFilters}>Clear filters</button>}</div><button type="button" className="yu-shelf-refresh" onClick={onRefresh} disabled={refreshing||loading||!!favoriteBusy} aria-label="Refresh shelf" title={refreshing?'Refreshing…':'Refresh shelf'} aria-busy={refreshing}><RefreshCw size={16} className={refreshing?'spin':undefined} aria-hidden="true"/></button><label><span className="sr-only">Shelf groups</span><select aria-label="Shelf groups" value={grouping} onChange={event=>onGrouping(event.target.value as ShelfGrouping)}>{shelfGroupings.map(option=><option key={option.value} value={option.value}>{option.label}</option>)}</select><ChevronDown size={14} aria-hidden="true"/></label></div>
   {loading?<p className="yu-inline-status" role="status">Opening your shelf…</p>:error?<div className="yu-inline-status" role="alert">{error}<button onClick={onRefresh} disabled={refreshing}>Retry refresh</button></div>:null}
+  {seriesError&&<p className="yu-inline-status" role="alert">{seriesError}</p>}
+  {onOpenSeries&&<StorySeriesShelf items={visibleSeries} onOpen={onOpenSeries}/>}
   {productions.length>0&&<ProductionGroup needs={needs} limit={query.trim()?null:Math.max(productionLimit,needs)}>{productions.map(productionRow)}</ProductionGroup>}
   {readable.length?<>{productions.length>0&&<h2 className="yu-shelf-region-title">Ready to read<span>{readable.length} stories</span></h2>}{readableView}</>
    :productions.length?(!filtered&&<p className="yu-shelf-region-empty">Completed stories will appear here when production finishes.</p>)
-   :loading||error?null:query.trim()?<div className="yu-empty"><Search size={32} strokeWidth={1.2}/><h2>No matching story</h2><p>Try another story title, book, theme, or art style.</p><button className="yu-primary" onClick={()=>onQuery('')}>Clear search</button></div>:<div className="yu-empty"><BookOpen size={35} strokeWidth={1}/><h2>{tab==='recent'?'Your stories begin here':'Keep the stories you love'}</h2><p>{tab==='recent'?'Saved stories and stories waiting for generation stay here.':'Tap the bookmark while reading to find a story again.'}</p><button className="yu-primary" onClick={onDiscover}>Create your first story <ArrowRight size={17}/></button></div>}
+   :loading||error?null:visibleSeries.length&&!query.trim()?<p className="yu-shelf-region-empty">Open a series to follow its parts. Readable comics appear here as they are created.</p>:query.trim()?<div className="yu-empty"><Search size={32} strokeWidth={1.2}/><h2>No matching story</h2><p>Try another story title, book, theme, or art style.</p><button className="yu-primary" onClick={()=>onQuery('')}>Clear search</button></div>:<div className="yu-empty"><BookOpen size={35} strokeWidth={1}/><h2>{tab==='recent'?'Your stories begin here':'Keep the stories you love'}</h2><p>{tab==='recent'?'Saved stories and stories waiting for generation stay here.':'Tap the bookmark while reading to find a story again.'}</p><button className="yu-primary" onClick={onDiscover}>Create your first story <ArrowRight size={17}/></button></div>}
  </section>;
 }

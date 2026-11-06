@@ -2,6 +2,7 @@
 // A failed save is rethrown for recovery; bounded English source translations are durable preparation steps.
 // Translation keeps model usage but omits raw-language prompt input from public prompt history.
 // Every newly generated or repaired balloon receives source verification and automatic readable placement.
+// Imported full review covers every evidence unit; unspent paused production yields preserve checkpoints without faults.
 import {blockedIssues,nextStep,reviewPhase,planSchema,reflectionCandidatesSchema,storyPresentationSchema,storyDraftSchema,storyboardOutlineSchema,storyboardBatchSchema,selectionSchema,view,ReaderError,productionComplete,readerBooks} from './reader-model.ts';
 import type {Document,Plan,StoryDraft,ReflectionCandidates,StoryPresentation,Selection,SessionRow,Storyboard,StoryboardOutline} from './reader-model.ts';
 import type {BubblePlacementFeedback} from './reader-bubbles.ts';
@@ -24,7 +25,7 @@ import {newReview,parseFrameCountReport,reviewReportSchema,repairOutputSchema,pe
 import {syncRevisionImages,reusableRevisionImages} from './reader-revision.ts';
 import {applyStructuralEdits} from './reader-structure.ts';
 import type {StructuralEdits} from './reader-structure.ts';
-import {validateEditorialCoverage} from './reader-editorial.ts';
+import {validateEditorialCoverage,assertImportedCoverageReady} from './reader-editorial.ts';
 import type {EditorialCoverage} from './reader-editorial.ts';
 import type {ReviewIssue,ReviewReport,RepairedPage,FrameCountReport,FrameCountContext} from './reader-review.ts';
 import type {PromptRecord} from './reader-prompt-records.ts';
@@ -32,6 +33,7 @@ export type Generated<T>={promptRecord?:PromptRecord;value:T;model:string;reques
 export interface StoryGenerator{validateOriginal?(selection:Selection,original:OriginalSource):void;translateSource?(text:string,title:string):Promise<Generated<{title:string;text:string}>>;recommendArt?(selection:Selection,original:OriginalSource):Promise<ArtRecommendation>;prepareOriginal?(selection:Selection,id:string):Promise<OriginalSource|null>;recommend?(selection:Selection,id:string,original:OriginalSource,prepareRequirements?:boolean):Promise<Generated<FrameRecommendation>>;outline?(selection:Selection,id:string,original?:OriginalSource):Promise<Generated<StoryboardOutline>>;planBatch?(selection:Selection,id:string,storyboard:Storyboard,original:OriginalSource,bubblePlacementRetry?:BubblePlacementFeedback):Promise<Generated<Plan['pages']>>;reviewFrameCount?(selection:Selection,plan:Plan,original:OriginalSource):Promise<Generated<FrameCountReport>>;review?(selection:Selection,plan:Plan,original:OriginalSource,outline?:StoryboardOutline,candidates?:ReflectionCandidates):Promise<Generated<ReviewReport>>;restructure?(selection:Selection,plan:Plan,original:OriginalSource,issues:ReviewIssue[],coverage?:EditorialCoverage[],frameCountContext?:FrameCountContext,bubblePlacementRetry?:BubblePlacementFeedback):Promise<Generated<StructuralEdits>>;repair?(selection:Selection,plan:Plan,original:OriginalSource,issues:ReviewIssue[],outline?:StoryboardOutline,bubblePlacementRetry?:BubblePlacementFeedback):Promise<Generated<RepairedPage[]>>;reflectionCandidates(selection:Selection,draft:StoryDraft,original:OriginalSource):Promise<Generated<StoryPresentation>>;reflection(selection:Selection,draft:StoryDraft,original:OriginalSource,revision?:{reflection:string;issues:ReviewIssue[]}):Promise<Generated<string>>;plan(selection:Selection,id:string,original?:OriginalSource,bubblePlacementRetry?:BubblePlacementFeedback):Promise<Generated<StoryDraft>>;original(selection:Selection,plan:SourceHint,id:string):Promise<SourceResult>;image(plan:Plan,page:number,id:string,reference:string,style?:ArtStyleId,productionPrompt?:string,artifactId?:string):Promise<Generated<string>>;audio(caption:string,id:string,page:number):Promise<Generated<string>>;safeError(error:unknown):string;}
 
 async function drawRequestedImages(repo:ReaderRepository,generator:StoryGenerator,row:SessionRow,token:string,doc:Document,selection:Selection,throughPage:number){
+ assertImportedCoverageReady(doc);
  const pages=doc.plan!.pages.map((_,page)=>page).filter(page=>page<=throughPage&&!doc.images[page]);
  // A new story establishes its reference alone; later requests may draw three missing scenes.
  const batch=pages.slice(0,doc.images[0]?readerImageBatchSize:1);
@@ -175,7 +177,7 @@ export async function advanceStory(repo:ReaderRepository,generator:StoryGenerato
     if(!generator.reviewFrameCount)throw new ReaderError(503,'This provider does not support frame-count review. Update it and try again.');
     const result=await generator.reviewFrameCount(selection,structuredClone(doc.plan!),doc.original!);
     const report=parseFrameCountReport(doc.plan!.pages.length,{frameCountReview:result.value.frameCountReview,requirements:result.value.requirements});
-    validateEditorialCoverage(report.coverage,doc.original!);
+    validateEditorialCoverage(report.coverage,doc.original!,false);
     (review.frameCountReports??=[]).push({...report,step:step.key,recordedAt:new Date().toISOString()});review.issues=report.issues;review.repaired=[];
     review.phase=report.issues.length?'frames':'full';
     review.status=!report.issues.length?'pending':review.repairs>=readerMaxAutomaticRepairs?'blocked':'repair';
@@ -252,5 +254,11 @@ export async function advanceStory(repo:ReaderRepository,generator:StoryGenerato
    throw new ReaderError(422,`${doc.visualReview.stopReason==='unchanged'?'Revision made no substantive changes':`Review still has issues after ${readerMaxAutomaticRepairs} automatic repair rounds`}; ${issues.length} issues remain. Illustration has stopped. ${summary}. Continue revision explicitly.`);
   }
   return view(await repo.save(row,token,doc,productionComplete(doc,selection),null,progressMap));
- }catch(error){if(error instanceof ReaderError&&error.status===404||persistenceError(error))throw error;onFailed?.(error);return view(await repo.save(row,token,doc,false,error instanceof ReaderError?error.message:generator.safeError(error),progressMap));}
+ }catch(error){
+  if(error&&typeof error==='object'&&'productionYield'in error&&error.productionYield===true){await repo.save(row,token,doc,false,null,progressMap);throw error;}
+  if(error instanceof ReaderError&&error.status===404||persistenceError(error))throw error;
+  const coverageFailure=!!doc.original?.imported&&error instanceof Error&&/^(?:IMPORTED_SOURCE_|EDITORIAL_SOURCE_QUOTE)/.test(error.message);
+  const message=coverageFailure?'The storyboard review did not verify every section of this uploaded part. Your source and storyboard are retained, and drawing has not started. Retry the review to continue.':error instanceof ReaderError?error.message:generator.safeError(error);
+  onFailed?.(coverageFailure?new ReaderError(502,message):error);return view(await repo.save(row,token,doc,false,message,progressMap));
+ }
 }

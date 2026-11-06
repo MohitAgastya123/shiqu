@@ -1,4 +1,5 @@
 // Stage a public CLI release from explicit assets and declared runtime imports, then pack it with pnpm.
+// Include the isolated document worker and its actual external imports in the installed package.
 import {build as buildClient} from 'vite';
 import {build} from 'esbuild';
 import {cp, chmod, mkdir, readFile, rm, writeFile} from 'node:fs/promises';
@@ -14,7 +15,8 @@ await rm(output, {recursive:true, force:true});
 await mkdir(stage, {recursive:true});
 await buildClient({root, configFile:path.join(root, 'vite.config.ts'), build:{outDir:path.join(stage, 'dist/client'), emptyOutDir:true}});
 const result = await build({entryPoints:[path.join(root, 'server/cli.ts')], outfile:path.join(stage, 'dist/server/cli.js'), bundle:true, platform:'node', format:'esm', target:'node24', packages:'external', metafile:true});
-const names = [...new Set(Object.values(result.metafile.outputs).flatMap(file=>file.imports.filter(item=>item.external && !item.path.startsWith('node:')).map(item=>item.path.startsWith('@') ? item.path.split('/').slice(0,2).join('/') : item.path.split('/')[0])))].sort();
+const worker = await build({entryPoints:[path.join(root, 'server/story-import-worker.mjs')], outfile:path.join(stage, 'dist/server/story-import-worker.mjs'), bundle:true, platform:'node', format:'esm', target:'node24', packages:'external', metafile:true});
+const names = [...new Set([result,worker].flatMap(bundle=>Object.values(bundle.metafile.outputs).flatMap(file=>file.imports.filter(item=>item.external && !item.path.startsWith('node:')).map(item=>item.path.startsWith('@') ? item.path.split('/').slice(0,2).join('/') : item.path.split('/')[0]))))].sort();
 const dependencies = Object.fromEntries(names.map(name=>{
   if (!source.dependencies[name]) throw Error('Undeclared production dependency: ' + name);
   return [name, source.dependencies[name]];
@@ -30,7 +32,7 @@ await chmod(path.join(stage, 'bin/shiqu.mjs'), 0o755);
 const manifest = {
   name:source.publishConfig.name, version:source.version, description:source.description, license:source.license, author:source.author,
   repository:source.repository, homepage:source.homepage, bugs:source.bugs, type:'module', engines:source.engines,
-  bin:{shiqu:'bin/shiqu.mjs'}, files:['bin/shiqu.mjs','dist/client','dist/server/cli.js','data/library','data/export-fonts','skills/shiqu','drizzle/*.sql','docker/seed.sql','.env.example','LICENSE','NOTICE','README.md'],
+  bin:{shiqu:'bin/shiqu.mjs'}, files:['bin/shiqu.mjs','dist/client','dist/server/cli.js','dist/server/story-import-worker.mjs','data/library','data/export-fonts','skills/shiqu','drizzle/*.sql','docker/seed.sql','.env.example','LICENSE','NOTICE','README.md'],
   publishConfig:{access:'public',registry:'https://registry.npmjs.org/'}, dependencies,
 };
 await writeFile(path.join(stage, 'package.json'), JSON.stringify(manifest, null, 2) + '\n');

@@ -9,6 +9,7 @@
 // story lock it stops when no longer wanted, and
 // its failures stay with the search unless a stop interrupted the call.
 // Only current image inputs may publish; their paid receipt can replace a stale version's slot.
+// Local imported-series activation and atomic parent/predecessor fences reuse these same paid jobs.
 import {generationProgress} from '../lib/generation-progress.ts';
 import {productionTimingScope,productionStageDurations} from '../lib/production-timing.ts';
 import {BookImageReferences} from './book-image-reference.ts';
@@ -37,13 +38,17 @@ import type {ProductionJob,JobSpec} from './production-queue.ts';
 import {authorizeRecovery,authorizeControl,authorizeOverride,commandReceipt,sessionFaults} from './reader-commands.ts';
 import type {ReaderFault} from './reader-commands.ts';
 import type {FaultView,RecoveryRequest} from '../lib/reader-recovery.ts';
+import type {StorySeries} from './story-series.ts';
+import type {StoryGenerator} from '../lib/reader-engine.ts';
+import {seriesEligibleSql} from './story-series-membership.ts';
+import {assertImportedCoverageReady} from '../lib/reader-editorial.ts';
 
 type Demand={session_id:string;owner_id:string;viewer_id:string;page:number;through_page:number;expires_at:number;runtime_id:string};
 type Lease={ownerId:string;token:string};
 type ActiveSearch={round:number;controller:AbortController;startedAt:number;progress?:SuggestionProgress};
 type RebuildKey={document:string;selection:string;state:string;demands:string};
 type PruneKey={document:string;selection:string;queued:number;failed:number};
-export type ProductionOptions={imageWorkers?:number;now?:()=>number;leaseMs?:number;tickMs?:number;autoStart?:boolean;targetSessionId?:string;stopBeforeImages?:boolean};
+export type ProductionOptions={imageWorkers?:number;now?:()=>number;leaseMs?:number;tickMs?:number;autoStart?:boolean;targetSessionId?:string;stopBeforeImages?:boolean;series?:StorySeries};
 type Options=ProductionOptions;
 const sessionLeaseMs=180000;
 const maxAutomaticAttempts=3;
@@ -96,6 +101,7 @@ export class ReaderProductionCoordinator implements ReaderProduction{
    targetSessionId:options.targetSessionId,
    limits:{search:1,text:1,image:options.imageWorkers??3,local:2},now:this.clock,leaseMs:options.leaseMs,
    canRun:job=>this.canRun(job),resumeInterrupted:job=>this.resumeInterrupted(job),onSettled:()=>this.wake(),
+   claimGuard:`j.kind='image-publish' OR EXISTS(SELECT 1 FROM stories s WHERE s.id=j.session_id AND s.user_id=j.owner_id AND s.generation_control='active' AND NOT ${supersededSql('s')} AND ${seriesEligibleSql('s')} AND NOT EXISTS(SELECT 1 FROM library_deletions d WHERE d.story_id=s.id AND d.user_id=s.user_id))`,
    candidateFilter:`j.kind='image-publish' OR NOT EXISTS(SELECT 1 FROM stories s WHERE s.id=j.session_id AND s.user_id=j.owner_id AND (s.generation_control!='active' OR (s.state='failed' AND NOT EXISTS(SELECT 1 FROM reader_faults f WHERE f.session_id=s.id AND f.owner_id=s.user_id AND f.state='recovering' AND (f.command_id=j.recovery_id OR f.kind='interrupted' AND f.job_id=j.id))) OR EXISTS(SELECT 1 FROM library_deletions d WHERE d.story_id=s.id AND d.user_id=s.user_id)))`,
    skipCandidate:job=>!!options.targetSessionId&&job.session_id!==options.targetSessionId||!!options.stopBeforeImages&&['image','image-publish'].includes(job.kind)||job.kind!=='image-publish'&&this.supersededJobs.has(job.session_id),
    safeError:(error,job)=>error instanceof ReaderError?error.message:job.kind==='image-publish'?'The image was generated but could not be saved for reading. Retry to continue.':this.provider.safeError(error),
@@ -179,11 +185,12 @@ export class ReaderProductionCoordinator implements ReaderProduction{
  async control(ownerId:string,id:string,action:ProductionAction,handoffOnly=false,requestId?:string){
   if(this.stopping)throw new ReaderError(503,'The production service is stopping. Reopen the story in a moment.');
   await this.repository.get(id,ownerId);
+  await this.options.series?.requireStarted(ownerId,id);
   if(requestId)await authorizeControl(this.database,ownerId,id,requestId,action,this.clock());
   else await this.repository.control(id,ownerId,action,handoffOnly);
   this.wake();return this.snapshot(ownerId,id);
  }
- async managed(ownerId:string,id:string){const saved=await this.database.prepare('SELECT document FROM stories WHERE id=? AND user_id=?').bind(id,ownerId).first<{document:string}>();if(saved&&(JSON.parse(saved.document) as Document).intake)return true;return !!await this.database.prepare('SELECT id FROM production_jobs WHERE owner_id=? AND session_id=? LIMIT 1').bind(ownerId,id).first();}
+ async managed(ownerId:string,id:string){const saved=await this.database.prepare('SELECT document FROM stories WHERE id=? AND user_id=?').bind(id,ownerId).first<{document:string}>();if(saved){const doc=JSON.parse(saved.document) as Document;if(doc.intake||doc.original?.imported)return true;}return !!await this.database.prepare('SELECT id FROM production_jobs WHERE owner_id=? AND session_id=? LIMIT 1').bind(ownerId,id).first();}
  async request(ownerId:string,id:string,viewerId:string,page:number,retry=false){return this.demand(ownerId,id,viewerId,page,page+productionReadAhead,retry);}
  async advance(ownerId:string,id:string,throughPage:number,retry:boolean){return this.demand(ownerId,id,'legacy-advance',0,throughPage,retry);}
  private async demand(ownerId:string,id:string,viewerId:string,page:number,throughPage:number,retry:boolean){
@@ -205,6 +212,7 @@ export class ReaderProductionCoordinator implements ReaderProduction{
  // finished checkpoints are removed rather than rerun: a script job would repair what was accepted.
  async overrideReview(ownerId:string,id:string,command?:RecoveryRequest){
   if(this.stopping)throw new ReaderError(503,'The production service is stopping. Reopen the story in a moment.');
+  this.importedCoverage(JSON.parse((await this.repository.get(id,ownerId)).document) as Document);
   if(command){await this.repository.get(id,ownerId);await authorizeOverride(this.database,ownerId,id,command,this.clock());this.wake();return this.snapshot(ownerId,id);}
   const row=await this.repository.get(id,ownerId),doc=JSON.parse(row.document) as Document,review=doc.visualReview;
   if(await this.repository.superseded(id,ownerId))throw new ReaderError(409,latestVersionMessage);
@@ -294,6 +302,7 @@ export class ReaderProductionCoordinator implements ReaderProduction{
    return {...await this.snapshot(ownerId,id),recoveryReceipt:{requestId:command.requestId,status:replay.status,error:replay.error}};
   }
   if(this.stopping)throw new ReaderError(503,'The production service is stopping. Retry in a moment.');
+  await this.options.series?.requireRecoveryAllowed(ownerId,id);
   if(await this.repository.superseded(id,ownerId))throw new ReaderError(409,latestVersionMessage);
   if(row.generation_control!=='active')throw new ReaderError(409,'Resume production before retrying or redrawing.');
   const doc=JSON.parse(row.document) as Document;
@@ -352,7 +361,7 @@ export class ReaderProductionCoordinator implements ReaderProduction{
   this.wake();return {...await this.snapshot(ownerId,id),recoveryReceipt:{requestId:receipt.request_id,status:receipt.status,error:receipt.error}};
  }
  async snapshot(ownerId:string,id:string):Promise<SessionView>{
-  const row=await this.repository.get(id,ownerId),saved=view(row);
+  const row=await this.repository.get(id,ownerId),saved=this.options.series?await this.options.series.decorate(view(row),row):view(row),seriesBlocked=this.options.series&&!await this.options.series.eligible(row);
   if(row.state!=='completed'&&await this.repository.superseded(id,ownerId))return {...saved,superseded:true,generationControl:'paused',productionState:'paused'};
   const allJobs=await this.queue.jobs(row.id,row.user_id),jobs=await this.currentJobs(row,allJobs),faults=await this.faults(row,jobs),failed=jobs.find(job=>job.state==='failed'&&lostImageError(job.error))||jobs.find(job=>job.state==='failed');
   const active=jobs.filter(job=>job.state==='running'&&job.lease_until>this.clock()).sort((a,b)=>a.updated_at-b.updated_at);
@@ -369,7 +378,7 @@ export class ReaderProductionCoordinator implements ReaderProduction{
   if(faults.length){
    const views=faults.map(fault=>this.faultView(row,fault,allJobs)),pending=views.find(f=>f.retryAllowed&&f.stage==='redraw')||views.find(f=>f.retryAllowed)||views[0];
    const recovering=working||faults.some(fault=>fault.state==='recovering'&&jobs.some(job=>job.state==='queued'&&(job.recovery_id===fault.command_id||job.id===fault.job_id)));
-   const manual=row.generation_control!=='active';
+   const manual=row.generation_control!=='active'||seriesBlocked;
    return {...session,faults:views,state:recovering?'running':'failed',error:recovering?null:pending.message,retryAllowed:views.some(f=>f.retryAllowed),retryStage:pending.stage,
     ready:session.ready-faults.filter((f,i)=>f.page!==null&&!!session.story?.pages[f.page]?.image&&faults.findIndex(other=>other.page===f.page)===i).length,
     productionState:manual?'paused':recovering?'running':'paused',
@@ -380,7 +389,7 @@ export class ReaderProductionCoordinator implements ReaderProduction{
    return {...session,state:'failed',error:lost?lostImageMessage:failed.error,retryAllowed:!['replan','requirements'].includes(saved.generationProgress?.reviewStopReason||''),...(lost?{retryStage:'redraw' as const}:failed.kind==='image-publish'?{retryStage:'publication' as const}:{})};
   }
   const demands=await this.demands(id),eligible=jobs.some(job=>job.state==='queued'&&demands.some(d=>job.pool==='text'||(JSON.parse(job.payload) as {page:number}).page<=d.through_page));
-  const manual=row.generation_control!=='active';
+  const manual=row.generation_control!=='active'||seriesBlocked;
   // No story is chosen yet, so finding one is what this story is doing.
   if(!manual&&saved.intake?.phase==='discovering'&&saved.intake.search.state==='searching')return {...session,productionState:search?'running':'queued'};
   const productionState=manual?'paused':working?'running':eligible?'queued':'paused';
@@ -449,6 +458,7 @@ export class ReaderProductionCoordinator implements ReaderProduction{
   if(!local){
    if(await this.repository.superseded(row.id,row.user_id))return false;
    if(row.generation_control!=='active')return false;
+   if(this.options.series&&!await this.options.series.eligible(row))return false;
    if(this.stopping||!(await this.demands(row.id)).some(d=>job.pool==='text'||(JSON.parse(job.payload) as {page:number}).page<=d.through_page))return false;
    if(await this.database.prepare('SELECT story_id FROM library_deletions WHERE story_id=? AND user_id=?').bind(row.id,row.user_id).first())return false;
    const jobs=await this.currentJobs(row,(await this.database.prepare("SELECT * FROM production_jobs WHERE session_id=? AND owner_id=? AND (state='failed' OR kind='image-publish' AND state='running')").bind(row.id,row.user_id).all<ProductionJob>()).results);
@@ -601,6 +611,22 @@ export class ReaderProductionCoordinator implements ReaderProduction{
    await this.database.prepare("DELETE FROM production_jobs WHERE id=? AND state='failed'").bind(job.id).run();
   }
  }
+ private async checkDispatch(row:Pick<SessionRow,'id'|'user_id'>){
+  const permitted=await this.database.prepare(`SELECT s.id FROM stories s WHERE s.id=? AND s.user_id=? AND s.generation_control='active' AND NOT ${supersededSql('s')} AND ${seriesEligibleSql('s')} AND NOT EXISTS(SELECT 1 FROM library_deletions d WHERE d.story_id=s.id AND d.user_id=s.user_id)`).bind(row.id,row.user_id).first();
+  if(!permitted||this.stopping)throw new JobYield();
+ }
+ private importedCoverage(doc:Document){
+  try{assertImportedCoverageReady(doc);}catch{throw new ReaderError(409,'Review all source sections before drawing; source coverage cannot be overridden.');}
+ }
+ private dispatchGuard(generator:StoryGenerator,row:SessionRow):StoryGenerator{
+  if(!(JSON.parse(row.document) as Document).original?.imported)return generator;
+  const guarded={...generator};
+  for(const key of ['translateSource','prepareOriginal','recommend','recommendArt','outline','planBatch','reviewFrameCount','review','restructure','repair','reflectionCandidates','reflection','plan','original'] as const){
+   const method=generator[key];if(typeof method!=='function')continue;
+   Object.defineProperty(guarded,key,{value:async(...args:unknown[])=>{await this.checkDispatch(row);return Reflect.apply(method,generator,args);},enumerable:true});
+  }
+  return guarded;
+ }
  private async script(job:ProductionJob){
   let row=await this.raw(job.session_id,job.owner_id),doc=JSON.parse(row.document) as Document;
   if(!this.currentJob(row,job))return {obsolete:true};
@@ -610,7 +636,7 @@ export class ReaderProductionCoordinator implements ReaderProduction{
   if(stepKey&&stepKey!==nextStep(doc,selection,0)?.key)return {storyboardFrames:doc.storyboard?.pages.length||0};
   let failure:unknown,acquired:string|undefined,result:SessionView;
   try{
-   result=await advanceStory(this.repository,this.provider.generator(),row.user_id,row.id,0,true,token=>{acquired=token;this.leases.set(row.id,{ownerId:row.user_id,token});},error=>{failure=error;});
+   result=await advanceStory(this.repository,this.dispatchGuard(this.provider.generator(),row),row.user_id,row.id,0,true,token=>{acquired=token;this.leases.set(row.id,{ownerId:row.user_id,token});},error=>{failure=error;});
   }catch(error){
    if(!(error instanceof ReaderError&&error.status===404))throw error;
    const saved=await this.find(row.id,row.user_id);
@@ -650,6 +676,7 @@ export class ReaderProductionCoordinator implements ReaderProduction{
   if(!this.currentJob(row,job))return {obsolete:true};
   const {page}=JSON.parse(job.payload) as {page:number};
   if(!reviewPassed(doc))throw new ReaderError(409,'The storyboard has not passed review. Drawing has not started.');
+  this.importedCoverage(doc);
   const command=job.recovery_id?await commandReceipt(this.database,row.user_id,job.recovery_id):null;
   const redraw=command?.action==='recover'&&!!JSON.parse(command.payload).redraw;
   if(doc.images[page]&&!redraw)return {value:doc.images[page],model:'saved',requestId:null,usage:null};
@@ -664,6 +691,8 @@ export class ReaderProductionCoordinator implements ReaderProduction{
   if(reference&&await this.fileLost(reference).catch(()=>{throw new ReaderError(503,'The reference image could not be verified. Retry later; drawing has not started.');}))throw new ReaderError(409,lostImageMessage);
   if(!this.currentJob(await this.raw(job.session_id,job.owner_id),job))return {obsolete:true};
   if(await this.repository.superseded(row.id,row.user_id))throw new JobYield();
+  await this.checkDispatch(row);
+  this.importedCoverage(doc);
   return this.provider.generator().image(doc.plan!,page,row.id,selectedReference,selection.artStyle,selection.productionPrompt,inputVersion([job.id,job.lease_token]));
  }
  private async publish(job:ProductionJob,outputs:Record<string,unknown>){
@@ -730,6 +759,7 @@ export class ReaderProductionCoordinator implements ReaderProduction{
    }
   }
   await this.settleHealthyCheckpoints();
+  if(!this.stopping)await this.options.series?.sync(this.options.targetSessionId);
   const demands=await this.demands(),seen=new Set<string>();
   for(const demand of demands)if(!seen.has(demand.session_id)){
    seen.add(demand.session_id);

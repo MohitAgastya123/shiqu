@@ -1,5 +1,6 @@
 // English product messages; source identities and historical evidence stay stable.
 // Persist owner-scoped defaults/checkpoints and serialize immediate retries without duplicating paid steps.
+// Series children may be created paused; their immutable uploaded-source identity binds creation replay.
 import {createHash} from 'node:crypto';
 import {emptyDocument,ReaderError,selectionSchema,awaitingFrameCount} from './reader-model.ts';
 import type {Selection,SessionRow,Document,Step,ProductionAction} from './reader-model.ts';
@@ -124,12 +125,13 @@ export class ReaderRepository{
   if(!result.meta.changes)throw new ReaderError(409,'The story is updating. Save the source again shortly.');
   return this.get(row.id,row.user_id);
  }
- async create(id:string,uid:string,selection:Selection,document:Document=emptyDocument()){
- const normalized=selectionSchema.parse(selection),creationHash=createHash('sha256').update(JSON.stringify([normalized,!!document.intake,document.reselection||null,...(document.copiedFrom?[document.copiedFrom]:[])])).digest('hex');
+ async create(id:string,uid:string,selection:Selection,document:Document=emptyDocument(),paused=false){
+ const imported=document.original?.imported,sourceIdentity=imported?{sourceId:imported.sourceId,fileSha256:imported.fileSha256,textSha256:imported.textSha256,start:imported.start,end:imported.end,seriesId:imported.seriesId,partRootId:imported.partRootId,partNumber:imported.partNumber,partCount:imported.partCount,text:document.original!.text}:null;
+ const normalized=selectionSchema.parse(selection),creationHash=createHash('sha256').update(JSON.stringify([normalized,!!document.intake,document.reselection||null,...(document.copiedFrom?[document.copiedFrom]:[]),...(sourceIdentity?[sourceIdentity]:[])])).digest('hex');
  const command=await this.db.prepare('SELECT request_id FROM reader_commands WHERE owner_id=? AND request_id=?').bind(uid,id).first();if(command)throw new ReaderError(409,'This creation ID was used for another operation.');
  const now=new Date().toISOString(),saved=JSON.stringify({...document,creationHash});
  // Read defaults inside the insert: retries cannot change a story's original attribution snapshot.
- await this.db.prepare(`INSERT INTO stories(id,user_id,selection,document,generation_mode,generation_control,state,step_attempts,lock_until,page,saved,created_at,updated_at) VALUES(?,?,?,COALESCE((SELECT json_set(?,'$.publication',json(publication)) FROM reader_publication_defaults WHERE owner_id=?),?),?,?,'idle',0,0,0,0,?,?) ON CONFLICT(id) DO NOTHING`).bind(id,uid,JSON.stringify(selection),saved,uid,saved,document.reselection?'reader':'background',document.copiedFrom?'paused':'active',now,now).run();
+ await this.db.prepare(`INSERT INTO stories(id,user_id,selection,document,generation_mode,generation_control,state,step_attempts,lock_until,page,saved,created_at,updated_at) VALUES(?,?,?,COALESCE((SELECT json_set(?,'$.publication',json(publication)) FROM reader_publication_defaults WHERE owner_id=?),?),?,?,'idle',0,0,0,0,?,?) ON CONFLICT(id) DO NOTHING`).bind(id,uid,JSON.stringify(selection),saved,uid,saved,document.reselection?'reader':'background',document.copiedFrom||paused?'paused':'active',now,now).run();
  const row=await this.get(id,uid),doc=JSON.parse(row.document) as Document;
  if(doc.creationHash?doc.creationHash!==creationHash:doc.revision||doc.intake?.creationHash!==document.intake?.creationHash||JSON.stringify(selectionSchema.parse(JSON.parse(row.selection)))!==JSON.stringify(normalized))throw new ReaderError(409,'This creation ID has already been used for different content. Start a new request.');
  return row;}

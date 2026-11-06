@@ -1,5 +1,6 @@
 // Verify English preparation and durable shared-runtime locking with isolated source evidence.
 // Exercise real persistence and HTTP contracts without provider billing or a Cloudflare runtime.
+// Legacy D1 history cannot skip new local tables; imported source bytes and records remain unchanged.
 import {copyBookLibrary} from './fixtures/book-library.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -113,15 +114,15 @@ test('offline importer preserves records, identities, media keys and source byte
  const result=await importLegacy(fixture.source,fixture.target,fixture.root);assert.equal(result.mediaObjects,1);
  assert.deepEqual(await readFile(fixture.databaseFile),before);assert.deepEqual(await readFile(fixture.metadataFile),metadataBefore);
  const app=createApplication({root:fixture.root,dataDirectory:fixture.target});
- try{assert.equal((await app.services.database.prepare('SELECT id FROM stories').first()).id,'current');assert.equal((await app.services.database.prepare("SELECT name FROM sqlite_schema WHERE name='progress'").first()),null);assert.deepEqual((await app.services.media.get('reader/story/0.png')).body,fixture.bytes);assert.equal((await (await request(app,'/api/reader/sessions')).json()).length,1);}
+ try{assert.equal((await app.services.database.prepare('SELECT id FROM stories').first()).id,'current');assert.equal((await app.services.database.prepare("SELECT name FROM sqlite_schema WHERE name='progress'").first()),null);assert.deepEqual((await app.services.media.get('reader/story/0.png')).body,fixture.bytes);assert.ok(await app.services.database.prepare("SELECT name FROM sqlite_schema WHERE type='table' AND name='story_import_sources'").first(),'Current local support tables are applied even when a legacy journal claims their names.');assert.equal((await (await request(app,'/api/reader/sessions')).json()).length,1);}
  finally{app.close();}
  await assert.rejects(importLegacy(fixture.source,fixture.target,fixture.root),/empty/);
 });
 test('offline importer upgrades a pre-summary legacy database without requiring the local-only migration',async t=>{
  const f=await legacyFixture(t),db=new DatabaseSync(f.databaseFile);
- db.exec("ALTER TABLE stories RENAME COLUMN summary TO hook; DROP TABLE book_image_references; DROP TRIGGER IF EXISTS book_image_reference_on_delete; DELETE FROM d1_migrations WHERE name IN('0009_story_summary.sql','0010_book_image_references.sql')");db.close();const before=await readFile(f.databaseFile);
+ db.exec("ALTER TABLE stories RENAME COLUMN summary TO hook; DROP TABLE book_image_references; DROP TRIGGER IF EXISTS book_image_reference_on_delete; DELETE FROM d1_migrations WHERE name IN('0009_story_summary.sql','0010_book_image_references.sql') OR name>='0018_consolidate_story_storage.sql'");db.close();const before=await readFile(f.databaseFile);
  await importLegacy(f.source,f.target,f.root);assert.deepEqual(await readFile(f.databaseFile),before);
- const local=openDatabase(f.target,f.root);assert.ok(local.sqlite.prepare('PRAGMA table_info(stories)').all().some(column=>column.name==='document'));assert.equal(local.sqlite.prepare('SELECT id FROM stories').get().id,'current');assert.equal(local.sqlite.prepare('SELECT count(*) n FROM book_image_references').get().n,0);local.close();
+ const local=openDatabase(f.target,f.root);assert.ok(local.sqlite.prepare('PRAGMA table_info(stories)').all().some(column=>column.name==='document'));assert.equal(local.sqlite.prepare('SELECT id FROM stories').get().id,'current');assert.equal(local.sqlite.prepare('SELECT count(*) n FROM book_image_references').get().n,0);assert.ok(local.sqlite.prepare("SELECT name FROM sqlite_schema WHERE type='table' AND name='story_import_sources'").get());local.close();
 });
 test('import failure keeps destination absent and rejects live WAL, missing blobs and unsupported multipart objects',async t=>{
  for(const mode of ['wal','blob','multipart']){

@@ -1,4 +1,5 @@
 // Convert an offline legacy local store without opening or modifying its source databases.
+// Legacy prerequisites stop at consolidation; current local support tables are applied after import.
 import {bookReferenceMigration} from './book-image-reference.ts';
 import {DatabaseSync} from 'node:sqlite';
 import {readFile,writeFile,mkdir,readdir,stat,lstat,rm,rename} from 'node:fs/promises';
@@ -7,6 +8,7 @@ import {randomUUID} from 'node:crypto';
 import {pathToFileURL} from 'node:url';
 import {FileMedia,mediaTypes,mediaKey} from './media.ts';
 import {openDatabase} from './database.ts';
+import {consolidationMigration} from './library-upgrade.ts';
 import {storySummaryMigration} from './story-summary-migration.ts';
 
 async function exists(filename:string){try{return await lstat(filename);}catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT')return null;throw error;}}
@@ -51,7 +53,7 @@ export async function importLegacy(sourceDirectory:string,targetDirectory:string
    }
    const names=database.prepare('SELECT name FROM d1_migrations').all().map(row=>String(row.name));
    const migrations=(await readdir(path.join(root,'drizzle'))).filter(f=>f.endsWith('.sql'));
-   if(migrations.some(name=>![storySummaryMigration,bookReferenceMigration,'0018_consolidate_story_storage.sql'].includes(name)&&!names.includes(name)))throw Error('Legacy database migrations are incomplete; update the old edition before importing');
+   if(migrations.some(name=>name<consolidationMigration&&![storySummaryMigration,bookReferenceMigration].includes(name)&&!names.includes(name)))throw Error('Legacy database migrations are incomplete; update the old edition before importing');
   }finally{database.close();}
   let objects=0;
   if(r2db.length){

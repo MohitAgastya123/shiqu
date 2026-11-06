@@ -1,4 +1,5 @@
 // Route reading, recovery and generation through the local library; source views expose saved English translations only.
+// Private local uploads propose complete parts without inference; confirmed series commission ordinary jobs.
 import {productionStageDurations} from './production-timing.ts';
 import {publicationSchema} from './story-publication.ts';
 import {draftInstructions} from './reader-generation-contract.ts';
@@ -30,6 +31,7 @@ import {createIntake,changeIntake} from '../server/reader-intake.ts';
 import {forkRevision,revisionSnapshot} from '../server/reader-revisions.ts';
 import {openReselection,commitReselection,cancelReselection} from '../server/reader-reselection.ts';
 import {replacementChoiceSchema} from './reader-reselection.ts';
+import {storyImportLimits,storyImportPlanInputSchema,storySeriesCreateSchema,storySeriesControlSchema} from './story-import-contract.ts';
 const json=(data:unknown,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'private, no-store'}});
 const uuid=z.string().uuid();
 export function shelfView(session:SessionView):SessionView{
@@ -38,6 +40,14 @@ export function shelfView(session:SessionView):SessionView{
  return {...session,story};
 }
 async function body(req:Request,maxLength=4096){const s=await req.text();if(s.length>maxLength)throw new ReaderError(413,'The request is too long.');try{return JSON.parse(s);}catch{throw new ReaderError(400,'Invalid request format.');}}
+async function importForm(req:Request){
+ const maximum=storyImportLimits.fileBytes+1024*1024,reader=req.body?.getReader();if(!reader)throw new ReaderError(400,'Choose a Word or PDF file.');
+ const chunks:Uint8Array[]=[];let length=0;
+ try{for(;;){const {value,done}=await reader.read();if(done)break;length+=value.length;if(length>maximum){await reader.cancel();throw new ReaderError(413,'Choose a Word or PDF file of at most 10 MB.');}chunks.push(value);}}
+ finally{reader.releaseLock();}
+ try{return await new Response(new Blob(chunks as BlobPart[]),{headers:{'Content-Type':req.headers.get('content-type')||''}}).formData();}
+ catch{throw new ReaderError(400,'The uploaded file could not be read. Choose a Word or PDF file again.');}
+}
 export function createReaderApi(services:Services){
 const provider=services.generation;
 async function requireProvider(){if(services.commandOnly)return;const status=await provider.status();if(!status.configured)throw new ReaderError(503,status.message||'Configure a generation provider first. Open My space → Generation service and models on the computer running Shiqu.');}
@@ -48,6 +58,23 @@ return async function readerApi(req:Request,path:string[]):Promise<Response>{
   const url=new URL(req.url);if(req.method!=='GET'){const origin=req.headers.get('origin');if(origin&&origin!==url.origin)throw new ReaderError(403,'Cross-site requests are not allowed.');}
   if(!services.database)throw new ReaderError(503,'The bookshelf is temporarily unavailable.');
   const repo=new ReaderRepository(services.database);
+  if(path[0]==='imports'){
+   if(!services.series)throw new ReaderError(503,'Local story imports are temporarily unavailable.');
+   if(path.length===1&&req.method==='POST'){
+    const form=await importForm(req),file=form.get('file'),requestId=uuid.parse(form.get('requestId'));
+    if(!file||typeof file==='string')throw new ReaderError(400,'Choose a Word or PDF file.');
+    return json(await services.series.upload(uid,file.name,new Uint8Array(await file.arrayBuffer()),requestId),201);
+   }
+   if(path.length===2&&req.method==='GET')return json(await services.series.importedSource(uid,uuid.parse(path[1]),z.coerce.number().int().min(0).max(storyImportLimits.textCharacters).parse(url.searchParams.get('offset')||0),z.coerce.number().int().min(100).max(20000).parse(url.searchParams.get('limit')||6000)));
+   if(path.length===3&&path[2]==='plan'&&req.method==='POST'){const input=storyImportPlanInputSchema.parse(await body(req,32768));return json(await services.series.plan(uid,uuid.parse(path[1]),input.title,input.settings));}
+  }
+  if(path[0]==='series'){
+   if(!services.series)throw new ReaderError(503,'Comic series are temporarily unavailable.');
+   if(path.length===1&&req.method==='GET')return json(await services.series.list(uid));
+   if(path.length===1&&req.method==='POST'){await requireProvider();const input=storySeriesCreateSchema.parse(await body(req,32768)),created=await services.series.create(uid,input);services.production?.wake();return json(created,201);}
+   if(path.length===2&&req.method==='GET')return json(await services.series.get(uid,uuid.parse(path[1])));
+   if(path.length===3&&path[2]==='control'&&req.method==='POST'){const input=storySeriesControlSchema.parse(await body(req));if(input.action==='resume')await requireProvider();const saved=await services.series.control(uid,uuid.parse(path[1]),input);services.production?.wake();return json(saved);}
+  }
   if(path.join('/')==='publication-defaults'){
    if(req.method==='GET')return json({publication:await repo.publicationDefaults(uid)});
    if(req.method==='POST'){
@@ -106,7 +133,7 @@ return async function readerApi(req:Request,path:string[]):Promise<Response>{
     const bySession=new Map<string,typeof timings>();
     for(const timing of timings){const group=bySession.get(timing.session_id)||[];group.push(timing);bySession.set(timing.session_id,group);}
     return json(await Promise.all(rows.map(async row=>{
-     const session=services.production&&row.state!=='completed'?await services.production.snapshot(uid,row.id):view(row);
+     const session=services.production&&row.state!=='completed'?await services.production.snapshot(uid,row.id):services.series?await services.series.decorate(view(row),row):view(row);
      if(row.state==='completed')session.generationProgress={...session.generationProgress!,stageDurations:productionStageDurations(bySession.get(row.id)||[],session.selection)};
      return shelfView(session);
     })));
@@ -136,7 +163,7 @@ return async function readerApi(req:Request,path:string[]):Promise<Response>{
     if(!parsed.success)throw new ReaderError(400,parsed.error.issues[0].message);
     return json(view(await repo.rename(id,uid,parsed.data.title)));
    }
-   if(path.length===2&&req.method==='GET')return json(services.production?await services.production.snapshot(uid,id):view(await repo.get(id,uid)));
+   if(path.length===2&&req.method==='GET'){const row=await repo.get(id,uid);return json(services.production?await services.production.snapshot(uid,id):services.series?await services.series.decorate(view(row),row):view(row));}
    if(path[2]==='current'&&path.length===3&&req.method==='GET'){
     const row=await repo.current(id,uid);return json(services.production?await services.production.snapshot(uid,row.id):view(row));
    }
@@ -167,6 +194,7 @@ return async function readerApi(req:Request,path:string[]):Promise<Response>{
    }
    if(path[2]==='setup'&&path.length===3&&req.method==='POST'){await requireProvider();const action=intakeActionSchema.parse(await body(req,32768));await changeIntake(repo,id,uid,action,services.localBooks);return json(services.production?await services.production.snapshot(uid,id):view(await repo.get(id,uid)));}
    if(path[2]==='revisions'&&path.length===3){
+    await services.series?.requireStarted(uid,id);
     if(req.method==='GET')return json(await revisionSnapshot(repo,id,uid));
     if(req.method==='POST'){
      await requireProvider();
@@ -202,6 +230,7 @@ return async function readerApi(req:Request,path:string[]):Promise<Response>{
     }
    }
    if(path[2]==='source'&&path.length===3&&['GET','POST'].includes(req.method)){
+    if(req.method==='POST'){await services.series?.requireStarted(uid,id);if(services.series&&!await services.series.eligible({id,user_id:uid}))throw new ReaderError(409,'Resume the comic series before preparing this part.');}
     const row=await repo.get(id,uid),selection=selectionSchema.parse(JSON.parse(row.selection)),doc=JSON.parse(row.document) as Document;
     if(doc.original){
      const source=englishOriginal(doc.original);

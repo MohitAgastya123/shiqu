@@ -1,6 +1,7 @@
 // English product messages; source evidence and machine identifiers remain stable.
 // Keep one owner-scoped reference per book. Only server-resolved local pictures become
 // immutable snapshots; selection changes affect future calls, never paid job identities.
+// Imported series use their reserved owner-scoped root identity; independent copies do not inherit it.
 import {createHash,randomUUID} from 'node:crypto';
 import type {Database} from '../lib/reader-repository.ts';
 import type {MediaStore} from '../lib/services.ts';
@@ -10,6 +11,7 @@ import {readerBooks} from '../lib/reader-books.ts';
 import {readerImageAsset,referenceImageKey} from '../lib/reader-image-assets.ts';
 import {mediaType,imageTypes} from '../lib/reader-generation-contract.ts';
 import {imageDimensions} from '../lib/reader-image-dimensions.ts';
+import {storySeriesMembership} from './story-series-membership.ts';
 
 export const bookReferenceMigration='0010_book_image_references.sql';
 export type BookReference={storyId:string;page:number;token:string};
@@ -26,7 +28,8 @@ export class BookImageReferences{
   const row=await this.database.prepare(`SELECT selection,document FROM stories WHERE id=? AND user_id=? AND ${visible}`).bind(id,this.owner,id,this.owner).first<{selection:string;document:string}>();
   if(row){
    const selection=JSON.parse(row.selection),doc=JSON.parse(row.document),image=doc.plan?.pages[page]?doc.images[page]||'':'';
-   return {bookKey:bookKey(selection.bookId,selection.customBook),image,validPage:!!doc.plan?.pages[page],guard:`EXISTS(SELECT 1 FROM stories WHERE id=? AND user_id=? AND selection=? AND json_extract(document,?)=? AND ${visible})`,values:[id,this.owner,row.selection,`$.images[${page}]`,image,id,this.owner]};
+   const member=doc.original?.imported?await storySeriesMembership(this.database,{id,user_id:this.owner}):null;
+   return {bookKey:member?'import:'+member.id:bookKey(selection.bookId,selection.customBook),image,validPage:!!doc.plan?.pages[page],guard:`EXISTS(SELECT 1 FROM stories WHERE id=? AND user_id=? AND selection=? AND json_extract(document,?)=? AND ${visible})`,values:[id,this.owner,row.selection,`$.images[${page}]`,image,id,this.owner]};
   }
   throw new ReaderError(404,'This story is not on your bookshelf.');
  }

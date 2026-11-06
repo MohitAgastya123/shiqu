@@ -1,6 +1,7 @@
 // Apply immutable migrations once each; callers stage files and own recovery before invoking hooks.
 // `through` limits historical fixtures and the consolidation stage; `after` keeps consolidated libraries
 // from re-running pre-consolidation hooks whose receipts are absent.
+// Post-consolidation migrations belong to the local journal; old D1 names cannot certify new local tables.
 import {readFileSync,readdirSync} from 'node:fs';
 import path from 'node:path';
 import type {DatabaseSync} from 'node:sqlite';
@@ -14,7 +15,7 @@ export function migrate(sqlite:DatabaseSync,root:string,directory?:string,throug
   try{
    if(!sqlite.prepare('SELECT 1 FROM app_migrations WHERE name=?').get(name)){
     const legacy=sqlite.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='d1_migrations'").get();
-    const applied=legacy&&sqlite.prepare('SELECT 1 FROM d1_migrations WHERE name=?').get(name);
+    const applied=!after&&legacy&&sqlite.prepare('SELECT 1 FROM d1_migrations WHERE name=?').get(name);
     if(!applied){const sql=readFileSync(path.join(root,'drizzle',name),'utf8');if(name===storySummaryMigration)migrateStorySummary(sqlite,sql,directory);else if(name===readerInputMigration)migrateReaderInputs(sqlite);else if(name===legacyInputFaultMigration)retainLegacyInputFaults(sqlite);else sqlite.exec(sql);}
     sqlite.prepare('INSERT INTO app_migrations VALUES(?,?)').run(name,new Date().toISOString());
    }
