@@ -1143,7 +1143,9 @@
         "server/story-theme-matching.ts",
         "lib/reader-theme-match.ts",
         "server/local-generation.ts",
-        "server/story-discovery-cache.ts"
+        "server/story-discovery-cache.ts",
+        "lib/reader-suggestions.ts",
+        "lib/reader-suggestion-request.ts"
       ]
     },
     {

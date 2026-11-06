@@ -18,3 +18,5 @@
 - Placement follows planned speaker locations and reserved image space; it does not detect faces in final pixels. Crowded dialogue gets bounded feedback/retry and an explicit production failure if it still cannot fit. Real model artwork varies; verification used isolated controlled providers without paid requests or personal library data.
 - No migration or desktop package is needed. Edit balloon stories with this version or later; older apps can discard unfamiliar fields. The external awesome-shiqu checkout was unavailable, so its separate parser was not run; local archive/signature/byte-preservation regressions passed.
 - Committed locally on `feature/comic-bubbles` in `shiqu-fork`. Online book import remains separate. Main is unchanged.
+
+Live tutorial follow-up: valid English discovery explanations exposed a separate 480-versus-120-character picker mismatch after the initial bubble release checks. The [discovery validation fix](discovery-match-reason.md) preserves existing results and adds real cold/warm browser-parser/intake regression coverage; its final full suite passed 1492 tests.

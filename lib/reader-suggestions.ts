@@ -1,14 +1,16 @@
 // English product text and generation contracts; canonical source evidence remains unchanged.
-// Validate suggestion batches and keep verified local receipts through browser history.
+// Validate suggestion batches and preserve complete matching explanations through intake and browser history.
+// Reuse the matching reason contract so valid English cached results cannot fail at the picker boundary.
 import {z} from 'zod';
 import {selectionSchema} from './reader-model.ts';
 import {localSourceSchema,localSourceKey} from './reader-local-contract.ts';
 import type {LocalSourceReference} from './reader-local-contract.ts';
 import {artRecommendationSchema} from './reader-art-recommendation.ts';
 import {storyBriefSchema} from './reader-story-brief.ts';
+import {themeDecisionSchema} from './reader-theme-match.ts';
 
 export const suggestionRequestSchema=selectionSchema.extend({excludeTitles:z.array(z.string().min(1).max(100)).max(200).default([]),excludeSources:z.array(localSourceSchema).max(200).default([])});
-export const suggestionBatchSchema=z.object({stories:z.array(z.object({title:z.string().min(1).max(100),description:z.string().min(1).max(180),source:localSourceSchema.optional(),sourceLabel:z.string().max(150).optional(),artRecommendation:artRecommendationSchema.optional(),matchReason:z.string().trim().min(1).max(120).optional(),storyBrief:storyBriefSchema.optional()})).max(5),note:z.string().max(300)});
+export const suggestionBatchSchema=z.object({stories:z.array(z.object({title:z.string().min(1).max(100),description:z.string().min(1).max(180),source:localSourceSchema.optional(),sourceLabel:z.string().max(150).optional(),artRecommendation:artRecommendationSchema.optional(),matchReason:themeDecisionSchema.shape.reason.optional(),storyBrief:storyBriefSchema.optional()})).max(5),note:z.string().max(300)});
 export type SuggestionBatch=z.infer<typeof suggestionBatchSchema>;
 export const suggestionProgressSchema=z.object({completed:z.number().int().min(0),total:z.number().int().min(1),completedChars:z.number().int().min(0),totalChars:z.number().int().min(0),stage:z.enum(['reading','checking','selecting']),mode:z.enum(['whole','chapters']).optional(),currentChapters:z.array(z.string().min(1).max(500)).max(1024).optional()}).refine(p=>p.completed<=p.total&&p.completedChars<=p.totalChars);
 export type SuggestionProgress=z.infer<typeof suggestionProgressSchema>;
