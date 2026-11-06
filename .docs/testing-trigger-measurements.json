@@ -40,7 +40,7 @@
     "reportedExistingFastSeconds": 120,
     "estimatedFastSeconds": 84,
     "estimatedFixedPlusFastSeconds": 142,
-    "warning": "Illustrative ratio only. Does not include affected E2E/native additions, browser download or hosted scheduling."
+    "warning": "Illustrative ratio only; add extra aggregator-job startup/scheduling. Does not include affected E2E/native additions, browser download or hosted scheduling."
   },
   "verification": {
     "fullSource": {
