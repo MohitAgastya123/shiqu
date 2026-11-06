@@ -1,13 +1,15 @@
+// Replacement frames retain attributed balloons, while image mapping depends only on scene prompts.
 // English product text and generation contracts; canonical source evidence remains unchanged.
 // Apply bounded frame edits and optional global character-continuity updates atomically.
 // Character-only updates preserve frame/progress identities and still require a real change.
 import {z} from 'zod';
+import {generatedPageJson} from './reader-generation-contract.ts';
 import {planSchema} from './reader-model.ts';
 import type {Plan} from './reader-model.ts';
 import {readerMaxFrames,readerMinFrames,readerStoryboardBatchSize} from './reader-limits.ts';
 export const structuralEditsSchema=z.object({edits:z.array(z.object({from:z.number().int().min(1),to:z.number().int().min(0),pages:z.array(planSchema.shape.pages.element).max(readerStoryboardBatchSize)}).strict()).max(readerStoryboardBatchSize),characters:planSchema.shape.characters.nullable().optional()}).strict().superRefine((value,ctx)=>{if(!value.edits.length&&!value.characters)ctx.addIssue({code:z.ZodIssueCode.custom,message:'Frame edits or a character-continuity update are required'});});
 export type StructuralEdits=z.infer<typeof structuralEditsSchema>;
-export function structuralEditsJson(count:number){return {type:'object',properties:{characters:{anyOf:[{type:'string',minLength:20,maxLength:6000},{type:'null'}]},edits:{type:'array',minItems:0,maxItems:readerStoryboardBatchSize,items:{type:'object',properties:{from:{type:'integer',minimum:1,maximum:count+1},to:{type:'integer',minimum:0,maximum:count},pages:{type:'array',maxItems:readerStoryboardBatchSize,items:{type:'object',properties:{caption:{type:'string',minLength:8,maxLength:500},prompt:{type:'string',minLength:20,maxLength:4000}},required:['caption','prompt'],additionalProperties:false}}},required:['from','to','pages'],additionalProperties:false}}},required:['characters','edits'],additionalProperties:false};}
+export function structuralEditsJson(count:number){return {type:'object',properties:{characters:{anyOf:[{type:'string',minLength:20,maxLength:6000},{type:'null'}]},edits:{type:'array',minItems:0,maxItems:readerStoryboardBatchSize,items:{type:'object',properties:{from:{type:'integer',minimum:1,maximum:count+1},to:{type:'integer',minimum:0,maximum:count},pages:{type:'array',maxItems:readerStoryboardBatchSize,items:generatedPageJson}},required:['from','to','pages'],additionalProperties:false}}},required:['characters','edits'],additionalProperties:false};}
 export function applyStructuralEdits(plan:Plan,value:StructuralEdits){
  const {edits,characters}=structuralEditsSchema.parse(value),pages:Plan['pages']=[],sourcePages:(number|null)[]=[];
  let cursor=1,previousFrom=0,written=0;

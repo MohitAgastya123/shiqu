@@ -3,6 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createReaderProvider} from '../server/generation.ts';
 import {structuralEditsJson,applyStructuralEdits} from '../lib/reader-structure.ts';
+import {geminiOutputSchema} from '../lib/reader-gemini-schema.ts';
 import {readerStoryboardBatchSize} from '../lib/reader-limits.ts';
 import {makePlan,selection as legacy} from './fixtures/production.mjs';
 
@@ -23,7 +24,7 @@ test('Gemini keeps structural repair counts in guidance and preserves the shared
   sent=schema;assert.equal(schema.properties.edits.maxItems,undefined);assert.match(schema.properties.edits.description,new RegExp(`At most ${readerStoryboardBatchSize} items`));
   const pages=schema.properties.edits.items.properties.pages;
   assert.equal(pages.maxItems,undefined);assert.match(pages.description,/At most 20 items/);
-  assert.deepEqual(pages.items,structuralEditsJson(12).properties.edits.items.properties.pages.items);
+  assert.deepEqual(pages.items,geminiOutputSchema(structuralEditsJson(12).properties.edits.items.properties.pages.items));
  }));
  assert.equal(applyStructuralEdits(plan,result.value).plan.pages.length,13);
  assert.deepEqual(result.promptRecord.schema,sent);

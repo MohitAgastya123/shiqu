@@ -1,6 +1,8 @@
 // English product text and generation contracts; canonical source evidence remains unchanged.
 // Project saved production checkpoints into read-only history. Missing historical evidence stays missing;
 // only a unique call from this version can establish ordering or restore an earlier frame.
+// Frame snapshots include balloons so content-only repairs remain visible in the production audit.
+import {pageBubblesSchema} from './reader-bubbles.ts';
 import type {Document,Plan,SessionRow} from './reader-model.ts';
 import type {ReviewCheckpoint,ReviewIssue,ReviewRecordMeta,ReviewRepairRecord,FrameCountReview,FrameRequirement,RepairedPage} from './reader-review.ts';
 import type {AcceptanceResult} from './reader-acceptance.ts';
@@ -23,7 +25,7 @@ type ObjectValue=Record<string,unknown>;
 const object=(value:unknown):ObjectValue|null=>value!==null&&typeof value==='object'&&!Array.isArray(value)?value as ObjectValue:null;
 const numbers=(value:unknown)=>Array.isArray(value)&&value.every(x=>Number.isInteger(x))?value as number[]:null;
 const samePages=(a:number[],b:number[])=>JSON.stringify([...new Set(a)].sort((x,y)=>x-y))===JSON.stringify([...new Set(b)].sort((x,y)=>x-y));
-const frame=(value:unknown):Frame|null=>{const item=object(value);return typeof item?.caption==='string'&&typeof item?.prompt==='string'?{caption:item.caption,prompt:item.prompt}:null;};
+const frame=(value:unknown):Frame|null=>{const item=object(value);if(typeof item?.caption!=='string'||typeof item?.prompt!=='string')return null;const bubbles=pageBubblesSchema.safeParse(item.bubbles);return {caption:item.caption,prompt:item.prompt,...(bubbles.success?{bubbles:bubbles.data}:{})};};
 function input(value:string|undefined){try{return object(JSON.parse(value||''));}catch{return null;}}
 function inputPlan(value:ObjectValue|null){return object(value?.plan)||object(value?.draft);}
 function inputFrame(value:ObjectValue|null,page:number){const pages=inputPlan(value)?.pages;return Array.isArray(pages)?frame(pages[page-1]):null;}
@@ -66,7 +68,7 @@ export function storyReviewHistory(row:SessionRow):StoryReviewHistory{
    const requested=numbers(call.input?.requestedPages);if(requested&&!samePages(requested,record.requested))return false;
    if(record.structure){
     const plan=inputPlan(call.input),pages=plan?.pages;
-    if(Array.isArray(pages)&&(pages.length!==record.structure.before||(record.structure.removed||[]).some(old=>{const current=frame(pages[old.page-1]);return !current||current.caption!==old.caption||current.prompt!==old.prompt;})))return false;
+    if(Array.isArray(pages)&&(pages.length!==record.structure.before||(record.structure.removed||[]).some(old=>{const current=frame(pages[old.page-1]);return !current||JSON.stringify(current)!==JSON.stringify(frame(old));})))return false;
     const issues=call.input?.issues;
     if(Array.isArray(issues)){
      const all=issues.map(object).filter(x=>!!x),structural=all.filter(x=>x!.requiresReplan===true),relevant=structural.length?structural:all;
@@ -76,7 +78,7 @@ export function storyReviewHistory(row:SessionRow):StoryReviewHistory{
    }
    return true;
   });
-  const changes=record.changes.map(after=>({page:after.page,before:frame(record.before?.find(x=>x.page===after.page))||inputFrame(call?.input??null,after.page),after:{caption:after.caption,prompt:after.prompt}}));
+  const changes=record.changes.map(after=>({page:after.page,before:frame(record.before?.find(x=>x.page===after.page))||inputFrame(call?.input??null,after.page),after:frame(after)!}));
   const repair:NonNullable<ReviewHistoryEntry['repair']>={requested:record.requested,pages:changes};
   if(record.reflection!==undefined){
    const previous=record.previousReflection??inputPlan(call?.input??null)?.reflection??object(call?.input?.revision)?.reflection;
@@ -100,5 +102,5 @@ function repairChanged(record:ReviewRepairRecord,repair:NonNullable<ReviewHistor
  if(!repair.structure)return false;
  if(repair.structure.before!==repair.structure.after||repair.characters&&repair.characters.before!==null&&repair.characters.before!==repair.characters.after)return true;
  if(repair.characters?.before===null||repair.structure.edits.some(edit=>edit.before===null))return null;
- return repair.structure.edits.some(edit=>JSON.stringify(edit.before?.map(({caption,prompt})=>({caption,prompt})))!==JSON.stringify(edit.after.map(({caption,prompt})=>({caption,prompt}))));
+ return repair.structure.edits.some(edit=>JSON.stringify(edit.before?.map(page=>frame(page)))!==JSON.stringify(edit.after.map(page=>frame(page))));
 }

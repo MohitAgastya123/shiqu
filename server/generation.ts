@@ -1,3 +1,4 @@
+// Comic placement feedback stays within the selected text provider and existing stage.
 // English product messages; source evidence and machine identifiers remain stable.
 // Select a complete provider explicitly; subscription mode never falls back to API billing.
 import {formatSystemPrompt} from '../lib/reader-prompt-format.ts';
@@ -147,9 +148,9 @@ function createSingleProvider(name:string,variables:Record<string,string|undefin
     const result=await run({instructions:frameRecommendationPrompt,prompt:JSON.stringify(frameRecommendationPayload(selection,original,prepareRequirements)),schema:frameRecommendationOutputJson(original,prepareRequirements),reasoningEffort:taskReasoningEfforts.frames});
     return {value:frameRecommendationOutputSchema(original,prepareRequirements).parse(JSON.parse(result.text)),model:result.model,requestId:result.requestId,usage:result.usage,promptRecord:result.promptRecord,reasoningEffort:result.reasoningEffort};
    },
-   async plan(selection,id,original){
+   async plan(selection,id,original,bubblePlacementRetry){
     assertStoryBriefReady(original);
-    const result=await run({instructions:draftInstructions(!!original?.localSource),prompt:JSON.stringify({book:book(selection),chosenStory:selection.storyTitle,...(selection.storyTitle?{}:{theme:selection.theme}),editorialContext:storyEditorialContext(selection.theme),exactPageCount:selection.length,narrativeDetail:selection.narrativeDetail,productionPrompt:normalizeProductionPrompt(selection.productionPrompt||'',selection.theme),artDirection:getArtStyle(selection.artStyle).prompt,variationSeed:id,...(original?{verifiedOriginal:verifiedOriginalPayload(original)}:{})}),schema:storyDraftJson(selection.length),timeoutMs:codexGenerationTimeoutMs,reasoningEffort:taskReasoningEfforts.plan});
+    const result=await run({instructions:draftInstructions(!!original?.localSource),prompt:JSON.stringify({book:book(selection),chosenStory:selection.storyTitle,...(selection.storyTitle?{}:{theme:selection.theme}),editorialContext:storyEditorialContext(selection.theme),exactPageCount:selection.length,narrativeDetail:selection.narrativeDetail,productionPrompt:normalizeProductionPrompt(selection.productionPrompt||'',selection.theme),artDirection:getArtStyle(selection.artStyle).prompt,variationSeed:id,...(bubblePlacementRetry?{bubblePlacementRetry}:{}),...(original?{verifiedOriginal:verifiedOriginalPayload(original)}:{})}),schema:storyDraftJson(selection.length),timeoutMs:codexGenerationTimeoutMs,reasoningEffort:taskReasoningEfforts.plan});
     const value=storyDraftSchema.parse(JSON.parse(result.text));if(selection.length!=='auto'&&value.pages.length!==selection.length)throw new CodexError('INVALID_PLAN');
     return {value,model:result.model,requestId:result.requestId,usage:result.usage,promptRecord:result.promptRecord,reasoningEffort:result.reasoningEffort};
    },

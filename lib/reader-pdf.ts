@@ -1,9 +1,10 @@
 // English product text and generation contracts; canonical source evidence remains unchanged.
-// Export saved stories with their original source labels, including historical ordinary records.
+// Export saved stories; balloon pages preserve full artwork and keep narration outside its bounds.
 import {themeLabel} from './reader-language.ts';
 import type {Story} from './content';
 import {browserExportRuntime,type ExportRuntime} from './story-export-runtime.ts';
 import {publicationCredit,publicationText} from './story-publication.ts';
+import {paintComicBubbles} from './comic-bubble-layout.ts';
 
 const W=900,H=1350,M=72;
 const serif='"Noto Serif SC", "Songti SC", "STSong", serif';
@@ -45,6 +46,21 @@ export async function createStoryPdf(story:Story,onProgress:(text:string)=>void=
   for(let i=0;i<story.pages.length;i++){
    onProgress(`Preparing frame ${i+1} / ${story.pages.length}`);
    const scene=story.pages[i],blob=await runtime.read(scene.image,i);
+   if(scene.bubbles?.length){
+    ctx.clearRect(0,0,W,H);ctx.fillStyle='#f7f6ef';ctx.fillRect(0,0,W,H);
+    font(28);const narration=scene.caption.trim()?lines(scene.caption):[],artTop=120,artHeight=H-artTop-120-narration.length*40;
+    if(artHeight<120)throw Error(`Frame ${i+1} has too much narration to export with its balloons.`);
+    await runtime.image(blob,image=>{
+     const scale=Math.min((W-2*M)/image.width,artHeight/image.height),width=image.width*scale,height=image.height*scale,x=(W-width)/2,y=artTop+(artHeight-height)/2;
+     ctx.drawImage(image.value,x,y,width,height);
+     if(scene.bubbleRendering!=='embedded'){ctx.save();try{ctx.translate(x,y);paintComicBubbles(ctx,scene.bubbles,width,height);}finally{ctx.restore();}}
+    });
+    font(27,sans);ctx.fillStyle='#2a493b';lines(story.title,W-2*M-120).forEach((line,j)=>ctx.fillText(line,M,45+j*36));
+    ctx.textAlign='right';ctx.fillText(`${String(i+1).padStart(2,'0')} / ${story.pages.length}`,W-M,45);ctx.textAlign='left';
+    font(28);narration.forEach((line,j)=>ctx.fillText(line,M,artTop+artHeight+20+j*40));
+    font(21,sans);ctx.fillStyle='#65745d';ctx.fillText(publicationCredit(story),M,H-65,W-2*M);
+    await addCanvas();continue;
+   }
    await runtime.image(blob,image=>{
     const scale=Math.max(W/image.width,H/image.height),width=image.width*scale,height=image.height*scale;
     ctx.clearRect(0,0,W,H);ctx.drawImage(image.value,(W-width)/2,(H-height)/2,width,height);

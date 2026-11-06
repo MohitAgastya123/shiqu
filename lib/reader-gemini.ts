@@ -1,5 +1,7 @@
+// Shared comic contracts and placement-feedback retries use the same Gemini text stage.
 // English product text and generation contracts; canonical source evidence remains unchanged.
 // Generate story plans and media through Gemini, preserving safe errors and validated results.
+import type {BubblePlacementFeedback} from './reader-bubbles.ts';
 import {formatSystemPrompt} from './reader-prompt-format.ts';
 import {promptRecord} from './reader-prompt-records.ts';
 import {discoveryCall} from './reader-discovery-call.ts';
@@ -177,10 +179,10 @@ export function makeGenerator(key:string,assets:Assets,config:Partial<Models>={}
    const {candidate,metadata}=await generate(models.text,input,'frames');
    return {value:frameRecommendationOutputSchema(original,prepareRequirements).parse(parseText(candidate)),...metadata,reasoningEffort:reasoning.frames,promptRecord:promptRecord(frameRecommendationPrompt,payload,input.generationConfig.responseFormat.text.schema)};
   },
-  async plan(selection:Selection,id:string,original?:OriginalSource){
+  async plan(selection:Selection,id:string,original?:OriginalSource,bubblePlacementRetry?:BubblePlacementFeedback){
    assertStoryBriefReady(original);
    const {book,url}=source(selection);
-   const instructions=draftInstructions(!!original?.localSource),payload={book,chosenStory:selection.storyTitle,...(selection.storyTitle?{}:{theme:selection.theme}),editorialContext:storyEditorialContext(selection.theme),exactPageCount:selection.length,narrativeDetail:selection.narrativeDetail,productionPrompt:normalizeProductionPrompt(selection.productionPrompt||'',selection.theme),artDirection:getArtStyle(selection.artStyle).prompt,variationSeed:id,...(original?{verifiedOriginal:verifiedOriginalPayload(original)}:{})},schema=storyDraftJson(selection.length);
+   const instructions=draftInstructions(!!original?.localSource),payload={book,chosenStory:selection.storyTitle,...(selection.storyTitle?{}:{theme:selection.theme}),editorialContext:storyEditorialContext(selection.theme),exactPageCount:selection.length,narrativeDetail:selection.narrativeDetail,productionPrompt:normalizeProductionPrompt(selection.productionPrompt||'',selection.theme),artDirection:getArtStyle(selection.artStyle).prompt,variationSeed:id,...(bubblePlacementRetry?{bubblePlacementRetry}:{}),...(original?{verifiedOriginal:verifiedOriginalPayload(original)}:{})},schema=storyDraftJson(selection.length);
    const input=textRequest(models.text,instructions,payload,schema,original?'':url,Math.max(8192,(selection.length==='auto'?readerMaxFrames:selection.length)*800),reasoning.plan);
    const {candidate,metadata}=await generate(models.text,input,'plan');
    if(url&&!original&&!wasRead(candidate,url))throw new GeminiError('SOURCE_UNAVAILABLE');

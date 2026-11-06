@@ -64,7 +64,7 @@ for(const malformed of ['missing','duplicate','extra','bad-caption'])test(`repai
   if(kind==='review'&&f.control.reviews.length===1){before=structuredClone(payload.plan);return {issues:[issue(2),issue(3)]};}
   if(kind==='repair'&&invalid){
    const p=page=>({page,...payload.plan.pages[page-1]});
-   return {pages:malformed==='missing'?[p(2)]:malformed==='duplicate'?[p(2),p(2)]:malformed==='extra'?[p(2),p(4)]:[{...p(2),caption:''},p(3)]};
+   return {pages:malformed==='missing'?[p(2)]:malformed==='duplicate'?[p(2),p(2)]:malformed==='extra'?[p(2),p(4)]:[{...p(2),caption:'x'.repeat(501)},p(3)]};
   }
  };
  await f.demand(id);await until(async()=>(await f.read(id)).state==='failed');assert.deepEqual((await document(f,id)).plan,before);assert.equal(f.control.calls.length,0);

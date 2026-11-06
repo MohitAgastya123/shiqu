@@ -1,5 +1,5 @@
 // English product text and generation contracts; canonical source evidence remains unchanged.
-// Render a complete story as a single contact sheet locally, preserving full frames and wrapped text.
+// Render full frames with shared comic balloons and wrapped narration in a local contact sheet.
 import {themeLabel} from './reader-language.ts';
 import type {Story} from './content';
 import {browserExportRuntime,type ExportRuntime} from './story-export-runtime.ts';
@@ -7,6 +7,7 @@ import type {GeneratedStory} from './reader-model';
 import {readerBooks} from './reader-books.ts';
 import {pdfFilename,wrapPdfText} from './reader-pdf.ts';
 import {publicationCredit} from './story-publication.ts';
+import {paintComicBubbles} from './comic-bubble-layout.ts';
 
 const M=36,GAP=24,CARD=420,ART=630,LINE=42;
 const family='"Noto Serif SC", "Songti SC", "STSong", "SimSun", serif';
@@ -58,7 +59,9 @@ export async function createStoryPng(story:Story,onProgress:(text:string)=>void=
    const blob=await runtime.read(story.pages[cell.index].image,cell.index);
    await runtime.image(blob,image=>{
     const scale=Math.min(CARD/image.width,ART/image.height),w=image.width*scale,h=image.height*scale;
-    ctx.drawImage(image.value,cell.x+(CARD-w)/2,cell.y+(ART-h)/2,w,h);
+    const x=cell.x+(CARD-w)/2,y=cell.y+(ART-h)/2,scene=story.pages[cell.index];
+    ctx.drawImage(image.value,x,y,w,h);
+    if(scene.bubbleRendering!=='embedded'){ctx.save();try{ctx.translate(x,y);paintComicBubbles(ctx,scene.bubbles,w,h);}finally{ctx.restore();}}
    });
    text([String(cell.index+1).padStart(2,'0')],cell.x,cell.y+ART+14,28,40,'#263a2e');
    text(cell.caption,cell.x,cell.y+ART+58,26,LINE,'#4b5148');

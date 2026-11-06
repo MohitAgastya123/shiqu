@@ -1,6 +1,8 @@
+// Every generated scene includes structured balloons; bounded placement retries retain batch scope.
 // English product text and generation contracts; canonical source evidence remains unchanged.
 // Save source-grounded scene batches, then finalize the title and ending from the complete story.
 import {z} from 'zod';
+import type {BubblePlacementFeedback} from './reader-bubbles.ts';
 const zTranslation=(value:unknown)=>z.object({title:z.string().min(1).max(320),text:z.string().min(1).max(24000)}).parse(value);
 import {normalizeProductionPrompt} from './reader-prompts.ts';
 import {storyboardOutlineSchema,storyboardBatchSchema,planSchema,storyPresentationSchema} from './reader-model.ts';
@@ -54,11 +56,11 @@ export function storyboardGenerator(book:(selection:Selection)=>string,call:Call
    if(selection.length!=='auto'&&value.beats.length!==selection.length)throw Error('PLAN_LENGTH');
    return {...result,value};
   },
-  async planBatch(selection:Selection,id:string,storyboard:Storyboard,original:OriginalSource){
+  async planBatch(selection:Selection,id:string,storyboard:Storyboard,original:OriginalSource,bubblePlacementRetry?:BubblePlacementFeedback){
    const first=storyboard.pages.length+1,last=Math.min(first+readerStoryboardBatchSize-1,storyboard.outline.beats.length),count=last-first+1;
    if(count<1)throw Error('PLAN_LENGTH');
    const full=planJson(count),schema={type:'object',properties:{pages:full.properties.pages},required:['pages'],additionalProperties:false};
-   const result=await call('plan',instructions(original,'batch',first===1),{...payload(selection,id,original),exactPageCount:storyboard.outline.beats.length,outline:withoutStorySummary(storyboard.outline),batch:{first,last},previousPages:storyboard.pages},schema,Math.max(8192,count*800),original);
+   const result=await call('plan',instructions(original,'batch',first===1),{...payload(selection,id,original),exactPageCount:storyboard.outline.beats.length,outline:withoutStorySummary(storyboard.outline),batch:{first,last},previousPages:storyboard.pages,...(bubblePlacementRetry?{bubblePlacementRetry}:{})},schema,Math.max(8192,count*800),original);
    return {...result,value:storyboardBatchSchema(count).parse(result.value).pages};
   },
   async reflection(selection:Selection,draft:StoryDraft,original:OriginalSource,revision?:{reflection:string;issues:ReviewIssue[]}){

@@ -1,9 +1,12 @@
 // Advance local story generation under one session lock, retaining every paid result it can save.
 // A failed save is rethrown for recovery; bounded English source translations are durable preparation steps.
 // Translation keeps model usage but omits raw-language prompt input from public prompt history.
+// Every newly generated or repaired balloon receives source verification and automatic readable placement.
 import {blockedIssues,nextStep,reviewPhase,planSchema,reflectionCandidatesSchema,storyPresentationSchema,storyDraftSchema,storyboardOutlineSchema,storyboardBatchSchema,selectionSchema,view,ReaderError,productionComplete,readerBooks} from './reader-model.ts';
 import type {Document,Plan,StoryDraft,ReflectionCandidates,StoryPresentation,Selection,SessionRow,Storyboard,StoryboardOutline} from './reader-model.ts';
-import {sourceTranslationReady} from './reader-source-types.ts';
+import type {BubblePlacementFeedback} from './reader-bubbles.ts';
+import {autoPlaceBubbles,validateBubbleEvidence,BubbleDensityError} from './reader-bubbles.ts';
+import {sourceTranslationReady,verifiedOriginalPayload} from './reader-source-types.ts';
 import {translateSourceCheckpoint} from './reader-source-english.ts';
 import {persistenceError} from './reader-repository.ts';
 import type {ReaderRepository} from './reader-repository.ts';
@@ -26,7 +29,7 @@ import type {EditorialCoverage} from './reader-editorial.ts';
 import type {ReviewIssue,ReviewReport,RepairedPage,FrameCountReport,FrameCountContext} from './reader-review.ts';
 import type {PromptRecord} from './reader-prompt-records.ts';
 export type Generated<T>={promptRecord?:PromptRecord;value:T;model:string;requestId:string|null;usage:unknown;reasoningEffort?:string};
-export interface StoryGenerator{validateOriginal?(selection:Selection,original:OriginalSource):void;translateSource?(text:string,title:string):Promise<Generated<{title:string;text:string}>>;recommendArt?(selection:Selection,original:OriginalSource):Promise<ArtRecommendation>;prepareOriginal?(selection:Selection,id:string):Promise<OriginalSource|null>;recommend?(selection:Selection,id:string,original:OriginalSource,prepareRequirements?:boolean):Promise<Generated<FrameRecommendation>>;outline?(selection:Selection,id:string,original?:OriginalSource):Promise<Generated<StoryboardOutline>>;planBatch?(selection:Selection,id:string,storyboard:Storyboard,original:OriginalSource):Promise<Generated<Plan['pages']>>;reviewFrameCount?(selection:Selection,plan:Plan,original:OriginalSource):Promise<Generated<FrameCountReport>>;review?(selection:Selection,plan:Plan,original:OriginalSource,outline?:StoryboardOutline,candidates?:ReflectionCandidates):Promise<Generated<ReviewReport>>;restructure?(selection:Selection,plan:Plan,original:OriginalSource,issues:ReviewIssue[],coverage?:EditorialCoverage[],frameCountContext?:FrameCountContext):Promise<Generated<StructuralEdits>>;repair?(selection:Selection,plan:Plan,original:OriginalSource,issues:ReviewIssue[],outline?:StoryboardOutline):Promise<Generated<RepairedPage[]>>;reflectionCandidates(selection:Selection,draft:StoryDraft,original:OriginalSource):Promise<Generated<StoryPresentation>>;reflection(selection:Selection,draft:StoryDraft,original:OriginalSource,revision?:{reflection:string;issues:ReviewIssue[]}):Promise<Generated<string>>;plan(selection:Selection,id:string,original?:OriginalSource):Promise<Generated<StoryDraft>>;original(selection:Selection,plan:SourceHint,id:string):Promise<SourceResult>;image(plan:Plan,page:number,id:string,reference:string,style?:ArtStyleId,productionPrompt?:string,artifactId?:string):Promise<Generated<string>>;audio(caption:string,id:string,page:number):Promise<Generated<string>>;safeError(error:unknown):string;}
+export interface StoryGenerator{validateOriginal?(selection:Selection,original:OriginalSource):void;translateSource?(text:string,title:string):Promise<Generated<{title:string;text:string}>>;recommendArt?(selection:Selection,original:OriginalSource):Promise<ArtRecommendation>;prepareOriginal?(selection:Selection,id:string):Promise<OriginalSource|null>;recommend?(selection:Selection,id:string,original:OriginalSource,prepareRequirements?:boolean):Promise<Generated<FrameRecommendation>>;outline?(selection:Selection,id:string,original?:OriginalSource):Promise<Generated<StoryboardOutline>>;planBatch?(selection:Selection,id:string,storyboard:Storyboard,original:OriginalSource,bubblePlacementRetry?:BubblePlacementFeedback):Promise<Generated<Plan['pages']>>;reviewFrameCount?(selection:Selection,plan:Plan,original:OriginalSource):Promise<Generated<FrameCountReport>>;review?(selection:Selection,plan:Plan,original:OriginalSource,outline?:StoryboardOutline,candidates?:ReflectionCandidates):Promise<Generated<ReviewReport>>;restructure?(selection:Selection,plan:Plan,original:OriginalSource,issues:ReviewIssue[],coverage?:EditorialCoverage[],frameCountContext?:FrameCountContext,bubblePlacementRetry?:BubblePlacementFeedback):Promise<Generated<StructuralEdits>>;repair?(selection:Selection,plan:Plan,original:OriginalSource,issues:ReviewIssue[],outline?:StoryboardOutline,bubblePlacementRetry?:BubblePlacementFeedback):Promise<Generated<RepairedPage[]>>;reflectionCandidates(selection:Selection,draft:StoryDraft,original:OriginalSource):Promise<Generated<StoryPresentation>>;reflection(selection:Selection,draft:StoryDraft,original:OriginalSource,revision?:{reflection:string;issues:ReviewIssue[]}):Promise<Generated<string>>;plan(selection:Selection,id:string,original?:OriginalSource,bubblePlacementRetry?:BubblePlacementFeedback):Promise<Generated<StoryDraft>>;original(selection:Selection,plan:SourceHint,id:string):Promise<SourceResult>;image(plan:Plan,page:number,id:string,reference:string,style?:ArtStyleId,productionPrompt?:string,artifactId?:string):Promise<Generated<string>>;audio(caption:string,id:string,page:number):Promise<Generated<string>>;safeError(error:unknown):string;}
 
 async function drawRequestedImages(repo:ReaderRepository,generator:StoryGenerator,row:SessionRow,token:string,doc:Document,selection:Selection,throughPage:number){
  const pages=doc.plan!.pages.map((_,page)=>page).filter(page=>page<=throughPage&&!doc.images[page]);
@@ -48,6 +51,11 @@ async function drawRequestedImages(repo:ReaderRepository,generator:StoryGenerato
 }
 
 export async function advanceStory(repo:ReaderRepository,generator:StoryGenerator,uid:string,id:string,throughPage:number,retry=false,onAcquired?:(token:string)=>void,onFailed?:(error:unknown)=>void){
+ function preparedPages<T extends Plan['pages'][number]>(pages:T[],original:OriginalSource|undefined):T[]{
+  const source=original?verifiedOriginalPayload(original):null;
+  validateBubbleEvidence(pages,source?[source.text,source.chapterContext?.text||''].join('\n'):'');
+  return pages.map(page=>page.bubbles?.length?{...page,bubbles:autoPlaceBubbles(page.bubbles)}:page);
+ }
  let row=await repo.get(id,uid);
  if(row.generation_control&&row.generation_control!=='active')return view(row);
  if(row.state==='running'){if(row.lock_until>Date.now())return view(row);row=await repo.stale(row);}
@@ -59,6 +67,20 @@ export async function advanceStory(repo:ReaderRepository,generator:StoryGenerato
  let progressMap:number[]|undefined;
  try{
   let generated:Generated<unknown>|undefined;
+  async function fittedGeneration<T>(produce:(feedback?:BubblePlacementFeedback)=>Promise<Generated<T>>,fit:(value:T)=>T,pages:(value:T)=>Plan['pages']):Promise<Generated<T>>{
+   let feedback:BubblePlacementFeedback|undefined;
+   for(let attempt=1;attempt<=2;attempt++){
+    const result=await produce(feedback);
+    try{return {...result,value:fit(result.value)};}
+    catch(error){
+     doc.usage.push({step:step!.key+':bubble-placement:'+attempt,model:result.model,requestId:result.requestId,usage:result.usage,...(result.promptRecord?{promptRecord:result.promptRecord}:{}),...(result.reasoningEffort?{reasoningEffort:result.reasoningEffort}:{})});
+     if(error instanceof BubbleDensityError&&attempt===1){feedback={message:error.message+' Preserve the story facts and source quotations; shorten balloon wording, reduce repeated dialogue or restage speaker targets within this same frame count.',previousPages:pages(result.value)};continue;}
+     throw new ReaderError(502,error instanceof Error?error.message:'Generated comic balloons are invalid. Retry this storyboard step.');
+    }
+   }
+   throw new ReaderError(502,'Comic balloon fitting could not be completed. Retry this storyboard step.');
+  }
+
   // Both explicit preparation and the legacy planning fallback save the same verified checkpoint.
   async function prepareRecommendation(ownedToken:string){
    if(!doc.original){
@@ -123,13 +145,13 @@ export async function advanceStory(repo:ReaderRepository,generator:StoryGenerato
      if(!generator.planBatch)throw Error('STORYBOARD_UNAVAILABLE');
      const draft=doc.storyboard,count=Math.min(readerStoryboardBatchSize,draft.outline.beats.length-draft.pages.length);
      if(storyBriefVerified(doc.original))draft.outline.summary=doc.original!.storyBrief!.summary;
-     const result=await generator.planBatch(selection,id,structuredClone(draft),doc.original);
-     const pages=[...draft.pages,...storyboardBatchSchema(count).parse({pages:result.value}).pages];
+     const result=await fittedGeneration(feedback=>generator.planBatch!(selection,id,structuredClone(draft),doc.original!,feedback),value=>preparedPages(storyboardBatchSchema(count).parse({pages:value}).pages,doc.original),value=>value);
+     const pages=[...draft.pages,...result.value];
      const plan=pages.length===draft.outline.beats.length?storyDraftSchema.parse({...draft.outline,pages}):null;
      doc.storyboard={outline:draft.outline,pages};if(plan)doc.draft=plan;generated=result;
     }
    }else{
-    const result=await generator.plan(selection,id,doc.original);if(selection.length!=='auto'&&result.value.pages.length!==selection.length)throw Error('PLAN_LENGTH');
+    const result=await fittedGeneration(feedback=>generator.plan(selection,id,doc.original,feedback),value=>{const draft=storyDraftSchema.parse(value);return {...draft,pages:preparedPages(draft.pages,doc.original)};},value=>value.pages);if(selection.length!=='auto'&&result.value.pages.length!==selection.length)throw Error('PLAN_LENGTH');
     doc.draft=storyDraftSchema.parse(result.value);if(storyBriefVerified(doc.original))doc.draft.summary=doc.original!.storyBrief!.summary;generated=result;
    }
   }
@@ -178,7 +200,7 @@ export async function advanceStory(repo:ReaderRepository,generator:StoryGenerato
    if(review.issues.some(issue=>issue.requiresReplan)){
     if(selection.length!=='auto'||!generator.restructure)throw new ReaderError(503,'This provider does not support storyboard restructuring. Review results are saved; illustration has not started.');
     const count=reviewPhase(review,selection)==='frames'?review.frameCountReports?.at(-1):undefined;
-    const before=doc.plan!,result=await generator.restructure(selection,structuredClone(before),doc.original!,review.issues,count?.coverage||review.reports.at(-1)?.coverage,count?{frameCountReview:count.frameCountReview,requirements:count.requirements}:undefined);
+    const before=doc.plan!,result=await fittedGeneration(feedback=>generator.restructure!(selection,structuredClone(before),doc.original!,review.issues,count?.coverage||review.reports.at(-1)?.coverage,count?{frameCountReview:count.frameCountReview,requirements:count.requirements}:undefined,feedback),value=>({...value,edits:value.edits.map(edit=>({...edit,pages:preparedPages(edit.pages,doc.original)}))}),value=>value.edits.flatMap(edit=>edit.pages));
     const edited=applyStructuralEdits(before,result.value);
     (review.history??=[]).push({step:step.key,recordedAt:new Date().toISOString(),changed:edited.changed,round:review.round,requested:review.issues.filter(issue=>issue.requiresReplan).map(issue=>issue.page),changes:[],structure:{edits:edited.edits,before:before.pages.length,after:edited.plan.pages.length,sourcePages:edited.sourcePages,removed:edited.removed,...(edited.characters?{characters:edited.characters,previousCharacters:edited.previousCharacters}:{}),...(doc.storyboard?{previousOutline:doc.storyboard.outline}:{})}});
     generated=result;
@@ -198,11 +220,11 @@ export async function advanceStory(repo:ReaderRepository,generator:StoryGenerato
     generated=result;
    }else{
     if(!generator.repair)throw new ReaderError(503,'This provider does not support storyboard revision. Update it and try again.');
-    const result=await generator.repair(selection,structuredClone(doc.plan!),doc.original!,issues,doc.storyboard?.outline);
-    const pages=repairOutputSchema(requested).parse({pages:result.value}).pages,updated=structuredClone(doc.plan!);
-    const changed=pages.filter(({page,caption,prompt})=>caption!==doc.plan!.pages[page-1].caption||prompt!==doc.plan!.pages[page-1].prompt);
+    const result=await fittedGeneration(feedback=>generator.repair!(selection,structuredClone(doc.plan!),doc.original!,issues,doc.storyboard?.outline,feedback),value=>preparedPages(repairOutputSchema(requested).parse({pages:value}).pages,doc.original),value=>value);
+    const pages=result.value,updated=structuredClone(doc.plan!);
+    const changed=pages.filter(({page,...content})=>JSON.stringify(content)!==JSON.stringify(doc.plan!.pages[page-1]));
     (review.history??=[]).push({step:step.key,recordedAt:new Date().toISOString(),changed:!!changed.length,round:review.round,requested:[...requested],before:requested.map(page=>({page,...doc.plan!.pages[page-1]})),changes:structuredClone(changed)});
-    for(const {page,caption,prompt} of pages)updated.pages[page-1]={caption,prompt};
+    for(const {page,...content} of pages)updated.pages[page-1]=content;
     doc.images=reusableRevisionImages({selection,plan:doc.plan,images:doc.images},selection,updated,updated.pages.map((_,i)=>i));
     doc.plan=planSchema.parse(updated);if(doc.storyboard)doc.storyboard.pages=structuredClone(doc.plan.pages);
     if(!changed.length){review.status='blocked';review.stopReason='unchanged';}else{review.repaired.push(...requested);if(!pendingRepairs(review).length){review.status='pending';review.repairs++;}}generated=result;

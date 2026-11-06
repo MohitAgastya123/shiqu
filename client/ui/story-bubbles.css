@@ -1,0 +1,35 @@
+/* Shared artwork coordinates keep generated balloons aligned in the reader and optional editor.
+   Comic pages reserve their own narration area; SVG text never inherits artwork fade masks. */
+.yu-bubble-layer{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none;user-select:none}
+.yu-comic-art-slot{position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:center;min-width:0;min-height:0}
+.yu-comic-art{position:relative;flex:none;max-width:100%;max-height:100%}
+.yu-comic-image{display:block;width:100%;height:100%;object-fit:contain;pointer-events:none;user-select:none}
+.yu-bubble-transcript{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
+.yu-bubble-render-error{position:absolute;inset:auto 8px 8px;background:#fff8e8;color:#7f3523;padding:10px;font:13px/1.5 system-ui}
+.yu-film-frame.yu-film-comic{padding:var(--yu-comic-top,110px) 12px var(--yu-comic-bottom,204px);box-sizing:border-box;align-items:center}
+.yu-reader.yu-has-bubbles>.yu-scene-caption{bottom:104px;left:24px;right:24px;max-height:92px;overflow:auto;pointer-events:auto;padding:10px 14px;border-radius:12px;background:#173327}
+.yu-reader.yu-has-bubbles>.yu-scene-caption::before{display:none}
+.yu-reader.yu-has-bubbles>.yu-scene-caption>.yu-scene-number{margin-bottom:4px;font-size:10px}
+.yu-reader.yu-has-bubbles>.yu-scene-caption>p{font:15px/1.5 system-ui,sans-serif;letter-spacing:0;text-shadow:none;margin:0}
+.yu-reader.yu-has-bubbles>.yu-scene-caption.large>p{font-size:18px}
+.yu-reader.yu-has-bubbles>.yu-reader-top::before{bottom:0;background:#173327}
+.yu-reader.yu-has-bubbles.yu-metadata-hidden>.yu-scene-caption{bottom:24px}
+.yu-reader.yu-has-bubbles.yu-metadata-hidden .yu-film-comic{padding-top:12px;padding-bottom:124px}
+.yu-bubble-editor{margin:18px 0;padding:16px;border:1px solid #ccd7c1;border-radius:14px;background:#f1f5e9;color:#304c37}
+.yu-bubble-editor h4{font:600 16px/1.4 system-ui;margin:0 0 6px}
+.yu-bubble-editor p{font-size:12px;line-height:1.6;margin:6px 0 12px}
+.yu-bubble-editor-preview{width:100%;aspect-ratio:2/3;max-height:620px;background:#1a3227;border-radius:10px;overflow:hidden;margin:14px 0}
+.yu-bubble-toolbar,.yu-bubble-list,.yu-bubble-order{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+.yu-bubble-editor button{min-height:44px;min-width:44px;padding:8px 12px;border:1px solid #bdccb0;border-radius:8px;background:#fffef7;color:#304c37;font:13px system-ui}
+.yu-bubble-editor button[aria-pressed=true]{background:#335b41;color:white;border-color:#335b41}
+.yu-bubble-editor button:disabled{opacity:.5}
+.yu-bubble-editor label{display:grid;gap:5px;font-size:12px;margin:10px 0}
+.yu-bubble-editor input,.yu-bubble-editor select,.yu-bubble-editor textarea{width:100%;min-height:44px;padding:8px;border:1px solid #bdccb0;border-radius:7px;background:#fffef9;color:#253e2d;font:14px/1.5 system-ui;box-sizing:border-box}
+.yu-bubble-numbers{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 12px}
+.yu-bubble-handle{position:absolute;z-index:1;border:2px solid #2270c5!important;background:#fff9!important;color:#174f8c!important;min-height:44px;min-width:44px;touch-action:none;transform:translate(-50%,-50%);cursor:move;padding:0!important}
+.yu-bubble-handle:focus-visible{outline:3px solid #f2be45;outline-offset:3px}
+.yu-bubble-selection{position:absolute;border:2px dashed #2270c5;pointer-events:none;box-sizing:border-box}
+.yu-bubble-editor [role=alert]{padding:10px;border-radius:8px;background:#f8e6da;color:#7b3625;font-size:13px;line-height:1.5}
+@media(max-width:540px){.yu-film-frame.yu-film-comic{padding-left:0;padding-right:0}.yu-bubble-editor{padding:12px}.yu-reader.yu-has-bubbles>.yu-scene-caption{left:12px;right:12px;bottom:102px}}
+@media(max-width:540px){.yu-has-bubbles .yu-reader-title{display:block}.yu-has-bubbles .yu-reader-title>.yu-style-label{display:none}.yu-has-bubbles .yu-reader-title>div:first-child>span{font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.yu-has-bubbles .yu-reader-heading strong{font-size:14px}}
+@media(max-height:720px){.yu-reader.yu-has-bubbles>.yu-scene-caption{bottom:94px;max-height:62px}.yu-reader.yu-has-bubbles>.yu-scene-caption>p{font-size:13px}}

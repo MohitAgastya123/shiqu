@@ -1,4 +1,4 @@
-// Offline exports call the browser's render/archive core with native canvas IO and bundled CJK fonts.
+// Offline exports use shared comic balloon painting, archive rules, and native canvas IO.
 // Read media through the in-process production API only; never fetch remote URLs or mutate source images.
 import path from 'node:path';
 import {readFile,writeFile,lstat} from 'node:fs/promises';
@@ -14,6 +14,7 @@ import {storyZipData,storyZipFiles} from '../lib/reader-zip-content.ts';
 import {imageDimensions} from '../lib/reader-image-dimensions.ts';
 import {hasPublicationAuthor,withPublicationDefaults} from '../lib/story-publication.ts';
 import type {StoryPromptHistory} from '../lib/reader-prompt-records.ts';
+import {paintComicBubbles} from '../lib/comic-bubble-layout.ts';
 type Application={handle:(request:Request)=>Promise<Response>};
 const fontHash='2c76254f6fc379fddfce0a7e84fb5385bb135d3e399294f6eeb6680d0365b74b';
 const loaded=new Set<string>();
@@ -50,9 +51,20 @@ export async function exportLocalStory(root:string,app:Application,session:any,o
  if(format==='json'){bytes=new TextEncoder().encode(JSON.stringify(storyZipData(story,story.pages.map(p=>p.image||''),[],null),null,2)+'\n');}
  else if(format==='md'){bytes=storyZipFiles(storyZipData(story,story.pages.map(p=>p.image||''),[],null))['分镜.md'];}
  else if(format==='html'){
+  await runtime.ready();
   const frames=[];for(const [i,page]of story.pages.entries()){
-   const image=page.image?await runtime.read(page.image,i):null;const src=image?'data:'+image.type+';base64,'+Buffer.from(await image.arrayBuffer()).toString('base64'):'';
-   frames.push(`<figure>${src?`<img alt="Frame ${i+1}" src="${src}">`:'<p>Image not generated yet</p>'}<figcaption>${i+1}. ${escape(page.caption)}</figcaption></figure>`);
+   let image=page.image?await runtime.read(page.image,i):null;
+   if(image&&page.bubbles?.length&&page.bubbleRendering!=='embedded')image=await runtime.image(image,async original=>{
+    const canvas=runtime.canvas();canvas.width=original.width;canvas.height=original.height;
+    try{
+     const ctx=canvas.getContext('2d');if(!ctx)throw Error('PREVIEW_CANVAS_UNAVAILABLE');
+     ctx.drawImage(original.value,0,0);paintComicBubbles(ctx,page.bubbles,canvas.width,canvas.height);
+     return await new Promise<Blob>((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(Error('PREVIEW_IMAGE_UNAVAILABLE')),'image/png'));
+    }finally{canvas.width=0;canvas.height=0;}
+   });
+   const src=image?'data:'+image.type+';base64,'+Buffer.from(await image.arrayBuffer()).toString('base64'):'';
+   const dialogue=page.bubbles?.length?'<ol aria-label="Dialogue and thoughts">'+page.bubbles.map(bubble=>`<li>${escape(bubble.speaker)} (${bubble.kind}): ${escape(bubble.text)}</li>`).join('')+'</ol>':'';
+   frames.push(`<figure>${src?`<img alt="Frame ${i+1}" src="${src}">`:'<p>Image not generated yet</p>'}<figcaption>${i+1}. ${escape(page.caption)}${dialogue}</figcaption></figure>`);
   }
   bytes=new TextEncoder().encode(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'"><title>${escape(story.title)}</title><style>body{max-width:850px;margin:2rem auto;padding:0 1rem;font:18px/1.8 system-ui;background:#faf8f1;color:#243b2c}figure{margin:2rem 0}img{max-width:100%;max-height:80vh;display:block;margin:auto}figcaption{white-space:pre-wrap}details{white-space:pre-wrap}</style><h1>${escape(story.title)}</h1>${frames.join('')}<p>${escape(story.reflection)}</p><details><summary>Source text (English translation)</summary>${escape(story.sourceText)}</details><p>${escape(story.publication?.author||'Unsigned')} · AI-assisted adaptation</p></html>`);
  }else{

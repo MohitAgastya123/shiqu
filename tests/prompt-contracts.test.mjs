@@ -1,5 +1,5 @@
 // English production expectations; original evidence and historical hashes remain unchanged.
-// Verify real provider request assembly and historical fingerprints without live inference.
+// Verify real provider assembly, shared balloon/narration contracts and historical fingerprints without inference.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
@@ -160,7 +160,14 @@ test('all providers send the same stage-specific instructions, data and strict o
  assert.equal(occurrences(get('batch-later').instructions,storyScopeDirection),0);
  assert.equal(get('draft').schema.properties.reflection,undefined);
  assert.equal(get('draft').schema.properties.pages.items.properties.caption.maxLength,500);
- assert.match(get('draft').instructions,/10–45 words/);assert.match(get('draft').instructions,/hard limit of 500 characters/);
+ assert.equal(get('draft').schema.properties.pages.items.properties.caption.minLength,0);
+ assert.match(get('draft').instructions,/narration, separate from character dialogue/);assert.match(get('draft').instructions,/may be empty/);assert.match(get('draft').instructions,/Never repeat balloon words/);assert.match(get('draft').instructions,/at most 500 characters/);
+ for(const stage of ['draft','batch','batch-later','repair']){
+  const page=get(stage).schema.properties.pages.items;
+  assert.ok(page.required.includes('bubbles'),stage);assert.equal(page.properties.bubbles.maxItems,4,stage);
+  assert.deepEqual(page.properties.bubbles.items.properties.kind.enum,['speech','thought'],stage);assert.ok(page.properties.bubbles.items.required.includes('sourceQuote'),stage);
+  assert.match(get(stage).instructions,/exact continuous quotation/,stage);assert.match(get(stage).instructions,/automatically fits balloon bodies/,stage);
+ }
  assert.match(get('frames').instructions,/separate ending page is excluded/);
  assert.match(get('review').instructions,/requiresReplan=true/);assert.match(get('review').instructions,/Ordinary|Local/);
  assert.ok(get('review').schema.properties.issues.items.required.includes('requiresReplan'));

@@ -1,20 +1,23 @@
 // English interface: labels, accessibility text, and workflow messages use English.
 // Read saved audit and repair evidence on demand; version navigation never starts production.
+// Balloon-only repairs retain ordered dialogue and speaker attribution in before/after comparisons.
 import {useEffect,useState} from 'react';
 import {request} from './shared';
 import type {StoryReviewHistory as History,ReviewHistoryEntry,ReviewTextChange} from '@/lib/reader-review-history';
 import type {RepairedPage} from '@/lib/reader-review';
+import type {ComicBubble} from '@/lib/reader-bubbles';
 import './story-review-history.css';
 
 const outcomeLabels={passed:"Passed",'needs-change':"Needs changes",unknown:"Cannot determine",changed:"Revised",unchanged:"No change"};
 const acceptanceLabels={passed:"Passed",failed:"Failed",unknown:"Cannot determine"};
 const pageLabel=(page:number)=>page===0?"Ending":`Page ${page}`;
 const range=(from:number,to:number)=>from===to?`Page ${from}`:`Pages ${from}–${to}`;
+const dialogue=(bubbles?:ComicBubble[])=>bubbles?.map(b=>`${b.speaker} ${b.kind==='thought'?'thinks':'says'}: ${b.text}`).join('\n')||'No comic dialogue.';
 function TextDiff({label,change}:{label:string;change:ReviewTextChange}){
  return <section className="yu-review-history-change"><h5>{label}</h5><div className="yu-review-history-diff"><div><strong>Before</strong><p>{change.before??"Previous content was not recorded."}</p></div><div><strong>After</strong><p>{change.after}</p></div></div></section>;
 }
 function Frames({label,pages}:{label:string;pages:RepairedPage[]|null}){
- return <section className="yu-review-history-frames"><h5>{label}</h5>{pages===null?<p>Previous content for this section was not recorded.</p>:!pages.length?<p>No pages</p>:pages.map(page=><div key={page.page}><strong>{pageLabel(page.page)}</strong><p>{page.caption}</p><details><summary>Image instructions</summary><p>{page.prompt}</p></details></div>)}</section>;
+ return <section className="yu-review-history-frames"><h5>{label}</h5>{pages===null?<p>Previous content for this section was not recorded.</p>:!pages.length?<p>No pages</p>:pages.map(page=><div key={page.page}><strong>{pageLabel(page.page)}</strong><p>{page.caption}</p>{!!page.bubbles?.length&&<p>{dialogue(page.bubbles)}</p>}<details><summary>Image instructions</summary><p>{page.prompt}</p></details></div>)}</section>;
 }
 export function ReviewHistoryEvent({entry,expanded=false}:{entry:ReviewHistoryEntry;expanded?:boolean}){
  const repair=entry.repair;
@@ -33,7 +36,7 @@ export function ReviewHistoryEvent({entry,expanded=false}:{entry:ReviewHistoryEn
     <p>This batch covers: {repair.requested.map(pageLabel).join(', ')||"Global character definitions"}</p>
     {entry.outcome==='unchanged'&&<p>The returned content made no actual changes.</p>}
     {repair.structure&&<section><h4>Structural revision · {repair.structure.before} → {repair.structure.after}  pages</h4>{repair.structure.edits.map((edit,index)=><details key={index}><summary>{edit.to<edit.from?`Insert before original page ${edit.from} `:edit.after.length?`Replace original ${range(edit.from,edit.to)}`:`Delete original ${range(edit.from,edit.to)}`}{!!edit.after.length&&` → New ${range(edit.newFrom,edit.newFrom+edit.after.length-1)}`}</summary><div className="yu-review-history-diff"><Frames label="Before" pages={edit.before}/><Frames label="After" pages={edit.after}/></div></details>)}</section>}
-    {repair.pages.map(page=><section className="yu-review-history-page" key={page.page}><h4>{pageLabel(page.page)} revision</h4>{page.before?.caption===page.after.caption?<p>Caption unchanged: {page.after.caption}</p>:<TextDiff label="Caption" change={{before:page.before?.caption??null,after:page.after.caption}}/>}<details><summary>{page.before?.prompt===page.after.prompt?"Image instructions unchanged":"Compare image instructions"}</summary>{page.before?.prompt===page.after.prompt?<p>{page.after.prompt}</p>:<TextDiff label="Image instructions" change={{before:page.before?.prompt??null,after:page.after.prompt}}/>}</details></section>)}
+    {repair.pages.map(page=><section className="yu-review-history-page" key={page.page}><h4>{pageLabel(page.page)} revision</h4>{page.before?.caption===page.after.caption?<p>Caption unchanged: {page.after.caption}</p>:<TextDiff label="Caption" change={{before:page.before?.caption??null,after:page.after.caption}}/>}{!!(page.before?.bubbles?.length||page.after.bubbles?.length)&&<TextDiff label="Comic dialogue" change={{before:page.before?dialogue(page.before.bubbles):null,after:dialogue(page.after.bubbles)}}/>}<details><summary>{page.before?.prompt===page.after.prompt?"Image instructions unchanged":"Compare image instructions"}</summary>{page.before?.prompt===page.after.prompt?<p>{page.after.prompt}</p>:<TextDiff label="Image instructions" change={{before:page.before?.prompt??null,after:page.after.prompt}}/>}</details></section>)}
     {repair.reflection&&<TextDiff label="Ending revision" change={repair.reflection}/>}
     {repair.characters&&<details><summary>Character definition revision</summary><TextDiff label="Character definitions" change={repair.characters}/></details>}
    </>}

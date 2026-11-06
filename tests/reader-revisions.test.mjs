@@ -1,4 +1,5 @@
-// Exercise minimal redo and version isolation through real REST, SQLite, copied files and controlled inference.
+// Exercise minimal redo, balloon review boundaries and version isolation through production REST/SQLite.
+// Layout edits retain review/artwork; attributed dialogue changes use the existing content review.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {productionFixture,until,makePlan,selection} from './fixtures/production.mjs';
@@ -133,7 +134,7 @@ test('invalid inputs, unchanged drafts, stale parent, and cross-owner IDs never 
  const {f,id}=await completed(t),base=await snapshot(f,id),before=f.control.calls.length;
  const send=changes=>f.request(`sessions/${id}/revisions`,'POST',{requestId:crypto.randomUUID(),token:base.token,changes});
  assert.equal((await send({})).status,400);assert.equal((await send({length:81})).status,400);
- const plan=structuredClone(base.plan);plan.pages[0].caption='短';assert.equal((await send({plan})).status,400);
+ const plan=structuredClone(base.plan);plan.pages[0].caption='x'.repeat(501);assert.equal((await send({plan})).status,400);
  plan.pages[0].caption='庄周梦见自己变成蝴蝶，在花间自在飞翔。';assert.equal((await send({length:4,plan})).status,400);assert.equal((await send({productionPrompt:'new requirements',plan})).status,400);
  const meta=structuredClone(base.plan);meta.sourceReference='an invented source';assert.equal((await send({plan:meta})).status,400);
  await f.app.services.database.prepare("UPDATE stories SET document=json_set(document,'$.plan.reflection',?) WHERE id=?").bind('新的余味。',id).run();

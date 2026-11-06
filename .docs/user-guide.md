@@ -4,7 +4,7 @@
 
 ## What Shiqu does
 
-Shiqu turns stories from Chinese classics into English illustrated books. Each frame contains one image and a separate English caption. A complete story includes a title, summary, source attribution, character descriptions, and an ending reflection. New stories use English throughout discovery, preparation, storyboarding, review, revision, and export.
+Shiqu turns stories from Chinese classics into English comics. Each frame contains an illustration, optional narration, and automatically placed speech or thought balloons where the source supports them. A complete story includes a title, summary, source attribution, character descriptions, and an ending reflection. New stories use English throughout discovery, preparation, storyboarding, review, revision, and export.
 
 The 24 included books contain verified Chinese original texts. During explicitly requested preparation, the production workflow translates the selected passage and complete chapter context into English and saves the translation. The Chinese evidence stays internal for source verification and exact quotation checks. Reading or exporting does not silently start a paid translation. A saved story without an English translation must be prepared through production before its source can be read in English. Existing user-owned stories and images are not rewritten automatically.
 
@@ -77,6 +77,10 @@ For access from another network, install `cloudflared`, stop the desktop service
 
 Each story supports **1–80 illustrated frames**. Automatic frame counts may change during review to fit the source. Long storyboards use an outline and batches of up to 20 frames. A source book can produce multiple independent comic stories.
 
+Speech balloons have a pointed tail; thought clouds use a trail of circles. Production selects the important source-supported words, attributes them to characters and places the balloons automatically. You do not need to open an editor or position them. Illustration composition reserves space for text, and the fitting step keeps balloons readable and apart. A crowded page is retried through production rather than silently losing dialogue. Thoughts are only used when the source explicitly supports them; narration carries the remaining action.
+
+Automatic placement follows the planned characters and scene composition. It does not inspect faces in the final image pixels. If you want to refine a result, open the storyboard revision editor: balloon controls are optional. Reading an old story does not generate or add balloons automatically.
+
 Choose **Other** to enter a different book title or a public webpage URL. URL discovery requires Gemini. External source verification is limited; entering a title or URL does not guarantee a complete production. PDF/EPUB/Word/TXT uploads and a general pasted-story input are not currently available.
 
 ## Production and acceptance requirements
@@ -108,11 +112,15 @@ Selective image redraw accepts one-based frame numbers through `stories edit`: `
 
 ## Reading and organization
 
+Balloon pages show the complete artwork with narration below it. The accessible transcript identifies each speaker and whether they speak or think, in the saved reading order. Optional balloon editing supports text, speaker, kind, order, position, size and tail. Pointer, keyboard and percentage inputs provide alternate controls. Closing the editor keeps its local draft for the current story; save explicitly to create a version, or discard the draft. Position-only changes reuse the existing review and artwork. Dialogue and attribution changes go through the ordinary source review; changing a scene's illustration prompt can also redraw that artwork.
+
 The bookshelf separates active production from readable stories and contains current revisions, favorites, recent reading, and generation status. Reading progress is saved locally and shared by browsers connected to that library. You can inspect English source text, storyboard, production notes, review history, and revision history. Deleted stories can be restored.
 
 Star a suitable illustration as the reference for its source book. Later image tasks use that reference, including the first frame of another story from the same book. Existing images are not redrawn automatically. Removing the source story removes its reference selection.
 
 ## Exports
+
+Speech and thought balloons appear in the exported images, PDF, ZIP and offline HTML preview. JSON and Markdown preserve their text, speakers and reading order. Raster archive pages are marked as already containing balloons to prevent a second overlay. Public ZIP conversion keeps the existing signed WebP bytes intact. Use this app version or later to edit balloon stories; older apps may omit unfamiliar fields when saving.
 
 Exports run locally and do not call AI. Complete PDF, PNG, and ZIP exports require every current-revision image to exist and be readable. Missing images must be completed; an older revision is not substituted.
 

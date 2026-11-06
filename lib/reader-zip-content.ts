@@ -1,5 +1,5 @@
 // English product text and generation contracts; canonical source evidence remains unchanged.
-// Share archive names, public fields and text serialization between browser downloads and collection exports.
+// Preserve comic balloon attribution and embedded-raster markers in shared archive serialization.
 // Browser code owns image encoding; the collection command keeps those signed WebP bytes unchanged.
 import {themeLabel} from './reader-language.ts';
 import {strToU8} from 'fflate';
@@ -10,11 +10,13 @@ import {pdfFilename,storySourceReference} from './reader-pdf.ts';
 import {aiDisclosure,archivedAiDisclosure,publicationText,emptyPublication,publicationSchema} from './story-publication.ts';
 import type {StoryPublication} from './story-publication.ts';
 import type {StoryImageHashes} from './story-webp-metadata.ts';
+import {pageBubblesSchema} from './reader-bubbles.ts';
+import type {ComicBubble} from './reader-bubbles.ts';
 
 export type StoryZipData={
  id:string;title:string;summary:string;bookId:string;theme:string;sourceReference:string;sourceText:string;sourceUrl:string;
  artStyleLabel:string|null;author:string;publication:StoryPublication|null;aiGenerated:boolean|null;aiDisclosure:string;
- generationModels:{step:string;model:string}[];pages:({caption:string;prompt?:string|null;image:string}&StoryImageHashes)[];
+ generationModels:{step:string;model:string}[];pages:({caption:string;prompt?:string|null;image:string;bubbles?:ComicBubble[];bubbleRendering?:'embedded'}&StoryImageHashes)[];
  reflection:string;adaptationNote:string;revision:number;createdAt:string;updatedAt:string;
  productionPrompt?:string|null;acceptancePrompt?:string|null;promptHistoryFile?:string;
 };
@@ -29,7 +31,7 @@ export function assertZipReady(story:Pick<Story,'pages'>&Partial<Story>){
 export function zipMetadataStory(data:StoryZipData){
  return {...data,generated:data.aiGenerated===true,publication:data.publication||{...emptyPublication,author:data.author}};
 }
-export function storyZipData(story:Story,images:string[],hashes:StoryImageHashes[],history:StoryPromptHistory|null):StoryZipData{
+export function storyZipData(story:Story,images:string[],hashes:StoryImageHashes[],history:StoryPromptHistory|null,{bubbleRendering}:{bubbleRendering?:'embedded'}={}):StoryZipData{
  const generated='generated'in story&&story.generated===true?story as GeneratedStory:null;
  return {
   id:story.id,title:story.title,summary:story.summary,bookId:story.bookId,theme:themeLabel(story.theme),
@@ -37,7 +39,7 @@ export function storyZipData(story:Story,images:string[],hashes:StoryImageHashes
   artStyleLabel:generated?.artStyleLabel??null,author:story.publication?.author||'',publication:story.publication||null,
   aiGenerated:generated?true:null,aiDisclosure:aiDisclosure(story),generationModels:generated?.generationModels??[],
   productionPrompt:history?.productionPrompt??null,acceptancePrompt:history?.acceptancePrompt??null,promptHistoryFile:'提示词.json',
-  pages:story.pages.map((page,index)=>({caption:page.caption,prompt:page.prompt||null,image:images[index],...hashes[index]})),
+  pages:story.pages.map((page,index)=>({caption:page.caption,prompt:page.prompt||null,image:images[index],...hashes[index],...(page.bubbles?.length?{bubbles:pageBubblesSchema.parse(page.bubbles),...(bubbleRendering==='embedded'||page.bubbleRendering==='embedded'?{bubbleRendering:'embedded' as const}:{})}:{})})),
   reflection:story.reflection,adaptationNote:story.adaptationNote,revision:story.revision,createdAt:story.createdAt,updatedAt:story.updatedAt,
  };
 }
@@ -49,7 +51,10 @@ export function publicStoryZipData(input:StoryZipData):StoryZipData{
   ...Object.fromEntries(publicFields.map(key=>[key,input[key]])) as StoryZipData,
   publication:input.publication===null?null:publicPublication.parse(input.publication),
   generationModels:input.generationModels.map(({step,model})=>({step,model})),
-  pages:input.pages.map(({caption,image,sha256,originalSha256,imagePayloadSha256})=>({caption,image,sha256,originalSha256,imagePayloadSha256})),
+  pages:input.pages.map(({caption,image,sha256,originalSha256,imagePayloadSha256,bubbles,bubbleRendering})=>{
+   if(bubbles?.length&&bubbleRendering!=='embedded')throw Error('Public comic balloon images must already contain their saved balloons.');
+   return {caption,image,sha256,originalSha256,imagePayloadSha256,...(bubbles?.length?{bubbles:pageBubblesSchema.parse(bubbles),bubbleRendering:'embedded' as const}:{})};
+  }),
  };
 }
 export function storyZipFiles(data:StoryZipData,{includePrompts=true}={}):Record<string,Uint8Array>{
@@ -58,7 +63,7 @@ export function storyZipFiles(data:StoryZipData,{includePrompts=true}={}):Record
   `# ${story.title}`,story.summary,`Theme: ${themeLabel(story.theme)}`,`Source: ${story.sourceReference}`,
   story.sourceUrl&&`Source URL: ${story.sourceUrl}`,story.artStyleLabel&&`Art style: ${story.artStyleLabel}`,
   `## Credits and reuse\n\n${credits}`,
-  ...story.pages.map((page,index)=>`## Frame ${index+1}\n\nImage: ${page.image}\n\n### Caption\n\n${page.caption}`+(includePrompts?`\n\n### Scene prompt\n\n${page.prompt||'Not recorded.'}`:'')),
+  ...story.pages.map((page,index)=>`## Frame ${index+1}\n\nImage: ${page.image}\n\n### Caption\n\n${page.caption}`+(page.bubbles?.length?'\n\n### Dialogue and thoughts\n\n'+page.bubbles.map((bubble,order)=>`${order+1}. ${bubble.speaker} (${bubble.kind}): ${bubble.text}`).join('\n'):'')+(includePrompts?`\n\n### Scene prompt\n\n${page.prompt||'Not recorded.'}`:'')),
   story.reflection&&`## A final thought\n\n${story.reflection}`,story.adaptationNote&&`## Adaptation notes\n\n${story.adaptationNote}`,
   story.sourceText&&`## Saved English source\n\n${story.sourceText}`,
  ].filter(Boolean).join('\n\n')+'\n';

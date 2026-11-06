@@ -60,7 +60,7 @@ for(const provider of flowProviders(['codex','gemini']))for(const failure of ['o
  f.control.beforeText=async(kind,payload)=>{
   if(kind!=='batch'||payload.batch.first!==21||!blocked)return;
   if(failure==='outage')throw Error('controlled outage');
-  if(failure==='invalid')return {pages:makePlan(20).pages.map(p=>({...p,caption:''}))};
+  if(failure==='invalid')return {pages:makePlan(20).pages.map(p=>({...p,caption:'x'.repeat(501)}))};
   return {pages:makePlan(failure==='short'?19:21).pages};
  };
  await f.demand(id);await until(async()=>(await f.read(id)).state==='failed');

@@ -75,9 +75,13 @@ The production core creates a storyboard, reviews it against the original, makes
 
 The redesigned shelf separates active production from readable stories. A selective image redraw creates a revision that preserves reviewed text and redraws only the explicitly chosen frames.
 
+New comics automatically include speech balloons and thought clouds when the source supports them. The app chooses dialogue, attributes it to speakers, fits the balloons, and places their tails with the planned characters. Start production as usual and read the finished comic; no balloon-placement step is required. Narration remains separate. Optional storyboard revision controls let you adjust the result later. Moving or resizing a balloon preserves artwork and its review; changing dialogue or attribution runs the normal source review.
+
 ## Export and share
 
 When every frame is ready, export a PDF, PNG overview, or ZIP. Export runs locally without new AI calls. Set your author credit and reuse terms before sharing. Images include a visible author signature and metadata; exports retain source attribution and AI disclosures.
+
+Balloon text and shapes are included in image/PDF/ZIP exports and offline previews; JSON and storyboard text also preserve their speakers and reading order. Existing stories retain their saved captions and artwork. To add balloons to an existing story, make an explicit storyboard revision. Use this version or later when editing balloon stories: older apps may discard fields they do not understand.
 
 Public archives retain the collection-compatible filenames `故事.json`, `分镜.md`, `署名与转载.txt`, and numbered WebP images under `图片/`. Their generated prose is English. Full browser downloads can include saved production prompts; inspect the archive before sharing.
 

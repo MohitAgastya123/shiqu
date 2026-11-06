@@ -1,3 +1,4 @@
+// Forward balloon placement feedback without changing the verified local source checkpoint.
 // English product messages; source evidence and machine identifiers remain stable.
 // Bind whole-book or selected-chapter discovery and verified originals to the existing provider.
 // Verify and persist originals before any paid storyboard request; never fall back remotely.
@@ -83,22 +84,22 @@ export function withLocalBooks(provider:ReaderProvider,books:LocalBooks,media:Me
      if(localBookId(selection))verifyOriginal(selection,original);
      return generator.review!(selection,plan,original,outline,candidates);
     }} satisfies Pick<typeof generator,'review'>:{}),
-    ...(generator.restructure?{async restructure(selection,plan,original,issues,coverage,frameCountContext){
+    ...(generator.restructure?{async restructure(selection,plan,original,issues,coverage,frameCountContext,bubblePlacementRetry){
      if(localBookId(selection))verifyOriginal(selection,original);
-     return generator.restructure!(selection,plan,original,issues,coverage,frameCountContext);
+     return generator.restructure!(selection,plan,original,issues,coverage,frameCountContext,bubblePlacementRetry);
     }} satisfies Pick<typeof generator,'restructure'>:{}),
-    ...(generator.repair?{async repair(selection,plan,original,issues,outline){
+    ...(generator.repair?{async repair(selection,plan,original,issues,outline,bubblePlacementRetry){
      if(localBookId(selection))verifyOriginal(selection,original);
-     return generator.repair!(selection,plan,original,issues,outline);
+     return generator.repair!(selection,plan,original,issues,outline,bubblePlacementRetry);
     }} satisfies Pick<typeof generator,'repair'>:{}),
     ...(generator.outline?{async outline(selection,id,original){
      if(localBookId(selection))verifyOriginal(selection,original);
      const result=await generator.outline!(selection,id,original);
      return original?{...result,value:{...result.value,sourceReference:original.chapterContext?.title||original.title}}:result;
     }} satisfies Pick<typeof generator,'outline'>:{}),
-    ...(generator.planBatch?{async planBatch(selection,id,draft,original){
+    ...(generator.planBatch?{async planBatch(selection,id,draft,original,bubblePlacementRetry){
      if(localBookId(selection))verifyOriginal(selection,original);
-     return generator.planBatch!(selection,id,draft,original);
+     return generator.planBatch!(selection,id,draft,original,bubblePlacementRetry);
     }} satisfies Pick<typeof generator,'planBatch'>:{}),
     async prepareOriginal(selection,id){
      if(!localBookId(selection)){
@@ -112,11 +113,11 @@ export function withLocalBooks(provider:ReaderProvider,books:LocalBooks,media:Me
      if(!generator.recommend)throw new ReaderError(503,'This provider does not support frame recommendations. Update the service and retry.');
      return generator.recommend(selection,id,original,prepareRequirements);
     },
-    async plan(selection,id,original){
-     if(!localBookId(selection))return generator.plan(selection,id,original);
+    async plan(selection,id,original,bubblePlacementRetry){
+     if(!localBookId(selection))return generator.plan(selection,id,original,bubblePlacementRetry);
      verifyOriginal(selection,original);
      // The checkpoint owns the exact verified version; readable retries keep that saved original.
-     const result=await generator.plan(selection,id,original);
+     const result=await generator.plan(selection,id,original,bubblePlacementRetry);
      return {...result,value:{...result.value,sourceReference:original!.chapterContext?.title||original!.title}};
     },
     async original(selection,plan,id){

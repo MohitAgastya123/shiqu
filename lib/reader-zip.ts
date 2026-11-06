@@ -1,5 +1,5 @@
 // English product text and generation contracts; canonical source evidence remains unchanged.
-// Export credited WebPs, source text and saved prompts; never substitute current rules for missing history.
+// Export composited comic balloons before the existing credited WebP/hash/XMP pipeline.
 import {zipSync,strToU8} from 'fflate';
 import type {Story} from './content';
 import type {GeneratedStory} from './reader-model';
@@ -9,6 +9,7 @@ import type {StoryPromptArchive,StoryPromptHistory} from './reader-prompt-record
 import {zipFilename,zipImageFilename,assertZipReady,storyZipData,storyZipFiles} from './reader-zip-content.ts';
 export {zipFilename,assertZipReady} from './reader-zip-content.ts';
 import {drawStoryWatermarks} from './story-watermark.ts';
+import {paintComicBubbles} from './comic-bubble-layout.ts';
 import {sha256Hex,webpPayloadHash,publicImageXmp,withWebpXmp,assertStoryWebp} from './story-webp-metadata.ts';
 import type {StoryImageHashes} from './story-webp-metadata.ts';
 import {browserExportRuntime,type ExportRuntime,type ExportCanvas} from './story-export-runtime.ts';
@@ -20,6 +21,8 @@ async function webpImage(blob:Blob,page:number,story:Story,runtime:ExportRuntime
    canvas=runtime.canvas();canvas.width=image.width;canvas.height=image.height;
    const context=canvas.getContext('2d');if(!context)throw Error('CANVAS_UNAVAILABLE');
    context.drawImage(image.value,0,0);
+   const scene=story.pages[page];
+   if(scene.bubbleRendering!=='embedded')paintComicBubbles(context,scene.bubbles,canvas.width,canvas.height);
    drawStoryWatermarks(context,canvas.width,canvas.height,story);
    return await new Promise<Blob>((resolve,reject)=>canvas!.toBlob(result=>{
     if(!result?.size||result.type!=='image/webp')reject(Error('WEBP_UNAVAILABLE'));else resolve(result);
@@ -76,7 +79,7 @@ export async function createStoryZip(story:Story,history:StoryPromptHistory|null
  }
  onProgress('Preparing storyboard and saving ZIP');
  const archive=archivePromptHistory(history);
- Object.assign(files,storyZipFiles(storyZipData(story,images,hashes,history)));
+ Object.assign(files,storyZipFiles(storyZipData(story,images,hashes,history,{bubbleRendering:'embedded'})));
  files['提示词.md']=strToU8(promptText(story,archive));
  files['系统提示词.md']=strToU8(systemPromptText(story,archive));
  // Keep full call inputs outside the story metadata consumed by reading sites.
