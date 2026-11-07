@@ -17,3 +17,5 @@
 
 - [x] Upload a valid 230-chapter Word file whose Balanced plan exceeds 200 parts. Retain its complete preview and settings, reload it, then choose Brief to produce a valid 115-part plan without AI or text loss.
 - [x] After series completion, remove one fixture image. A health check must not authorize work; explicit recovery reopens the parent and redraws only that image, with replay-safe receipts and later completed parts retained.
+
+- [x] In actual Node24 watched development mode, upload both Word and PDF through the production extractor. Ignore dependency notifications until the complete tagged result; preserve meaningful parser errors and all worker deadlines. Re-upload the sample in the running app and show its one-comic plan without AI calls.

@@ -1,5 +1,6 @@
 // Decode uploaded documents in an isolated, time-limited worker without rendering their HTML or scripts.
 // Preserve readable pages, paragraphs and referenced notes; intermediate Word HTML becomes plain text only.
+// Tag application results so parent readers ignore Node watch dependency notifications on the same channel.
 import {parentPort,workerData} from 'node:worker_threads';
 import {fileURLToPath} from 'node:url';
 import {crc32} from 'node:zlib';
@@ -135,6 +136,6 @@ try{
  if(!parentPort||!workerData?.bytes||!['docx','pdf'].includes(workerData.format))bad('The document reader received an invalid request.');
  const bytes=new Uint8Array(workerData.bytes);
  if(bytes.length>storyImportLimits.fileBytes)bad('The file exceeds the 10 MiB upload limit.');
- const value=await (workerData.format==='docx'?docx(bytes):pdf(bytes));parentPort.postMessage({ok:true,value});
-}catch(error){parentPort?.postMessage({ok:false,error:error instanceof Error?error.message:'The document could not be read completely.'});}
+ const value=await (workerData.format==='docx'?docx(bytes):pdf(bytes));parentPort.postMessage({type:'story-import-result',ok:true,value});
+}catch(error){parentPort?.postMessage({type:'story-import-result',ok:false,error:error instanceof Error?error.message:'The document could not be read completely.'});}
 finally{parentPort?.close();}

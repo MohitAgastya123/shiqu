@@ -1,5 +1,6 @@
 // Read local uploads with two bounded workers; parser failures never publish a partial source.
 // Resolve only trusted application worker resources for source, development and installed editions.
+// Node watch mode shares this channel for dependency reports; accept only tagged parser results.
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {existsSync} from 'node:fs';
@@ -36,8 +37,10 @@ export async function extractStoryImport(filename:string,bytes:Uint8Array,root=d
   let settled=false;
   const finish=(error?:unknown,value?:ExtractedStoryImport)=>{if(settled)return;settled=true;clearTimeout(timer);void worker.terminate().finally(()=>error?reject(error):resolve(value!));};
   const timer=setTimeout(()=>finish(new ReaderError(400,'Reading this document exceeded 30 seconds. Export a simpler text PDF or Word .docx file and try again.')),storyImportLimits.extractionTimeoutMs);
-  worker.once('message',(result:{ok:boolean;error?:string;value?:ExtractedStoryImport})=>{
-   if(!result.ok||!result.value){finish(new ReaderError(400,result.error||'The complete document could not be read.'));return;}
+  worker.on('message',(message:unknown)=>{
+   if(settled||!message||typeof message!=='object'||!('type' in message)||message.type!=='story-import-result')return;
+   const result=message as {ok?:boolean;error?:string;value?:ExtractedStoryImport};
+   if(result.ok!==true||!result.value){finish(new ReaderError(400,typeof result.error==='string'&&result.error||'The complete document could not be read.'));return;}
    try{const value=result.value;if(value.format!==format||canonicalImportText(value.text)!==value.text||value.units.length>50_000||!Array.isArray(value.warnings)||value.warnings.some(item=>typeof item!=='string')||format==='pdf'&&(value.pageCount===null||!Number.isInteger(value.pageCount)||value.pageCount<1||value.pageCount>storyImportLimits.pdfPages)||format==='docx'&&value.pageCount!==null)throw Error('Invalid parser result');validateImportedSource(value);finish(undefined,value);}catch{finish(new ReaderError(400,'The complete document could not be verified. Export a readable copy and try again.'));}
   });
   worker.once('error',()=>finish(new ReaderError(400,'The document is too complex to read safely or the local document reader is unavailable. Export a simpler text PDF or Word .docx file and try again.')));

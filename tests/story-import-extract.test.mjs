@@ -1,10 +1,13 @@
 // Exercise genuine DOCX/PDF bytes through the production bounded worker, never a second extraction pipeline.
+// Actual Node watch subprocesses must distinguish dependency reports from document results.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {zipSync,unzipSync,strToU8,strFromU8} from 'fflate';
 import {mkdtemp,mkdir,writeFile,rm,readFile,readdir} from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
+import {spawn} from 'node:child_process';
+import {pathToFileURL} from 'node:url';
 import {PDFDocument,StandardFonts} from 'pdf-lib';
 import {build} from 'esbuild';
 import {extractStoryImport} from '../server/story-import-extract.ts';
@@ -15,6 +18,25 @@ import {importDocx,importPdf} from './fixtures/import-documents.mjs';
 test('real Word paragraphs, XML characters and styled headings remain complete in the canonical source',async()=>{
  const paragraphs=['The Promise','Mara & Ivo find a traveler beside the river.','The Second Rescue','They help the traveler cross safely. FINAL_SENTINEL'];
  const value=await extractStoryImport('story.docx',importDocx(paragraphs,{headingIndexes:[0,2],externalReference:true}));assert.equal(value.format,'docx');assert.equal(value.pageCount,null);assert.equal(value.text,paragraphs.join('\n\n'));assert.ok(value.units.some(unit=>unit.heading==='The Second Rescue'));assert.equal(value.units.map(unit=>value.text.slice(unit.start,unit.end)).join(''),value.text);assert.equal(planImportedStory(value,'The Promise').length,1);
+});
+test('actual watched development reads Word and PDF despite worker dependency notifications',async t=>{
+ const directory=await mkdtemp(path.join(os.tmpdir(),'shiqu-import-watch-'));t.after(()=>rm(directory,{recursive:true,force:true}));
+ const script=path.join(directory,'watched.mjs'),moduleUrl=name=>JSON.stringify(pathToFileURL(path.resolve(name)).href);
+ await writeFile(script,`import {extractStoryImport} from ${moduleUrl('server/story-import-extract.ts')};
+import {planImportedStory} from ${moduleUrl('lib/story-import-text.ts')};
+import {importDocx,importPdf} from ${moduleUrl('tests/fixtures/import-documents.mjs')};
+try {
+ const text='Mara finds the lost lantern and returns home safely. FINAL_SENTINEL';
+ const word=await extractStoryImport('story.docx',importDocx([text]));
+ const pdf=await extractStoryImport('story.pdf',await importPdf([text]));
+ let invalid='';try{await extractStoryImport('empty.docx',importDocx(['']));}catch(error){invalid=error.message;}
+ console.log('IMPORT_RESULT:'+JSON.stringify({ok:true,word:word.text,pdf:pdf.text,parts:planImportedStory(word,'The Lost Lantern').length,invalid}));
+}catch(error){console.log('IMPORT_RESULT:'+JSON.stringify({ok:false,error:error.message}));}`);
+ const child=spawn(process.execPath,['--watch',script],{stdio:['ignore','pipe','pipe']}),exited=new Promise(resolve=>child.once('exit',resolve));let log='',timer;
+ try{
+  const result=await new Promise((resolve,reject)=>{const output=chunk=>{log+=chunk;const line=log.split('\n').slice(0,-1).find(value=>value.startsWith('IMPORT_RESULT:'));if(line){try{resolve(JSON.parse(line.slice('IMPORT_RESULT:'.length)));}catch(error){reject(error);}}};child.stdout.on('data',output);child.stderr.on('data',output);child.once('error',reject);child.once('exit',()=>reject(Error('Watched import exited without its result: '+log)));timer=setTimeout(()=>reject(Error('Watched import timed out: '+log)),20000);});
+  assert.equal(result.ok,true,JSON.stringify(result));assert.match(result.word,/FINAL_SENTINEL$/);assert.equal(result.pdf,result.word);assert.equal(result.parts,1);assert.match(result.invalid,/No readable/);
+ }finally{clearTimeout(timer);child.kill('SIGTERM');await exited;}
 });
 test('Word footnotes and endnotes remain once at their reading references as plain annotation context',async()=>{
  const value=await extractStoryImport('notes.docx',importDocx(['Mara finds a safe road.','Ivo follows the road and reaches home.'],{footnote:'The road was built by their village.',endnote:'They return before sunset.'}));assert.equal(value.text.match(/road was built/g)?.length,1);assert.equal(value.text.match(/return before sunset/g)?.length,1);assert.ok(value.text.indexOf('road was built')<value.text.indexOf('Ivo follows'));assert.match(value.text,/\[Footnote: The road was built by their village\.\]/);assert.match(value.text,/\[Endnote: They return before sunset\.\]/);assert.doesNotMatch(value.text,/↑|<a|<sup/);

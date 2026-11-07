@@ -90,7 +90,7 @@ Inspect commands/config rather than guessing: focused `node --experimental-strip
 
 Additive support tables do not replace stories/revisions. Normal upgrade initialization must verify a whole-library backup before migration; source bytes/extraction live in that backup. Do not restore a backup into a live directory. Old binaries cannot understand the series UI but must see unstarted children paused. Uploaded PDFs can be scanned/encrypted or have poor reading order: report unsupported extraction rather than claiming coverage. Local splitting cannot prove semantic perfection; gap-free source ranges plus independent complete unit review prevent known omissions from reaching illustration. A dense segment that cannot pass bounded production fails visibly with retained source rather than silently compressing away main events. Sequential generation preserves dependencies at the cost of throughput. Character/image continuity guides the existing models, not a guarantee of identical faces.
 
-## Verification evidence
+## Initial feature verification evidence
 
 - Parser/text: 23/23 focused checks pass, including genuine Word notes/headings, ZIP CRC/actual-size corruption, encrypted and image-only PDFs, exact partitions and an independently bundled worker with only staged production dependencies.
 - Backend: 63/63 checks pass (15 import/series plus 48 existing production/shared-library regressions), including pause-versus-claim, prepared-child restart, cumulative returning characters, completed-series revisions, explicit lost-image recovery and immutable uploaded-byte backups.
@@ -104,19 +104,38 @@ Additive support tables do not replace stories/revisions. Normal upgrade initial
 Independent final CR passed on the frozen tree, with no outstanding blockers. A separate read-only VR cross-check confirms AC1–AC7 complete against production code, the REQ/AP/E2E documents and targeted evidence; AC8 is complete after the final regression, native, documentation and branch checks below.
 
 
-## Final VR acceptance matrix
+## Current VR acceptance matrix
 
 | Criterion | Status | Concrete evidence |
 | --- | --- | --- |
-| AC1 — local Word/PDF intake | complete | Actual DOCX/PDF extraction tests and browser uploads; bounded worker, complete plain preview/provenance, private raw bytes, English corruption/encryption/scanned/size errors. Parser/text 23/23. |
+| AC1 — local Word/PDF intake | complete | Actual DOCX/PDF extraction tests and browser uploads; bounded worker, complete plain preview/provenance, private raw bytes, English corruption/encryption/scanned/size errors. Parser/text 24/24, including actual watched development Word/PDF and readable parser errors. |
 | AC2 — complete automatic parts | complete | Pure production planner range concatenation/final-sentinel/word-boundary/detail tests; real four-part and 115-part browser plans; no fixed four-part limit or silent truncation. |
 | AC3 — one confirmation and replay | complete | Authoritative stored-source replanning; backend upload/create/CAS replay tests; browser lost-create-response plus reload keeps the same series and part roots. |
 | AC4 — scoped production and coverage | complete | Shared production engine/review tests enforce every unit/quote/frame before drawing or override; rejected evidence draws zero images; explicit recovery finishes and exports full scoped source. |
 | AC5 — continuity | complete | Cumulative returning-character test through three parts, prior summary/ending distinct from evidence, unique series reference IDs and actual reference-copy checks. |
 | AC6 — order and recovery | complete | 63 backend/regression checks include activation/claim/dispatch pause fences, stopped/paused parents, restart, fault/preparation retries, completed revisions and explicit missing-image recovery without duplicate later work. |
 | AC7 — reader, UI and exports | complete | Four browser cases together pass; numeric shelf/navigation, desktop/390px IAB, ordinary production PDF/PNG/ZIP/public conversion preserve source, part title and automatic panel presentation. |
-| AC8 — regression and completion | complete | Final `pnpm test:changed`: 1,567/1,567 across 192 files; final `pnpm typecheck`/`pnpm lint`/`git diff --check` pass; 24 native tests and rustfmt pass; independent AR/CR and AC1–AC7 VR passed; source branch is `feature/story-import-series`. |
+| AC8 — regression and completion | complete | Final `pnpm test:changed`: 1,568/1,568 across 192 files; final `pnpm typecheck`/`pnpm lint`/`git diff --check` pass; 24 native tests and rustfmt pass; independent AR/CR and AC1–AC7 VR passed; source branch is `feature/story-import-series`. |
 
-Final suite evidence: `.data/test-plans/2026-11-06T23-01-40-359Z-ab745635/run.json` (exitCode 0). Test providers were controlled; no live paid generation or personal-library migration probes were used. After all checks passed, normal `pnpm dev` startup restored the user's service at http://127.0.0.1:3000/, created a verified whole-library safety backup and applied migration 0022. The exact local backup path is retained in `.data/reviews/story-import-startup.json`; it is intentionally excluded from shared source documentation. IAB confirms the running app's Upload a story sheet is ready, without importing a personal file or starting inference.
+Initial feature suite evidence: `.data/test-plans/2026-11-06T23-01-40-359Z-ab745635/run.json` (exitCode 0). Test providers were controlled; no live paid generation or personal-library migration probes were used. After all checks passed, normal `pnpm dev` startup restored the user's service at http://127.0.0.1:3000/, created a verified whole-library safety backup and applied migration 0022. The exact local backup path is retained in `.data/reviews/story-import-startup.json`; it is intentionally excluded from shared source documentation. IAB confirms the running app's Upload a story sheet is ready, without importing a personal file or starting inference.
 
 GC completed: the verified implementation is committed locally on `feature/story-import-series`, based on main `5624163`. Final documentation bookkeeping is included in the same feature commit. PDF fixtures have explicit binary Git attributes so required PDF cross-reference bytes are preserved; no fixture data was rewritten.
+
+
+## Development upload repair
+
+The first real sample upload exposed a missing runtime-mode case: Node24 `--watch` sends dependency reports through a worker's parent channel before its application result. The parser's one-shot listener treated the first report as a failed document. Isolated watched-process reproduction returns the exact UI error; the same file reads successfully outside watch mode. No source corruption or library migration is involved.
+
+- [x] Add an actual `node --watch` subprocess regression through the production extractor for Word, PDF and a parser rejection; demonstrate the original failure.
+- [x] Give parser result envelopes an explicit discriminator and listen until that result arrives, ignoring unrelated runtime control messages while preserving validation/deadline/worker-error/exit handling.
+- [x] Run focused parser checks, typecheck/lint and the required changed-test plan; independently review the repair.
+- [x] Re-upload the supplied sample through the running watched app and verify its complete source preview and one-comic plan without commissioning generation.
+- [x] Record verified repair evidence and commit the fix on the same feature branch.
+
+Repair evidence so far: the real watched regression failed before the fix with the exact generic document error, then parser/text checks passed 24/24. The actual running watched service accepted the same Word file through its origin-checked multipart API with HTTP 201, complete 1,423-character source preview/final ending and a one-comic plan; no comic was commissioned. Independent final CR passed; final typecheck/lint, 24 native tests and rustfmt passed. After resetting the browser control connection, IAB file selection also succeeded in the same running watched app. The source preview visibly contains all 1,423 characters and its ending; the plan reads One complete comic and Create comic is available. No generation was commissioned. Local proof screenshot: `.data/reviews/story-import-fixed.png`.
+
+The first repair full run completed 1,567/1,568 checks: the unchanged desktop-console browser test timed out waiting for its initial Start service button on a blank page. It failed before the console booted, outside the import parser dependency graph. The exact test passed on isolated rerun (1/1, 11.18 seconds). Concurrent desktop Vite optimizer invalidation is a plausible cause from shared-cache/re-optimization evidence, not a proven diagnosis. No unrelated source/test was changed; a fresh full run follows.
+
+Repair VR passed: AC1 is demonstrated by actual watched Word/PDF success and preserved parser errors, plus the successful live IAB sample upload/full preview/one-comic plan. AC8 is confirmed by the fresh full `pnpm test:changed` run: 1,568/1,568 pass, zero failures/skips/cancellations, 268.55 seconds; evidence `.data/test-plans/2026-11-07T03-59-42-711Z-db76848a/run.json` (exitCode 0). Typecheck, lint, diff checks, 24 native source-only checks, rustfmt and independent final CR pass. The desktop preview timeout passed on both isolated and full reruns; no unrelated desktop code/test was changed. Source stayed frozen throughout the clean full run.
+
+Repair GC completed locally on `feature/story-import-series`; only the parser protocol, actual watched regression and matching RPD evidence were committed. Main remains unchanged.
