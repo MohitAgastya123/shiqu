@@ -14,7 +14,7 @@ Continue the scene's illustrated background behind automatic lettering, retainin
 - [x] AC2: Shared reader, PDF, PNG, ZIP and offline output use the same scenery transform and foreground geometry. Saved images, source, dialogue/evidence, frame order and signed public archive rules remain intact; opening/exporting starts no inference.
 - [x] AC3: Scenic reuse is bounded to the top scenery outside validated planned face/action regions and speaker halos, with explicit safety margins and scale limits. This is geometric staging, not pixel-level background recognition. Unknown/baked/no-safe-region frames retain conservative subject protection. Malformed metadata and dense text never cause sampling into declared protected regions or silent loss.
 - [x] AC4: Every development launch owns its cache. A second optimizer/startup failure and cleanup leave the first server's versioned dependencies and actual browser PDF download working. Public-path validation/frontend binding still precede backend/library startup.
-- [ ] AC5: The running app downloads a readable, complete PDF through its ordinary controls after controlled restart/reload. Required selected/full/native/typecheck/lint checks and independent review pass. Reconciled docs and verified branch push complete delivery.
+- [x] AC5: The running app downloads a readable, complete PDF through its ordinary controls after controlled restart/reload. Required selected/full/native/typecheck/lint checks and independent review pass. Reconciled docs and verified branch push complete delivery.
 
 ## Constraints
 

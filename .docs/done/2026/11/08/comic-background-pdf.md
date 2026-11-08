@@ -11,7 +11,7 @@
 - Pinned `pnpm test:changed --plan` selected full/native scope, 196 files; `pnpm test:changed` passed 1,618 tests with zero failures/skips. Focused scenic/shared checks passed 62/62 and development/browser checks 12/12; `pnpm typecheck`, `pnpm lint` and `git diff --check` passed.
 - Native source checks passed 24 tests and rustfmt. Initial parallel lock-race failure resolved in a complete serial rerun; one prepared-bundle contract was filtered because no package build was requested.
 - The retained reader downloaded a readable six-page PDF through ordinary controls after restart/reload. All six pages passed independent visual review; panel 3 passed desktop and 390px phone zoom. Saved source/dialogue/images/model records/revision are unchanged. Desktop preview was checked without packaging.
-- Independent AR and renewed CR passed; REQ/AP/E2E/user/development/CLI docs agree. Source commit and verified branch publication are the remaining delivery step.
+- Independent AR and renewed CR passed; REQ/AP/E2E/user/development/CLI docs agree. Source commit `e7bee9c7bc8ca2aef856bf8d60281d0d69044dcc` was pushed to `origin/feature/comic-composition-ack`; exact remote head and unchanged main were verified. All five acceptance criteria pass.
 
 ## Notes
 
