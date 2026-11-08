@@ -17,7 +17,7 @@ Compose tightly arranged comic pages whose artwork fills the panel viewport, wit
 - [x] AC5: **ACK comics** is available in the ordinary creation/import/revision style picker and all current selection/recommendation/provider contracts. Its prompt produces the intended expressive ink, rich flat colours, restrained shading and detailed classic-comic atmosphere while retaining source culture, era, ages and clothing. Existing styles/defaults and frozen historical discovery contracts remain valid.
 - [x] AC6: Reader, PDF, PNG, ZIP panels and offline preview consume the shared image transforms, narration and balloon geometry. Phone zoom/transcripts and canonical frame progress still work. Long titles/credits/signatures do not overlap panels or narration; no source text is dropped or silently clipped.
 - [x] AC7: Production-path geometry, source/repair/revision, provider size/style, legacy archive, actual desktop/phone browser and rendered-export checks demonstrate the requested improvements, including the user-reported portrait layout and faces near speech targets. Required selected/full/native/typecheck/lint checks pass and independent reviews have no blockers.
-- [ ] AC8: Requirements, plan, E2E and user/CLI documentation match the finished behavior. The verified work is committed and pushed to a feature branch on origin, and its remote head is verified. Main is not merged as part of this request.
+- [x] AC8: Requirements, plan, E2E and user/CLI documentation match the finished behavior. The verified work is committed and pushed to a feature branch on origin, and its remote head is verified. Main is not merged as part of this request.
 
 ## Constraints
 

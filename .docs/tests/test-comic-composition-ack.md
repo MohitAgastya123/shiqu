@@ -9,7 +9,7 @@
 - [x] Publish explicit panel-only and composition-staging revisions. Panel-only edits reuse eligible art/review; changed real image inputs correctly update redraw previews/anchor dependants without a read-triggered redraw.
 - [x] Export actual production PDF, PNG, ZIP and offline preview. Inspect every page and maximum credits/signatures for overlap; compare transforms/balloons and retain source/part labels. Old baked lettering is not cropped/repainted; public conversion keeps signed WebP bytes/hashes/XMP unchanged.
 - [x] Inspect desktop Vite preview/IAB and 390px phone zoom/transcripts. Read/select/navigate saved comics without starting paid work. Run independent CR/VR and required selected/full/native/typecheck/lint checks.
-- [ ] Commit and push the feature to origin, verify its remote head and preserve main.
+- [x] Commit and push the feature to origin, verify its remote head and preserve main.
 
 - [x] Repair a historical caption-only frame without composition metadata: retain its 9:16 canvas, eligible artwork and review; do not invent staging. Retain existing composition on unchanged scene prompts and replace/clear it when scene staging changes.
 - [x] Verify a known legacy baked 24px minimum cannot be downscaled to 20–23px merely because new raw-art pages use a 20px floor. Unknown baked text remains splash-only and new 20px exports are validated against their own declared bound.
@@ -26,3 +26,5 @@ Independent architecture and final code reviews passed. Scoped tests and fixes a
 - [x] Block image metadata, then reveal a regrouped page map and traverse every actual comic page before reflection. Confirm the ending and next series part remain reachable without skipping scenes or starting inference.
 
 Final complete qualification: 195 source files / 1,602 tests passed with zero skipped; native 24 passed with the planned prepared-bundle filter, rustfmt/typecheck/full lint/diff passed. Independent final CR passed. The completed actual ACK comic was inspected across all four pages in IAB and left open at its beginning.
+
+Publication passed: source commit `ee517a1` is on `origin/feature/comic-composition-ack`; its remote full hash matched local HEAD, and origin/main remains `5624163`. No private QA artifacts were included.
