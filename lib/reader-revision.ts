@@ -4,6 +4,8 @@
 // Captions/reflection never invalidate artwork;
 // a changed anchor, cast, style or global image preference invalidates its dependants.
 // Style and explicit image-only redraws preserve review; content and acceptance edits invalidate it.
+// Staging geometry affects image reuse while remaining separate from narrative editorial evidence.
+// Manual scene rewrites clear copied staging unless the revision explicitly supplies new geometry.
 import {z} from 'zod';
 import {acceptancePromptSchema} from './reader-acceptance.ts';
 import {planSchema,ReaderError} from './reader-model.ts';
@@ -28,15 +30,23 @@ export type RevisionImpact={changed:boolean;replan:boolean;preserveScript:boolea
 export const revisionFrameCount=(base:RevisionBase)=>base.plan?.pages.length??(typeof base.selection.length==='number'?base.selection.length:base.frameRecommendation?.count??8);
 export const preserveRevisionScript=(base:RevisionBase,changes:RevisionChanges)=>!base.plan&&base.savedFrameCount===revisionFrameCount(base)&&(changes.productionPrompt??base.selection.productionPrompt)===base.selection.productionPrompt&&(changes.narrativeDetail??base.selection.narrativeDetail??'balanced')===(base.selection.narrativeDetail||'balanced')&&(changes.length===undefined||changes.length===base.selection.length||changes.length===revisionFrameCount(base));
 // Compare semantic fields explicitly: layout-only edits must not invoke a paid model review.
-const editorialPlan=(plan:Plan|null)=>plan&&({...plan,pages:plan.pages.map(({bubbles,panel,...page})=>{void panel;return {...page,bubbles:(bubbles||[]).map(({kind,speaker,text,sourceQuote})=>({kind,speaker,text,...(sourceQuote?{sourceQuote}:{})}))};})});
+const editorialPlan=(plan:Plan|null)=>plan&&({...plan,pages:plan.pages.map(({bubbles,panel,composition,...page})=>{void panel;void composition;return {...page,bubbles:(bubbles||[]).map(({kind,speaker,text,sourceQuote})=>({kind,speaker,text,...(sourceQuote?{sourceQuote}:{})}))};})});
+function revisionPlan(base:RevisionBase,changes:RevisionChanges){
+ if(!changes.plan)return base.plan;
+ return {...changes.plan,pages:changes.plan.pages.map((page,index)=>{
+  const previous=base.plan?.pages[index];
+  if(!previous||page.prompt===previous.prompt||JSON.stringify(page.composition??null)!==JSON.stringify(previous.composition??null))return page;
+  const {composition,...scene}=page;void composition;return scene;
+ })};
+}
 export function revisionImpact(base:RevisionBase,changes:RevisionChanges):RevisionImpact{
  const selection={...base.selection,productionPrompt:changes.productionPrompt??base.selection.productionPrompt,artStyle:changes.artStyle??base.selection.artStyle};
  const requirements=selection.productionPrompt!==base.selection.productionPrompt;
  const detail=changes.narrativeDetail!==undefined&&changes.narrativeDetail!==(base.selection.narrativeDetail||'balanced');
  const count=changes.length!==undefined&&(changes.length==='auto'?base.selection.length!=='auto':changes.length!==revisionFrameCount(base));
- const replan=!base.plan||requirements||detail||count,plan=changes.plan||base.plan;
- const manual=!!changes.plan&&JSON.stringify(changes.plan)!==JSON.stringify(base.plan);
- const editorial=manual&&JSON.stringify(editorialPlan(changes.plan!))!==JSON.stringify(editorialPlan(base.plan));
+ const replan=!base.plan||requirements||detail||count,plan=revisionPlan(base,changes);
+ const manual=!!changes.plan&&JSON.stringify(plan)!==JSON.stringify(base.plan);
+ const editorial=manual&&JSON.stringify(editorialPlan(plan!))!==JSON.stringify(editorialPlan(base.plan));
  const acceptance=(changes.acceptancePrompt??base.selection.acceptancePrompt??'')!==(base.selection.acceptancePrompt||'');
  const changed=acceptance||requirements||detail||count||manual||selection.artStyle!==base.selection.artStyle||!!changes.redrawPages?.length;
  const total=typeof changes.length==='number'?changes.length:revisionFrameCount(base);
@@ -58,7 +68,7 @@ export function checkedRevision(base:RevisionBase,changes:RevisionChanges){
  if(changes.plan&&(['title','summary','sourceReference','adaptationNote'] as const).some(key=>changes.plan![key]!==base.plan![key]))throw new ReaderError(400,'This revision may change frames, characters and ending; source and story metadata must remain unchanged.');
  if(changes.plan&&changes.plan.pages.length!==base.plan!.pages.length)throw new ReaderError(400,'Adjust narrative detail to replan the count rather than directly adding or removing frames.');
  const selection:Selection={...base.selection,...(changes.acceptancePrompt!==undefined?{acceptancePrompt:changes.acceptancePrompt}:{}),productionPrompt:changes.productionPrompt??base.selection.productionPrompt,artStyle:changes.artStyle??base.selection.artStyle,narrativeDetail:changes.narrativeDetail??base.selection.narrativeDetail,length:changes.length??(impact.replan?'auto':base.selection.length)};
- return {impact,selection,plan:impact.replan?null:structuredClone(changes.plan||base.plan)};
+ return {impact,selection,plan:impact.replan?null:structuredClone(revisionPlan(base,changes))};
 }
 export function syncRevisionImages(doc:Document,selection:Selection){
  if(doc.revision&&doc.plan)doc.images=reusableRevisionImages(doc.revision.base,selection,doc.plan).map((image,index)=>doc.revision!.redrawPages?.includes(index+1)?'':image);

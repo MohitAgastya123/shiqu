@@ -1,9 +1,11 @@
 // English product text and generation contracts; canonical source evidence remains unchanged.
-// Preserve comic balloon attribution and embedded-raster markers in shared archive serialization.
+// Preserve comic staging, balloon attribution and actual embedded-lettering records in shared archive serialization.
 // Browser code owns image encoding; the collection command keeps those signed WebP bytes unchanged.
 // Public series labels retain numeric part identity without leaking original upload bytes or continuity context.
 import {layoutComicPages,validatedComicPages,validatedComicRendering} from './comic-page-layout.ts';
 import type {ComicPage} from './comic-page-layout.ts';
+import {comicCompositionSchema} from './comic-composition.ts';
+import type {ComicComposition} from './comic-composition.ts';
 import {themeLabel} from './reader-language.ts';
 import {strToU8} from 'fflate';
 import type {Story} from './content';
@@ -22,7 +24,7 @@ export type StoryZipData={
  series?:StorySeriesMembership;
  id:string;title:string;summary:string;bookId:string;theme:string;sourceReference:string;sourceText:string;sourceUrl:string;
  artStyleLabel:string|null;author:string;publication:StoryPublication|null;aiGenerated:boolean|null;aiDisclosure:string;
- comicPages?:ComicPage[];generationModels:{step:string;model:string}[];pages:({caption:string;prompt?:string|null;image:string;bubbles?:ComicBubble[];bubbleRendering?:'embedded';panel?:'normal'|'wide'|'large'|'splash';comicRendering?:{width:number;height:number;minFontSize:number|null}}&StoryImageHashes)[];
+ comicPages?:ComicPage[];generationModels:{step:string;model:string}[];pages:({composition?:ComicComposition;caption:string;prompt?:string|null;image:string;bubbles?:ComicBubble[];bubbleRendering?:'embedded';panel?:'normal'|'wide'|'large'|'splash';comicRendering?:{width:number;height:number;minFontSize:number|null}}&StoryImageHashes)[];
  reflection:string;adaptationNote:string;revision:number;createdAt:string;updatedAt:string;
  productionPrompt?:string|null;acceptancePrompt?:string|null;promptHistoryFile?:string;
 };
@@ -47,15 +49,15 @@ export function storyZipData(story:Story,images:string[],hashes:StoryImageHashes
   artStyleLabel:generated?.artStyleLabel??null,author:story.publication?.author||'',publication:story.publication||null,
   aiGenerated:generated?true:null,aiDisclosure:aiDisclosure(story),generationModels:generated?.generationModels??[],
   productionPrompt:history?.productionPrompt??null,acceptancePrompt:history?.acceptancePrompt??null,promptHistoryFile:'提示词.json',
-  comicPages:comicPages||layoutComicPages(story.pages),
-  pages:story.pages.map((page,index)=>({caption:page.caption,prompt:page.prompt||null,image:images[index],...hashes[index],...(page.panel?{panel:page.panel}:{}),...(comicRenderings?.[index]||page.comicRendering?{comicRendering:validatedComicRendering(comicRenderings?.[index]||page.comicRendering)}:{}),...(page.bubbles?.length?{bubbles:pageBubblesSchema.parse(page.bubbles),...(bubbleRendering==='embedded'||page.bubbleRendering==='embedded'?{bubbleRendering:'embedded' as const}:{})}:{})})),
+  comicPages:comicPages||layoutComicPages(story.pages,{watermarkFontSize:story.publication?.watermarkFontSize}),
+  pages:story.pages.map((page,index)=>({caption:page.caption,prompt:page.prompt||null,image:images[index],...hashes[index],...(page.composition?{composition:comicCompositionSchema.parse(page.composition)}:{}),...(page.panel?{panel:page.panel}:{}),...(comicRenderings?.[index]||page.comicRendering?{comicRendering:validatedComicRendering(comicRenderings?.[index]||page.comicRendering)}:{}),...(page.bubbles?.length?{bubbles:pageBubblesSchema.parse(page.bubbles),...(bubbleRendering==='embedded'||page.bubbleRendering==='embedded'?{bubbleRendering:'embedded' as const}:{})}:{})})),
   reflection:story.reflection,adaptationNote:story.adaptationNote,revision:story.revision,createdAt:story.createdAt,updatedAt:story.updatedAt,
  };
 }
 export function publicStoryZipData(input:StoryZipData):StoryZipData{
  for(const key of publicFields)if(!Object.hasOwn(input,key))throw Error(`Story archive is missing public field: ${key}`);
  if(input.pages.some(page=>page.comicRendering)&&!input.comicPages)throw Error('Embedded comic panels require their saved comic page layout.');
- if(input.comicPages){const pages=validatedComicPages(input.comicPages,input.pages.length);for(const panel of pages.flatMap(page=>page.panels)){const rendering=input.pages[panel.frameIndex].comicRendering;if(rendering){const saved=validatedComicRendering(rendering);if(saved.minFontSize===null&&panel.span!=='splash'||saved.minFontSize!==null&&saved.minFontSize*Math.min(panel.width*900/saved.width,panel.height*1350/saved.height)<24-1e-6)throw Error(`Panel ${panel.frameIndex+1} lettering is too small for its saved comic layout.`);}}}
+ if(input.comicPages){const pages=validatedComicPages(input.comicPages,input.pages.length);for(const panel of pages.flatMap(page=>page.panels)){const rendering=input.pages[panel.frameIndex].comicRendering;if(rendering){const saved=validatedComicRendering(rendering);if(saved.minFontSize===null&&panel.span!=='splash'||saved.minFontSize!==null&&Math.min(panel.width*900/saved.width,panel.height*1350/saved.height)<1-1e-6)throw Error(`Panel ${panel.frameIndex+1} lettering is too small for its saved comic layout.`);}}}
  if(input.publication&&input.publication.author!==input.author)throw Error('Public creator credit does not match.');
  if(input.aiDisclosure!==archivedAiDisclosure(zipMetadataStory(input)))throw Error('Public AI disclosure does not match the production method.');
  return {
@@ -65,10 +67,10 @@ export function publicStoryZipData(input:StoryZipData):StoryZipData{
   ...(input.comicPages?{comicPages:validatedComicPages(input.comicPages,input.pages.length)}:{}),
   publication:input.publication===null?null:publicPublication.parse(input.publication),
   generationModels:input.generationModels.map(({step,model})=>({step,model})),
-  pages:input.pages.map(({caption,image,sha256,originalSha256,imagePayloadSha256,bubbles,bubbleRendering,panel,comicRendering})=>{
+  pages:input.pages.map(({caption,image,sha256,originalSha256,imagePayloadSha256,bubbles,bubbleRendering,panel,comicRendering,composition})=>{
    if(bubbles?.length&&bubbleRendering!=='embedded')throw Error('Public comic balloon images must already contain their saved balloons.');
    if(panel!==undefined&&!['normal','wide','large','splash'].includes(panel))throw Error('Invalid comic panel emphasis.');
-   return {caption,image,sha256,originalSha256,imagePayloadSha256,...(panel?{panel}:{}),...(comicRendering?{comicRendering:validatedComicRendering(comicRendering)}:{}),...(bubbles?.length?{bubbles:pageBubblesSchema.parse(bubbles),bubbleRendering:'embedded' as const}:{})};
+   return {caption,image,sha256,originalSha256,imagePayloadSha256,...(composition?{composition:comicCompositionSchema.parse(composition)}:{}),...(panel?{panel}:{}),...(comicRendering?{comicRendering:validatedComicRendering(comicRendering)}:{}),...(bubbles?.length?{bubbles:pageBubblesSchema.parse(bubbles),bubbleRendering:'embedded' as const}:{})};
   }),
  };
 }

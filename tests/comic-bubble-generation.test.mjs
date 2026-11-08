@@ -1,4 +1,4 @@
-// Exercise automatic, evidence-backed balloons through the same production queue, repairs and saved history.
+// Exercise compact automatic source-backed balloons through the production queue, repairs and saved history.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {comicBubbleSchema,pageBubblesSchema,comicBubbleJsonSchema,autoPlaceBubbles,validateBubbleEvidence,BubbleDensityError} from '../lib/reader-bubbles.ts';
@@ -44,7 +44,7 @@ test('generation evidence is an exact source quotation, including explicit thoug
 test('automatic placement is deterministic, readable, ordered and preserves speaker targets without mutating input',()=>{
  const input=[balloon(),thought()],original=structuredClone(input),placed=autoPlaceBubbles(input);
  assert.deepEqual(input,original);assert.deepEqual(autoPlaceBubbles(input),placed);assert.deepEqual(placed.map(({id,text,sourceQuote,tailX,tailY})=>({id,text,sourceQuote,tailX,tailY})),original.map(({id,text,sourceQuote,tailX,tailY})=>({id,text,sourceQuote,tailX,tailY})));
- for(const bubble of placed){assert.ok(bubble.x>=0&&bubble.y>=0&&bubble.x+bubble.width<=1&&bubble.y+bubble.height<=1);const start=bubbleTailStart(bubble);assert.ok(Math.hypot((start.x-bubble.tailX)*900,(start.y-bubble.tailY)*1350)<=90);const fit=fitBubbleText(bubble.text,bubble.width*900,bubble.height*1350,bubble.kind,bubble.speaker);assert.ok(fit.fontSize>=24);assert.doesNotThrow(()=>computeBubbleLayout(bubble,900,1350));}
+ for(const bubble of placed){assert.ok(bubble.x>=0&&bubble.y>=0&&bubble.x+bubble.width<=1&&bubble.y+bubble.height<=1);const start=bubbleTailStart(bubble);assert.ok(Math.hypot((start.x-bubble.tailX)*900,(start.y-bubble.tailY)*1350)<=90);const fit=fitBubbleText(bubble.text,bubble.width*900,bubble.height*1350,bubble.kind,bubble.speaker);assert.ok(fit.fontSize>=20);assert.doesNotThrow(()=>computeBubbleLayout(bubble,900,1350));}
  const [a,b]=placed;assert.ok(a.x+a.width<=b.x||a.y+a.height<=b.y||b.x+b.width<=a.x||b.y+b.height<=a.y);
 });
 

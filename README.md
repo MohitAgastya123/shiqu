@@ -1,6 +1,6 @@
 # Shiqu
 
-Turn your own stories and Chinese classics into illustrated comic books in English. Shiqu includes 24 source books and 15 art styles, supports computer and phone reading, and exports PDF, PNG overview images, and ZIP archives. Stories, images, and reading progress are saved on your computer.
+Turn your own stories and Chinese classics into illustrated comic books in English. Shiqu includes 24 source books and 16 art styles, supports computer and phone reading, and exports PDF, PNG overview images, and ZIP archives. Stories, images, and reading progress are saved on your computer.
 
 New stories are written in English. During preparation, the production workflow translates the selected source passage and its chapter context into English. The verified Chinese originals remain internal evidence for source checks; they are not rewritten. Previously saved content is not silently translated or regenerated.
 
@@ -81,9 +81,11 @@ The production core creates a storyboard, reviews it against the original, makes
 
 The redesigned shelf separates active production from readable stories. A selective image redraw creates a revision that preserves reviewed text and redraws only the explicitly chosen frames.
 
-New comics automatically include compact oval speech balloons and thought clouds when the source supports them. The app chooses dialogue, keeps speaker attribution in its saved data and accessible transcript, and places short connected tails near the planned characters. Visible balloons contain the words alone, in bundled comic lettering with colours drawn from the artwork. Start production as usual; no balloon-placement step is required.
+New comics automatically include compact oval speech balloons and thought clouds when the source supports them. The app chooses dialogue, keeps speaker attribution in its saved data and accessible transcript, and places short connected tails near the planned characters. Visible balloons contain the words alone, in bundled comic lettering with colours drawn from the artwork. Planned face/action areas guide clear-space placement. When artwork has no reliable staging geometry or a panel is crowded, an automatic lettering band keeps bubbles out of the scene. Start production as usual; no balloon-placement step is required.
 
-The reader composes illustrated panels into comic pages, normally four per page. Wide, tall and full-page panels give important or text-heavy scenes more room. Existing saved stories receive the new layout without regenerating artwork. Narration stays with its panel, and phone readers can zoom into the page. Optional corrections retain explicit save/revision behavior; layout-only edits reuse artwork and review, while dialogue or attribution changes use the normal source review.
+The reader composes tightly arranged comic pages with wide, tall and full-page panels for important or text-heavy scenes. Image-aware layouts can use up to six panels. Artwork fills its viewport, with compact narration and small gutters; protected scene content takes priority when a crop would remove a face or key action. Existing saved stories receive the new layout without regenerating artwork. Narration stays with its panel, and phone readers can zoom into the page. Optional corrections retain explicit save/revision behavior; layout-only edits reuse artwork and review, while dialogue or attribution changes use the normal source review.
+
+**ACK comics** adds classic Indian adventure-comic character: expressive ink contours, rich flat colours, restrained shading and warm print tones. Choose it in Art style for newly generated illustrations; the story keeps its own era, culture, clothing and character ages.
 
 ## Export and share
 

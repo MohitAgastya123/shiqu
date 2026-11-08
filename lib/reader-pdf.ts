@@ -1,5 +1,5 @@
 // English product text and generation contracts; canonical source evidence remains unchanged.
-// Export automatic comic sheets using the shared full-art panel presentation, followed by source notes.
+// Export protected-aware comic sheets with matching publication clearance and non-overlapping page labels.
 import {themeLabel} from './reader-language.ts';
 import type {Story} from './content';
 import {browserExportRuntime,type ExportRuntime} from './story-export-runtime.ts';
@@ -43,13 +43,14 @@ export async function createStoryPdf(story:Story,onProgress:(text:string)=>void=
   const image=await pdf.embedJpg(await blob.arrayBuffer());pdf.addPage([360,540]).drawImage(image,{x:0,y:0,width:360,height:540});
  }
  try{
-  const imageSizes=await readComicImageSizes(story.pages,runtime),comicPages=layoutComicPages(story.pages,{imageSizes});
+  const options={watermarkFontSize:story.publication?.watermarkFontSize},imageSizes=await readComicImageSizes(story.pages,runtime),comicPages=layoutComicPages(story.pages,{imageSizes,...options});
+  let fullTitleInNotes=false;
   for(const page of comicPages){
    onProgress(`Preparing comic page ${page.index+1} / ${comicPages.length}`);
-   await paintComicPage(ctx,story.pages,page,runtime);
-   font(20,sans);ctx.fillStyle='#263a2e';lines(story.title,W-2*M-120).forEach((line,index)=>ctx.fillText(line,M,20+index*23));
-   ctx.textAlign='right';ctx.fillText(`${page.index+1} / ${comicPages.length}`,W-M,30);ctx.textAlign='left';
-   font(18,sans);ctx.fillText(publicationCredit(story),M,H-30,W-2*M);
+   await paintComicPage(ctx,story.pages,page,runtime,()=>{},options);
+   font(18,sans);ctx.fillStyle='#263a2e';const heading=lines(story.title,W-28-110);fullTitleInNotes=heading.length>2;heading.slice(0,2).forEach((line,index)=>ctx.fillText(line+(index===1&&heading.length>2?'…':''),14,7+index*21,W-28-110));
+   ctx.textAlign='right';ctx.fillText(`${page.index+1} / ${comicPages.length}`,W-14,18);ctx.textAlign='left';
+   font(16,sans);ctx.fillText(publicationCredit(story),14,H-30,W-28);
    await addCanvas();
   }
   onProgress('Preparing the ending and source notes');
@@ -64,6 +65,7 @@ export async function createStoryPdf(story:Story,onProgress:(text:string)=>void=
    for(const line of content){if(y>H-110){await addCanvas();paper();font(size);}ctx.fillStyle='#2a493b';ctx.fillText(line,M,y);y+=size*1.75;}
    y+=40;
   }
+  if(fullTitleInNotes)await block('Story title',story.title);
   await block('A final thought',story.reflection,40);
   await block('Source reference',storySourceReference(story));
   await block('About this adaptation',story.adaptationNote);

@@ -1,4 +1,4 @@
-// Offline exports use shared comic balloon painting, archive rules, and native canvas IO.
+// Offline exports use protected-aware comic presentation, publication clearance and shared native canvas IO.
 // Read media through the in-process production API only; never fetch remote URLs or mutate source images.
 import path from 'node:path';
 import {readFile,writeFile,lstat} from 'node:fs/promises';
@@ -55,11 +55,11 @@ export async function exportLocalStory(root:string,app:Application,session:any,o
  else if(format==='md'){bytes=storyZipFiles(storyZipData(story,story.pages.map(p=>p.image||''),[],null))['分镜.md'];}
  else if(format==='html'){
   await runtime.ready();
-  const imageSizes=await readComicImageSizes(story.pages,runtime),pages=layoutComicPages(story.pages,{imageSizes}),sheets=[];
+  const imageSizes=await readComicImageSizes(story.pages,runtime),pages=layoutComicPages(story.pages,{imageSizes,watermarkFontSize:story.publication?.watermarkFontSize}),sheets=[];
   for(const page of pages){
    const canvas=runtime.canvas();canvas.width=comicPageWidth;canvas.height=comicPageHeight;
    try{
-    const ctx=canvas.getContext('2d');if(!ctx)throw Error('PREVIEW_CANVAS_UNAVAILABLE');await paintComicPage(ctx,story.pages,page,runtime);
+    const ctx=canvas.getContext('2d');if(!ctx)throw Error('PREVIEW_CANVAS_UNAVAILABLE');await paintComicPage(ctx,story.pages,page,runtime,()=>{},{watermarkFontSize:story.publication?.watermarkFontSize});
     const image=await new Promise<Blob>((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(Error('PREVIEW_IMAGE_UNAVAILABLE')),'image/png'));
     const src='data:image/png;base64,'+Buffer.from(await image.arrayBuffer()).toString('base64');
     const transcript=page.panels.map(({frameIndex})=>{const frame=story.pages[frameIndex];return `<li><strong>Panel ${frameIndex+1}</strong><p>${escape(frame.caption)}</p>`+(frame.bubbles?.length?'<ol>'+frame.bubbles.map(bubble=>`<li>${escape(bubble.speaker)} (${bubble.kind}): ${escape(bubble.text)}</li>`).join('')+'</ol>':'')+'</li>';}).join('');

@@ -2,9 +2,11 @@
 // Validate saved story documents; complete drafts wait for a separately edited title and ending before review.
 // Panel emphasis is optional on saved frames; production generation requests it for automatic page composition.
 // Only the reserved imported root (and its revisions) exposes active series membership; copies keep evidence alone.
+// Optional validated staging retains legacy pages while new plans carry protected scene geometry.
 import type {RequirementsSetup} from './reader-requirements.ts';
 import {z} from 'zod';
 import {pageBubblesSchema} from './reader-bubbles.ts';
+import {comicCompositionSchema} from './comic-composition.ts';
 import type {StoryPublication} from './story-publication';
 import {acceptancePromptSchema} from './reader-acceptance.ts';
 import type {PromptRecord} from './reader-prompt-records.ts';
@@ -32,7 +34,7 @@ export const selectionSchema=z.object({bookId:z.string().min(1).max(100),customB
 export type Selection=z.infer<typeof selectionSchema>;
 export const comicPanelKinds=['normal','wide','large','splash'] as const;
 export const comicPanelSchema=z.enum(comicPanelKinds);
-export const planSchema=z.object({title:z.string().min(1).max(160),summary:z.string().trim().min(1).max(2400),sourceReference:z.string().min(1).max(150),adaptationNote:z.string().min(1).max(600),reflection:z.string().min(1).max(400),characters:z.string().min(20).max(6000),pages:z.array(z.object({caption:z.string().max(500),prompt:z.string().min(20).max(4000),bubbles:pageBubblesSchema.optional(),panel:comicPanelSchema.optional()})).min(readerMinFrames).max(readerMaxFrames)});
+export const planSchema=z.object({title:z.string().min(1).max(160),summary:z.string().trim().min(1).max(2400),sourceReference:z.string().min(1).max(150),adaptationNote:z.string().min(1).max(600),reflection:z.string().min(1).max(400),characters:z.string().min(20).max(6000),pages:z.array(z.object({caption:z.string().max(500),prompt:z.string().min(20).max(4000),bubbles:pageBubblesSchema.optional(),panel:comicPanelSchema.optional(),composition:comicCompositionSchema.optional()})).min(readerMinFrames).max(readerMaxFrames)});
 export type Plan=z.infer<typeof planSchema>;
 export const reflectionCandidatesSchema=z.array(planSchema.shape.reflection.trim().min(1)).length(3).superRefine((values,ctx)=>{
  if(new Set(values).size!==3)ctx.addIssue({code:z.ZodIssueCode.custom,message:'Ending candidates must be distinct'});

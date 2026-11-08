@@ -1,4 +1,4 @@
-// Verify English export metadata and preserve legacy archive image bytes.
+// Verify English export metadata, shared viewport clipping and byte-exact public archive conversion.
 import {createCanvas} from '@napi-rs/canvas';
 import {themeLabel} from '../lib/reader-language.ts';
 // English product expectations; historical source fixtures remain explicit test data.
@@ -26,7 +26,7 @@ function browserImages(t){
  globalThis.document={querySelector(){return null;},body:{appendChild(){}},createElement(tag){
   if(tag==='a')return {click(){controls.downloads.push({href:this.href,download:this.download});},remove(){}};
   assert.equal(tag,'canvas');
-  const canvas={width:0,height:0,getContext(){return controls.failure==='context'?null:{save(){},restore(){},translate(){},rotate(){},measureText(text){return {width:[...text].length*20};},fillRect(){},strokeRect(){},fillText(text,x,y,maxWidth){(canvas.labels||=[]).push({text,x,y,font:this.font,maxWidth});},drawImage(image,x,y,width,height){assert.ok(Number.isFinite(x)&&Number.isFinite(y));if(width!==undefined)assert.ok(width>0&&height>0);canvas.image=image;}};},toBlob(callback,type,quality){
+  const canvas={width:0,height:0,getContext(){return controls.failure==='context'?null:{save(){},restore(){},translate(){},rotate(){},beginPath(){},rect(x,y,width,height){canvas.clipRect={x,y,width,height};},clip(){},measureText(text){return {width:[...text].length*20};},fillRect(){},strokeRect(){},fillText(text,x,y,maxWidth){(canvas.labels||=[]).push({text,x,y,font:this.font,maxWidth});},drawImage(image,x,y,width,height){assert.ok(Number.isFinite(x)&&Number.isFinite(y));if(width!==undefined)assert.ok(width>0&&height>0);canvas.image=image;}};},toBlob(callback,type,quality){
    assert.equal(type,'image/webp');assert.equal(quality,.85);
    canvas.encodedSize=[canvas.width,canvas.height];
    if(controls.failure==='empty'){callback(null);return;}const output=createCanvas(canvas.width,canvas.height);output.getContext('2d').fillRect(0,0,canvas.width,canvas.height);void output.encode('webp',85).then(bytes=>{canvas.output=bytes;callback(new Blob([bytes],{type:controls.failure==='format'?'image/png':'image/webp'}));});
@@ -108,7 +108,7 @@ test('ZIP preserves images and public metadata while exporting requirements, pag
  assert.ok(progress.includes('Packaging frame 12 / 12'));
  assert.equal(browser.canvases.filter(canvas=>canvas.encodedSize).length,12);
  assert.equal(browser.revoked.length,24);
- for(const canvas of browser.canvases){if(canvas.encodedSize){assert.equal(canvas.encodedSize[0],409);assert.equal(canvas.encodedSize[1],591);assert.ok(canvas.labels.some(label=>label.text.includes('AI-generated')));}assert.equal(canvas.width,0);assert.equal(canvas.height,0);}
+ let encodedIndex=0;for(const canvas of browser.canvases){if(canvas.encodedSize){const rendering=json.pages[encodedIndex++].comicRendering;assert.deepEqual(canvas.encodedSize,[rendering.width,rendering.height]);assert.ok(canvas.labels.some(label=>label.text.includes('AI-generated')));}assert.equal(canvas.width,0);assert.equal(canvas.height,0);}
 });
 
 test('ZIP exports stories without generation metadata with an empty model list',async t=>{
@@ -246,7 +246,7 @@ test('ZIP applies the saved watermark size to WebP canvases and retains it in st
  const story={...makeStory(2),publication},blob=await createStoryZip(story,null);
  const files=unzipSync(new Uint8Array(await blob.arrayBuffer())),saved=JSON.parse(strFromU8(files['故事.json']));
  assert.deepEqual(saved.publication,publication);const encoded=browser.canvases.filter(canvas=>canvas.encodedSize);assert.equal(encoded.length,2);
- for(const canvas of encoded){const label=canvas.labels.find(label=>label.font.startsWith('300 '));assert.match(label.font,/300 40px /);assert.equal(label.maxWidth,836*.94);assert.deepEqual(canvas.encodedSize,[836,591]);}
+ for(const [index,canvas]of encoded.entries()){const label=canvas.labels.find(label=>label.font.startsWith('300 ')),rendering=saved.pages[index].comicRendering;assert.match(label.font,/300 40px /);assert.equal(label.maxWidth,rendering.width*.94);assert.deepEqual(canvas.encodedSize,[rendering.width,rendering.height]);}
 });
 
 test('collection export consumes the browser ZIP with its signed WebPs and shared public serialization',async t=>{

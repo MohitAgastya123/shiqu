@@ -592,7 +592,8 @@
         "lib/reader-bubbles.ts",
         "lib/comic-bubble-palette.ts",
         "lib/comic-bubble-font.ts",
-        "server/story-export.ts"
+        "server/story-export.ts",
+        "lib/comic-composition.ts"
       ]
     },
     {
@@ -648,7 +649,8 @@
         "lib/reader-structure.ts",
         "lib/reader-review-history.ts",
         "lib/reader-repository.ts",
-        "lib/reader-engine.ts"
+        "lib/reader-engine.ts",
+        "lib/comic-composition.ts"
       ]
     },
     {
@@ -725,7 +727,8 @@
         "client/ui/StoryRevisionEditor.tsx",
         "client/ui/StoryFilmstrip.tsx",
         "lib/reader-revision.ts",
-        "lib/reader-bubbles.ts"
+        "lib/reader-bubbles.ts",
+        "client/ui/story-bubbles.css"
       ]
     },
     {
@@ -2198,7 +2201,8 @@
         "lib/reader-local-contract.ts",
         "lib/reader-model.ts",
         "lib/reader-prompts.ts",
-        "server/generation.ts"
+        "server/generation.ts",
+        "server/openai-provider.ts"
       ]
     },
     {
@@ -4283,7 +4287,8 @@
         "client/ui/StoryImportSetup.tsx",
         "client/ui/StorySeriesOverview.tsx",
         "client/ui/useStorySeries.ts",
-        "lib/story-import-contract.ts"
+        "lib/story-import-contract.ts",
+        "lib/comic-page-layout.ts"
       ]
     },
     {
@@ -4315,6 +4320,100 @@
         "server/library-backup.ts",
         "lib/reader-repository.ts",
         "lib/story-import-contract.ts"
+      ]
+    },
+    {
+      "file": "tests/comic-composition.test.mjs",
+      "groups": [
+        "preparation",
+        "review",
+        "production",
+        "reader",
+        "media"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "lib/comic-composition.ts",
+        "lib/content.ts",
+        "lib/reader-model.ts",
+        "lib/reader-generation-contract.ts",
+        "lib/reader-image-dimensions.ts",
+        "lib/reader-revision.ts",
+        "lib/reader-revision-images.ts",
+        "lib/reader-structure.ts",
+        "lib/reader-engine.ts",
+        "lib/reader-review.ts",
+        "server/generation.ts",
+        "server/openai-provider.ts",
+        "lib/reader-gemini.ts"
+      ]
+    },
+    {
+      "file": "tests/comic-composition-layout.test.mjs",
+      "groups": [
+        "reader",
+        "media"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "lib/comic-page-layout.ts",
+        "lib/comic-bubble-layout.ts",
+        "lib/reader-pdf.ts",
+        "lib/reader-png.ts",
+        "lib/reader-zip.ts",
+        "lib/public-story-zip.mjs",
+        "server/story-export.ts"
+      ]
+    },
+    {
+      "file": "tests/ack-comics.test.mjs",
+      "groups": [
+        "preparation",
+        "production",
+        "reader",
+        "media"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "lib/reader-styles.ts",
+        "lib/reader-model.ts",
+        "lib/reader-intake.ts",
+        "lib/story-import-contract.ts",
+        "lib/reader-revision.ts",
+        "lib/reader-art-recommendation.ts",
+        "lib/reader-generation-contract.ts",
+        "lib/reader-local-contract.ts",
+        "server/generation.ts",
+        "lib/reader-zip-content.ts",
+        "lib/story-webp-metadata.ts",
+        "client/ui/StoryArtStylePicker.tsx"
       ]
     }
   ]

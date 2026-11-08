@@ -1,8 +1,10 @@
 // Validate attributed comic balloons and exact source evidence without changing historical pages.
-// Pack content-sized oval bodies close to planned speakers, using final-sheet pixel references for reflow.
+// Fit compact whole-word bodies with bounded ranked search; final presentation avoids protected faces and action.
+// Canonical pre-image targets stay intact; protected/band presentations clip short tips before scene content.
 import {z} from 'zod';
-import {measureBubbleText,bubbleTailStart,bubbleReferenceWidth,bubbleReferenceHeight} from './comic-bubble-layout.ts';
+import {measureBubbleText,comicTextWidth,bubbleTailStart,bubbleTailTip,bubbleReferenceWidth,bubbleReferenceHeight,bubbleMinimumFontSize,bubbleTargetFontSize} from './comic-bubble-layout.ts';
 import type {BubbleReference} from './comic-bubble-layout.ts';
+import type {NormalizedRect} from './comic-composition.ts';
 
 const coordinate=z.number().finite().min(0).max(1);
 export const comicBubbleSchema=z.object({
@@ -31,58 +33,99 @@ export function validateBubbleEvidence(pages:{bubbles?:ComicBubble[]}[],sourceTe
   if(quote.length<2||!source.includes(quote))throw Error('A generated balloon needs an exact quotation from the saved English source.');
  }
 }
-const overlap=(a:ComicBubble,b:ComicBubble)=>a.x<b.x+b.width&&a.x+a.width>b.x&&a.y<b.y+b.height&&a.y+a.height>b.y;
-function connectorCrosses(bubble:ComicBubble,other:ComicBubble){
- const start=bubbleTailStart(bubble),dx=bubble.tailX-start.x,dy=bubble.tailY-start.y,pad=.008;
- // A bounded slab intersection includes connector endpoints and a small rendering clearance.
+export type BubblePlacementOptions=BubbleReference&{protectedAreas?:readonly NormalizedRect[];bodyBounds?:NormalizedRect;allowDistantTails?:boolean;maxFontSize?:number};
+type PixelRect={x:number;y:number;width:number;height:number};
+type Candidate={bubble:ComicBubble;score:number;box:PixelRect;tail:PixelRect};
+const overlap=(a:PixelRect,b:PixelRect)=>a.x<b.x+b.width&&a.x+a.width>b.x&&a.y<b.y+b.height&&a.y+a.height>b.y;
+function validRect(rect:NormalizedRect){return !!rect&&typeof rect==='object'&&[rect.x,rect.y,rect.width,rect.height].every(Number.isFinite)&&rect.x>=0&&rect.y>=0&&rect.width>0&&rect.height>0&&rect.x+rect.width<=1+1e-9&&rect.y+rect.height<=1+1e-9;}
+function expanded(rect:PixelRect,pad:number):PixelRect{return {x:rect.x-pad,y:rect.y-pad,width:rect.width+pad*2,height:rect.height+pad*2};}
+const contains=(rect:PixelRect,point:{x:number;y:number})=>point.x>=rect.x&&point.x<=rect.x+rect.width&&point.y>=rect.y&&point.y<=rect.y+rect.height;
+function segmentEntry(start:{x:number;y:number},end:{x:number;y:number},rect:PixelRect){
  let low=0,high=1;
- for(const [origin,direction,min,max] of [[start.x,dx,other.x-pad,other.x+other.width+pad],[start.y,dy,other.y-pad,other.y+other.height+pad]]){
-  if(Math.abs(direction)<1e-12){if(origin<min||origin>max)return false;continue;}
-  const a=(min-origin)/direction,b=(max-origin)/direction;low=Math.max(low,Math.min(a,b));high=Math.min(high,Math.max(a,b));if(low>high)return false;
+ for(const [origin,direction,min,max]of [[start.x,end.x-start.x,rect.x,rect.x+rect.width],[start.y,end.y-start.y,rect.y,rect.y+rect.height]]){
+  if(Math.abs(direction)<1e-12){if(origin<min||origin>max)return null;continue;}
+  const a=(min-origin)/direction,b=(max-origin)/direction;low=Math.max(low,Math.min(a,b));high=Math.min(high,Math.max(a,b));if(low>high)return null;
  }
- return high>=0&&low<=1;
+ return high>=0&&low<=1?Math.max(0,low):null;
 }
-function connectorsCross(a:ComicBubble,b:ComicBubble){
- // Two balloons may belong to the same speaker; meeting at that target is intentional.
- if(Math.hypot(a.tailX-b.tailX,a.tailY-b.tailY)<.01)return false;
- const start=bubbleTailStart(a),other=bubbleTailStart(b),dx=a.tailX-start.x,dy=a.tailY-start.y,ox=b.tailX-other.x,oy=b.tailY-other.y,det=dx*oy-dy*ox;
- if(Math.abs(det)<1e-12)return false;
+function tailBounds(bubble:ComicBubble,rw:number,rh:number):PixelRect{
+ const start=bubbleTailStart(bubble),tip=bubbleTailTip(bubble,{referenceWidth:rw,referenceHeight:rh});
+ const cx=(bubble.x+bubble.width/2)*rw,cy=(bubble.y+bubble.height/2)*rh,rx=bubble.width*rw/2,ry=bubble.height*rh/2;
+ const angle=Math.atan2((tip.y*rh-cy)/ry,(tip.x*rw-cx)/rx),opening=bubble.kind==='speech'?.18:0;
+ const points=[{x:start.x*rw,y:start.y*rh},{x:tip.x*rw,y:tip.y*rh},...[-opening,opening].map(offset=>({x:cx+Math.cos(angle+offset)*rx,y:cy+Math.sin(angle+offset)*ry}))];
+ const pad=bubble.kind==='thought'?Math.min(9,Math.min(rx,ry)*.13)+2:3,x=Math.min(...points.map(p=>p.x))-pad,y=Math.min(...points.map(p=>p.y))-pad;
+ return {x,y,width:Math.max(...points.map(p=>p.x))-x+pad,height:Math.max(...points.map(p=>p.y))-y+pad};
+}
+function connectorCrosses(bubble:ComicBubble,other:ComicBubble,rw:number,rh:number){
+ const start=bubbleTailStart(bubble),tip=bubbleTailTip(bubble,{referenceWidth:rw,referenceHeight:rh});
+ return segmentEntry({x:start.x*rw,y:start.y*rh},{x:tip.x*rw,y:tip.y*rh},expanded({x:other.x*rw,y:other.y*rh,width:other.width*rw,height:other.height*rh},4))!==null;
+}
+function connectorsCross(a:ComicBubble,b:ComicBubble,rw:number,rh:number){
+ const start=bubbleTailStart(a),other=bubbleTailStart(b),tip=bubbleTailTip(a,{referenceWidth:rw,referenceHeight:rh}),otherTip=bubbleTailTip(b,{referenceWidth:rw,referenceHeight:rh});
+ const dx=tip.x-start.x,dy=tip.y-start.y,ox=otherTip.x-other.x,oy=otherTip.y-other.y,det=dx*oy-dy*ox;
+ if(Math.abs(det)<1e-12||Math.hypot((tip.x-otherTip.x)*rw,(tip.y-otherTip.y)*rh)<2)return false;
  const px=other.x-start.x,py=other.y-start.y,t=(px*oy-py*ox)/det,u=(px*dy-py*dx)/det;
  return t>0&&t<1&&u>0&&u<1;
 }
-export function autoPlaceBubbles(input:ComicBubble[],reference:BubbleReference={}):ComicBubble[]{
+function protectedTip(bubble:ComicBubble,areas:PixelRect[],rw:number,rh:number){
+ const start=bubbleTailStart(bubble),from={x:start.x*rw,y:start.y*rh},to={x:bubble.tailX*rw,y:bubble.tailY*rh},distance=Math.hypot(to.x-from.x,to.y-from.y);
+ if(!distance)return null;
+ const tip=bubbleTailTip(bubble,{referenceWidth:rw,referenceHeight:rh});let fraction=Math.min(1,Math.hypot((tip.x-start.x)*rw,(tip.y-start.y)*rh)/distance);
+ for(const area of areas)if(contains(area,to)){const entry=segmentEntry(from,to,area);if(entry!==null)fraction=Math.min(fraction,Math.max(0,entry-12/distance));}
+ // Resolve the intended subject first, so an earlier-listed distant obstacle cannot change the result.
+ for(const area of areas)if(!contains(area,to)){const entry=segmentEntry(from,to,area);if(entry!==null&&entry<=fraction)return null;}
+ if(fraction*distance<4)return null;
+ return {...bubble,tailX:(from.x+(to.x-from.x)*fraction)/rw,tailY:(from.y+(to.y-from.y)*fraction)/rh};
+}
+export function autoPlaceBubbles(input:ComicBubble[],options:BubblePlacementOptions={}):ComicBubble[]{
  const bubbles=pageBubblesSchema.parse(input);if(!bubbles.length)return bubbles;
- const rw=reference.referenceWidth??bubbleReferenceWidth,rh=reference.referenceHeight??bubbleReferenceHeight;
- if(![rw,rh].every(n=>Number.isFinite(n)&&n>0))throw new BubbleDensityError();
- const margin=12,placed:ComicBubble[]=[];
+ const rw=options.referenceWidth??bubbleReferenceWidth,rh=options.referenceHeight??bubbleReferenceHeight,bodyBounds=options.bodyBounds??{x:0,y:0,width:1,height:1};
+ if(![rw,rh].every(n=>Number.isFinite(n)&&n>0)||!validRect(bodyBounds)||options.protectedAreas!==undefined&&(!Array.isArray(options.protectedAreas)||options.protectedAreas.length>24||options.protectedAreas.some(area=>!validRect(area)))||options.maxFontSize!==undefined&&(!Number.isFinite(options.maxFontSize)||options.maxFontSize<bubbleMinimumFontSize))throw new BubbleDensityError();
+ const pixel=(r:NormalizedRect):PixelRect=>({x:r.x*rw,y:r.y*rh,width:r.width*rw,height:r.height*rh});
+ const bounds=pixel(bodyBounds),pad=8,left=Math.max(pad,bounds.x+pad),top=Math.max(pad,bounds.y+pad),right=Math.min(rw-pad,bounds.x+bounds.width-pad),bottom=Math.min(rh-pad,bounds.y+bounds.height-pad);
+ const widthAvailable=right-left,heightAvailable=bottom-top,areas=(options.protectedAreas??[]).map(area=>expanded(pixel(area),8));
+ if(widthAvailable<1||heightAvailable<1)throw new BubbleDensityError();
+ const presentation=options.protectedAreas!==undefined||options.bodyBounds!==undefined||!!options.allowDistantTails,diagonal=Math.hypot(rw,rh),maxFontSize=Math.min(bubbleTargetFontSize,options.maxFontSize??bubbleTargetFontSize);
  const candidates=bubbles.map(bubble=>{
-  const result:ComicBubble[]=[];
-  for(const fraction of [.72,.88,.96]){
-   const fit=measureBubbleText(bubble.text,bubble.kind,{maxWidth:rw*fraction-margin*2,maxHeight:rh*(bubbles.length>2?.48:.62)});if(!fit)continue;
-   const width=fit.width,height=fit.height,tx=bubble.tailX*rw,ty=bubble.tailY*rh,gap=bubble.kind==='thought'?48:18;
-   // Saved positions guide placement, but the short attached tail and reading order take precedence.
-   const positions=[[tx-width/2,ty-height-gap],[tx-width-gap,ty-height-gap],[tx+gap,ty-height-gap],[tx-width-gap,ty-height/2],[tx+gap,ty-height/2],[tx-width/2,ty+gap],[bubble.x*rw,bubble.y*rh]];
+  const result:Candidate[]=[],seen=new Set<string>();
+  const preserveWords=Math.max(...bubble.text.trim().toUpperCase().split(/\s+/u).map(word=>comicTextWidth(word,bubbleMinimumFontSize)))/.76<=widthAvailable;
+  for(const fraction of [.46,.64,.82,1]){
+   const fit=measureBubbleText(bubble.text,bubble.kind,{maxWidth:widthAvailable*fraction,maxHeight:Math.min(heightAvailable,rh*(bubbles.length>2?.48:.62)),fontSize:maxFontSize,preserveWords});if(!fit)continue;
+   const width=fit.width,height=fit.height,tx=bubble.tailX*rw,ty=bubble.tailY*rh,gap=bubble.kind==='thought'?28:18;
+   const positions=[[tx-width/2,ty-height-gap],[tx-width-gap,ty-height-gap],[tx+gap,ty-height-gap],[tx-width-gap,ty-height/2],[tx+gap,ty-height/2],[tx-width/2,ty+gap],[tx-width-gap,ty+gap],[tx+gap,ty+gap],[bubble.x*rw,bubble.y*rh]];
+   for(const area of areas){
+    positions.push([tx-width/2,area.y-height-gap],[tx-width/2,area.y+area.height+gap],[area.x-width-gap,ty-height/2],[area.x+area.width+gap,ty-height/2]);
+    for(const x of [left,right-width])positions.push([x,area.y-height-gap],[x,area.y+area.height+gap]);
+   }
+   for(const x of [0,.25,.5,.75,1])for(const y of [0,1/3,2/3,1])positions.push([left+(widthAvailable-width)*x,top+(heightAvailable-height)*y]);
    for(const [px,py]of positions){
-    const x=Math.max(margin,Math.min(rw-margin-width,px)),y=Math.max(margin,Math.min(rh-margin-height,py));
-    if(width>rw-margin*2||height>rh-margin*2)continue;
-    const next={...bubble,x:x/rw,y:y/rh,width:width/rw,height:height/rh},start=bubbleTailStart(next);
+    if(width>widthAvailable||height>heightAvailable)continue;
+    const x=Math.max(left,Math.min(right-width,px)),y=Math.max(top,Math.min(bottom-height,py)),box={x,y,width,height},key=[x,y,width,height].map(n=>Math.round(n*10)).join(':');
+    if(seen.has(key))continue;seen.add(key);if(areas.some(area=>overlap(box,area)))continue;
+    let next={...bubble,x:x/rw,y:y/rh,width:width/rw,height:height/rh};const start=bubbleTailStart(next);
     if(start.x===next.x+next.width/2&&start.y===next.y+next.height/2)continue;
-    if(Math.hypot((start.x-bubble.tailX)*rw,(start.y-bubble.tailY)*rh)>Math.min(90,Math.min(rw,rh)*.25))continue;
-    result.push(next);
+    const distance=Math.hypot((start.x-bubble.tailX)*rw,(start.y-bubble.tailY)*rh);
+    const origin={x:start.x*rw,y:start.y*rh},target={x:bubble.tailX*rw,y:bubble.tailY*rh};let clearDistance=distance;
+    for(const area of areas)if(contains(area,target)){const entry=segmentEntry(origin,target,area);if(entry!==null)clearDistance=Math.min(clearDistance,distance*entry);}
+    if(!options.allowDistantTails&&clearDistance>Math.min(90,Math.min(rw,rh)*.25))continue;
+    if(presentation){const clipped=protectedTip(next,areas,rw,rh);if(!clipped)continue;next=clipped;}
+    const tail=tailBounds(next,rw,rh);if(areas.some(area=>overlap(tail,area)))continue;
+    const score=width*height/(rw*rh)*300+distance/diagonal*30+Math.hypot(x-bubble.x*rw,y-bubble.y*rh)/diagonal*.3+y/rh*.2;
+    result.push({bubble:next,score,box,tail});
    }
   }
-  return result;
+  return result.sort((a,b)=>a.score-b.score||a.box.y-b.box.y||a.box.x-b.box.x).slice(0,64);
  });
- function search(index:number):boolean{
-  if(index===bubbles.length)return true;
-  for(const candidate of candidates[index]){
-   const previous=placed.at(-1);
-   if(previous&&(candidate.y+candidate.height/2<previous.y+previous.height/2-.04||Math.abs(candidate.y-previous.y)<.035&&candidate.x<previous.x))continue;
-   if(placed.some(other=>overlap(candidate,other)||connectorCrosses(candidate,other)||connectorCrosses(other,candidate)||connectorsCross(candidate,other)))continue;
-   placed.push(candidate);if(search(index+1))return true;placed.pop();
+ type State={placed:Candidate[];score:number};let states:State[]=[{placed:[],score:0}];
+ for(const choices of candidates){
+  const next:State[]=[];
+  for(const state of states)for(const candidate of choices){
+   const previous=state.placed.at(-1)?.bubble,bubble=candidate.bubble;
+   if(previous&&(bubble.y+bubble.height/2<previous.y+previous.height/2-.04||Math.abs(bubble.y-previous.y)<.035&&bubble.x<previous.x))continue;
+   if(state.placed.some(other=>overlap(expanded(candidate.box,4),other.box)||connectorCrosses(bubble,other.bubble,rw,rh)||connectorCrosses(other.bubble,bubble,rw,rh)||connectorsCross(bubble,other.bubble,rw,rh)))continue;
+   next.push({placed:[...state.placed,candidate],score:state.score+candidate.score});
   }
-  return false;
+  states=next.sort((a,b)=>a.score-b.score).slice(0,32);if(!states.length)throw new BubbleDensityError();
  }
- if(search(0))return pageBubblesSchema.parse(placed);
- throw new BubbleDensityError();
+ return pageBubblesSchema.parse(states[0].placed.map(candidate=>candidate.bubble));
 }

@@ -1,4 +1,6 @@
-// Decide which saved artwork a revision can reuse. Free of schema imports so that views can report it.
+// Decide which saved artwork a revision can reuse. Independent of the story schema so views can report reuse.
+// Planned canvas/subject staging is an image input; panel emphasis and balloon body layout are not.
+import {sameComicImageInput} from './comic-composition.ts';
 import type {Plan,Selection} from './reader-model.ts';
 import type {FrameRecommendation} from './reader-frame-recommendation.ts';
 export type RevisionBase={selection:Selection;plan:Plan|null;images:string[];frameRecommendation?:FrameRecommendation;savedFrameCount?:number};
@@ -7,17 +9,17 @@ export function reusableRevisionImages(base:RevisionBase,selection:Selection,pla
  const previous=base.plan;if(!previous)return plan.pages.map(()=> '');
  const stable=base.selection.artStyle===selection.artStyle&&base.selection.productionPrompt===selection.productionPrompt&&previous.characters===plan.characters;
  if(sourcePages&&(sourcePages.length!==plan.pages.length||sourcePages.some(index=>index!==null&&(!Number.isInteger(index)||index<0||index>=previous.pages.length))||new Set(sourcePages.filter(index=>index!==null)).size!==sourcePages.filter(index=>index!==null).length))throw Error('INVALID_IMAGE_SOURCE_MAP');
- const anchor=stable&&!!base.images[0]&&previous.pages[0]?.prompt===plan.pages[0]?.prompt&&(!sourcePages||sourcePages[0]===0);
+ const anchor=stable&&!!base.images[0]&&!!previous.pages[0]&&!!plan.pages[0]&&sameComicImageInput(previous.pages[0],plan.pages[0])&&(!sourcePages||sourcePages[0]===0);
  if(!anchor)return plan.pages.map(()=> '');
- const sameOrder=previous.pages.length===plan.pages.length&&previous.pages.every((page,i)=>page.prompt===plan.pages[i].prompt);
+ const sameOrder=previous.pages.length===plan.pages.length&&previous.pages.every((page,i)=>sameComicImageInput(page,plan.pages[i]));
  const used=new Set<number>();
  return plan.pages.map((page,index)=>{
   let source=sourcePages?sourcePages[index]:index===0||sameOrder?index:null;
   if(!sourcePages&&source===null){
-   const matches=previous.pages.flatMap((p,i)=>p.prompt===page.prompt?[i]:[]);
-   if(matches.length===1&&plan.pages.filter(p=>p.prompt===page.prompt).length===1)source=matches[0];
+   const matches=previous.pages.flatMap((p,i)=>sameComicImageInput(p,page)?[i]:[]);
+   if(matches.length===1&&plan.pages.filter(p=>sameComicImageInput(p,page)).length===1)source=matches[0];
   }
-  if(source===null||used.has(source)||previous.pages[source]?.prompt!==page.prompt)return '';
+  if(source===null||used.has(source)||!previous.pages[source]||!sameComicImageInput(previous.pages[source],page))return '';
   used.add(source);return base.images[source]||'';
  });
 }
@@ -27,5 +29,5 @@ export function revisionRedraw(revision:{base:RevisionBase;previewedRedraw?:numb
  const actual=revision.actualRedraw??(plan.pages.length-(images||reusableRevisionImages(revision.base,selection,plan)).slice(0,plan.pages.length).filter(Boolean).length);
  if(actual<=previewed)return undefined;
  const lost=revision.lostPages||[];
- return {previewed,actual,reason:lost.includes(0)?'first-lost':revision.base.plan?.pages[0]?.prompt!==plan.pages[0]?.prompt?'first-changed':lost.length?'lost':'review'};
+ return {previewed,actual,reason:lost.includes(0)?'first-lost':revision.base.plan?.pages[0]&&!sameComicImageInput(revision.base.plan.pages[0],plan.pages[0])?'first-changed':lost.length?'lost':'review'};
 }

@@ -1,5 +1,5 @@
 // English product text and generation contracts; canonical source evidence remains unchanged.
-// Export complete shared comic panels before the existing credited WebP/hash/XMP pipeline.
+// Export shared protected-aware panels before the existing credited WebP/hash/XMP pipeline; preserve baked font records.
 import {zipSync,strToU8} from 'fflate';
 import type {Story} from './content';
 import type {GeneratedStory} from './reader-model';
@@ -20,7 +20,7 @@ async function webpImage(blob:Blob,page:number,story:Story,runtime:ExportRuntime
  try{
   canvas=runtime.canvas();canvas.width=Math.round(panel.width*900);canvas.height=Math.round(panel.height*1350);
   const context=canvas.getContext('2d');if(!context)throw Error('CANVAS_UNAVAILABLE');
-  context.save();try{context.translate(-panel.x*900,-panel.y*1350);await paintComicPanel(context,story.pages[page],panel,runtime,blob);}finally{context.restore();}
+  context.save();try{context.translate(-panel.x*900,-panel.y*1350);await paintComicPanel(context,story.pages[page],panel,runtime,blob,{watermarkFontSize:story.publication?.watermarkFontSize});}finally{context.restore();}
   drawStoryWatermarks(context,canvas.width,canvas.height,story);
   return await new Promise<Blob>((resolve,reject)=>canvas!.toBlob(result=>{
    if(!result?.size||result.type!=='image/webp')reject(Error('WEBP_UNAVAILABLE'));else resolve(result);
@@ -64,7 +64,7 @@ export async function createStoryZip(story:Story,history:StoryPromptHistory|null
  if(generated&&!history)throw Error('Prompt records are not loaded. Retry before exporting ZIP.');
  await runtime.ready();
  const files:Record<string,Uint8Array>={},images:string[]=[],hashes:StoryImageHashes[]=[];
- const imageSizes=await readComicImageSizes(story.pages,runtime),comicPages=layoutComicPages(story.pages,{imageSizes}),panels=comicPages.flatMap(page=>page.panels),comicRenderings=panels.map(panel=>({width:Math.round(panel.width*900),height:Math.round(panel.height*1350),minFontSize:story.pages[panel.frameIndex].comicRendering?.minFontSize===null||!story.pages[panel.frameIndex].comicRendering&&story.pages[panel.frameIndex].bubbleRendering==='embedded'?null:24}));
+ const imageSizes=await readComicImageSizes(story.pages,runtime),comicPages=layoutComicPages(story.pages,{imageSizes,watermarkFontSize:story.publication?.watermarkFontSize}),panels=comicPages.flatMap(page=>page.panels),comicRenderings=panels.map(panel=>({width:Math.round(panel.width*900),height:Math.round(panel.height*1350),minFontSize:story.pages[panel.frameIndex].comicRendering?story.pages[panel.frameIndex].comicRendering!.minFontSize:story.pages[panel.frameIndex].bubbleRendering==='embedded'?null:20}));
  for(const [index,page] of story.pages.entries()){
   onProgress(`Packaging frame ${index+1} / ${story.pages.length}`);
   const blob=await runtime.read(page.image,index);

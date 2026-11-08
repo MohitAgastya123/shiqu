@@ -1,10 +1,12 @@
 // English production expectations; original evidence and historical hashes remain unchanged.
 // Verify real provider assembly, shared balloon/narration contracts and historical fingerprints without inference.
 // Comic generation also carries panel emphasis without printing speaker labels in visible dialogue.
+// Optional legacy repair staging uses OpenAI's required nullable wire form and restores absence on receipt.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {createReaderProvider} from '../server/generation.ts';
+import {strictOpenAISchema} from '../server/openai-provider.ts';
 import {selectionSchema} from '../lib/reader-model.ts';
 import {defaultProductionDirection,defaultProductionPrompt,normalizeProductionPrompt,titleDirection,storyScopeDirection,storyOpeningDirection,narrativeMeaningDirection,sourceFidelityDirection,storyboardDirection} from '../lib/reader-prompts.ts';
 import {legacyProductionDirection} from '../lib/reader-legacy-prompts.ts';
@@ -67,6 +69,7 @@ async function requestsFor(provider,acceptancePrompt){
    if(String(url).endsWith('/images/generations')){seen.set(stage,{prompt:body.prompt});return Response.json({data:[{b64_json:encoded}]});}
    assert.equal(body.store,false);assert.equal(body.text.format.strict,true);
    const value=record(body.instructions,body.input[0].content,body.text.format.schema);
+   if(stage==='repair')for(const page of value.pages)page.composition=null;
    return Response.json({status:'completed',model:body.model,output:[{type:'message',content:[{type:'output_text',text:JSON.stringify(value)}]}]});
   }
   assert.match(String(url),/^https:\/\/generativelanguage.googleapis.com\//);
@@ -79,6 +82,7 @@ async function requestsFor(provider,acceptancePrompt){
  const p=createReaderProvider({SHIQU_AI_PROVIDER:provider,GEMINI_API_KEY:'controlled',OPENAI_API_KEY:'controlled'},media,transport,runner),g=p.generator();
  async function call(name,fn){stage=name;const result=await fn();
   if(result&&'value' in result){const capture=result.promptRecord,actual=seen.get(stage);assert.ok(capture,`${provider}:${stage} captured`);
+   if(stage==='repair')assert.ok(result.value.every(page=>page.composition===undefined),'Legacy optional staging is absent after adapter validation');
    if(stage==='image'){assert.equal(capture.input,actual.prompt);assert.equal(capture.instructions,actual.instructions||'');}
    else{assert.equal(capture.instructions,actual.instructions);assert.deepEqual(JSON.parse(capture.input),actual.payload);assert.deepEqual(capture.schema,actual.schema);}
   }
@@ -128,7 +132,8 @@ test('all providers send the same stage-specific instructions, data and strict o
   const canonical=value=>Array.isArray(value)?value.map(canonical):value&&typeof value==='object'?Object.fromEntries(Object.entries(value)
    .filter(([key])=>!['description','minItems','maxItems','minimum','maximum'].includes(key))
    .map(([key,item])=>key==='quoteId'?['quote',{type:'string',minLength:2,maxLength:120}]:[key,key==='required'?[...item].map(name=>name==='quoteId'?'quote':name).sort():canonical(item)])):value;
-  assert.deepEqual(canonical(other.get(stage).schema),canonical(request.schema),stage);
+  const expected=other===captures[2]?strictOpenAISchema(request.schema):request.schema;
+  assert.deepEqual(canonical(other.get(stage).schema),canonical(expected),stage);
  }
  const get=stage=>codex.get(stage);
  for(const stage of ['frames','draft','outline','batch','batch-later','candidates','reflection','reflection-repair','review','review-candidates','repair']){
@@ -168,6 +173,7 @@ test('all providers send the same stage-specific instructions, data and strict o
   assert.ok(page.required.includes('bubbles'),stage);assert.equal(page.properties.bubbles.maxItems,4,stage);
   assert.deepEqual(page.properties.bubbles.items.properties.kind.enum,['speech','thought'],stage);assert.ok(page.properties.bubbles.items.required.includes('sourceQuote'),stage);
   assert.ok(page.required.includes('panel'),stage);assert.deepEqual(page.properties.panel.enum,['normal','wide','large','splash'],stage);
+  assert.equal(page.required.includes('composition'),stage!=='repair',stage);assert.deepEqual(page.properties.composition.properties.canvas.enum,['9:16','4:5','3:2','2:3'],stage);
   assert.match(get(stage).instructions,/exact continuous quotation/,stage);assert.match(get(stage).instructions,/automatically fits compact balloon bodies/,stage);assert.match(get(stage).instructions,/not be printed inside balloons/,stage);
  }
  assert.match(get('frames').instructions,/separate ending page is excluded/);

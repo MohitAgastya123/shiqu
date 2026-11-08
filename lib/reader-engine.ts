@@ -3,10 +3,12 @@
 // Translation keeps model usage but omits raw-language prompt input from public prompt history.
 // Every newly generated or repaired balloon receives source verification and automatic readable placement.
 // Imported full review covers every evidence unit; unspent paused production yields preserve checkpoints without faults.
+// Automatic caption repairs retain image staging; changed scenes accept fresh geometry without stale inheritance.
 import {blockedIssues,nextStep,reviewPhase,planSchema,reflectionCandidatesSchema,storyPresentationSchema,storyDraftSchema,storyboardOutlineSchema,storyboardBatchSchema,selectionSchema,view,ReaderError,productionComplete,readerBooks} from './reader-model.ts';
 import type {Document,Plan,StoryDraft,ReflectionCandidates,StoryPresentation,Selection,SessionRow,Storyboard,StoryboardOutline} from './reader-model.ts';
 import type {BubblePlacementFeedback} from './reader-bubbles.ts';
 import {autoPlaceBubbles,validateBubbleEvidence,BubbleDensityError} from './reader-bubbles.ts';
+import {retainSceneComposition} from './comic-composition.ts';
 import {sourceTranslationReady,verifiedOriginalPayload} from './reader-source-types.ts';
 import {translateSourceCheckpoint} from './reader-source-english.ts';
 import {persistenceError} from './reader-repository.ts';
@@ -223,7 +225,7 @@ export async function advanceStory(repo:ReaderRepository,generator:StoryGenerato
    }else{
     if(!generator.repair)throw new ReaderError(503,'This provider does not support storyboard revision. Update it and try again.');
     const result=await fittedGeneration(feedback=>generator.repair!(selection,structuredClone(doc.plan!),doc.original!,issues,doc.storyboard?.outline,feedback),value=>preparedPages(repairOutputSchema(requested).parse({pages:value}).pages,doc.original),value=>value);
-    const pages=result.value,updated=structuredClone(doc.plan!);
+    const pages=result.value.map(page=>retainSceneComposition(doc.plan!.pages[page.page-1],page)),updated=structuredClone(doc.plan!);
     const changed=pages.filter(({page,...content})=>JSON.stringify(content)!==JSON.stringify(doc.plan!.pages[page-1]));
     (review.history??=[]).push({step:step.key,recordedAt:new Date().toISOString(),changed:!!changed.length,round:review.round,requested:[...requested],before:requested.map(page=>({page,...doc.plan!.pages[page-1]})),changes:structuredClone(changed)});
     for(const {page,...content} of pages)updated.pages[page-1]=content;

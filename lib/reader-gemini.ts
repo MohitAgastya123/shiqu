@@ -1,6 +1,7 @@
 // Shared comic contracts and placement-feedback retries use the same Gemini text stage.
 // English product text and generation contracts; canonical source evidence remains unchanged.
 // Generate story plans and media through Gemini, preserving safe errors and validated results.
+// Explicit scene canvases reach imageConfig; historical frames continue to request 9:16.
 import type {BubblePlacementFeedback} from './reader-bubbles.ts';
 import {formatSystemPrompt} from './reader-prompt-format.ts';
 import {promptRecord} from './reader-prompt-records.ts';
@@ -203,7 +204,7 @@ export function makeGenerator(key:string,assets:Assets,config:Partial<Models>={}
    }
    const prompt=imagePrompt(plan,page,style,productionPrompt,!!reference);
    parts.push({text:prompt});
-   const {candidate,metadata}=await generate(models.image,{contents:[{role:'user',parts}],generationConfig:{responseModalities:['TEXT','IMAGE'],imageConfig:{aspectRatio:'9:16',imageSize:'1K'}}},'image');
+   const {candidate,metadata}=await generate(models.image,{contents:[{role:'user',parts}],generationConfig:{responseModalities:['TEXT','IMAGE'],imageConfig:{aspectRatio:plan.pages[page].composition?.canvas||'9:16',imageSize:'1K'}}},'image');
    const output=candidate.content?.parts?.find(p=>!p.thought&&p.inlineData)?.inlineData;
    if(!output||!(output.mimeType in imageTypes)||output.data.length>17*1024*1024)throw new GeminiError('INVALID_MEDIA');
    let bytes:Uint8Array;try{bytes=Uint8Array.from(atob(output.data),c=>c.charCodeAt(0));}catch{throw new GeminiError('INVALID_MEDIA');}

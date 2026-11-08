@@ -1,11 +1,13 @@
 // Share oval balloon outlines, attached curved tails and exact offline comic lettering across SVG/canvas.
 // Fit uppercase dialogue without speaker labels; panel reference dimensions preserve final-sheet readability.
+// Compact new lettering uses a 20px floor and a 22px target; all renderers share bounded tail tips.
 import type {ComicBubble} from './reader-bubbles.ts';
 import {comicGlyphAdvances} from './comic-bubble-font-metrics.ts';
 import {defaultComicBubblePalette,type ComicBubblePalette} from './comic-bubble-palette.ts';
 export const bubbleReferenceWidth=900;
 export const bubbleReferenceHeight=1350;
-export const bubbleMinimumFontSize=24;
+export const bubbleMinimumFontSize=20;
+export const bubbleTargetFontSize=22;
 export const comicBubbleFontFamily='"Shiqu Comic", sans-serif';
 export type BubbleTextFit={fontSize:number;lines:string[];lineHeight:number};
 export type BubbleReference={referenceWidth?:number;referenceHeight?:number};
@@ -14,17 +16,19 @@ export type BubbleLayout={path:string;tailPath?:string;circles:{x:number;y:numbe
 export function comicTextWidth(text:string,size:number){
  return Array.from(text).reduce((total,character)=>total+(/\p{Mark}/u.test(character)?0:comicGlyphAdvances[character.codePointAt(0)!]??(/\p{Extended_Pictographic}|\p{Script=Han}/u.test(character)?1:.65))*size,0);
 }
+// Normalized widths round-trip through division/multiplication; a few ulps must not wrap an exact-fit word.
+const fitsWithin=(value:number,limit:number)=>value<=limit+Number.EPSILON*Math.max(1,value,limit)*32;
 function wrapped(text:string,width:number,size:number):string[]|null{
  const lines:string[]=[];
  for(const paragraph of text.replace(/\r\n?/g,'\n').split('\n')){
   let line='';
   for(const word of paragraph.trim().split(/\s+/u).filter(Boolean)){
    const candidate=line?line+' '+word:word;
-   if(comicTextWidth(candidate,size)<=width){line=candidate;continue;}
+   if(fitsWithin(comicTextWidth(candidate,size),width)){line=candidate;continue;}
    if(line){lines.push(line);line='';}
    for(const character of Array.from(word)){
-    if(comicTextWidth(character,size)>width)return null;
-    if(line&&comicTextWidth(line+character,size)>width){lines.push(line);line='';}
+    if(!fitsWithin(comicTextWidth(character,size),width))return null;
+    if(line&&!fitsWithin(comicTextWidth(line+character,size),width)){lines.push(line);line='';}
     line+=character;
    }
   }
@@ -34,28 +38,30 @@ function wrapped(text:string,width:number,size:number):string[]|null{
 }
 function fittedAt(text:string,width:number,height:number,size:number,kind:'speech'|'thought'):BubbleTextFit|null{
  const lines=wrapped(text.toUpperCase(),width*.76,size),lineHeight=size*1.16;
- if(!lines||lines.length*lineHeight>height*.73)return null;
+ if(!lines||!fitsWithin(lines.length*lineHeight,height*.73))return null;
  const rx=width*.45,ry=height*.43;
- if(lines.some((line,index)=>{const y=Math.abs((index-(lines.length-1)/2)*lineHeight)+size*.42;return y>=ry||comicTextWidth(line,size)>2*rx*Math.sqrt(1-(y/ry)**2)*(kind==='thought'?.95:1);}))return null;
+ if(lines.some((line,index)=>{const y=Math.abs((index-(lines.length-1)/2)*lineHeight)+size*.42;return y>=ry||!fitsWithin(comicTextWidth(line,size),2*rx*Math.sqrt(1-(y/ry)**2)*(kind==='thought'?.95:1));}))return null;
  return {fontSize:size,lines,lineHeight};
 }
 export function fitBubbleText(text:string,widthPx:number,heightPx:number,kind:'speech'|'thought'='speech',_speaker=''):BubbleTextFit|null{
  if(!Number.isFinite(widthPx)||!Number.isFinite(heightPx)||widthPx<=0||heightPx<=0||!text.trim())return null;
- for(let size=32;size>=bubbleMinimumFontSize;size--){const fit=fittedAt(text.trim(),widthPx,heightPx,size,kind);if(fit)return fit;}
+ for(let size=bubbleTargetFontSize;size>=bubbleMinimumFontSize;size--){const fit=fittedAt(text.trim(),widthPx,heightPx,size,kind);if(fit)return fit;}
  return null;
 }
-export function measureBubbleText(text:string,kind:'speech'|'thought',options:{maxWidth:number;maxHeight:number;fontSize?:number}){
+export function measureBubbleText(text:string,kind:'speech'|'thought',options:{maxWidth:number;maxHeight:number;fontSize?:number;preserveWords?:boolean}){
  const {maxWidth,maxHeight}=options;if(!text.trim()||!Number.isFinite(maxWidth)||!Number.isFinite(maxHeight)||maxWidth<1||maxHeight<1)return null;
- for(let size=Math.min(32,options.fontSize??32);size>=bubbleMinimumFontSize;size--){
+ for(let size=Math.min(bubbleTargetFontSize,options.fontSize??bubbleTargetFontSize);size>=bubbleMinimumFontSize;size--){
   let best:({width:number;height:number}&BubbleTextFit)|null=null,bestScore=Infinity;
   const longest=Math.max(...text.trim().toUpperCase().split(/\s+/u).map(word=>comicTextWidth(word,size)));
-  for(let width=Math.min(maxWidth,Math.max(110,size*3,longest/.76));width<=maxWidth+11;width+=12){
+  if(options.preserveWords&&!fitsWithin(longest/.76,maxWidth))continue;
+  const firstWidth=Math.min(maxWidth,Math.max(72,size*2.7,longest/.76)),step=Math.max(12,(maxWidth-firstWidth)/64);
+  for(let width=firstWidth;width<=maxWidth+step-1;width+=step){
    const w=Math.min(width,maxWidth),lines=wrapped(text.trim().toUpperCase(),w*.76,size);if(!lines)continue;
    const ellipseHeight=Math.max(...lines.map((line,index)=>{
     const ratio=comicTextWidth(line,size)/(w*.9*(kind==='thought'?.95:1));
     return ratio>=1?Infinity:(Math.abs((index-(lines.length-1)/2)*size*1.16)+size*.42)/(.43*Math.sqrt(1-ratio*ratio));
    }));
-   const rawHeight=Math.max(size*2.6,lines.length*size*1.16/.7,ellipseHeight+1);
+   const rawHeight=Math.max(size*2.5,lines.length*size*1.16/.7,ellipseHeight+1);
    for(let height=rawHeight;height<=Math.min(maxHeight,rawHeight+size*.5)+1;height+=size*.25){
     const fit=fittedAt(text.trim(),w,height,size,kind);if(!fit)continue;
     const score=w*height*(1+Math.abs(Math.log(w/height/1.7))*.8);if(score<bestScore){best={width:w,height,...fit};bestScore=score;}break;
@@ -71,6 +77,11 @@ export function bubbleTailStart(bubble:ComicBubble){
  const distance=Math.hypot(dx/(bubble.width/2),dy/(bubble.height/2));
  return distance<=1?{x:cx,y:cy}:{x:cx+dx/distance,y:cy+dy/distance};
 }
+export function bubbleTailTip(bubble:ComicBubble,reference:BubbleReference={}){
+ const rw=reference.referenceWidth??bubbleReferenceWidth,rh=reference.referenceHeight??bubbleReferenceHeight,start=bubbleTailStart(bubble);
+ const dx=(bubble.tailX-start.x)*rw,dy=(bubble.tailY-start.y)*rh,distance=Math.hypot(dx,dy),maximum=Math.min(64,Math.min(rw,rh)*.18);
+ return distance>maximum?{x:start.x+dx/distance*maximum/rw,y:start.y+dy/distance*maximum/rh}:{x:bubble.tailX,y:bubble.tailY};
+}
 const svgPath=(commands:Command[])=>commands.map(c=>c.kind==='Z'?'Z':c.kind==='Q'?`Q ${c.cx} ${c.cy} ${c.x} ${c.y}`:`${c.kind} ${c.x} ${c.y}`).join(' ');
 export function computeBubbleLayout(bubble:ComicBubble,imageWidth:number,imageHeight:number,reference:BubbleReference={}):BubbleLayout{
  const rw=reference.referenceWidth??bubbleReferenceWidth,rh=reference.referenceHeight??bubbleReferenceHeight;
@@ -81,9 +92,8 @@ export function computeBubbleLayout(bubble:ComicBubble,imageWidth:number,imageHe
  const sx=imageWidth/rw,sy=imageHeight/rh,scale=Math.min(sx,sy),strokeWidth=2.4*scale;
  const bodyCommands:Command[]=[],tailCommands:Command[]=[],circles:{x:number;y:number;r:number}[]=[];
  const start=bubbleTailStart(bubble),ax=start.x*imageWidth,ay=start.y*imageHeight;
- let tx=bubble.tailX*imageWidth,ty=bubble.tailY*imageHeight;
+ const tip=bubbleTailTip(bubble,reference),tx=tip.x*imageWidth,ty=tip.y*imageHeight;
  const hasTail=start.x!==bubble.x+bubble.width/2||start.y!==bubble.y+bubble.height/2;
- if(hasTail){const distance=Math.hypot(tx-ax,ty-ay),maximum=Math.min(74,Math.min(rw,rh)*.2)*scale;if(distance>maximum){tx=ax+(tx-ax)*maximum/distance;ty=ay+(ty-ay)*maximum/distance;}}
  if(bubble.kind==='thought'){
   const lobes=11;
   for(let index=0;index<lobes;index++){

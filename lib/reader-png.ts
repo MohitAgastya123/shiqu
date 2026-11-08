@@ -1,5 +1,5 @@
 // English product text and generation contracts; canonical source evidence remains unchanged.
-// Export the same automatic comic sheets as the reader and PDF, in a complete overview image.
+// Export the same protected art transforms and publication-aware comic sheets as the reader and PDF.
 import {themeLabel} from './reader-language.ts';
 import type {Story} from './content';
 import {browserExportRuntime,type ExportRuntime} from './story-export-runtime.ts';
@@ -18,7 +18,7 @@ export function assertPngReady(story:Story){if('generated' in story&&story.gener
 }
 export function layoutStoryPng(story:Story,measure:(text:string,size:number)=>number,options:ComicLayoutOptions={}){
  assertPngReady(story);
- const pages=layoutComicPages(story.pages,options),columns=pages.length>1?2:1,width=2*M+columns*comicPageWidth+(columns-1)*GAP;
+ const pages=layoutComicPages(story.pages,{watermarkFontSize:story.publication?.watermarkFontSize,...options}),columns=pages.length>1?2:1,width=2*M+columns*comicPageWidth+(columns-1)*GAP;
  const wrap=(text:string,size:number,limit:number)=>wrapPdfText(text,limit,value=>measure(value,size));
  const title=wrap(`${story.title} · ${pages.length} comic ${pages.length===1?'page':'pages'}`,52,width-2*M);
  const generated='generated'in story&&story.generated===true?story as GeneratedStory:null;
@@ -36,12 +36,12 @@ export async function createStoryPng(story:Story,onProgress:(text:string)=>void=
  const canvas=runtime.canvas(),context=canvas.getContext('2d');if(!context)throw Error('PNG export is not supported by this browser. Try another browser.');
  const ctx:CanvasRenderingContext2D=context;
  const font=(size:number)=>{ctx.font=`${size}px ${family}`;ctx.textBaseline='top';};
- const imageSizes=await readComicImageSizes(story.pages,runtime),layout=layoutStoryPng(story,(text,size)=>{font(size);return ctx.measureText(text).width;},{imageSizes});canvas.width=layout.width;canvas.height=layout.height;
+ const imageSizes=await readComicImageSizes(story.pages,runtime),layout=layoutStoryPng(story,(text,size)=>{font(size);return ctx.measureText(text).width;},{imageSizes,watermarkFontSize:story.publication?.watermarkFontSize});canvas.width=layout.width;canvas.height=layout.height;
  try{
   ctx.fillStyle='#f6f2e8';ctx.fillRect(0,0,canvas.width,canvas.height);
   function text(lines:string[],x:number,y:number,size:number,lineHeight:number,color:string){font(size);ctx.fillStyle=color;lines.forEach((line,i)=>ctx.fillText(line,x,y+i*lineHeight));}
   text(layout.title,M,M,52,70,'#263a2e');text(layout.subtitle,M,layout.subtitleY,26,40,'#6b7465');
-  for(const cell of layout.cells){onProgress(`Preparing comic page ${cell.index+1} / ${layout.pages.length}`);ctx.save();try{ctx.translate(cell.x,cell.y);await paintComicPage(ctx,story.pages,cell.page,runtime);}finally{ctx.restore();}}
+  for(const cell of layout.cells){onProgress(`Preparing comic page ${cell.index+1} / ${layout.pages.length}`);ctx.save();try{ctx.translate(cell.x,cell.y);await paintComicPage(ctx,story.pages,cell.page,runtime,()=>{},{watermarkFontSize:story.publication?.watermarkFontSize});}finally{ctx.restore();}}
   text(layout.reflection,M,layout.footerY+32,36,56,'#263a2e');text(layout.credit,M,layout.height-24-layout.credit.length*32,22,32,'#6b7465');
   onProgress('Saving comic overview PNG');return await new Promise<Blob>((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(Error('PNG rendering failed. Retry.')),'image/png'));
  }finally{canvas.width=0;canvas.height=0;}

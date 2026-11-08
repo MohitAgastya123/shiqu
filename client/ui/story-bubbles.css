@@ -1,5 +1,5 @@
 /* Shared artwork coordinates keep generated balloons aligned in the reader and optional editor.
-   Lettering loads explicitly from its bundled font; SVG text never inherits artwork fade masks. */
+   Lettering loads explicitly from its bundled font; compact edit handles use separate targets with anchor guides. */
 .yu-bubble-layer{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none;user-select:none}
 .yu-comic-art-slot{position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:center;min-width:0;min-height:0}
 .yu-comic-art{position:relative;flex:none;max-width:100%;max-height:100%}
@@ -28,6 +28,7 @@
 .yu-bubble-numbers{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 12px}
 .yu-bubble-handle{position:absolute;z-index:1;border:2px solid #2270c5!important;background:#fff9!important;color:#174f8c!important;min-height:44px;min-width:44px;touch-action:none;transform:translate(-50%,-50%);cursor:move;padding:0!important}
 .yu-bubble-handle:focus-visible{outline:3px solid #f2be45;outline-offset:3px}
+.yu-bubble-handle-guides{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;stroke:#2270c5;stroke-width:1.5;stroke-dasharray:3 3;fill:none}
 .yu-bubble-selection{position:absolute;border:2px dashed #2270c5;pointer-events:none;box-sizing:border-box}
 .yu-bubble-editor [role=alert]{padding:10px;border-radius:8px;background:#f8e6da;color:#7b3625;font-size:13px;line-height:1.5}
 @media(max-width:540px){.yu-film-frame.yu-film-comic{padding-left:0;padding-right:0}.yu-bubble-editor{padding:12px}.yu-reader.yu-has-bubbles>.yu-scene-caption{left:12px;right:12px;bottom:102px}}

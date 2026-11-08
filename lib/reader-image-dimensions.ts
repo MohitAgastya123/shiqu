@@ -1,15 +1,28 @@
 // Inspect image metadata and validate outbound API size options. Read displayed dimensions,
 // including EXIF rotation, without decoding pixels or transforming existing artwork.
+// Explicit staged canvases retarget supported request sizes; unannotated legacy calls retain 9:16.
+import {comicCanvasTarget,type ComicCanvas} from './comic-composition.ts';
 export type ImageDimensions={width:number;height:number};
 // 864 × 1536 is exact 9:16 within OpenAI's custom-size limits (16-pixel multiples).
 export const imageTarget={width:864,height:1536};
 export const imageSizeDirection='Use a 9:16 portrait canvas. Set the native image generation size to 864x1536 (864 x 1536 pixels) where supported; both dimensions are multiples of 16. Retain the provider-native 1K dimensions when exact pixel sizing is unavailable. Do not crop, stretch or pad a different aspect ratio to simulate 9:16.';
 
-export function imageRequestSize(value?:string){
- const size=value?.trim()||'864x1536',match=/^([1-9]\d{0,5})x([1-9]\d{0,5})$/.exec(size);
+export function imageCanvasDirection(canvas?:ComicCanvas){
+ if(!canvas||canvas==='9:16')return imageSizeDirection;
+ const {width,height}=comicCanvasTarget(canvas);
+ return `Use a ${canvas} ${width>height?'landscape':'portrait'} canvas. Set the native image generation size to ${width}x${height} (${width} x ${height} pixels) where supported; both dimensions are multiples of 16. Retain the provider-native 1K dimensions when exact sizing is unavailable. Fill this intended panel aspect naturally; do not crop, stretch or pad a different ratio to simulate it.`;
+}
+export function imageRequestSize(value?:string,canvas?:ComicCanvas){
+ const target=comicCanvasTarget(canvas),size=value?.trim()||`${target.width}x${target.height}`,match=/^([1-9]\d{0,5})x([1-9]\d{0,5})$/.exec(size);
  if(!match)return null;
- const width=Number(match[1]),height=Number(match[2]);
- return width*16===height*9&&width%16===0&&height%16===0&&Math.max(width,height)<=3840&&width*height>=655360&&width*height<=8294400?{size,width,height}:null;
+ let width=Number(match[1]),height=Number(match[2]);
+ const valid=(w:number,h:number)=>w%16===0&&h%16===0&&Math.max(w,h)<=3840&&Math.max(w,h)<=Math.min(w,h)*3&&w*h>=655360&&w*h<=8294400;
+ if(!valid(width,height)||!canvas&&width*16!==height*9)return null;
+ if(canvas&&width*target.height!==height*target.width){
+  const [x,y]=canvas.split(':').map(Number),units=Math.floor(Math.sqrt(width*height/(x*y))/16);
+  width=x*16*units;height=y*16*units;
+ }
+ return valid(width,height)?{size:`${width}x${height}`,width,height}:null;
 }
 
 function metadata(bytes:Uint8Array):ImageDimensions|null{

@@ -2,6 +2,7 @@
 // English product messages; source evidence and machine identifiers remain stable.
 // Share the Responses text adapter with DeepSeek; only OpenAI supports image generation here.
 // Never log provider bodies or credentials, fetch returned image URLs, retry, or fall back to another provider.
+// Planned scene canvases retarget image resolution while legacy calls keep their original size policy.
 import {formatSystemPrompt} from '../lib/reader-prompt-format.ts';
 import {promptRecord} from '../lib/reader-prompt-records.ts';
 import {discoveryCall} from '../lib/reader-discovery-call.ts';
@@ -154,7 +155,7 @@ function createResponsesProvider(provider:'openai'|'deepseek',variables:Record<s
    },
    async image(plan,page,id,reference,style='ink-pencil',productionPrompt='',artifactId){
     if(deepseek)throw new ReaderError(400,'DeepSeek supports text production only. Stop after storyboard review; another provider will not be called automatically for images.');
-    const size=imageRequestSize(variables.IMAGE_SIZE);if(!size)throw new OpenAIError('INVALID_IMAGE_SIZE',400);
+    const size=imageRequestSize(variables.IMAGE_SIZE,plan.pages[page].composition?.canvas);if(!size)throw new OpenAIError('INVALID_IMAGE_SIZE',400);
     const prompt=imagePrompt(plan,page,style,productionPrompt,!!reference);
     let body:Record<string,unknown>|FormData={model:models.image,prompt,n:1,size:size.size,output_format:'png'},route='/images/generations';
     if(reference){

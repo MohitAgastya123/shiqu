@@ -19,7 +19,7 @@ test('comic overviews retain every source panel in order for 4, 8, 10, 12, 16 an
   const base=makeStory(),story={...base,pages:Array.from({length:count},(_,i)=>({...base.pages[i%10],caption:`Panel ${i+1} preserves its complete story detail.`}))},layout=layoutStoryPng(story,measure);
   assert.equal(layout.cells.length,layout.pages.length);assert.deepEqual(layout.pages.flatMap(page=>page.panels.map(panel=>panel.frameIndex)),Array.from({length:count},(_,index)=>index));
   assert.equal(new Set(layout.cells.map(cell=>`${cell.x},${cell.y}`)).size,layout.pages.length);assert.ok(layout.cells.every(cell=>cell.x>=0&&cell.x+900<=layout.width&&cell.y+1350<layout.footerY));
-  for(const page of layout.pages)for(const panel of page.panels){const presentation=layoutComicPanel(story.pages[panel.frameIndex],panel);assert.equal(presentation.captionLines.map(line=>line.text).join(' '),story.pages[panel.frameIndex].caption);assert.ok(presentation.captionFontSize>=24);}
+  for(const page of layout.pages)for(const panel of page.panels){const presentation=layoutComicPanel(story.pages[panel.frameIndex],panel);assert.equal(presentation.captionLines.map(line=>line.text).join(' '),story.pages[panel.frameIndex].caption);assert.ok(presentation.captionFontSize>=20);}
   assert.ok(layout.height>layout.footerY+layout.reflection.length*56);assert.equal(layout.columns,layout.pages.length>1?2:1);
  }
 });
@@ -27,7 +27,7 @@ test('comic overviews retain every source panel in order for 4, 8, 10, 12, 16 an
 test('long titles, narration and reflections retain all content without overlapping comic sheets',()=>{
  const base=makeStory(),story={...base,title:'A very long story title '.repeat(10),reflection:'A final observation worth considering. '.repeat(20),pages:Array.from({length:12},(_,i)=>({...base.pages[i%10],caption:i===0?'The travelers pause to consider a difficult choice before continuing along the river. '.repeat(5).trim():'They continue beside the river.'}))},layout=layoutStoryPng(story,measure);
  assert.ok(layout.title.length>1);assert.ok(layout.reflection.length>1);
- for(const cell of layout.cells){const nextRow=layout.cells.find(other=>other.y>cell.y);assert.ok(cell.y+1350<(nextRow?.y??layout.footerY));for(const panel of cell.page.panels){const presentation=layoutComicPanel(story.pages[panel.frameIndex],panel);assert.ok(presentation.captionLines.every(line=>line.y+presentation.captionLineHeight<=presentation.rect.y+presentation.rect.height-88));}}
+ for(const cell of layout.cells){const nextRow=layout.cells.find(other=>other.y>cell.y);assert.ok(cell.y+1350<(nextRow?.y??layout.footerY));for(const panel of cell.page.panels){const presentation=layoutComicPanel(story.pages[panel.frameIndex],panel);assert.ok(presentation.captionLines.every(line=>line.y+presentation.captionLineHeight<=presentation.signature.y));}}
  assert.ok(layout.title.every(line=>measure(line,52)<=layout.width-72));assert.ok(layout.reflection.every(line=>measure(line,36)<=layout.width-72));
  assert.notEqual(layout.pages[0].panels[0].span,'normal');assert.equal(layoutComicPanel(story.pages[0],layout.pages[0].panels[0]).captionLines.map(line=>line.text).join(' '),story.pages[0].caption);
  assert.equal(layout.reflection.join(' '),'A final thought: '+story.reflection.trim());

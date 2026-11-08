@@ -26,11 +26,13 @@ async function fixture(embeddedBubbles=[]){
  const runtime=nativeExportRuntime(process.cwd(),app);await runtime.ready();return {base,app,runtime};
 }
 async function pixels(bytes){const image=await loadImage(Buffer.from(bytes)),canvas=createCanvas(image.width,image.height),ctx=canvas.getContext('2d');ctx.drawImage(image,0,0);return {width:image.width,height:image.height,at:(x,y)=>[...ctx.getImageData(Math.round(x),Math.round(y),1,1).data]};}
+const fixtureSize={width:900,height:1350};
+const fixturePages=saved=>layoutComicPages(saved.pages,{imageSizes:Object.fromEntries(saved.pages.map((_,i)=>[i,fixtureSize]))});
 const white=pixel=>pixel[0]>220&&pixel[1]>220&&pixel[2]>220;
 
 test('one deterministic layout supplies SVG geometry, fitted lines, and distinct thought/speech connectors',()=>{
  const a=computeBubbleLayout(speech,900,1350),again=computeBubbleLayout({...speech},900,1350),b=computeBubbleLayout(thought,900,1350);
- assert.deepEqual(a,again);assert.ok(a.fontSize>=24);assert.equal(a.tailPath,undefined);assert.ok(a.bodyCommands.length>8);assert.equal(a.circles.length,0);assert.equal(b.tailPath,undefined);assert.equal(b.circles.length,3);assert.notEqual(a.path,b.path);
+ assert.deepEqual(a,again);assert.ok(a.fontSize>=20);assert.equal(a.tailPath,undefined);assert.ok(a.bodyCommands.length>8);assert.equal(a.circles.length,0);assert.equal(b.tailPath,undefined);assert.equal(b.circles.length,3);assert.notEqual(a.path,b.path);
  assert.ok(a.lines.every(line=>!line.text.includes('Sam:')));assert.equal(a.lines.map(line=>line.text).join(' '),speech.text.toUpperCase());assert.ok(a.lines.every(line=>line.width<=a.bounds.width*.72+1e-8));
  const start=bubbleTailStart(speech);assert.ok(start.y>speech.y+speech.height/2);assert.ok(start.x>=speech.x&&start.x<=speech.x+speech.width);
  const resized=computeBubbleLayout(speech,1800,2700);assert.equal(resized.fontSize,a.fontSize*2);assert.deepEqual(resized.lines.map(line=>line.text),a.lines.map(line=>line.text));
@@ -48,7 +50,7 @@ test('shared canvas painting changes artwork pixels and keeps the original media
 test('production ZIP composites balloons before signatures and keeps public conversion byte-preserving',async()=>{
  const {base,runtime}=await fixture(),saved=story(),archive=await createStoryZip(saved,null,()=>{},runtime),files=unzipSync(new Uint8Array(await archive.arrayBuffer())),data=JSON.parse(strFromU8(files['故事.json']));
  assert.equal(data.pages[0].bubbleRendering,'embedded');assert.deepEqual(data.pages[0].bubbles,[speech,thought]);assert.equal(data.pages[0].originalSha256,sha256Hex(base));
- assertStoryWebp(files['图片/01.webp'],zipMetadataStory(data),0,data.pages[0]);const rendered=await pixels(files['图片/01.webp']),presentation=layoutComicPanel(saved.pages[0],layoutComicPages(saved.pages)[0].panels[0]),bubble=presentation.bubbles[0];assert.ok(white(rendered.at((bubble.x+bubble.width/2)*presentation.rect.width,(bubble.y+bubble.height*.15)*presentation.rect.height)));assert.deepEqual(data.pages[0].comicRendering,{width:836,height:1200,minFontSize:24});assert.deepEqual(convertedLayout(data),[0]);
+ assertStoryWebp(files['图片/01.webp'],zipMetadataStory(data),0,data.pages[0]);const rendered=await pixels(files['图片/01.webp']),presentation=layoutComicPanel(saved.pages[0],fixturePages(saved)[0].panels[0],fixtureSize),bubble=presentation.bubbles[0];assert.ok(white(rendered.at((bubble.x+bubble.width/2)*presentation.rect.width,(bubble.y+bubble.height*.15)*presentation.rect.height)));assert.deepEqual(data.pages[0].comicRendering,{width:Math.round(presentation.rect.width),height:Math.round(presentation.rect.height),minFontSize:20});assert.deepEqual(convertedLayout(data),[0]);
  const converted=publicStoryZip(new Uint8Array(await archive.arrayBuffer())),publicFiles=unzipSync(converted.bytes);assert.deepEqual(publicFiles['图片/01.webp'],files['图片/01.webp']);assert.deepEqual(converted.story.pages[0].bubbles,[speech,thought]);assert.equal(converted.story.pages[0].bubbleRendering,'embedded');
  assert.deepEqual(unzipSync(publicStoryZip(converted.bytes).bytes)['图片/01.webp'],files['图片/01.webp']);
  assert.match(strFromU8(publicFiles['分镜.md']),/1\. Sam \(speech\): We can cross here\./);assert.match(strFromU8(publicFiles['分镜.md']),/2\. Lee \(thought\): Perhaps there is another way\./);
@@ -71,7 +73,7 @@ test('raster ZIP and offline HTML do not repaint balloons marked as already embe
  const archive=await createStoryZip(saved,null,()=>{},runtime),files=unzipSync(new Uint8Array(await archive.arrayBuffer())),raster=await pixels(files['图片/01.webp']);
  const metadata=JSON.parse(strFromU8(files['故事.json']));assert.equal(metadata.pages[0].comicRendering.minFontSize,null);assert.equal(metadata.comicPages[0].panels[0].span,'splash');const quarter=structuredClone(metadata);quarter.comicPages[0].panels[0].width/=2;quarter.comicPages[0].panels[0].height/=2;assert.throws(()=>publicStoryZipData(quarter),/canonical panel templates/);
  const reexportStory={...saved,pages:[{...saved.pages[0],comicRendering:metadata.pages[0].comicRendering}]},reexportRuntime={...runtime,read:async()=>new Blob([files['图片/01.webp']],{type:'image/webp'})},again=unzipSync(new Uint8Array(await(await createStoryZip(reexportStory,null,()=>{},reexportRuntime)).arrayBuffer()));assert.equal(JSON.parse(strFromU8(again['故事.json'])).pages[0].comicRendering.minFontSize,null);
- const panel=layoutComicPages(saved.pages)[0].panels[0],presentation=layoutComicPanel(saved.pages[0],panel),point=(x,y)=>({x:presentation.art.x-presentation.rect.x+x*presentation.art.width,y:presentation.art.y-presentation.rect.y+y*presentation.art.height});const empty=point(.26,.14),existing=point(.74,.14);
+ const panel=fixturePages(saved)[0].panels[0],presentation=layoutComicPanel(saved.pages[0],panel,fixtureSize),point=(x,y)=>({x:presentation.art.x-presentation.rect.x+x*presentation.art.width,y:presentation.art.y-presentation.rect.y+y*presentation.art.height});const empty=point(.26,.075),existing=point(.74,.075);
  assert.ok(!white(raster.at(empty.x,empty.y)),'Saved overlay coordinates must not cause a second balloon.');assert.ok(white(raster.at(existing.x,existing.y)),'The existing embedded balloon remains visible.');
  const directory=await mkdtemp(path.join(os.tmpdir(),'shiqu-bubble-embedded-'));t.after(()=>rm(directory,{recursive:true,force:true}));const output=path.join(directory,'preview.html');
  await exportLocalStory(process.cwd(),app,{state:'completed',story:saved},{format:'html',output,preview:true});
@@ -81,7 +83,7 @@ test('raster ZIP and offline HTML do not repaint balloons marked as already embe
 test('PDF preserves full artwork for balloon pages and PNG visibly paints the same overlays',async()=>{
  const {runtime}=await fixture(),saved=story(),pdf=await PDFDocument.load(await createStoryPdf(saved,()=>{},runtime));assert.ok(pdf.getPageCount()>=2);
  const resources=pdf.getPage(0).node.Resources(),objects=resources.lookup(PDFName.of('XObject'),PDFDict);const jpeg=pdf.context.lookup(objects.values()[0]);const rendered=await pixels(jpeg.contents);
- const presentation=layoutComicPanel(saved.pages[0],layoutComicPages(saved.pages)[0].panels[0]),bubble=presentation.bubbles[0],x=presentation.rect.x+(bubble.x+bubble.width/2)*presentation.rect.width,y=presentation.rect.y+(bubble.y+bubble.height*.15)*presentation.rect.height;
+ const presentation=layoutComicPanel(saved.pages[0],fixturePages(saved)[0].panels[0],fixtureSize),bubble=presentation.bubbles[0],x=presentation.rect.x+(bubble.x+bubble.width/2)*presentation.rect.width,y=presentation.rect.y+(bubble.y+bubble.height*.15)*presentation.rect.height;
  assert.ok(white(rendered.at(x,y)));assert.ok(!white(rendered.at(presentation.art.x+presentation.art.width/2,presentation.art.y+presentation.art.height*.9)));
  const png=await createStoryPng(saved,()=>{},runtime),sheet=await pixels(new Uint8Array(await png.arrayBuffer()));assert.ok(sheet.width>=900&&sheet.height>=1350);
  let found=false;for(let row=0;row<sheet.height&&!found;row+=4)for(let column=0;column<sheet.width;column+=4){const pixel=sheet.at(column,row);if(Math.abs(pixel[0]-36)<5&&Math.abs(pixel[1]-80)<5&&Math.abs(pixel[2]-120)<5){found=true;break;}}assert.ok(found,'The full source illustration remains on the comic overview.');
