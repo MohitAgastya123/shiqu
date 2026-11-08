@@ -24,7 +24,7 @@ SHIQU_DATA_DIR=/tmp/shiqu-development SHIQU_AI_PROVIDER=readonly pnpm dev
 
 `pnpm dev local` isolates the library under `.data/dev-local`, but generation configuration still comes from shared settings. Explicit environment variables override only the current process. Development does not automatically load the project's `.env`. Never put credentials in `VITE_` variables. Ordinary `pnpm dev` can use the saved personal library, so specify an isolated directory before testing writes.
 
-Use `SHIQU_API_PORT=3003 pnpm dev --port 3001` for another pair of ports. Stop the process before changing dependencies or clearing its Vite cache.
+Use `SHIQU_API_PORT=3003 pnpm dev --port 3001` for another pair of ports. Each `pnpm dev` frontend owns a unique optimizer cache under `node_modules/.cache/shiqu-dev-*`, so a competing launch cannot invalidate an existing reader's lazy PDF dependencies. Ctrl+C closes the frontend before removing its cache. A forced termination may leave its disposable cache behind; stop the owning process before manually removing it or changing dependencies.
 
 ## Desktop preview
 

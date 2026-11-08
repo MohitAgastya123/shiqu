@@ -1,5 +1,6 @@
 // Compose filled comic panels with protected-aware crops, compact lettering and safe legacy text bands.
 // One bounded presentation supplies SVG/canvas/export geometry while opaque archived lettering stays intact.
+// Reuse bounded scenic pixels behind lettering without changing subject proportions or saved image bytes.
 import type {ComicBubble} from './reader-bubbles.ts';
 import {autoPlaceBubbles} from './reader-bubbles.ts';
 import {comicTextWidth,paintComicBubbles,comicBubbleFontFamily,computeBubbleLayout} from './comic-bubble-layout.ts';
@@ -15,7 +16,8 @@ export type ComicImageSize={width:number;height:number};
 export type ComicFrame={caption:string;prompt?:string;image?:string;bubbles?:ComicBubble[];bubbleRendering?:'embedded';panel?:ComicPanelSpan;comicRendering?:{width:number;height:number;minFontSize:number|null};composition?:ComicComposition};
 export type ComicPanel=ComicRect&{frameIndex:number;span:ComicPanelSpan};
 export type ComicPage={index:number;panels:ComicPanel[]};
-export type ComicPanelPresentation={rect:ComicRect;art:ComicRect;artViewport:ComicRect;letteringBand?:ComicRect;signature:ComicRect;protectedAreas:ComicRect[];cropped:boolean;artOccupancy:number;narration:ComicRect;captionLines:{text:string;x:number;y:number;width:number}[];captionFontSize:number;captionLineHeight:number;bubbles:ComicBubble[];bubbleReference:ComicImageSize};
+export type ComicScenicBackdrop={art:ComicRect;viewport:ComicRect;source:NormalizedRect};
+export type ComicPanelPresentation={rect:ComicRect;art:ComicRect;artViewport:ComicRect;letteringBand?:ComicRect;scenicBackdrop?:ComicScenicBackdrop;signature:ComicRect;protectedAreas:ComicRect[];cropped:boolean;artOccupancy:number;narration:ComicRect;captionLines:{text:string;x:number;y:number;width:number}[];captionFontSize:number;captionLineHeight:number;bubbles:ComicBubble[];bubbleReference:ComicImageSize};
 export type ComicPresentationOptions={watermarkFontSize?:number};
 export type ComicLayoutOptions=ComicPresentationOptions&{imageSizes?:Readonly<Record<number,ComicImageSize|undefined>>};
 export class ComicPanelDensityError extends Error{constructor(frameIndex:number){super(`Panel ${frameIndex+1} cannot fit its complete narration and dialogue at a readable size, even on a full comic page. Shorten the text or revise its saved balloons.`);this.name='ComicPanelDensityError';}}
@@ -59,6 +61,27 @@ function fitArtwork(frame:ComicFrame,size:ComicImageSize,viewport:ComicRect){
  const scale=Math.min(viewport.width/size.width,viewport.height/size.height),w=size.width*scale,h=size.height*scale,art={x:viewport.x+(viewport.width-w)/2,y:viewport.y+(viewport.height-h)/2,width:w,height:h};
  return {art,artViewport:{...art},cropped:false,occupancy:w*h/(viewport.width*viewport.height)};
 }
+function scenicLettering(frame:ComicFrame,size:ComicImageSize,band:ComicRect,fitted:ReturnType<typeof fitArtwork>){
+ if(!frame.composition?.protectedAreas.length||frame.comicRendering||frame.bubbleRendering==='embedded')return;
+ // Face boxes can omit hair or a head covering: reserve one face-height above every declared face.
+ const areas=[...protectedSourceAreas(frame),...frame.composition.protectedAreas.filter(area=>area.kind==='face').map(area=>({...area,y:area.y-area.height,height:area.height*2}))],guard=.04,epsilon=1e-9;
+ let viewport={...band,height:Math.max(band.height,fitted.art.y-band.y+1)},artViewport={...fitted.artViewport};
+ const coversWidth=fitted.art.x<=band.x+epsilon&&fitted.art.x+fitted.art.width>=band.x+band.width-epsilon;
+ if(coversWidth){
+  const top=Math.max(fitted.art.y,band.y);
+  artViewport={...artViewport,y:Math.min(artViewport.y,top),height:artViewport.y+artViewport.height-Math.min(artViewport.y,top)};
+  if(top<=band.y+epsilon)return {artViewport};
+  // One pixel of overlap under the opaque original prevents an antialiased join from exposing paper.
+  viewport={...band,height:top-band.y+1};
+ }
+ const source:NormalizedRect={x:0,y:0,width:1,height:Math.min(.20,Math.min(...areas.map(area=>area.y))-guard)};
+ if(source.height<.08||source.height*size.height<64)return;
+ if(areas.some(area=>source.y+source.height>Math.max(0,area.y-guard)+epsilon))return;
+ const scale=Math.max(viewport.width/(size.width*source.width),viewport.height/(size.height*source.height)),foregroundScale=fitted.art.width/size.width;
+ if(!Number.isFinite(scale)||scale<=0||scale>1+epsilon||scale/foregroundScale>3.25+epsilon)return;
+ const art={x:viewport.x+(viewport.width-size.width*source.width*scale)/2-source.x*size.width*scale,y:viewport.y+(viewport.height-size.height*source.height*scale)/2-source.y*size.height*scale,width:size.width*scale,height:size.height*scale};
+ return {artViewport,scenicBackdrop:{art,viewport,source}};
+}
 function computeComicPanel(frame:ComicFrame,panel:ComicPanel,imageSize?:ComicImageSize,options:ComicPresentationOptions={}):ComicPanelPresentation{
  const rect=pixels(panel);imageSize=imageSize||frame.comicRendering||(frame.composition?comicCanvasTarget(frame.composition.canvas):defaultImageSize);
  if(![imageSize.width,imageSize.height].every(value=>Number.isFinite(value)&&value>0)||frame.composition&&!comicCompositionSchema.safeParse(frame.composition).success)throw new ComicPanelDensityError(panel.frameIndex);
@@ -97,13 +120,15 @@ function computeComicPanel(frame:ComicFrame,panel:ComicPanel,imageSize?:ComicIma
    if(!found)throw new ComicPanelDensityError(panel.frameIndex);
   }
  }
- return {rect,...fitted,narration,signature,letteringBand,captionLines:caption.map((text,index)=>({text,x:narration.x,y:narration.y+index*lineHeight,width:comicTextWidth(text,fontSize)})),captionFontSize:fontSize,captionLineHeight:lineHeight,bubbles,bubbleReference:{width:rect.width,height:rect.height},protectedAreas,artOccupancy:fitted.occupancy};
+ const scenery=letteringBand?scenicLettering(frame,imageSize,letteringBand,fitted):undefined;
+ if(scenery&&!scenery.scenicBackdrop)letteringBand=undefined;
+ return {rect,...fitted,...scenery,narration,signature,letteringBand,captionLines:caption.map((text,index)=>({text,x:narration.x,y:narration.y+index*lineHeight,width:comicTextWidth(text,fontSize)})),captionFontSize:fontSize,captionLineHeight:lineHeight,bubbles,bubbleReference:{width:rect.width,height:rect.height},protectedAreas,artOccupancy:fitted.occupancy};
 }
 type CachedPanel={value:ComicPanelPresentation}|{failed:true};
 const panelPresentations=new WeakMap<ComicFrame,Map<string,CachedPanel>>();
 const panelCacheLimit=16;
 function copyPresentation(value:ComicPanelPresentation):ComicPanelPresentation{
- return {...value,rect:{...value.rect},art:{...value.art},artViewport:{...value.artViewport},signature:{...value.signature},protectedAreas:value.protectedAreas.map(area=>({...area})),...(value.letteringBand?{letteringBand:{...value.letteringBand}}:{}),narration:{...value.narration},captionLines:value.captionLines.map(line=>({...line})),bubbles:value.bubbles.map(bubble=>({...bubble})),bubbleReference:{...value.bubbleReference}};
+ return {...value,rect:{...value.rect},art:{...value.art},artViewport:{...value.artViewport},signature:{...value.signature},protectedAreas:value.protectedAreas.map(area=>({...area})),...(value.letteringBand?{letteringBand:{...value.letteringBand}}:{}),...(value.scenicBackdrop?{scenicBackdrop:{art:{...value.scenicBackdrop.art},viewport:{...value.scenicBackdrop.viewport},source:{...value.scenicBackdrop.source}}}:{}),narration:{...value.narration},captionLines:value.captionLines.map(line=>({...line})),bubbles:value.bubbles.map(bubble=>({...bubble})),bubbleReference:{...value.bubbleReference}};
 }
 export function layoutComicPanel(frame:ComicFrame,panel:ComicPanel,imageSize?:ComicImageSize,options:ComicPresentationOptions={}):ComicPanelPresentation{
  const size=imageSize||frame.comicRendering||(frame.composition?comicCanvasTarget(frame.composition.canvas):defaultImageSize);
@@ -199,8 +224,9 @@ export async function paintComicPanel(ctx:CanvasRenderingContext2D,frame:ComicFr
  await runtime.image(blob,image=>{
   const presentation=layoutComicPanel(frame,panel,image,options),palette=sampleComicBubblePalette(image.value,runtime.canvas()),{rect,art}=presentation;
   ctx.fillStyle=palette.paper;ctx.fillRect(rect.x,rect.y,rect.width,rect.height);
+  if(presentation.scenicBackdrop){const backdrop=presentation.scenicBackdrop;ctx.save();try{ctx.beginPath();ctx.rect(backdrop.viewport.x,backdrop.viewport.y,backdrop.viewport.width,backdrop.viewport.height);ctx.clip();ctx.drawImage(image.value,backdrop.art.x,backdrop.art.y,backdrop.art.width,backdrop.art.height);}finally{ctx.restore();}}
   ctx.save();try{const viewport=presentation.artViewport;ctx.beginPath();ctx.rect(viewport.x,viewport.y,viewport.width,viewport.height);ctx.clip();ctx.drawImage(image.value,art.x,art.y,art.width,art.height);}finally{ctx.restore();}
-  if(presentation.letteringBand){const band=presentation.letteringBand;ctx.fillStyle=palette.fill;ctx.fillRect(band.x,band.y,band.width,band.height);}
+  if(presentation.letteringBand&&!presentation.scenicBackdrop){const band=presentation.letteringBand;ctx.fillStyle=palette.fill;ctx.fillRect(band.x,band.y,band.width,band.height);}
   if(presentation.captionLines.length){const strip={x:rect.x+1,y:presentation.narration.y-7,width:rect.width-2,height:presentation.narration.height+14};ctx.fillStyle=palette.fill;ctx.fillRect(strip.x,strip.y,strip.width,strip.height);ctx.strokeStyle=palette.stroke;ctx.lineWidth=1;ctx.strokeRect(strip.x,strip.y,strip.width,strip.height);}
   ctx.save();try{ctx.translate(rect.x,rect.y);paintComicBubbles(ctx,presentation.bubbles,rect.width,rect.height,{referenceWidth:rect.width,referenceHeight:rect.height,palette});}finally{ctx.restore();}
   ctx.font=`700 ${presentation.captionFontSize}px ${comicBubbleFontFamily}`;ctx.fontKerning='none';ctx.textBaseline='top';ctx.fillStyle=palette.ink;

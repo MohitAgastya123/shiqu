@@ -1,9 +1,16 @@
 // English product messages; source evidence and machine identifiers remain stable.
 // Keep LAN development available without serving private libraries through Vite's file paths.
+// Each development frontend owns a unique optimizer cache; cleanup never follows an exposed path property.
 import path from 'node:path';
 import {existsSync,realpathSync,readdirSync,lstatSync} from 'node:fs';
+import {mkdir,mkdtemp,rm} from 'node:fs/promises';
 import {normalizePath,isFileServingAllowed} from 'vite';
 import {providerSettingsPath,providerSettingsProofHeader,loopbackAddress} from '../lib/provider-settings.ts';
+export async function createDevelopmentCache(root=process.cwd()){
+ const parent=path.resolve(root,'node_modules','.cache');await mkdir(parent,{recursive:true});
+ const directory=await mkdtemp(path.join(parent,'shiqu-dev-'));let removal;
+ return {directory,remove(){return removal??=rm(directory,{recursive:true,force:true}).catch(error=>{removal=undefined;throw error;});}};
+}
 // Vite proxies LAN traffic through loopback; authorize the original socket before any rewrite/proxy.
 export function protectLocalProviderSettings(proxyToken){
  if(!proxyToken)throw Error('Local provider settings require private proxy proof');

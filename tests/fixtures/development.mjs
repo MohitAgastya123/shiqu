@@ -1,4 +1,5 @@
 // Reuse actual dev launcher fixtures with disposable homes/checkouts and no user credentials.
+// Optimizer-cache parents stay local instead of following dependency-directory symlinks into the checkout.
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import {spawn} from 'node:child_process';
@@ -14,10 +15,10 @@ export async function checkoutFixture(t){
   if(existsSync(name))await cp(name,path.join(checkout,name),{recursive:true,filter:source=>!/(?:^|\/)\.env(?:\.|$)/.test(source)});
  }
  await mkdir(path.join(checkout,'data'));await symlink(path.resolve('data/library'),path.join(checkout,'data/library'),process.platform==='win32'?'junction':'dir');
- // Reuse installed dependencies, but keep Vite's cache inside this disposable checkout.
+ // Reuse installed dependencies, but keep both default and owned Vite caches inside this disposable checkout.
  await mkdir(path.join(checkout,'node_modules'));
  for(const entry of await readdir('node_modules',{withFileTypes:true})){
-  if(!entry.name.startsWith('.vite')&&(entry.isDirectory()||entry.isSymbolicLink()))await symlink(path.resolve('node_modules',entry.name),path.join(checkout,'node_modules',entry.name),process.platform==='win32'?'junction':'dir');
+  if(entry.name!=='.cache'&&!entry.name.startsWith('.vite')&&(entry.isDirectory()||entry.isSymbolicLink()))await symlink(path.resolve('node_modules',entry.name),path.join(checkout,'node_modules',entry.name),process.platform==='win32'?'junction':'dir');
  }
  return {...f,checkout};
 }

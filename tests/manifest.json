@@ -1023,7 +1023,12 @@
       "suite": "flows",
       "pr": "affected",
       "gates": [],
-      "covers": []
+      "covers": [
+        "scripts/dev.mjs",
+        "scripts/development-server.mjs",
+        "lib/reader-pdf.ts",
+        "lib/story-export-runtime.ts"
+      ]
     },
     {
       "file": "tests/development-local.e2e.mjs",
@@ -4414,6 +4419,35 @@
         "lib/reader-zip-content.ts",
         "lib/story-webp-metadata.ts",
         "client/ui/StoryArtStylePicker.tsx"
+      ]
+    },
+    {
+      "file": "tests/comic-scenery.test.mjs",
+      "groups": [
+        "reader",
+        "media",
+        "production"
+      ],
+      "level": "integration",
+      "cost": "standard",
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "suite": "flows",
+      "pr": "affected",
+      "gates": [],
+      "covers": [
+        "lib/comic-page-layout.ts",
+        "lib/comic-bubble-palette.ts",
+        "lib/reader-generation-contract.ts",
+        "server/story-export.ts",
+        "lib/reader-pdf.ts",
+        "lib/reader-png.ts",
+        "lib/reader-zip.ts",
+        "lib/public-story-zip.mjs",
+        "client/ui/StoryComicPage.tsx"
       ]
     }
   ]
